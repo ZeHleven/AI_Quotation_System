@@ -87,13 +87,43 @@
                 <el-input v-model="inputText" type="textarea" :rows="2" placeholder="描述需求或上传图片清单..." resize="none" @keyup.enter.exact="sendMessage" :disabled="sending"></el-input>
               </div>
               <div class="action-bar">
-                <span class="tip-text">提示：支持图文多模态混合意图识别，支持人工干预与纠错。</span>
+                <el-button size="small" plain @click="openHistory">📋 历史记录</el-button>
                 <el-button type="primary" :loading="sending" @click="sendMessage" round>🚀 发送至 AI 中枢</el-button>
               </div>
             </div>
           </el-card>
         </div>
       </el-main>
+
+      <!-- 历史记录抽屉 -->
+      <el-drawer v-model="showHistory" title="📋 我的报价历史" size="70%" direction="rtl">
+        <el-table :data="historyList" border stripe style="width:100%" v-loading="historyLoading">
+          <el-table-column prop="created_at" label="时间" width="160"></el-table-column>
+          <el-table-column prop="item_count" label="项目数" width="80" align="center"></el-table-column>
+          <el-table-column prop="total_amount" label="总价(元)" width="120" align="right">
+            <template #default="scope">¥ {{ scope.row.total_amount.toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" align="center">
+            <template #default="scope">
+              <el-button size="small" @click="viewDetail(scope.row)">详情</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div style="margin-top:16px; text-align:right;">
+          <el-pagination v-model:current-page="historyPage" :page-size="20"
+            :total="historyTotal" layout="total, prev, pager, next" @current-change="fetchHistory" small />
+        </div>
+      </el-drawer>
+
+      <!-- 历史详情弹窗 -->
+      <el-dialog v-model="showDetailDialog" title="报价明细" width="700px">
+        <el-table :data="detailRows" border stripe style="width:100%">
+          <el-table-column prop="project_name" label="施工项目" min-width="160"></el-table-column>
+          <el-table-column prop="unit_price" label="单价(元)" width="110" align="right"></el-table-column>
+          <el-table-column prop="total_price" label="合计(元)" width="110" align="right"></el-table-column>
+          <el-table-column prop="notes" label="备注" min-width="180"></el-table-column>
+        </el-table>
+      </el-dialog>
 
       <!-- 人在回路 (HITL) 预审数据源弹窗 -->
       <el-dialog v-model="showPreviewDialog" title="🧐 AI 报价明细预审 (支持手工干预)" width="850px" :close-on-click-modal="false" :show-close="false">
@@ -161,6 +191,41 @@
         const previewData = ref([]);
         const globalNotes = ref("");
         const pushing = ref(false);
+
+        // 历史记录
+        const showHistory = ref(false);
+        const historyList = ref([]);
+        const historyLoading = ref(false);
+        const historyTotal = ref(0);
+        const historyPage = ref(1);
+        const showDetailDialog = ref(false);
+        const detailRows = ref([]);
+
+        const fetchHistory = async (page = 1) => {
+          historyPage.value = page;
+          historyLoading.value = true;
+          try {
+            const token = localStorage.getItem('ai_token');
+            const res = await axios.get(`${API_BASE_URL}/history?page=${page}&page_size=20`,
+              { headers: { Authorization: `Bearer ${token}` } });
+            historyList.value = res.data.data;
+            historyTotal.value = res.data.total;
+          } catch (e) {
+            ElMessage.error('获取历史记录失败');
+          } finally {
+            historyLoading.value = false;
+          }
+        };
+
+        const openHistory = () => { showHistory.value = true; fetchHistory(1); };
+
+        const viewDetail = (row) => {
+          try {
+            const parsed = JSON.parse(row.payload_json);
+            detailRows.value = parsed.project_details || [];
+          } catch { detailRows.value = []; }
+          showDetailDialog.value = true;
+        };
 
         const authForm = ref({ username: '', password: '' });
         const inputText = ref('');
@@ -350,7 +415,9 @@
         return {
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping, showPreviewDialog, previewData, pushing, finalTotalAmount,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
-          handleRegister, handleLogin, logout, handleFileChange, sendMessage, cancelPreview, submitFinalQuote, scrollToBottom
+          handleRegister, handleLogin, logout, handleFileChange, sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
+          showHistory, historyList, historyLoading, historyTotal, historyPage, showDetailDialog, detailRows,
+          fetchHistory, openHistory, viewDetail
         };
       }
     };

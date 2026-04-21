@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from app.api.v1 import chat, auth
 from app.core.database import engine, Base
+from app.models import user, quote_history  # noqa: F401 — 触发 SQLAlchemy 建表
 
 Base.metadata.create_all(bind=engine)
 

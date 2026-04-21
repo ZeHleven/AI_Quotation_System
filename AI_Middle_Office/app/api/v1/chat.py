@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.models.user import User
+from app.models.quote_history import QuoteHistory
 from app.core.security import SECRET_KEY, ALGORITHM
 
 router = APIRouter()
@@ -176,11 +177,26 @@ async def process_chat(
 @router.post("/confirm_push", summary="人工审核通过后推送钉钉")
 async def confirm_and_push(
         payload: dict = Body(...),
-        current_user: User = Depends(get_current_user)
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     try:
         response = requests.post(N8N_WEBHOOK_URL_PUSH, json=payload, headers=_sign_payload(payload), timeout=60)
         if response.status_code == 200:
+            # 写入历史记录
+            try:
+                details = payload.get("project_details", [])
+                total = sum(float(item.get("total_price", 0)) for item in details)
+                record = QuoteHistory(
+                    username=current_user.username,
+                    total_amount=round(total, 2),
+                    item_count=len(details),
+                    payload_json=json.dumps(payload, ensure_ascii=False),
+                )
+                db.add(record)
+                db.commit()
+            except Exception:
+                pass  # 历史写入失败不影响主流程
             return {"message": "✅ 最终报价单已成功投递至钉钉群！"}
         else:
             raise HTTPException(status_code=500, detail="底层推送流水线异常")
@@ -413,6 +429,39 @@ async def list_users(db: Session = Depends(get_db), current_user: User = Depends
     return {"code": 200, "data": [
         {"id": u.id, "username": u.username, "role": u.role, "quota": u.quota, "is_active": u.is_active}
         for u in users
+    ]}
+
+
+# ==========================================
+# 📋 报价历史记录接口
+# ==========================================
+@router.get("/history", summary="查询报价历史（本人；admin 可查全部）")
+async def get_history(
+    page: int = 1,
+    page_size: int = 20,
+    username: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    query = db.query(QuoteHistory)
+    if current_user.role != "admin":
+        query = query.filter(QuoteHistory.username == current_user.username)
+    elif username:
+        query = query.filter(QuoteHistory.username == username)
+
+    total = query.count()
+    records = query.order_by(QuoteHistory.created_at.desc()) \
+                   .offset((page - 1) * page_size).limit(page_size).all()
+
+    return {"code": 200, "total": total, "data": [
+        {
+            "id": r.id,
+            "username": r.username,
+            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "",
+            "total_amount": r.total_amount,
+            "item_count": r.item_count,
+            "payload_json": r.payload_json,
+        } for r in records
     ]}
 
 

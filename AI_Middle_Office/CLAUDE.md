@@ -103,6 +103,11 @@ ALIAS = "enterprise_quotation_rag"
 - 原代码所有用户共享同一个固定 conversationId，多用户并发时 Dify 上下文互相污染
 - 修复：`chat.py` 改为每次请求生成 `str(uuid.uuid4())`，每个请求独立隔离
 
+### ✅ 任务13：报价历史记录（2026-04-21）
+- 新增 `app/models/quote_history.py`（QuoteHistory 表），confirm_push 成功后自动写入
+- `chat.py` 新增 `GET /api/v1/history` 接口（普通用户看自己，admin 可按 username 过滤）
+- `index.html` 底部工具栏新增"历史记录"按钮，点击弹出抽屉展示历史列表 + 分页 + 明细查看
+
 ### ✅ 任务12：用户配额管理界面（2026-04-21）
 - 后端：`chat.py` 新增 `GET /api/v1/admin/users`（列出所有用户）和 `PATCH /api/v1/admin/users/{id}/quota`（设置额度）
 - 前端：`admin.html` 顶部新增"员工账号 & AI 额度管理"面板，表格内直接输入新额度并确认，实时生效

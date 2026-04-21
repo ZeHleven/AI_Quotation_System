@@ -29,6 +29,9 @@ node_modules/
 ai-web/node_modules/
 ai-web/dist/
 
+# Claude Code local settings
+.claude/
+
 # IDE
 .vscode/
 .idea/

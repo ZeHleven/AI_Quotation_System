@@ -8,6 +8,7 @@ RUN pip install \
     "uvicorn[standard]==0.30.1" \
     pymilvus==2.3.6 \
     sentence-transformers==3.1.0 \
+    jieba==0.42.1 \
     -i https://mirrors.aliyun.com/pypi/simple/ \
     --no-cache-dir
 

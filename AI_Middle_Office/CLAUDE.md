@@ -103,6 +103,12 @@ ALIAS = "enterprise_quotation_rag"
 - 原代码所有用户共享同一个固定 conversationId，多用户并发时 Dify 上下文互相污染
 - 修复：`chat.py` 改为每次请求生成 `str(uuid.uuid4())`，每个请求独立隔离
 
+### ✅ 任务11：N8N Webhook HMAC-SHA256 签名验证（2026-04-21）
+- 原 Webhook 端点无任何鉴权，任何人知道地址即可调用算价引擎
+- FastAPI 侧：`chat.py` 新增 `_sign_payload()` 函数，对请求体计算 HMAC-SHA256，以 `X-Webhook-Signature: sha256=<hex>` 头附加发出
+- N8N 侧：通过 N8N API 在 budget-calc / budget-push 两个 workflow 的 Webhook 节点后插入 Code 节点，验签失败直接抛出异常终止流程
+- 密钥：`AI_Middle_Office/.env` → `WEBHOOK_SECRET`（64位随机十六进制）
+
 ### ✅ 任务1：RAG 微服务迁移 CentOS
 - CentOS 7.9 无 Python3，采用 Docker 容器化
 - bitnami/etcd 镜像无法从国内拉取，通过 Windows `docker save` → `scp` → CentOS `docker load` 方式转移

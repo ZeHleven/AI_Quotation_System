@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import hmac
 import re
 import os
 import csv
@@ -29,6 +31,14 @@ N8N_WEBHOOK_URL_PUSH = "http://192.168.88.128:5678/webhook/budget-push"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY", "")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
+
+
+def _sign_payload(body: dict) -> dict:
+    """返回带 HMAC-SHA256 签名的请求头"""
+    body_bytes = json.dumps(body, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    sig = hmac.new(WEBHOOK_SECRET.encode('utf-8'), body_bytes, hashlib.sha256).hexdigest()
+    return {"Content-Type": "application/json", "X-Webhook-Signature": f"sha256={sig}"}
 
 
 # ==========================================
@@ -139,7 +149,7 @@ async def process_chat(
             yield f"data: {json.dumps({'status': 'processing', 'message': '[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...\n(后台算力执行中，预计静候 15~30 秒，完成后将弹出核对面板)'})}\n\n"
 
             payload = {"text": {"content": final_query}, "conversationId": str(uuid.uuid4())}
-            response = await asyncio.to_thread(requests.post, N8N_WEBHOOK_URL_CALC, json=payload, timeout=180)
+            response = await asyncio.to_thread(requests.post, N8N_WEBHOOK_URL_CALC, json=payload, headers=_sign_payload(payload), timeout=180)
 
             if response.status_code == 200:
                 current_user.quota -= 1
@@ -169,7 +179,7 @@ async def confirm_and_push(
         current_user: User = Depends(get_current_user)
 ):
     try:
-        response = requests.post(N8N_WEBHOOK_URL_PUSH, json=payload, timeout=60)
+        response = requests.post(N8N_WEBHOOK_URL_PUSH, json=payload, headers=_sign_payload(payload), timeout=60)
         if response.status_code == 200:
             return {"message": "✅ 最终报价单已成功投递至钉钉群！"}
         else:

@@ -10,10 +10,10 @@
 - **位置**：`AI_Middle_Office/app/api/v1/chat.py`
 - **修复**：改为每次请求生成 `str(uuid.uuid4())`，彻底隔离多用户上下文
 
-### 2. N8N Webhook 无签名验证（待完成）
-- **位置**：`chat.py` N8N_WEBHOOK_URL_CALC / PUSH
-- **问题**：任何人知道地址即可直接调用算价引擎
-- **方案**：加 HMAC-SHA256 签名头，N8N 侧验证
+### ~~2. N8N Webhook 无签名验证~~（✅ 2026-04-21 已完成）
+- **修复**：FastAPI 每次请求计算 `HMAC-SHA256(WEBHOOK_SECRET, JSON.stringify(body))` 并附加 `X-Webhook-Signature` 头
+- **N8N 侧**：两个 workflow（budget-calc / budget-push）Webhook 节点后新增 Code 节点验签，签名错误直接抛出异常终止流程
+- **密钥存储**：`AI_Middle_Office/.env` 的 `WEBHOOK_SECRET` 字段
 
 ### 3. 用户配额无管理界面（待完成）
 - **问题**：配额只能手动改 SQLite 数据库

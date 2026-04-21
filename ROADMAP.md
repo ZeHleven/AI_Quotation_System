@@ -6,10 +6,9 @@
 
 ## 高优先级
 
-### 1. N8N conversationId 硬编码（待完成）
-- **位置**：`AI_Middle_Office/app/api/v1/chat.py:141`
-- **问题**：所有用户共享同一个 conversationId，多用户并发时 Dify 对话上下文互相污染
-- **方案**：改为按用户或按请求动态生成独立 ID
+### ~~1. N8N conversationId 硬编码~~（✅ 2026-04-21 已完成）
+- **位置**：`AI_Middle_Office/app/api/v1/chat.py`
+- **修复**：改为每次请求生成 `str(uuid.uuid4())`，彻底隔离多用户上下文
 
 ### 2. N8N Webhook 无签名验证（待完成）
 - **位置**：`chat.py` N8N_WEBHOOK_URL_CALC / PUSH

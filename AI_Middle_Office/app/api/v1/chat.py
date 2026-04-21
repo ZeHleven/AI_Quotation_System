@@ -138,7 +138,7 @@ async def process_chat(
 
             yield f"data: {json.dumps({'status': 'processing', 'message': '[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...\n(后台算力执行中，预计静候 15~30 秒，完成后将弹出核对面板)'})}\n\n"
 
-            payload = {"text": {"content": final_query}, "conversationId": "cidp1QfmWjqNW4U4nx3kFbbyQ=="}
+            payload = {"text": {"content": final_query}, "conversationId": str(uuid.uuid4())}
             response = await asyncio.to_thread(requests.post, N8N_WEBHOOK_URL_CALC, json=payload, timeout=180)
 
             if response.status_code == 200:

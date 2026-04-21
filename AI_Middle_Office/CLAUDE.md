@@ -99,6 +99,10 @@ ALIAS = "enterprise_quotation_rag"
 
 ## 四、已完成的优化项
 
+### ✅ 任务10：N8N conversationId 去硬编码（2026-04-21）
+- 原代码所有用户共享同一个固定 conversationId，多用户并发时 Dify 上下文互相污染
+- 修复：`chat.py` 改为每次请求生成 `str(uuid.uuid4())`，每个请求独立隔离
+
 ### ✅ 任务1：RAG 微服务迁移 CentOS
 - CentOS 7.9 无 Python3，采用 Docker 容器化
 - bitnami/etcd 镜像无法从国内拉取，通过 Windows `docker save` → `scp` → CentOS `docker load` 方式转移

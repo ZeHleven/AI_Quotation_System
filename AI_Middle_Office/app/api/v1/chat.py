@@ -33,6 +33,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY", "")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
+RAG_SERVICE_URL = os.environ.get("RAG_SERVICE_URL", "http://192.168.88.128:8001")
+RELOAD_SECRET = os.environ.get("RELOAD_SECRET", "")
 
 
 def _sign_payload(body: dict) -> dict:
@@ -330,90 +332,31 @@ async def upload_csv_history(file: UploadFile = File(...), current_user: User = 
     return {"code": 200, "message": "解析成功", "data": new_drafts}
 
 
-@router.post("/admin/sync_milvus", summary="同步数据至 Milvus（零停机蓝绿切换）")
+@router.post("/admin/sync_milvus", summary="同步数据至 Milvus（委托 RAG 服务执行，零停机蓝绿切换）")
 async def sync_to_milvus(current_user: User = Depends(require_admin)):
-    """蓝绿切换：先写新库再切别名，同步期间检索服务不中断"""
+    """将本地 JSON 数据 POST 至 CentOS RAG 服务的 /admin/reload，由其完成向量化和蓝绿切换。
+    Windows 端不再加载大模型，速度更快、内存占用更低。"""
     data = load_data()
     if not data:
         raise HTTPException(status_code=400, detail="本地知识库为空，无法同步")
 
     try:
-        from pymilvus import connections, utility, FieldSchema, CollectionSchema, DataType, Collection
-        from sentence_transformers import SentenceTransformer
-
-        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-        # ✅ 连接服务器上的 Milvus，不再用本机 127.0.0.1
-        connections.connect("default", host="192.168.88.128", port="19530")
-
-        ALIAS_NAME = "enterprise_quotation_rag"
-        BLUE       = "quotation_blue"
-        GREEN      = "quotation_green"
-
-        # 1. 找出当前在线的物理集合，选另一个作为写入目标
-        all_physical = utility.list_collections()
-        current = None
-        for col_name in [BLUE, GREEN]:
-            if col_name in all_physical:
-                try:
-                    if ALIAS_NAME in utility.list_aliases(col_name):
-                        current = col_name
-                        break
-                except Exception:
-                    pass
-
-        next_col = GREEN if current == BLUE else BLUE
-
-        # 2. 清理写入目标（物理集合名，安全）
-        if next_col in all_physical:
-            utility.drop_collection(next_col)
-
-        # 3. 建新集合
-        fields = [
-            FieldSchema(name="id",           dtype=DataType.INT64,        is_primary=True, auto_id=True),
-            FieldSchema(name="page_content", dtype=DataType.VARCHAR,       max_length=65535),
-            FieldSchema(name="vector",       dtype=DataType.FLOAT_VECTOR,  dim=768),
-            FieldSchema(name="metadata",     dtype=DataType.JSON),
-        ]
-        new_col = Collection(name=next_col,
-                             schema=CollectionSchema(fields=fields, description="企业级报价库"))
-
-        # 4. 向量化写入
-        model = SentenceTransformer("maidalun1020/bce-embedding-base_v1")
-        page_contents, metadatas = [], []
-        for item in data:
-            content = (f"施工作业项为：{item['item_name']}。"
-                       f"工艺及材料标准：{item['notes']}。"
-                       f"计价单位：{item['unit']}。")
-            page_contents.append(content)
-            metadatas.append({
-                "item_name": item["item_name"], "unit": item["unit"],
-                "price_total": float(item["unit_price"]), "notes": item["notes"]
-            })
-
-        vectors = model.encode(page_contents, normalize_embeddings=True).tolist()
-        new_col.insert([page_contents, vectors, metadatas])
-        new_col.flush()
-        new_col.create_index(field_name="vector",
-            index_params={"metric_type": "COSINE", "index_type": "HNSW",
-                          "params": {"M": 8, "efConstruction": 64}})
-        new_col.load()
-
-        # 5. 原子切换 alias：先 alter（已存在），失败再 create（首次）
-        try:
-            utility.alter_alias(collection_name=next_col, alias=ALIAS_NAME)
-        except Exception:
-            utility.create_alias(collection_name=next_col, alias=ALIAS_NAME)
-
-        # 6. 下线旧物理集合
-        if current and current in utility.list_collections():
-            utility.drop_collection(current)
-
-        return {"code": 200,
-                "message": f"✅ 零停机热更新完成，共同步 {len(data)} 条数据（{next_col} → {ALIAS_NAME}）"}
-
+        payload = {"materials": data, "secret": RELOAD_SECRET}
+        response = await asyncio.to_thread(
+            requests.post,
+            f"{RAG_SERVICE_URL}/admin/reload",
+            json=payload,
+            timeout=120,
+        )
+        if response.status_code == 200:
+            return {"code": 200, "message": response.json().get("message", "同步完成")}
+        else:
+            detail = response.json().get("detail", f"状态码 {response.status_code}")
+            raise HTTPException(status_code=500, detail=f"RAG 服务返回错误: {detail}")
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="RAG 服务超时，请检查 CentOS 容器状态")
     except Exception as e:
-        print(f"[Milvus Sync Error] {str(e)}")
-        raise HTTPException(status_code=500, detail=f"向量化写入失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==========================================

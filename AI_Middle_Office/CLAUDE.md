@@ -103,6 +103,12 @@ ALIAS = "enterprise_quotation_rag"
 - 原代码所有用户共享同一个固定 conversationId，多用户并发时 Dify 上下文互相污染
 - 修复：`chat.py` 改为每次请求生成 `str(uuid.uuid4())`，每个请求独立隔离
 
+### ✅ 任务15：sync_milvus 向量化迁移至 CentOS RAG 服务（2026-04-21）
+- `rag_api_service.py` 新增 `POST /admin/reload`：接收物料列表，复用常驻内存 `_GLOBAL_MODEL` 完成向量化 + 蓝绿切换 + BM25 热更新
+- `hybrid_searcher.py` 新增 `rebuild_indexes()` 函数，供 reload 接口调用
+- `chat.py` 的 `sync_milvus` 改为向 `RAG_SERVICE_URL/admin/reload` 发 POST，不再本地加载大模型
+- 新增环境变量：`RAG_SERVICE_URL`、`RELOAD_SECRET`（`.env` + `docker-compose.yml`）
+
 ### ✅ 任务14：RAG 检索效果评测脚本（2026-04-21）
 - `eval_rag.py`：30 条人工标注测试集，覆盖 4 个难度级别
 - 指标：Hit@K + MRR，按难度级别分解输出，结果自动保存为 JSON

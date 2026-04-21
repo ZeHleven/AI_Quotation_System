@@ -72,6 +72,7 @@ services:
       - HF_HOME=/model_cache
       - MILVUS_HOST=standalone
       - MILVUS_PORT=19530
+      - RELOAD_SECRET=rag_reload_7f3a9d2e1b4c8f6a
     volumes:
       - /opt/rag_service/model_cache:/model_cache
     depends_on:

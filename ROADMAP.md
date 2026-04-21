@@ -34,10 +34,10 @@
 - **用法**：`python eval_rag.py [--url http://192.168.88.128:8001] [--top_k 5]`
 - **输出**：控制台报告 + 自动保存 `rag_eval_时间戳.json`
 
-### 6. sync_milvus 每次重载 embedding 模型（待完成）
-- **位置**：`chat.py:355` `SentenceTransformer(...)`
-- **问题**：每次同步都在 Windows 端加载 768 维模型，耗时且占内存
-- **方案**：让 CentOS RAG 服务暴露 `/admin/reload` 接口，由它完成向量化
+### ~~6. sync_milvus 每次重载 embedding 模型~~（✅ 2026-04-21 已完成）
+- **RAG 服务**：`rag_api_service.py` 新增 `POST /admin/reload`，接收物料数据后复用常驻内存的 `_GLOBAL_MODEL` 完成向量化和蓝绿切换，同时热更新 BM25 索引
+- **chat.py**：`sync_milvus` 改为直接 POST 到 RAG 服务，不再在 Windows 端加载大模型
+- **鉴权**：`RELOAD_SECRET` 环境变量，`.env` 和 `docker-compose.yml` 均已配置
 
 ---
 

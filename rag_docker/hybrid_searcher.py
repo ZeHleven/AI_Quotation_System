@@ -224,3 +224,42 @@ def execute_strict_retrieval(query_text, top_k=5):
         })
 
     return json.dumps(extracted_payloads, ensure_ascii=False)
+
+
+def rebuild_indexes(materials: list):
+    """
+    用新物料数据重建内存中的 BM25 索引和 jieba 自定义词典。
+    由 /admin/reload 接口在 Milvus 写入完成后调用，保持内存与向量库一致。
+    """
+    global _BM25_DOCS, _BM25_RECORDS, _BM25_INDEX, _RAG_MATERIALS
+
+    _RAG_MATERIALS = materials
+
+    # 重新注册 jieba 词典
+    for item in materials:
+        meta = item.get("metadata", item)
+        name = meta.get("item_name", item.get("item_name", ""))
+        if name:
+            jieba.add_word(name)
+
+    # 重建 BM25 索引
+    new_docs = []
+    new_records = []
+    for item in materials:
+        meta = item.get("metadata", item)
+        page_content = item.get("page_content", "")
+        item_name = meta.get("item_name", item.get("item_name", ""))
+        notes = meta.get("notes", item.get("notes", ""))
+        searchable = f"{item_name} {notes} {page_content}".strip()
+        new_docs.append(_tokenize(searchable))
+        new_records.append({
+            "item_name": item_name,
+            "unit_price": meta.get("price_total", item.get("price_total", item.get("unit_price"))),
+            "unit": meta.get("unit", item.get("unit")),
+            "content": page_content or notes,
+        })
+
+    _BM25_DOCS = new_docs
+    _BM25_RECORDS = new_records
+    _BM25_INDEX = BM25Okapi(_BM25_DOCS)
+    print(f"[System] BM25 索引热更新完毕，共 {len(_BM25_DOCS)} 条记录")

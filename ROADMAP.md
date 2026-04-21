@@ -15,9 +15,9 @@
 - **N8N 侧**：两个 workflow（budget-calc / budget-push）Webhook 节点后新增 Code 节点验签，签名错误直接抛出异常终止流程
 - **密钥存储**：`AI_Middle_Office/.env` 的 `WEBHOOK_SECRET` 字段
 
-### 3. 用户配额无管理界面（待完成）
-- **问题**：配额只能手动改 SQLite 数据库
-- **方案**：admin 后台新增充值/扣减配额接口 + 前端操作入口
+### ~~3. 用户配额无管理界面~~（✅ 2026-04-21 已完成）
+- **后端**：`chat.py` 新增 `GET /admin/users` 和 `PATCH /admin/users/{id}/quota` 两个接口
+- **前端**：`admin.html` 顶部新增员工账号 & 额度管理面板，支持直接在表格内输入新额度并一键确认
 
 ---
 

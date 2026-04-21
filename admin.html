@@ -28,6 +28,44 @@
   <div id="app" class="app-container">
 
     <el-main class="main-content">
+
+      <!-- 用户配额管理面板 -->
+      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
+        <template #header>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>👥 员工账号 & AI 额度管理</span>
+            <el-button size="small" @click="fetchUsers" plain>刷新</el-button>
+          </div>
+        </template>
+        <el-table :data="userData" border stripe style="width:100%" v-loading="userLoading">
+          <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+          <el-table-column prop="username" label="用户名" min-width="120"></el-table-column>
+          <el-table-column prop="role" label="角色" width="100" align="center">
+            <template #default="scope">
+              <el-tag :type="scope.row.role === 'admin' ? 'danger' : 'info'" size="small">
+                {{ scope.row.role === 'admin' ? '管理员' : '业务员' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="quota" label="剩余额度（次）" width="140" align="center">
+            <template #default="scope">
+              <el-tag :type="scope.row.quota > 10 ? 'success' : scope.row.quota > 0 ? 'warning' : 'danger'" size="small">
+                {{ scope.row.quota }} 次
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="充值额度" width="220" align="center">
+            <template #default="scope">
+              <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
+                <el-input-number v-model="scope.row._newQuota" :min="0" :max="9999" :controls="false"
+                  size="small" style="width:80px;" placeholder="新额度"></el-input-number>
+                <el-button size="small" type="primary" @click="updateQuota(scope.row)">确认</el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
       <el-row :gutter="20">
         <!-- 左侧状态看板 -->
         <el-col :span="6">
@@ -143,6 +181,34 @@
         const syncing = ref(false);
         const lastSyncTime = ref(localStorage.getItem('last_milvus_sync') || '未同步');
 
+        // 用户管理
+        const userData = ref([]);
+        const userLoading = ref(false);
+
+        const fetchUsers = async () => {
+          userLoading.value = true;
+          try {
+            const res = await axios.get(`${API_BASE_URL}/users`, { headers: authHeaders() });
+            userData.value = res.data.data.map(u => ({ ...u, _newQuota: u.quota }));
+          } catch (e) {
+            ElMessage.error('获取用户列表失败');
+          } finally {
+            userLoading.value = false;
+          }
+        };
+
+        const updateQuota = async (row) => {
+          if (row._newQuota === undefined || row._newQuota === null) return;
+          try {
+            const res = await axios.patch(`${API_BASE_URL}/users/${row.id}/quota`,
+              { quota: row._newQuota }, { headers: authHeaders() });
+            row.quota = row._newQuota;
+            ElMessage.success(res.data.message);
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '更新失败');
+          }
+        };
+
         const initMockData = () => {
           return [
             { id: "1", item_name: "直线型吊顶", unit_price: 120.00, unit: "平米", notes: "使用龙牌轻钢龙骨泰山石膏板，L型抗裂及接缝处理。" }
@@ -250,11 +316,12 @@
             return row.is_draft ? 'draft-row' : '';
         };
 
-        onMounted(() => { fetchData(); });
+        onMounted(() => { fetchData(); fetchUsers(); });
 
         return {
           tableData, loading, saving, syncing, lastSyncTime, tableRowClassName,
-          handleAdd, handleDelete, handleImportCSV, saveData, syncToMilvus
+          handleAdd, handleDelete, handleImportCSV, saveData, syncToMilvus,
+          userData, userLoading, fetchUsers, updateQuota
         };
       }
     };

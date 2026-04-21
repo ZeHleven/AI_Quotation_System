@@ -103,6 +103,10 @@ ALIAS = "enterprise_quotation_rag"
 - 原代码所有用户共享同一个固定 conversationId，多用户并发时 Dify 上下文互相污染
 - 修复：`chat.py` 改为每次请求生成 `str(uuid.uuid4())`，每个请求独立隔离
 
+### ✅ 任务12：用户配额管理界面（2026-04-21）
+- 后端：`chat.py` 新增 `GET /api/v1/admin/users`（列出所有用户）和 `PATCH /api/v1/admin/users/{id}/quota`（设置额度）
+- 前端：`admin.html` 顶部新增"员工账号 & AI 额度管理"面板，表格内直接输入新额度并确认，实时生效
+
 ### ✅ 任务11：N8N Webhook HMAC-SHA256 签名验证（2026-04-21）
 - 原 Webhook 端点无任何鉴权，任何人知道地址即可调用算价引擎
 - FastAPI 侧：`chat.py` 新增 `_sign_payload()` 函数，对请求体计算 HMAC-SHA256，以 `X-Webhook-Signature: sha256=<hex>` 头附加发出

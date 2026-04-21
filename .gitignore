@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment & secrets
+.env
+*.env
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Milvus volumes (large binary data)
+volumes/
+
+# NSSM binary
+AI_Middle_Office/nssm.exe
+
+# Node modules
+node_modules/
+ai-web/node_modules/
+ai-web/dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

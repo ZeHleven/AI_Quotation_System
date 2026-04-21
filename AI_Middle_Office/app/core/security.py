@@ -1,0 +1,29 @@
+# 部署路径: AI_Middle_Office/app/core/security.py
+import jwt
+import bcrypt
+from datetime import datetime, timedelta
+
+# JWT 配置
+SECRET_KEY = "your_super_secret_key_for_ai_middle_office"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 小时有效
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    # bcrypt 要求入参必须是 bytes 格式
+    return bcrypt.checkpw(
+        plain_password.encode('utf-8'),
+        hashed_password.encode('utf-8')
+    )
+
+def get_password_hash(password: str) -> str:
+    # 生成随机盐值并加密，最后解码存入数据库 (String 格式)
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt

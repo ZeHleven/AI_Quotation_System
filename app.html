@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业级 AI 智能造价中台</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f0f2f5; }
+        #app { height: 100%; }
+
+        /* 登录页样式 */
+        .login-container { display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); }
+        .login-card { width: 400px; padding: 40px; background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+        .login-title { text-align: center; margin-bottom: 30px; color: #303133; font-size: 24px; font-weight: bold; }
+
+        /* 系统框架样式 */
+        .layout-container { height: 100%; display: flex; flex-direction: column; }
+        .sys-header { background-color: #2b303b; color: #fff; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; height: 60px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 10; }
+        .sys-logo { font-size: 18px; font-weight: bold; letter-spacing: 1px; display: flex; align-items: center; gap: 10px; }
+        .sys-main-wrapper { flex: 1; display: flex; overflow: hidden; }
+        .sys-sidebar { width: 220px; background-color: #fff; border-right: 1px solid #e6e6e6; display: flex; flex-direction: column; }
+        .sys-content { flex: 1; padding: 20px; overflow-y: auto; background-color: #f0f2f5; position: relative; }
+
+        /* 嵌入的 iframe 样式 (用来承载现有的 index 和 admin 页面) */
+        .page-iframe { width: 100%; height: 100%; border: none; border-radius: 8px; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.05); background-color: #fff; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <!-- 未登录状态：显示登录表单 -->
+    <div v-if="!isLoggedIn" class="login-container">
+        <div class="login-card">
+            <div class="login-title">AI 造价中台登录</div>
+            <el-form :model="loginForm" :rules="rules" ref="loginFormRef">
+                <el-form-item prop="username">
+                    <el-input v-model="loginForm.username" placeholder="请输入用户名" prefix-icon="User" size="large"></el-input>
+                </el-form-item>
+                <el-form-item prop="password">
+                    <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" prefix-icon="Lock" size="large" @keyup.enter="handleLogin"></el-input>
+                </el-form-item>
+                <el-form-item>
+                    <el-button type="primary" size="large" style="width: 100%;" :loading="loading" @click="handleLogin">登 录</el-button>
+                </el-form-item>
+                <div style="text-align: center; font-size: 12px; color: #909399;">
+                    管理员账号需手动在数据库中将 role 设为 admin
+                </div>
+            </el-form>
+        </div>
+    </div>
+
+    <!-- 已登录状态：显示系统主框架 -->
+    <div v-else class="layout-container">
+        <header class="sys-header">
+            <div class="sys-logo">
+                🖥️ AI 智能造价中台
+            </div>
+            <div class="user-info">
+                <el-dropdown @command="handleCommand">
+                    <span style="color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <el-avatar size="small" :src="'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'"></el-avatar>
+                        {{ currentUser.name }} ({{ currentUser.role === 'admin' ? '管理员' : '业务员' }}) ▾
+                    </span>
+                    <template #dropdown>
+                        <el-dropdown-menu>
+                            <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </template>
+                </el-dropdown>
+            </div>
+        </header>
+
+        <div class="sys-main-wrapper">
+            <!-- 侧边菜单栏 -->
+            <aside class="sys-sidebar">
+                <!-- 这里的 default-active 绑定当前选中的菜单 -->
+                <el-menu :default-active="activeMenu" @select="handleSelectMenu" style="border-right: none; height: 100%;">
+
+                    <el-menu-item index="workspace">
+                        <span>📊 业务工作台 (AI测算)</span>
+                    </el-menu-item>
+
+                    <el-menu-item index="admin" v-if="currentUser.role === 'admin'">
+                        <span>⚙️ 知识库管理 (价格中枢)</span>
+                    </el-menu-item>
+
+                </el-menu>
+            </aside>
+
+            <!-- 主内容区：使用 iframe 动态加载对应的 HTML 页面 -->
+            <main class="sys-content">
+                <iframe v-if="activeMenu === 'workspace'" src="index.html" class="page-iframe" title="业务工作台"></iframe>
+                <!-- 双重保险：即使 URL 被篡改，非 admin 角色也加载不出来这个 iframe -->
+                <iframe v-if="activeMenu === 'admin' && currentUser.role === 'admin'" src="admin.html" class="page-iframe" title="知识库管理"></iframe>
+            </main>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://unpkg.com/element-plus"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script>
+    const { createApp, ref, reactive, onMounted } = Vue;
+    const { ElMessage } = ElementPlus;
+
+    const App = {
+        setup() {
+            const isLoggedIn = ref(false);
+            const loading = ref(false);
+            const loginFormRef = ref(null);
+            const activeMenu = ref('workspace'); // 默认进入工作台
+
+            // 当前用户信息
+            const currentUser = reactive({
+                username: '',
+                name: '',
+                role: '' // 'admin' 或 'user'
+            });
+
+            const loginForm = reactive({ username: '', password: '' });
+            const rules = {
+                username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+                password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+            };
+
+            // 检查本地是否已存有登录信息 (保持登录态)
+            const checkLoginState = () => {
+                const storedUser = localStorage.getItem('app_user_info');
+                if (storedUser) {
+                    const parsedUser = JSON.parse(storedUser);
+                    Object.assign(currentUser, parsedUser);
+                    isLoggedIn.value = true;
+                    // 如果普通用户刷新页面时停留在 admin，强制切回 workspace
+                    if(currentUser.role !== 'admin' && activeMenu.value === 'admin') {
+                        activeMenu.value = 'workspace';
+                    }
+                }
+            };
+
+            const handleLogin = () => {
+                loginFormRef.value.validate(async (valid) => {
+                    if (!valid) return;
+                    loading.value = true;
+                    try {
+                        const params = new URLSearchParams();
+                        params.append('username', loginForm.username);
+                        params.append('password', loginForm.password);
+                        const res = await axios.post('/api/v1/auth/login', params);
+                        const { access_token, role, username } = res.data;
+
+                        localStorage.setItem('ai_token', access_token);
+                        currentUser.username = username;
+                        currentUser.name = role === 'admin' ? '系统主管' : '业务员 ' + username;
+                        currentUser.role = role;
+                        localStorage.setItem('app_user_info', JSON.stringify({ username, name: currentUser.name, role }));
+
+                        isLoggedIn.value = true;
+                        activeMenu.value = 'workspace';
+                        ElMessage.success('登录成功，欢迎回来！');
+                    } catch (error) {
+                        ElMessage.error(error.response?.data?.detail || '用户名或密码错误');
+                    } finally {
+                        loading.value = false;
+                    }
+                });
+            };
+
+            // 菜单切换逻辑
+            const handleSelectMenu = (index) => {
+                activeMenu.value = index;
+            };
+
+            // 顶栏下拉菜单命令处理
+            const handleCommand = (command) => {
+                if (command === 'logout') {
+                    localStorage.removeItem('app_user_info');
+                    isLoggedIn.value = false;
+                    loginForm.username = '';
+                    loginForm.password = '';
+                    activeMenu.value = 'workspace';
+                    ElMessage.info('已退出登录');
+                }
+            };
+
+            onMounted(() => {
+                checkLoginState();
+            });
+
+            return {
+                isLoggedIn, loading, loginForm, rules, loginFormRef, currentUser, activeMenu,
+                handleLogin, handleSelectMenu, handleCommand
+            };
+        }
+    };
+
+    const app = createApp(App);
+    app.use(ElementPlus);
+    app.mount('#app');
+</script>
+</body>
+</html>

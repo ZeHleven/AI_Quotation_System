@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>企业级 AI 业务中台 V2.0 (HITL版)</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <style>
+    body { margin: 0; padding: 0; background-color: #f5f7fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .app-container { height: 100vh; display: flex; flex-direction: column; }
+    /* 去掉了 header 的相关样式 */
+    .main-content { display: flex; justify-content: center; align-items: center; flex: 1; overflow: hidden; padding: 10px; }
+    .auth-panel { width: 400px; }
+    .full-btn { width: 100%; margin-top: 10px; }
+    .chat-panel { width: 100%; max-width: 1000px; height: 100%; display: flex; flex-direction: column; box-sizing: border-box;}
+    .chat-card { height: 100%; display: flex; flex-direction: column; border-radius: 12px; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,0.05); border: none;}
+    .chat-card .el-card__body { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+    .message-list { flex: 1; padding: 20px; background-color: #fafafa; overflow-y: auto; scroll-behavior: smooth;}
+    .message-item { display: flex; margin-bottom: 24px; align-items: flex-start; }
+    .message-item.user { flex-direction: row-reverse; }
+    .avatar { font-size: 26px; margin: 0 12px; line-height: 1;}
+    .bubble { max-width: 80%; padding: 14px 18px; border-radius: 10px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; box-shadow: 0 2px 6px rgba(0,0,0,0.02);}
+    .message-item.assistant .bubble { background-color: #fff; border: 1px solid #ebeef5; color: #333;}
+    .message-item.user .bubble { background-color: #409eff; color: #fff; border: 1px solid #409eff;}
+    .file-preview { margin-bottom: 10px; }
+    .preview-img { width: 160px; height: 160px; border-radius: 6px; object-fit: cover; border: 1px solid #ddd; }
+    .input-area { padding: 15px 20px; background-color: #fff; border-top: 1px solid #ebeef5; }
+    .input-container { display: flex; align-items: flex-end; gap: 12px; }
+    .upload-preview { margin-bottom: 10px; }
+    .action-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+    .tip-text { font-size: 12px; color: #909399; }
+
+    .cursor {
+        display: inline-block; width: 7px; height: 16px; background-color: #409eff;
+        vertical-align: text-bottom; margin-left: 4px; animation: blink 1s step-end infinite; border-radius: 2px;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-container">
+    <el-container style="height: 100%;">
+      <!-- 删除了原本独立的 el-header，让页面完美融入 app.html -->
+
+      <el-main class="main-content">
+        <div v-if="!isLoggedIn" class="auth-panel">
+          <el-card class="box-card" shadow="hover">
+            <el-tabs v-model="activeTab">
+              <el-tab-pane label="安全登录 (API授权)" name="login">
+                <el-form :model="authForm" label-width="70px" @submit.prevent="handleLogin">
+                  <el-form-item label="账号"><el-input v-model="authForm.username" placeholder="请输入员工账号"></el-input></el-form-item>
+                  <el-form-item label="密码"><el-input v-model="authForm.password" type="password" placeholder="请输入密码" show-password></el-input></el-form-item>
+                  <el-button type="primary" class="full-btn" :loading="loading" @click="handleLogin">验证接口 Token</el-button>
+                </el-form>
+              </el-tab-pane>
+              <el-tab-pane label="新员工注册" name="register">
+                <el-form :model="authForm" label-width="70px" @submit.prevent="handleRegister">
+                  <el-form-item label="账号"><el-input v-model="authForm.username" placeholder="设置员工账号"></el-input></el-form-item>
+                  <el-form-item label="密码"><el-input v-model="authForm.password" type="password" placeholder="设置登录密码" show-password></el-input></el-form-item>
+                  <el-button type="success" class="full-btn" :loading="loading" @click="handleRegister">注册并领取额度</el-button>
+                </el-form>
+              </el-tab-pane>
+            </el-tabs>
+          </el-card>
+        </div>
+
+        <div v-else class="chat-panel">
+          <el-card class="chat-card" shadow="never">
+            <div class="message-list" ref="scrollbarRef">
+              <div v-for="(msg, index) in messageHistory" :key="index" :class="['message-item', msg.role]">
+                <div class="avatar">{{ msg.role === 'user' ? '🧑‍💻' : '🤖' }}</div>
+                <div class="bubble">
+                  <div v-if="msg.fileUrl" class="file-preview"><img :src="msg.fileUrl" class="preview-img" /></div>
+                  <div class="text-content">{{ msg.content }}<span v-if="index === messageHistory.length - 1 && isTyping" class="cursor"></span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="input-area">
+              <div v-if="selectedFile" class="upload-preview">
+                <el-tag closable @close="selectedFile = null" type="warning" effect="dark">📄 已挂载附件: {{ selectedFile.name }}</el-tag>
+              </div>
+              <div class="input-container">
+                <el-upload class="upload-trigger" action="#" :auto-upload="false" :show-file-list="false" :on-change="handleFileChange">
+                  <el-button circle size="large">📎</el-button>
+                </el-upload>
+                <el-input v-model="inputText" type="textarea" :rows="2" placeholder="描述需求或上传图片清单..." resize="none" @keyup.enter.exact="sendMessage" :disabled="sending"></el-input>
+              </div>
+              <div class="action-bar">
+                <span class="tip-text">提示：支持图文多模态混合意图识别，支持人工干预与纠错。</span>
+                <el-button type="primary" :loading="sending" @click="sendMessage" round>🚀 发送至 AI 中枢</el-button>
+              </div>
+            </div>
+          </el-card>
+        </div>
+      </el-main>
+
+      <!-- 人在回路 (HITL) 预审数据源弹窗 -->
+      <el-dialog v-model="showPreviewDialog" title="🧐 AI 报价明细预审 (支持手工干预)" width="850px" :close-on-click-modal="false" :show-close="false">
+        <el-alert title="请仔细核对以下 AI 提取的数据，如有遗漏或单价错误，请直接点击表格框进行修改。" type="warning" show-icon style="margin-bottom: 15px;"></el-alert>
+
+        <el-table :data="previewData" border stripe style="width: 100%">
+          <el-table-column prop="project_name" label="施工项目" min-width="160">
+            <template #default="scope">
+              <el-input v-model="scope.row.project_name" size="small"></el-input>
+            </template>
+          </el-table-column>
+          <el-table-column prop="unit_price" label="AI 建议单价(元)" width="130">
+            <template #default="scope">
+              <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%"></el-input-number>
+            </template>
+          </el-table-column>
+          <el-table-column prop="total_price" label="系统合计(元)" width="130">
+            <template #default="scope">
+              <el-input-number v-model="scope.row.total_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%"></el-input-number>
+            </template>
+          </el-table-column>
+          <el-table-column prop="notes" label="工艺与避坑备注" min-width="200">
+            <template #default="scope">
+              <el-input v-model="scope.row.notes" type="textarea" :rows="2" size="small"></el-input>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div style="margin-top: 20px; font-size: 16px; text-align: right; color: #f56c6c; font-weight: bold;">
+          人工核定总价：¥ {{ finalTotalAmount }}
+        </div>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="cancelPreview">打回重填</el-button>
+            <el-button type="success" :loading="pushing" @click="submitFinalQuote">
+              ✅ 确认无误，下发生成 Excel 并推钉钉
+            </el-button>
+          </span>
+        </template>
+      </el-dialog>
+
+    </el-container>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/element-plus"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+  <script>
+    const { createApp, ref, computed, nextTick, onMounted } = Vue;
+    const { ElMessage } = ElementPlus;
+
+    const App = {
+      setup() {
+        const API_BASE_URL = '/api/v1';
+
+        const isLoggedIn = ref(false);
+        const currentUser = ref('');
+        const activeTab = ref('login');
+        const loading = ref(false);
+        const sending = ref(false);
+        const isTyping = ref(false);
+
+        const showPreviewDialog = ref(false);
+        const previewData = ref([]);
+        const globalNotes = ref("");
+        const pushing = ref(false);
+
+        const authForm = ref({ username: '', password: '' });
+        const inputText = ref('');
+        const selectedFile = ref(null);
+        const messageHistory = ref([{ role: 'assistant', content: '您好，内部多模态 AI 业务中台 V2.0 已就绪。\n随时可以接收您的业务指令或图纸。' }]);
+        const scrollbarRef = ref(null);
+
+        // 防爆盾计算属性
+        const finalTotalAmount = computed(() => {
+            if (!Array.isArray(previewData.value)) return "0.00";
+            return previewData.value.reduce((sum, item) => sum + (Number(item.total_price) || 0), 0).toFixed(2);
+        });
+
+        const handleRegister = async () => { /*省略*/ };
+        const handleLogin = async () => {
+          if (!authForm.value.username || !authForm.value.password) return ElMessage.warning('账号和密码不能为空！');
+          loading.value = true;
+          try {
+            const params = new URLSearchParams(); params.append('username', authForm.value.username); params.append('password', authForm.value.password);
+            const res = await axios.post(`${API_BASE_URL}/auth/login`, params);
+            localStorage.setItem('ai_token', res.data.access_token);
+            currentUser.value = authForm.value.username;
+            isLoggedIn.value = true;
+          } catch (error) { ElMessage.error('获取底层 Token 失败，请检查密码'); } finally { loading.value = false; }
+        };
+        const logout = () => { localStorage.removeItem('ai_token'); isLoggedIn.value = false; authForm.value.password = ''; messageHistory.value = [{ role: 'assistant', content: '您好，业务中台已连接。' }]; };
+        const handleFileChange = (file) => { selectedFile.value = file.raw; ElMessage.info(`已选中附件`); };
+
+        const sendMessage = async () => {
+          const text = inputText.value.trim();
+          if (!text && !selectedFile.value) return;
+
+          const formData = new FormData();
+          if (text) formData.append('message', text);
+          if (selectedFile.value) formData.append('file', selectedFile.value);
+
+          const userMsg = { role: 'user', content: text || '发起多模态文件解析请求' };
+          if (selectedFile.value && selectedFile.value.type.startsWith('image/')) userMsg.fileUrl = URL.createObjectURL(selectedFile.value);
+          messageHistory.value.push(userMsg);
+
+          messageHistory.value.push({ role: 'assistant', content: '' });
+          const msgIndex = messageHistory.value.length - 1;
+
+          inputText.value = ''; selectedFile.value = null; sending.value = true; isTyping.value = true; scrollToBottom();
+
+          let charQueue = Array.from('⏳ 正在唤醒网关层，建立长连接...\n\n');
+          let streamEnded = false;
+
+          const typeNextChar = () => {
+            if (charQueue.length > 0) {
+              const charsToProcess = charQueue.length > 60 ? 4 : (charQueue.length > 20 ? 2 : 1);
+              for(let i = 0; i < charsToProcess; i++) {
+                  if(charQueue.length > 0) messageHistory.value[msgIndex].content += charQueue.shift();
+              }
+              scrollToBottom(); setTimeout(typeNextChar, 25);
+            } else {
+              if (streamEnded) { isTyping.value = false; } else { setTimeout(typeNextChar, 50); }
+            }
+          };
+          typeNextChar();
+
+          try {
+            const token = localStorage.getItem('ai_token');
+            const response = await fetch(`${API_BASE_URL}/chat`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+
+            if (!response.ok) {
+              streamEnded = true; sending.value = false; return;
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let done = false;
+
+            while (!done) {
+              const { value, done: readerDone } = await reader.read();
+              done = readerDone;
+              if (value) {
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    try {
+                      const data = JSON.parse(line.substring(6));
+                      if (data.status === 'processing') {
+                         charQueue.push(...(data.message + '\n\n').split(''));
+                      } else if (data.status === 'preview') {
+                         charQueue.push(...(data.message).split(''));
+                         sending.value = false;
+
+                         let rawData = data.data || {};
+                         let extractedArray = [];
+                         let extractedNotes = "无";
+
+                         let targetStr = typeof rawData === 'string' ? rawData : (rawData.text || rawData.answer || rawData.response || rawData.message || "");
+
+                         if (typeof targetStr === 'string' && targetStr.length > 0) {
+                             try {
+                                 let startIndex = targetStr.indexOf('{');
+                                 let endIndex = targetStr.lastIndexOf('}');
+                                 if (startIndex !== -1 && endIndex !== -1) {
+                                     let cleanStr = targetStr.substring(startIndex, endIndex + 1);
+                                     let parsedData = JSON.parse(cleanStr);
+                                     if (parsedData.project_details && Array.isArray(parsedData.project_details)) {
+                                         extractedArray = parsedData.project_details;
+                                         extractedNotes = parsedData.customer_questions_answered || "无";
+                                     }
+                                 }
+                             } catch(e) { console.error('JSON反序列化出错:', e); }
+                         }
+
+                         if (extractedArray.length === 0) {
+                             if (rawData.project_details && Array.isArray(rawData.project_details)) {
+                                 extractedArray = rawData.project_details;
+                                 extractedNotes = rawData.customer_questions_answered || "无";
+                             } else if (Array.isArray(rawData)) {
+                                 extractedArray = rawData;
+                             } else if (rawData.data && Array.isArray(rawData.data)) {
+                                 extractedArray = rawData.data;
+                             }
+                         }
+
+                         previewData.value = Array.isArray(extractedArray) ? extractedArray : [];
+                         globalNotes.value = extractedNotes;
+
+                         setTimeout(() => { showPreviewDialog.value = true; }, 1000);
+
+                      } else if (data.status === 'error' || data.status === 'success') {
+                         charQueue.push(...(data.message).split(''));
+                         sending.value = false;
+                      }
+                    } catch(e) { console.error("SSE解析出错:", e); }
+                  }
+                }
+              }
+            }
+            streamEnded = true;
+          } catch (error) {
+            charQueue.push(...(`\n❌ 严重异常: ${error.message}`).split(''));
+            streamEnded = true; sending.value = false;
+          }
+        };
+
+        const cancelPreview = () => {
+            showPreviewDialog.value = false;
+            sending.value = false;
+            messageHistory.value.push({ role: 'assistant', content: '⏸️ 人工审核不通过，流程已打回。您可以修改参数后重新输入指令。' });
+            scrollToBottom();
+        };
+
+        const submitFinalQuote = async () => {
+            pushing.value = true;
+            try {
+                const token = localStorage.getItem('ai_token');
+                const finalPayload = {
+                    project_details: previewData.value,
+                    customer_questions_answered: globalNotes.value
+                };
+
+                await axios.post(`${API_BASE_URL}/confirm_push`, finalPayload, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                ElMessage.success('🎉 确认成功！最终报价单已推送到钉钉！');
+                showPreviewDialog.value = false;
+                sending.value = false;
+                messageHistory.value.push({ role: 'assistant', content: '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！' });
+                scrollToBottom();
+            } catch (error) {
+                ElMessage.error(error.response?.data?.detail || '推送钉钉失败，请检查推送流服务状态');
+            } finally {
+                pushing.value = false;
+            }
+        };
+
+        const scrollToBottom = () => { nextTick(() => { if (scrollbarRef.value) scrollbarRef.value.scrollTop = scrollbarRef.value.scrollHeight; }); };
+
+        // 🚀 新增自动加载本地 Token 逻辑 (支持跨框架共享态)
+        onMounted(() => {
+            const token = localStorage.getItem('ai_token');
+            if (token) {
+                isLoggedIn.value = true;
+                const sysUser = localStorage.getItem('app_user_info');
+                currentUser.value = sysUser ? JSON.parse(sysUser).username : '已授权用户';
+            }
+        });
+
+        return {
+          isLoggedIn, currentUser, activeTab, loading, sending, isTyping, showPreviewDialog, previewData, pushing, finalTotalAmount,
+          authForm, inputText, selectedFile, messageHistory, scrollbarRef,
+          handleRegister, handleLogin, logout, handleFileChange, sendMessage, cancelPreview, submitFinalQuote, scrollToBottom
+        };
+      }
+    };
+
+    const app = createApp(App);
+    app.use(ElementPlus);
+    app.mount('#app');
+  </script>
+</body>
+</html>

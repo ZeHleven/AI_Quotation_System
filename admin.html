@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V3.0 知识库管理员驾驶舱 - 智能提炼中心</title>
+  <!-- 引入 Element Plus CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <style>
+    body { margin: 0; padding: 0; background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .app-container { height: 100vh; display: flex; flex-direction: column; }
+    /* 已去掉 header 相关样式，完美适配 app.html 的 iframe 嵌入 */
+    .main-content { padding: 20px; flex: 1; overflow-y: auto; }
+    .box-card { margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: none; }
+    .toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; align-items: center;}
+    .title-area { display: flex; align-items: center; gap: 10px; }
+    .title-area h3 { margin: 0; color: #303133; }
+    .milvus-btn { background: linear-gradient(135deg, #67c23a, #529b2e); border: none; color: white; }
+    .milvus-btn:hover { background: linear-gradient(135deg, #85ce61, #67c23a); box-shadow: 0 4px 12px rgba(103,194,58,0.4); }
+
+    /* 使得新导入的草稿行有醒目的背景色提示 */
+    .el-table .draft-row {
+      background: #fff5f5 !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-container">
+
+    <el-main class="main-content">
+      <el-row :gutter="20">
+        <!-- 左侧状态看板 -->
+        <el-col :span="6">
+          <el-card class="box-card" shadow="never">
+            <template #header>
+              <div class="card-header"><span>🧠 Milvus 向量库引擎状态</span></div>
+            </template>
+            <el-descriptions direction="vertical" :column="1" border>
+              <el-descriptions-item label="引擎状态">
+                <el-tag type="success" size="small">在线 (Running)</el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="当前物料条数">{{ tableData.length }} 条</el-descriptions-item>
+              <el-descriptions-item label="最后同步时间">{{ lastSyncTime }}</el-descriptions-item>
+            </el-descriptions>
+            <div style="margin-top: 20px; text-align: center;">
+              <el-button class="milvus-btn" size="large" :loading="syncing" @click="syncToMilvus" style="width: 100%;">
+                <el-icon style="margin-right: 5px"><UploadCloud /></el-icon> 一键热更新至 Milvus
+              </el-button>
+              <div style="font-size: 12px; color: #909399; margin-top: 10px;">将下方表格确定的价格灌入底层算力库</div>
+            </div>
+          </el-card>
+        </el-col>
+
+        <!-- 右侧数据管理表格 -->
+        <el-col :span="18">
+          <el-card class="box-card" shadow="never">
+            <div class="toolbar">
+              <div class="title-area">
+                <h3>💰 核心施工物料基准单价库 (RAG源数据)</h3>
+              </div>
+              <div class="action-area" style="display: flex; gap: 10px; align-items: center;">
+                <el-upload
+                  action="#"
+                  :auto-upload="false"
+                  :show-file-list="false"
+                  accept=".csv"
+                  :on-change="handleImportCSV"
+                >
+                  <el-button type="warning" plain>
+                     <el-icon style="margin-right: 5px;"><DocumentAdd /></el-icon>
+                     导入新历史记录(CSV)提取草稿
+                  </el-button>
+                </el-upload>
+                <el-button type="primary" @click="handleAdd" plain>+ 新增自定义物料</el-button>
+                <el-button type="success" :loading="saving" @click="saveData">💾 保存表格并核定草稿</el-button>
+              </div>
+            </div>
+
+            <el-alert title="工作流：导入 CSV 文件提炼异动记录 -> 在表格中修改完善并【保存】 -> 点击左侧【一键热更新至 Milvus】让其正式对 AI 生效。" type="info" show-icon style="margin-bottom: 15px;"></el-alert>
+
+            <!-- 利用 row-class-name 动态给草稿加上红色的弱底色 -->
+            <el-table :data="tableData" :row-class-name="tableRowClassName" border style="width: 100%" v-loading="loading">
+              <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+
+              <el-table-column prop="item_name" label="施工项目名称" min-width="220">
+                <template #default="scope">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                      <el-input v-model="scope.row.item_name" placeholder="例如：直线型吊顶"></el-input>
+                      <el-tag v-if="scope.row.is_draft" type="danger" effect="dark" size="small" disable-transitions>新提炼草稿</el-tag>
+                  </div>
+                </template>
+              </el-table-column>
+
+              <el-table-column prop="unit_price" label="底层刚性单价(元)" width="150">
+                <template #default="scope">
+                  <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" style="width: 100%;"></el-input-number>
+                </template>
+              </el-table-column>
+
+              <el-table-column prop="unit" label="计价单位" width="100">
+                <template #default="scope">
+                  <el-input v-model="scope.row.unit" placeholder="平米/项"></el-input>
+                </template>
+              </el-table-column>
+
+              <el-table-column prop="notes" label="标准施工工艺约束 (喂给大模型的要求)" min-width="250">
+                <template #default="scope">
+                  <el-input v-model="scope.row.notes" type="textarea" :rows="2" placeholder="填写工艺要求以防 AI 乱编"></el-input>
+                </template>
+              </el-table-column>
+
+              <el-table-column label="操作" width="80" align="center" fixed="right">
+                <template #default="scope">
+                  <el-button size="small" type="danger" circle @click="handleDelete(scope.$index)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </el-col>
+      </el-row>
+    </el-main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/element-plus"></script>
+  <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    const { ElMessage, ElMessageBox } = ElementPlus;
+
+    const App = {
+      setup() {
+        // 如果你的 FastAPI 跑在其他地址或端口，请修改这里
+        const API_BASE_URL = '/api/v1/admin';
+
+        const tableData = ref([]);
+        const loading = ref(false);
+        const saving = ref(false);
+        const syncing = ref(false);
+        const lastSyncTime = ref(localStorage.getItem('last_milvus_sync') || '未同步');
+
+        const initMockData = () => {
+          return [
+            { id: "1", item_name: "直线型吊顶", unit_price: 120.00, unit: "平米", notes: "使用龙牌轻钢龙骨泰山石膏板，L型抗裂及接缝处理。" }
+          ];
+        };
+
+        const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('ai_token') || ''}` });
+
+        const fetchData = async () => {
+          loading.value = true;
+          try {
+            const res = await axios.get(`${API_BASE_URL}/materials`, { headers: authHeaders() });
+            if (res.data.data && res.data.data.length > 0) {
+              tableData.value = res.data.data;
+            } else {
+              tableData.value = initMockData();
+            }
+          } catch (error) {
+            console.error(error);
+            ElMessage.warning('未能连接到后台，正使用本地模拟数据运行。');
+            tableData.value = initMockData();
+          } finally {
+            loading.value = false;
+          }
+        };
+
+        const handleAdd = () => {
+          tableData.value.push({
+            id: Date.now().toString(), item_name: "", unit_price: 0.00, unit: "平米", notes: "", is_draft: false
+          });
+        };
+
+        const handleDelete = (index) => {
+          ElMessageBox.confirm('确定要删除这项基础物料吗？', '警告', { type: 'warning' })
+            .then(() => { tableData.value.splice(index, 1); ElMessage.success('条目已移除，请记得保存'); })
+            .catch(() => {});
+        };
+
+        // 处理 CSV 导入与后端提炼接口对接
+        const handleImportCSV = async (file) => {
+            const formData = new FormData();
+            formData.append('file', file.raw);
+            loading.value = true;
+            try {
+                const res = await axios.post(`${API_BASE_URL}/upload_csv`, formData, { headers: authHeaders() });
+                const newDrafts = res.data.data;
+                if (newDrafts && newDrafts.length > 0) {
+                    tableData.value.push(...newDrafts);
+                    ElMessage.success(`解析成功！智能提炼出 ${newDrafts.length} 条待审异常/新项目，已追加至末尾。`);
+                    setTimeout(() => {
+                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                    }, 500);
+                } else {
+                    ElMessage.info('过滤完毕。导入的文件与现有标准库高度一致，无需新增处理项。');
+                }
+            } catch (error) {
+                // 如果后端返回了错误信息（比如不是真实的 CSV），直接弹出显示
+                ElMessage.error(error.response?.data?.detail || 'CSV 解析失败，请检查文件格式。');
+            } finally {
+                loading.value = false;
+            }
+        };
+
+        const saveData = async () => {
+          saving.value = true;
+          try {
+            await axios.post(`${API_BASE_URL}/materials`, tableData.value, { headers: authHeaders() });
+            tableData.value.forEach(item => item.is_draft = false);
+            ElMessage.success('🎉 表格数据审核完毕，已安全保存到本地基础库！');
+          } catch (error) {
+            ElMessage.error('保存失败，请检查网关连接。');
+          } finally {
+            saving.value = false;
+          }
+        };
+
+        const syncToMilvus = async () => {
+          ElMessageBox.confirm('此操作会将上方表格的数据完全覆盖灌入 Milvus 向量引擎，直接成为 AI 报价算力的唯一标准，是否继续？', '🚀 发布指令', {
+            confirmButtonText: '⚡ 确认发布',
+            cancelButtonText: '取消',
+            type: 'warning',
+          }).then(async () => {
+            syncing.value = true;
+            try {
+              // 确保先保存最新数据
+              await axios.post(`${API_BASE_URL}/materials`, tableData.value, { headers: authHeaders() });
+              const res = await axios.post(`${API_BASE_URL}/sync_milvus`, {}, { headers: authHeaders() });
+              ElMessage({ message: res.data.message || '热更新完毕，向量引擎已满血复活！', type: 'success', duration: 4000 });
+
+              const now = new Date().toLocaleString();
+              lastSyncTime.value = now;
+              localStorage.setItem('last_milvus_sync', now);
+              // 同步成功后清除草稿标记
+              tableData.value.forEach(item => item.is_draft = false);
+            } catch (error) {
+              ElMessage.error(error.response?.data?.detail || '向量引擎同步失败，请检查底层 Milvus 状态。');
+            } finally {
+              syncing.value = false;
+            }
+          }).catch(() => {});
+        };
+
+        // 动态绑定背景色样式
+        const tableRowClassName = ({row}) => {
+            return row.is_draft ? 'draft-row' : '';
+        };
+
+        onMounted(() => { fetchData(); });
+
+        return {
+          tableData, loading, saving, syncing, lastSyncTime, tableRowClassName,
+          handleAdd, handleDelete, handleImportCSV, saveData, syncToMilvus
+        };
+      }
+    };
+
+    const app = createApp(App);
+    // 注册所有的 Element UI 图标
+    for (const [key, component] of Object.entries(ElementPlusIconsVue)) { app.component(key, component); }
+    app.use(ElementPlus);
+    app.mount('#app');
+  </script>
+</body>
+</html>

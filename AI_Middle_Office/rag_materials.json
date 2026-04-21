@@ -1,0 +1,562 @@
+[
+  {
+    "id": "1",
+    "item_name": "直线型吊顶",
+    "unit_price": 185.0,
+    "unit": "平米",
+    "notes": "使用龙牌轻钢龙骨泰山石膏板，L型抗裂及接缝处理。",
+    "is_draft": false
+  },
+  {
+    "id": "2",
+    "item_name": "墙面防水处理",
+    "unit_price": 55.0,
+    "unit": "平米",
+    "notes": "东方雨虹柔韧型防水涂料，墙面刷高至1.8米，闭水试验48小时无渗漏。",
+    "is_draft": false
+  },
+  {
+    "id": "3",
+    "item_name": "铲墙皮",
+    "unit_price": 12.0,
+    "unit": "平米",
+    "notes": "铲除原开发商大白腻子至抹灰层，清理建筑垃圾至小区指定地点。",
+    "is_draft": false
+  },
+  {
+    "id": "4",
+    "item_name": "地砖铺贴",
+    "unit_price": 65.0,
+    "unit": "平米",
+    "notes": "水泥砂浆湿铺法，缝隙均匀，踢脚线配套施工，适用于客厅、餐厅、厨卫。",
+    "is_draft": false
+  },
+  {
+    "id": "5",
+    "item_name": "木地板安装",
+    "unit_price": 35.0,
+    "unit": "平米",
+    "notes": "强化复合木地板悬浮铺法，含防潮膜、门槛条，适用于卧室、书房。",
+    "is_draft": false
+  },
+  {
+    "id": "6",
+    "item_name": "墙面腻子批刮",
+    "unit_price": 28.0,
+    "unit": "平米",
+    "notes": "耐水腻子两遍，打磨平整，含阴阳角处理，是刷漆前必做工序。",
+    "is_draft": false
+  },
+  {
+    "id": "7",
+    "item_name": "乳胶漆涂刷",
+    "unit_price": 22.0,
+    "unit": "平米",
+    "notes": "立邦/多乐士品牌乳胶漆，底漆一遍面漆两遍，辊涂工艺，含人工及辅料。",
+    "is_draft": false
+  },
+  {
+    "id": "8",
+    "item_name": "地面找平",
+    "unit_price": 30.0,
+    "unit": "平米",
+    "notes": "自流平水泥找平，厚度3cm以内，适用于毛坯地面或旧地面翻新前处理。",
+    "is_draft": false
+  },
+  {
+    "id": "9",
+    "item_name": "水路改造",
+    "unit_price": 85.0,
+    "unit": "米",
+    "notes": "PPR管热熔连接，含打槽、封槽、压力测试，冷热水管分色区分。",
+    "is_draft": false
+  },
+  {
+    "id": "10",
+    "item_name": "电路改造",
+    "unit_price": 65.0,
+    "unit": "米",
+    "notes": "BV2.5mm²国标铜芯线穿PVC管暗埋，含打槽、封槽、开关插座底盒安装。",
+    "is_draft": false
+  },
+  {
+    "id": "11",
+    "item_name": "强电箱安装",
+    "unit_price": 450.0,
+    "unit": "套",
+    "notes": "空气开关分路改造，含漏电保护器，按实际回路数报价，一般住宅12-16路。",
+    "is_draft": false
+  },
+  {
+    "id": "12",
+    "item_name": "弱电箱安装",
+    "unit_price": 350.0,
+    "unit": "套",
+    "notes": "含网络、电视、电话线路整合，弱电箱成品安装，分路清晰。",
+    "is_draft": false
+  },
+  {
+    "id": "13",
+    "item_name": "墙面瓷砖铺贴",
+    "unit_price": 75.0,
+    "unit": "平米",
+    "notes": "瓷砖湿贴，含勾缝，厨房墙砖铺至顶，卫生间墙砖铺至顶或半腰线处理。",
+    "is_draft": false
+  },
+  {
+    "id": "14",
+    "item_name": "卫生间防水",
+    "unit_price": 75.0,
+    "unit": "平米",
+    "notes": "聚合物水泥基防水涂料两遍，地面满铺，墙面上翻30cm，淋浴区上翻180cm，闭水试验48小时。",
+    "is_draft": false
+  },
+  {
+    "id": "15",
+    "item_name": "铝扣板吊顶",
+    "unit_price": 155.0,
+    "unit": "平米",
+    "notes": "300×300集成铝扣板，适用于厨房、卫生间，含轻钢龙骨骨架及嵌入式灯孔预留。",
+    "is_draft": false
+  },
+  {
+    "id": "16",
+    "item_name": "石膏线安装",
+    "unit_price": 18.0,
+    "unit": "米",
+    "notes": "石膏阴角线或腰线粘贴，含打磨、刮腻子收边，宽度80mm以内。",
+    "is_draft": false
+  },
+  {
+    "id": "17",
+    "item_name": "内门安装",
+    "unit_price": 280.0,
+    "unit": "套",
+    "notes": "成品木门安装，含门框、门套、合页、门锁、门吸，不含门本身材料费。",
+    "is_draft": false
+  },
+  {
+    "id": "18",
+    "item_name": "入户门安装",
+    "unit_price": 380.0,
+    "unit": "套",
+    "notes": "钢制防盗门或铸铝门安装，含门框修补、密封条、猫眼、门铃安装。",
+    "is_draft": false
+  },
+  {
+    "id": "19",
+    "item_name": "推拉门安装",
+    "unit_price": 220.0,
+    "unit": "套",
+    "notes": "玻璃推拉门或木质推拉门安装，含轨道、滑轮、把手，适用于阳台、卧室隔断。",
+    "is_draft": false
+  },
+  {
+    "id": "20",
+    "item_name": "窗台板安装",
+    "unit_price": 180.0,
+    "unit": "米",
+    "notes": "大理石或人造石窗台板，含切割、打磨、玻璃胶封边，宽度25cm以内。",
+    "is_draft": false
+  },
+  {
+    "id": "21",
+    "item_name": "橱柜安装",
+    "unit_price": 350.0,
+    "unit": "延米",
+    "notes": "成品橱柜安装，含地柜、吊柜、台面上下安装调平，不含橱柜材料费。",
+    "is_draft": false
+  },
+  {
+    "id": "22",
+    "item_name": "马桶安装",
+    "unit_price": 120.0,
+    "unit": "套",
+    "notes": "坐便器安装，含法兰圈、玻璃胶打胶，不含马桶材料费。",
+    "is_draft": false
+  },
+  {
+    "id": "23",
+    "item_name": "洗手盆安装",
+    "unit_price": 150.0,
+    "unit": "套",
+    "notes": "台上盆或台下盆安装，含龙头、下水器、角阀安装，不含盆体材料费。",
+    "is_draft": false
+  },
+  {
+    "id": "24",
+    "item_name": "淋浴房安装",
+    "unit_price": 280.0,
+    "unit": "套",
+    "notes": "钢化玻璃淋浴房安装，含底座、玻璃门、铰链调平，不含淋浴房材料费。",
+    "is_draft": false
+  },
+  {
+    "id": "25",
+    "item_name": "浴缸安装",
+    "unit_price": 220.0,
+    "unit": "套",
+    "notes": "嵌入式或独立浴缸安装，含下水器、龙头安装、玻璃胶封边，不含浴缸材料费。",
+    "is_draft": false
+  },
+  {
+    "id": "26",
+    "item_name": "热水器安装",
+    "unit_price": 180.0,
+    "unit": "台",
+    "notes": "燃气热水器或电热水器挂墙安装，含进出水管、烟道管连接，不含热水器材料费。",
+    "is_draft": false
+  },
+  {
+    "id": "27",
+    "item_name": "新风系统安装",
+    "unit_price": 320.0,
+    "unit": "台",
+    "notes": "全热交换新风机安装，含打孔、管道布线，不含新风机材料费，适用于100平米以内住宅。",
+    "is_draft": false
+  },
+  {
+    "id": "28",
+    "item_name": "中央空调安装",
+    "unit_price": 650.0,
+    "unit": "台",
+    "notes": "多联机室内机安装，含铜管、排水管铺设，不含室外机及管材费，按室内机台数计。",
+    "is_draft": false
+  },
+  {
+    "id": "29",
+    "item_name": "地暖铺设",
+    "unit_price": 120.0,
+    "unit": "平米",
+    "notes": "PE-RT地暖管铺设，含保温板、边角带、分集水器安装，水压试验合格。",
+    "is_draft": false
+  },
+  {
+    "id": "30",
+    "item_name": "拆除墙体",
+    "unit_price": 180.0,
+    "unit": "平米",
+    "notes": "砖混结构非承重墙拆除，含建筑垃圾清运至楼层指定地点，不含垂直运输费。",
+    "is_draft": false
+  },
+  {
+    "id": "31",
+    "item_name": "砌筑墙体",
+    "unit_price": 220.0,
+    "unit": "平米",
+    "notes": "加气混凝土砌块（AAC）砌筑，含水泥砂浆，厚度100mm，适用于室内隔墙。",
+    "is_draft": false
+  },
+  {
+    "id": "32",
+    "item_name": "轻钢龙骨隔墙",
+    "unit_price": 165.0,
+    "unit": "平米",
+    "notes": "75系列轻钢龙骨双面石膏板隔墙，内填岩棉隔音，含阴阳角处理。",
+    "is_draft": false
+  },
+  {
+    "id": "33",
+    "item_name": "踢脚线安装",
+    "unit_price": 15.0,
+    "unit": "米",
+    "notes": "PVC或实木踢脚线粘贴/卡扣安装，高度80mm以内，含阴阳角处理，不含材料费。",
+    "is_draft": false
+  },
+  {
+    "id": "34",
+    "item_name": "窗帘盒制作",
+    "unit_price": 95.0,
+    "unit": "米",
+    "notes": "石膏板或木工板制作暗装窗帘盒，含龙骨骨架、面层处理，宽度20cm以内。",
+    "is_draft": false
+  },
+  {
+    "id": "35",
+    "item_name": "墙面基层处理（挂网）",
+    "unit_price": 20.0,
+    "unit": "平米",
+    "notes": "不同材质交界处挂玻璃纤维网格布，防止开裂，配合水泥砂浆底层使用。",
+    "is_draft": false
+  },
+  {
+    "id": "36",
+    "item_name": "墙面抹灰找平",
+    "unit_price": 35.0,
+    "unit": "平米",
+    "notes": "水泥砂浆抹灰，两遍成活，误差≤3mm，适用于墙面不平整超过10mm的情况。",
+    "is_draft": false
+  },
+  {
+    "id": "37",
+    "item_name": "地面砖拆除",
+    "unit_price": 25.0,
+    "unit": "平米",
+    "notes": "原有地砖凿除，含建筑垃圾清运至楼层指定地点。",
+    "is_draft": false
+  },
+  {
+    "id": "38",
+    "item_name": "旧墙砖拆除",
+    "unit_price": 30.0,
+    "unit": "平米",
+    "notes": "原有墙面瓷砖凿除，含建筑垃圾清运至楼层指定地点。",
+    "is_draft": false
+  },
+  {
+    "id": "39",
+    "item_name": "建筑垃圾清运（楼层）",
+    "unit_price": 200.0,
+    "unit": "车",
+    "notes": "装修垃圾装袋后人工搬运至楼下，约1吨/车，不含外运费用。",
+    "is_draft": false
+  },
+  {
+    "id": "40",
+    "item_name": "成品保护",
+    "unit_price": 8.0,
+    "unit": "平米",
+    "notes": "入户门、楼梯、电梯、地面用珍珠棉或纸板覆盖保护，施工结束前保留。",
+    "is_draft": false
+  },
+  {
+    "id": "41",
+    "item_name": "地砖材料（600×600通体砖）",
+    "unit_price": 85.0,
+    "unit": "平米",
+    "notes": "普通600×600通体砖，适用于客厅、餐厅、过道，含损耗5%，不含铺贴人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "42",
+    "item_name": "地砖材料（800×800抛光砖）",
+    "unit_price": 130.0,
+    "unit": "平米",
+    "notes": "800×800抛光砖或仿古砖，适用于客厅大空间，含损耗5%，不含铺贴人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "43",
+    "item_name": "墙砖材料（300×600釉面砖）",
+    "unit_price": 75.0,
+    "unit": "平米",
+    "notes": "300×600釉面墙砖，适用于厨房、卫生间墙面，含损耗8%，不含铺贴人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "44",
+    "item_name": "强化复合木地板材料",
+    "unit_price": 120.0,
+    "unit": "平米",
+    "notes": "AC4级强化复合木地板，厚度12mm，含防潮膜，适用于卧室、书房，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "45",
+    "item_name": "实木复合地板材料",
+    "unit_price": 280.0,
+    "unit": "平米",
+    "notes": "三层实木复合地板，面板厚度3-4mm，含防潮膜，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "46",
+    "item_name": "PPR冷水管材料（DN20）",
+    "unit_price": 18.0,
+    "unit": "米",
+    "notes": "S4系列PPR冷水管，管径20mm，壁厚2.8mm，含管件（弯头、三通按实际用量另计），不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "47",
+    "item_name": "PPR热水管材料（DN20）",
+    "unit_price": 25.0,
+    "unit": "米",
+    "notes": "S3.2系列PPR热水管，管径20mm，壁厚3.1mm，红色标识，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "48",
+    "item_name": "BV铜芯电线（2.5mm²）",
+    "unit_price": 4.5,
+    "unit": "米",
+    "notes": "国标BV2.5mm²单股铜芯硬线，适用于普通插座回路，含护套管摊销，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "49",
+    "item_name": "BV铜芯电线（4mm²）",
+    "unit_price": 7.0,
+    "unit": "米",
+    "notes": "国标BV4mm²单股铜芯硬线，适用于空调、热水器大功率回路，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "50",
+    "item_name": "PVC穿线管（16mm）",
+    "unit_price": 3.5,
+    "unit": "米",
+    "notes": "阻燃PVC电工穿线管，管径16mm，暗埋墙体使用，含管卡，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "51",
+    "item_name": "泰山石膏板（9.5mm）",
+    "unit_price": 45.0,
+    "unit": "张",
+    "notes": "泰山牌普通纸面石膏板，规格1200×2400×9.5mm，适用于吊顶、隔墙面层，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "52",
+    "item_name": "防水石膏板（9.5mm）",
+    "unit_price": 65.0,
+    "unit": "张",
+    "notes": "泰山牌防水纸面石膏板，规格1200×2400×9.5mm，适用于厨卫吊顶，绿色板芯，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "53",
+    "item_name": "75系列轻钢龙骨材料",
+    "unit_price": 38.0,
+    "unit": "平米",
+    "notes": "75系列镀锌轻钢龙骨骨架，含竖龙骨、横龙骨、天地龙骨及配件，适用于隔墙，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "54",
+    "item_name": "38系列轻钢龙骨材料（吊顶）",
+    "unit_price": 28.0,
+    "unit": "平米",
+    "notes": "38系列镀锌轻钢龙骨，含主龙骨、次龙骨、吊件及配件，适用于平顶吊顶，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "55",
+    "item_name": "东方雨虹K11防水涂料",
+    "unit_price": 45.0,
+    "unit": "平米",
+    "notes": "东方雨虹K11柔韧型防水涂料，双组分，涂刷两遍，用量约1.5kg/m²，不含施工人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "56",
+    "item_name": "耐水腻子粉材料",
+    "unit_price": 12.0,
+    "unit": "平米",
+    "notes": "品牌耐水腻子粉，批刮两遍用量约1.5kg/m²，适用于内墙刷漆前基层处理，不含施工人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "57",
+    "item_name": "立邦五合一乳胶漆材料",
+    "unit_price": 18.0,
+    "unit": "平米",
+    "notes": "立邦五合一内墙乳胶漆，底漆一遍面漆两遍用量约0.4L/m²，不含施工人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "58",
+    "item_name": "多乐士五合一乳胶漆材料",
+    "unit_price": 22.0,
+    "unit": "平米",
+    "notes": "多乐士超易洗乳胶漆，底漆一遍面漆两遍，环保低VOC，不含施工人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "59",
+    "item_name": "加气混凝土砌块（AAC）",
+    "unit_price": 55.0,
+    "unit": "平米",
+    "notes": "600×200×100mm加气混凝土砌块，容重500级，适用于室内非承重隔墙，不含砌筑人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "60",
+    "item_name": "岩棉隔音板材料",
+    "unit_price": 35.0,
+    "unit": "平米",
+    "notes": "50mm厚岩棉板，容重80kg/m³，填充轻钢龙骨隔墙内，隔音降噪，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "61",
+    "item_name": "水泥砂浆材料（铺贴用）",
+    "unit_price": 15.0,
+    "unit": "平米",
+    "notes": "42.5级普通硅酸盐水泥+中砂配制砂浆，用于瓷砖铺贴底层，含损耗，不含施工人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "62",
+    "item_name": "瓷砖填缝剂（美缝剂）",
+    "unit_price": 25.0,
+    "unit": "平米",
+    "notes": "环氧彩色美缝剂，防水防污，适用于地砖、墙砖缝隙处理，含施工人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "63",
+    "item_name": "铝扣板材料（300×300）",
+    "unit_price": 85.0,
+    "unit": "平米",
+    "notes": "300×300集成铝扣板，厚度0.6mm，适用于厨卫吊顶，含龙骨骨架，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "64",
+    "item_name": "PE-RT地暖管材料（DN20）",
+    "unit_price": 22.0,
+    "unit": "米",
+    "notes": "PE-RT II型地暖专用管，管径20mm，壁厚2mm，间距200mm铺设，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "65",
+    "item_name": "挤塑板（XPS）保温材料",
+    "unit_price": 40.0,
+    "unit": "平米",
+    "notes": "20mm厚XPS挤塑聚苯板，导热系数≤0.030W/m·K，用于地暖隔热层，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "66",
+    "item_name": "玻璃纤维网格布",
+    "unit_price": 5.0,
+    "unit": "平米",
+    "notes": "160g/m²耐碱玻璃纤维网格布，用于墙面基层抗裂处理，幅宽1m，不含施工人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "67",
+    "item_name": "成品木门材料（含门套）",
+    "unit_price": 1800.0,
+    "unit": "套",
+    "notes": "实木复合门，含门扇、门套、合页、门锁、门吸，常规尺寸900×2000mm，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "68",
+    "item_name": "大理石窗台板材料",
+    "unit_price": 350.0,
+    "unit": "米",
+    "notes": "国产大理石窗台板，厚度20mm，宽度250mm以内，含切割打磨，不含安装人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "69",
+    "item_name": "自流平水泥材料",
+    "unit_price": 20.0,
+    "unit": "平米",
+    "notes": "水泥基自流平材料，厚度3mm用量约4.5kg/m²，适用于地面找平，不含施工人工费。",
+    "is_draft": false
+  },
+  {
+    "id": "70",
+    "item_name": "PVC踢脚线材料",
+    "unit_price": 12.0,
+    "unit": "米",
+    "notes": "PVC发泡踢脚线，高度80mm，厚度10mm，仿木纹多色可选，不含安装人工费。",
+    "is_draft": false
+  }
+]

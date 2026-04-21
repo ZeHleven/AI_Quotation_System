@@ -1,0 +1,194 @@
+import json
+import os
+import re
+from pymilvus import connections, Collection
+from sentence_transformers import SentenceTransformer
+from rank_bm25 import BM25Okapi
+
+# ==========================================
+# 🚀 国内 HuggingFace 镜像源
+# ==========================================
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
+# ==========================================
+# 架构配置区
+# ==========================================
+MILVUS_HOST = os.environ.get("MILVUS_HOST", "127.0.0.1")
+MILVUS_PORT = os.environ.get("MILVUS_PORT", "19530")
+COLLECTION_NAME = "enterprise_quotation_rag"
+EMBEDDING_MODEL_NAME = "maidalun1020/bce-embedding-base_v1"
+RAG_DATA_PATH = "/app/rag_materials.json"
+
+# ==========================================
+# 🧠 向量模型全局单例（常驻内存）
+# ==========================================
+print(f"\n[System] 正在全局预热 BCEmbedding 模型...")
+_GLOBAL_MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
+print(f"[System] ✅ BCEmbedding 模型加载完毕，已常驻内存！\n")
+
+# ==========================================
+# 🔍 BM25 关键词索引（建筑术语精确召回）
+# ==========================================
+print(f"[System] 正在构建 BM25 关键词索引...")
+
+def _tokenize(text: str):
+    """字符级分词 —— 适合中文建筑专业术语精确匹配"""
+    return list(str(text))
+
+with open(RAG_DATA_PATH, "r", encoding="utf-8") as f:
+    _RAG_MATERIALS = json.load(f)
+
+_BM25_DOCS = []
+_BM25_RECORDS = []
+
+for item in _RAG_MATERIALS:
+    # 兼容 flat 和 nested metadata 两种格式
+    meta = item.get("metadata", item)
+    page_content = item.get("page_content", "")
+    item_name = meta.get("item_name", item.get("item_name", ""))
+    searchable = f"{item_name} {page_content}"
+    _BM25_DOCS.append(_tokenize(searchable))
+    _BM25_RECORDS.append({
+        "item_name": item_name,
+        "unit_price": meta.get("price_total", item.get("price_total", item.get("unit_price"))),
+        "unit": meta.get("unit", item.get("unit")),
+        "content": page_content
+    })
+
+_BM25_INDEX = BM25Okapi(_BM25_DOCS)
+print(f"[System] ✅ BM25 索引构建完毕，共 {len(_BM25_DOCS)} 条记录！\n")
+
+
+# ==========================================
+# 🔗 RRF 融合算法（Reciprocal Rank Fusion）
+# ==========================================
+def _rrf_merge(vector_hits: dict, bm25_hits: dict, k: int = 60) -> list:
+    """
+    RRF 公式: score(d) = Σ 1/(k + rank(d))
+    两路结果按排名融合，避免单一检索的盲区
+    """
+    all_keys = set(vector_hits.keys()) | set(bm25_hits.keys())
+
+    vector_ranked = sorted(vector_hits.keys(),
+                           key=lambda x: vector_hits[x]["distance"], reverse=True)
+    bm25_ranked = sorted(bm25_hits.keys(),
+                         key=lambda x: bm25_hits[x]["bm25_score"], reverse=True)
+
+    scores = {}
+    for key in all_keys:
+        score = 0.0
+        if key in vector_ranked:
+            score += 1.0 / (k + vector_ranked.index(key) + 1)
+        if key in bm25_ranked:
+            score += 1.0 / (k + bm25_ranked.index(key) + 1)
+        scores[key] = score
+
+    merged = []
+    for key in sorted(scores.keys(), key=lambda x: scores[x], reverse=True):
+        record = vector_hits.get(key) or bm25_hits.get(key)
+        record["rrf_score"] = scores[key]
+        merged.append(record)
+
+    return merged
+
+
+def init_milvus_connection():
+    connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
+    return Collection(COLLECTION_NAME)
+
+
+def execute_strict_retrieval(query_text, top_k=5):
+    """
+    企业级 RAG 混合检索器：
+    - 通道A：向量语义检索（BCEmbedding + Milvus HNSW）
+    - 通道B：BM25 关键词检索（建筑术语精确匹配）
+    - 融合：RRF 倒数排名融合
+    """
+    print(f"\n[System] 接收到业务端查询指令: '{query_text[:80]}'")
+
+    collection = init_milvus_connection()
+    collection.load()
+
+    # 多意图拆分
+    raw_sub_queries = re.split(r'[；。;|\n]', query_text)
+    sub_queries = [sq.strip() for sq in raw_sub_queries if len(sq.strip()) > 2]
+    if not sub_queries:
+        sub_queries = [query_text]
+
+    print(f"[System] 多意图拆分为 {len(sub_queries)} 个子通道")
+
+    search_params = {"metric_type": "COSINE", "params": {"ef": 64}}
+
+    # ---- 通道A：向量检索 ----
+    vector_hits = {}
+    for sq in sub_queries:
+        print(f"  [向量] 召回: '{sq[:30]}'")
+        query_vector = _GLOBAL_MODEL.encode([sq], normalize_embeddings=True).tolist()
+        results = collection.search(
+            data=query_vector,
+            anns_field="vector",
+            param=search_params,
+            limit=top_k,
+            expr=None,
+            output_fields=["metadata", "page_content"]
+        )
+        for hits in results:
+            for hit in hits:
+                meta = hit.entity.get("metadata")
+                item_name = meta.get("item_name")
+                if item_name not in vector_hits or hit.distance > vector_hits[item_name]["distance"]:
+                    vector_hits[item_name] = {
+                        "distance": hit.distance,
+                        "bm25_score": 0.0,
+                        "meta": meta,
+                        "content": hit.entity.get("page_content"),
+                        "item_name": item_name,
+                        "unit_price": meta.get("price_total"),
+                        "unit": meta.get("unit")
+                    }
+
+    # ---- 通道B：BM25 检索 ----
+    bm25_hits = {}
+    for sq in sub_queries:
+        print(f"  [BM25] 召回: '{sq[:30]}'")
+        tokens = _tokenize(sq)
+        scores = _BM25_INDEX.get_scores(tokens)
+        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+        for idx in top_indices:
+            if scores[idx] <= 0:
+                continue
+            record = _BM25_RECORDS[idx]
+            item_name = record["item_name"]
+            if item_name not in bm25_hits or scores[idx] > bm25_hits[item_name]["bm25_score"]:
+                bm25_hits[item_name] = {
+                    "distance": 0.0,
+                    "bm25_score": float(scores[idx]),
+                    "meta": {"item_name": item_name,
+                             "price_total": record["unit_price"],
+                             "unit": record["unit"]},
+                    "content": record["content"],
+                    "item_name": item_name,
+                    "unit_price": record["unit_price"],
+                    "unit": record["unit"]
+                }
+
+    # ---- RRF 融合 ----
+    print(f"\n[System] 向量召回 {len(vector_hits)} 条 | BM25 召回 {len(bm25_hits)} 条 → RRF 融合中...")
+    merged = _rrf_merge(vector_hits, bm25_hits)
+    final_hits = merged[:15]
+
+    print("\n" + "=" * 50)
+    print("🚀 混合检索融合结果")
+    print("=" * 50)
+
+    extracted_payloads = []
+    for hit in final_hits:
+        print(f"\n[命中] RRF={hit.get('rrf_score', 0):.4f} | 向量={hit.get('distance', 0):.4f} | BM25={hit.get('bm25_score', 0):.4f}")
+        print(f"  施工项目: {hit.get('item_name')} | 单价: {hit.get('unit_price')} 元/{hit.get('unit')}")
+        extracted_payloads.append({
+            "item_name": hit.get("item_name"),
+            "unit_price": hit.get("unit_price"),
+            "unit": hit.get("unit")
+        })
+
+    return json.dumps(extracted_payloads, ensure_ascii=False)

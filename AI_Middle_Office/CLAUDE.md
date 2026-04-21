@@ -103,6 +103,11 @@ ALIAS = "enterprise_quotation_rag"
 - 原代码所有用户共享同一个固定 conversationId，多用户并发时 Dify 上下文互相污染
 - 修复：`chat.py` 改为每次请求生成 `str(uuid.uuid4())`，每个请求独立隔离
 
+### ✅ 任务14：RAG 检索效果评测脚本（2026-04-21）
+- `eval_rag.py`：30 条人工标注测试集，覆盖 4 个难度级别
+- 指标：Hit@K + MRR，按难度级别分解输出，结果自动保存为 JSON
+- 用法：`python eval_rag.py --url http://192.168.88.128:8001 --top_k 5`
+
 ### ✅ 任务13：报价历史记录（2026-04-21）
 - 新增 `app/models/quote_history.py`（QuoteHistory 表），confirm_push 成功后自动写入
 - `chat.py` 新增 `GET /api/v1/history` 接口（普通用户看自己，admin 可按 username 过滤）

@@ -1,6 +1,7 @@
 # AI 智能报价中台 — 项目上下文
 
 @AI_Middle_Office/CLAUDE.md
+@ROADMAP.md
 
 详细文档见 `AI_Middle_Office/CLAUDE.md`，以下为快速摘要。
 

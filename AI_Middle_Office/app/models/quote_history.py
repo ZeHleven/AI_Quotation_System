@@ -7,7 +7,7 @@ class QuoteHistory(Base):
     __tablename__ = "quote_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, index=True)
+    username = Column(String(64), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     total_amount = Column(Float, default=0.0)
     item_count = Column(Integer, default=0)

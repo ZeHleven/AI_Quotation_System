@@ -72,6 +72,9 @@
                 <div class="bubble">
                   <div v-if="msg.fileUrl" class="file-preview"><img :src="msg.fileUrl" class="preview-img" /></div>
                   <div class="text-content">{{ msg.content }}<span v-if="index === messageHistory.length - 1 && isTyping" class="cursor"></span></div>
+                  <div v-if="msg.canRetry && !sending" style="margin-top:10px;">
+                    <el-button size="small" type="warning" plain @click="retryLastMessage">🔄 重试</el-button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -186,6 +189,8 @@
         const loading = ref(false);
         const sending = ref(false);
         const isTyping = ref(false);
+        const lastInputText = ref('');
+        const lastInputFile = ref(null);
 
         const showPreviewDialog = ref(false);
         const previewData = ref([]);
@@ -269,6 +274,8 @@
           messageHistory.value.push({ role: 'assistant', content: '' });
           const msgIndex = messageHistory.value.length - 1;
 
+          lastInputText.value = text;
+          lastInputFile.value = selectedFile.value;
           inputText.value = ''; selectedFile.value = null; sending.value = true; isTyping.value = true; scrollToBottom();
 
           let charQueue = Array.from('⏳ 正在唤醒网关层，建立长连接...\n\n');
@@ -292,6 +299,8 @@
             const response = await fetch(`${API_BASE_URL}/chat`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
 
             if (!response.ok) {
+              charQueue.push(...(`\n❌ 请求失败 (${response.status})`).split(''));
+              messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
               streamEnded = true; sending.value = false; return;
             }
 
@@ -352,7 +361,11 @@
 
                          setTimeout(() => { showPreviewDialog.value = true; }, 1000);
 
-                      } else if (data.status === 'error' || data.status === 'success') {
+                      } else if (data.status === 'error') {
+                         charQueue.push(...(data.message).split(''));
+                         messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+                         sending.value = false;
+                      } else if (data.status === 'success') {
                          charQueue.push(...(data.message).split(''));
                          sending.value = false;
                       }
@@ -364,8 +377,19 @@
             streamEnded = true;
           } catch (error) {
             charQueue.push(...(`\n❌ 严重异常: ${error.message}`).split(''));
+            messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
             streamEnded = true; sending.value = false;
           }
+        };
+
+        const retryLastMessage = () => {
+          // 移除失败的 assistant 消息和对应的 user 消息，恢复输入后重发
+          if (messageHistory.value.length >= 2) {
+            messageHistory.value.splice(messageHistory.value.length - 2, 2);
+          }
+          inputText.value = lastInputText.value;
+          selectedFile.value = lastInputFile.value;
+          sendMessage();
         };
 
         const cancelPreview = () => {
@@ -416,6 +440,7 @@
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping, showPreviewDialog, previewData, pushing, finalTotalAmount,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           handleRegister, handleLogin, logout, handleFileChange, sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
+          retryLastMessage,
           showHistory, historyList, historyLoading, historyTotal, historyPage, showDetailDialog, detailRows,
           fetchHistory, openHistory, viewDetail
         };

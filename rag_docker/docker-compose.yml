@@ -20,6 +20,11 @@ services:
     networks:
       - rag_net
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   minio:
     container_name: milvus-minio
@@ -40,6 +45,11 @@ services:
     networks:
       - rag_net
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   standalone:
     container_name: milvus-standalone
@@ -59,10 +69,15 @@ services:
     networks:
       - rag_net
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   rag-service:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
     container_name: rag-api-service
     ports:
@@ -80,6 +95,11 @@ services:
     networks:
       - rag_net
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
 networks:
   rag_net:

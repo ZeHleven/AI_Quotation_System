@@ -7,8 +7,10 @@ RUN pip install \
     fastapi==0.111.0 \
     "uvicorn[standard]==0.30.1" \
     pymilvus==2.3.6 \
+    "marshmallow>=3.13.0,<4.0.0" \
     sentence-transformers==3.1.0 \
     jieba==0.42.1 \
+    rank-bm25 \
     -i https://mirrors.aliyun.com/pypi/simple/ \
     --no-cache-dir
 

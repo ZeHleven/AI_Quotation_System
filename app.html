@@ -49,6 +49,25 @@
         </div>
     </div>
 
+    <!-- 强制修改密码弹窗 -->
+    <el-dialog v-model="showChangePwdDialog" title="🔐 请修改初始密码" width="400px" :close-on-click-modal="false" :show-close="false">
+        <el-alert title="当前使用的是默认密码，存在安全风险，请立即修改。" type="warning" show-icon style="margin-bottom:16px;"></el-alert>
+        <el-form :model="changePwdForm" label-width="80px">
+            <el-form-item label="原密码">
+                <el-input v-model="changePwdForm.old_password" type="password" show-password placeholder="请输入原密码"></el-input>
+            </el-form-item>
+            <el-form-item label="新密码">
+                <el-input v-model="changePwdForm.new_password" type="password" show-password placeholder="至少6位"></el-input>
+            </el-form-item>
+            <el-form-item label="确认密码">
+                <el-input v-model="changePwdForm.confirm_password" type="password" show-password placeholder="再次输入新密码"></el-input>
+            </el-form-item>
+        </el-form>
+        <template #footer>
+            <el-button type="primary" :loading="changePwdLoading" @click="submitChangePassword" style="width:100%">确认修改</el-button>
+        </template>
+    </el-dialog>
+
     <!-- 已登录状态：显示系统主框架 -->
     <div v-else class="layout-container">
         <header class="sys-header">
@@ -109,7 +128,11 @@
             const isLoggedIn = ref(false);
             const loading = ref(false);
             const loginFormRef = ref(null);
-            const activeMenu = ref('workspace'); // 默认进入工作台
+            const activeMenu = ref('workspace');
+
+            const showChangePwdDialog = ref(false);
+            const changePwdLoading = ref(false);
+            const changePwdForm = reactive({ old_password: '', new_password: '', confirm_password: '' });
 
             // 当前用户信息
             const currentUser = reactive({
@@ -158,12 +181,42 @@
                         isLoggedIn.value = true;
                         activeMenu.value = 'workspace';
                         ElMessage.success('登录成功，欢迎回来！');
+
+                        if (res.data.must_change_password) {
+                            changePwdForm.old_password = '';
+                            changePwdForm.new_password = '';
+                            changePwdForm.confirm_password = '';
+                            showChangePwdDialog.value = true;
+                        }
                     } catch (error) {
                         ElMessage.error(error.response?.data?.detail || '用户名或密码错误');
                     } finally {
                         loading.value = false;
                     }
                 });
+            };
+
+            const submitChangePassword = async () => {
+                if (!changePwdForm.new_password || changePwdForm.new_password.length < 6) {
+                    return ElMessage.warning('新密码不能少于6位');
+                }
+                if (changePwdForm.new_password !== changePwdForm.confirm_password) {
+                    return ElMessage.warning('两次输入的密码不一致');
+                }
+                changePwdLoading.value = true;
+                try {
+                    const token = localStorage.getItem('ai_token');
+                    await axios.post('/api/v1/auth/change_password',
+                        { old_password: changePwdForm.old_password, new_password: changePwdForm.new_password },
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    ElMessage.success('密码修改成功！');
+                    showChangePwdDialog.value = false;
+                } catch (e) {
+                    ElMessage.error(e.response?.data?.detail || '修改失败');
+                } finally {
+                    changePwdLoading.value = false;
+                }
             };
 
             // 菜单切换逻辑
@@ -189,7 +242,8 @@
 
             return {
                 isLoggedIn, loading, loginForm, rules, loginFormRef, currentUser, activeMenu,
-                handleLogin, handleSelectMenu, handleCommand
+                showChangePwdDialog, changePwdLoading, changePwdForm,
+                handleLogin, handleSelectMenu, handleCommand, submitChangePassword
             };
         }
     };

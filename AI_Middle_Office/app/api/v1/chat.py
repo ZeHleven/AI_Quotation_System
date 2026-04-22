@@ -85,17 +85,20 @@ async def analyze_image_with_domestic_ai(base64_image: str, mime_type: str):
         ]
     }
 
+    last_error = "未知错误"
     for delay in [1, 2]:
         try:
             response = await asyncio.to_thread(requests.post, url, headers=headers, json=payload, timeout=20)
             if response.status_code == 200:
                 return response.json().get('choices', [{}])[0].get('message', {}).get('content', '')
             else:
+                last_error = f"HTTP {response.status_code}: {response.text[:300]}"
                 await asyncio.sleep(delay)
-        except Exception:
+        except Exception as e:
+            last_error = str(e)
             await asyncio.sleep(delay)
 
-    return None
+    raise RuntimeError(last_error)
 
 
 # ==========================================
@@ -130,7 +133,11 @@ async def process_chat(
                 yield f"data: {json.dumps({'status': 'processing', 'message': f'[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...'})}\n\n"
 
                 base64_data = base64.b64encode(file_content).decode('utf-8')
-                extracted_text = await analyze_image_with_domestic_ai(base64_data, mime_type)
+                try:
+                    extracted_text = await analyze_image_with_domestic_ai(base64_data, mime_type)
+                except Exception as glm_err:
+                    yield f"data: {json.dumps({'status': 'error', 'message': f'❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}'})}\n\n"
+                    return
 
                 if extracted_text:
                     final_query = f"{final_query} [从文件识别到的内容]: {extracted_text}".replace('\n', '；').replace(
@@ -138,7 +145,7 @@ async def process_chat(
                     yield f"data: {json.dumps({'status': 'processing', 'message': '[Vision Module] ✅ 提取完毕，已成功结构化二维图纸特征！'})}\n\n"
                     await asyncio.sleep(0.5)
                 else:
-                    yield f"data: {json.dumps({'status': 'error', 'message': '❌ [Vision Module] 崩溃：提取超时或配置错误'})}\n\n"
+                    yield f"data: {json.dumps({'status': 'error', 'message': '❌ [Vision Module] GLM-4V 返回空内容，请重试'})}\n\n"
                     return
             else:
                 if final_query.strip():
@@ -155,13 +162,20 @@ async def process_chat(
             response = await asyncio.to_thread(requests.post, N8N_WEBHOOK_URL_CALC, json=payload, headers=_sign_payload(payload), timeout=180)
 
             if response.status_code == 200:
+                try:
+                    calc_result = response.json()
+                except Exception:
+                    body_preview = response.text[:500].strip() if response.text else "<empty>"
+                    yield f"data: {json.dumps({'status': 'error', 'message': f'❌ [n8n Workflow] 响应体解析失败（HTTP 200）\n实际返回内容：{body_preview}\n→ 请确认 N8N budget-calc 工作流末尾有 Respond to Webhook 节点且 Response Body 设为 JSON'})}\n\n"
+                    return
                 current_user.quota -= 1
                 db.commit()
-                calc_result = response.json()
                 yield f"data: {json.dumps({'status': 'preview', 'message': '[n8n Workflow] ✅ AI 预审数据已就绪，请人工复核！', 'data': calc_result})}\n\n"
             else:
-                error_detail = response.json().get("message", "未知错误") if response.headers.get(
-                    'content-type') == 'application/json' else f"状态码 {response.status_code}"
+                try:
+                    error_detail = response.json().get("message", "未知错误")
+                except Exception:
+                    error_detail = f"状态码 {response.status_code}，响应体为空"
                 yield f"data: {json.dumps({'status': 'error', 'message': f'❌ [n8n Workflow] 中断: 底层算价引擎抛出异常 -> {error_detail}'})}\n\n"
 
         except requests.exceptions.Timeout:

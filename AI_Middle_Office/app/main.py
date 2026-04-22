@@ -5,11 +5,31 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
+from sqlalchemy import text
 from app.api.v1 import chat, auth
-from app.core.database import engine, Base
+from app.core.database import engine, Base, get_db
 from app.models import user, quote_history  # noqa: F401 — 触发 SQLAlchemy 建表
+from app.core.security import verify_password
 
 Base.metadata.create_all(bind=engine)
+
+# 启动时迁移：添加 must_change_password 列，并为仍使用默认密码 123 的 admin 标记强制修改
+def _run_startup_migrations():
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            row = conn.execute(text("SELECT hashed_password FROM users WHERE username='admin'")).first()
+            if row and verify_password("123", row[0]):
+                conn.execute(text("UPDATE users SET must_change_password=1 WHERE username='admin'"))
+                conn.commit()
+        except Exception:
+            pass
+
+_run_startup_migrations()
 
 app = FastAPI(title="Enterprise AI Middle Office", version="1.0.0")
 

@@ -1,12 +1,10 @@
-# 部署路径: AI_Middle_Office/app/core/database.py
-import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-SQLALCHEMY_DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "sqlite:///./sql_app.db"
-)
+from app.core.config import settings
+
+
+SQLALCHEMY_DATABASE_URL = settings.database_url
 
 connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)

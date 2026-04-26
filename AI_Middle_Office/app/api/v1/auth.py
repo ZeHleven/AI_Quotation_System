@@ -22,6 +22,19 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token 无效")
+
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录状态已失效")
+    return user
+
+
 @router.post("/register", summary="注册新员工账号")
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.username == user.username).first()
@@ -58,19 +71,25 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     }
 
 
+@router.get("/me", summary="获取当前登录用户")
+def read_current_user(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "role": current_user.role,
+        "quota": current_user.quota,
+        "is_active": current_user.is_active,
+        "must_change_password": bool(current_user.must_change_password),
+    }
+
+
 @router.post("/change_password", summary="修改密码")
 def change_password(
     req: ChangePasswordRequest,
-    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token 无效")
-
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(User.id == current_user.id).first()
     if not user or not verify_password(req.old_password, user.hashed_password):
         raise HTTPException(status_code=400, detail="原密码错误")
     if len(req.new_password) < 6:

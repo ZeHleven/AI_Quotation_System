@@ -147,17 +147,43 @@
                 password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
             };
 
-            // 检查本地是否已存有登录信息 (保持登录态)
-            const checkLoginState = () => {
-                const storedUser = localStorage.getItem('app_user_info');
-                if (storedUser) {
-                    const parsedUser = JSON.parse(storedUser);
-                    Object.assign(currentUser, parsedUser);
-                    isLoggedIn.value = true;
-                    // 如果普通用户刷新页面时停留在 admin，强制切回 workspace
-                    if(currentUser.role !== 'admin' && activeMenu.value === 'admin') {
-                        activeMenu.value = 'workspace';
+            const applyUserInfo = (user) => {
+                currentUser.username = user.username;
+                currentUser.name = user.role === 'admin' ? '系统主管' : '业务员 ' + user.username;
+                currentUser.role = user.role;
+                localStorage.setItem('app_user_info', JSON.stringify({
+                    username: currentUser.username,
+                    name: currentUser.name,
+                    role: currentUser.role
+                }));
+                isLoggedIn.value = true;
+                if(currentUser.role !== 'admin' && activeMenu.value === 'admin') {
+                    activeMenu.value = 'workspace';
+                }
+            };
+
+            const clearLoginState = () => {
+                localStorage.removeItem('ai_token');
+                localStorage.removeItem('app_user_info');
+                Object.assign(currentUser, { username: '', name: '', role: '' });
+                isLoggedIn.value = false;
+            };
+
+            // 检查本地 Token 是否仍有效，避免刷新后使用过期登录态
+            const checkLoginState = async () => {
+                const token = localStorage.getItem('ai_token');
+                if (!token) return;
+                try {
+                    const res = await axios.get('/api/v1/auth/me', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    applyUserInfo(res.data);
+                    if (res.data.must_change_password) {
+                        showChangePwdDialog.value = true;
                     }
+                } catch (error) {
+                    clearLoginState();
+                    ElMessage.warning('登录状态已过期，请重新登录');
                 }
             };
 
@@ -173,12 +199,7 @@
                         const { access_token, role, username } = res.data;
 
                         localStorage.setItem('ai_token', access_token);
-                        currentUser.username = username;
-                        currentUser.name = role === 'admin' ? '系统主管' : '业务员 ' + username;
-                        currentUser.role = role;
-                        localStorage.setItem('app_user_info', JSON.stringify({ username, name: currentUser.name, role }));
-
-                        isLoggedIn.value = true;
+                        applyUserInfo({ username, role });
                         activeMenu.value = 'workspace';
                         ElMessage.success('登录成功，欢迎回来！');
 
@@ -227,8 +248,7 @@
             // 顶栏下拉菜单命令处理
             const handleCommand = (command) => {
                 if (command === 'logout') {
-                    localStorage.removeItem('app_user_info');
-                    isLoggedIn.value = false;
+                    clearLoginState();
                     loginForm.username = '';
                     loginForm.password = '';
                     activeMenu.value = 'workspace';

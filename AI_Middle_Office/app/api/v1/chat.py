@@ -1,10 +1,11 @@
 import base64
-import hashlib
-import hmac
 import re
 import os
 import csv
 import uuid
+import urllib3
+import logging
+from datetime import datetime
 from io import StringIO
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Body
@@ -17,31 +18,46 @@ import jwt
 import json
 from pydantic import BaseModel
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 from app.core.database import get_db
 from app.models.user import User
 from app.models.quote_history import QuoteHistory
 from app.core.security import SECRET_KEY, ALGORITHM
+from app.core.config import settings
+from app.core.logging import get_trace_id, reset_trace_id, set_trace_id
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ==========================================
 # 🚀 基础配置区
 # ==========================================
-N8N_WEBHOOK_URL_CALC = "http://192.168.88.128:5678/webhook/budget-calc"
-N8N_WEBHOOK_URL_PUSH = "http://192.168.88.128:5678/webhook/budget-push"
+N8N_WEBHOOK_URL_CALC = settings.n8n_webhook_url_calc
+N8N_WEBHOOK_URL_PUSH = settings.n8n_webhook_url_push
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY", "")
-WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
-RAG_SERVICE_URL = os.environ.get("RAG_SERVICE_URL", "http://192.168.88.128:8001")
-RELOAD_SECRET = os.environ.get("RELOAD_SECRET", "")
+ZHIPU_API_KEY = settings.zhipu_api_key
+WEBHOOK_SECRET = settings.webhook_secret
+RAG_SERVICE_URL = settings.rag_service_url
+RELOAD_SECRET = settings.reload_secret
 
 
 def _sign_payload(body: dict) -> dict:
-    """返回带 HMAC-SHA256 签名的请求头"""
-    body_bytes = json.dumps(body, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
-    sig = hmac.new(WEBHOOK_SECRET.encode('utf-8'), body_bytes, hashlib.sha256).hexdigest()
-    return {"Content-Type": "application/json", "X-Webhook-Signature": f"sha256={sig}"}
+    """返回带共享密钥的请求头（N8N Webhook 内置 Header Auth）"""
+    return {"Content-Type": "application/json", "X-Webhook-Secret": WEBHOOK_SECRET}
+
+
+def _sse_event(status_name: str, message: str, trace_id: Optional[str] = None, **extra):
+    payload = {"status": status_name, "message": message, "trace_id": trace_id or get_trace_id()}
+    payload.update(extra)
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _build_quote_filename(username: str) -> str:
+    safe_user = re.sub(r"[^A-Za-z0-9_-]+", "_", username or "user").strip("_") or "user"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"quote_{timestamp}_{safe_user}.xlsx"
 
 
 # ==========================================
@@ -88,7 +104,10 @@ async def analyze_image_with_domestic_ai(base64_image: str, mime_type: str):
     last_error = "未知错误"
     for delay in [1, 2]:
         try:
-            response = await asyncio.to_thread(requests.post, url, headers=headers, json=payload, timeout=20)
+            response = await asyncio.to_thread(
+                requests.post, url, headers=headers, json=payload, timeout=20,
+                proxies={"http": None, "https": None}, verify=False
+            )
             if response.status_code == 200:
                 return response.json().get('choices', [{}])[0].get('message', {}).get('content', '')
             else:
@@ -114,49 +133,53 @@ async def process_chat(
     if current_user.quota <= 0:
         raise HTTPException(status_code=403, detail="您的 AI 调用额度已耗尽，请联系管理员充值")
 
+    logger.info("quote_request_started", extra={"username": current_user.username, "event": "quote_request_started"})
     file_content = await file.read() if file else None
     mime_type = file.content_type if file else None
     filename = file.filename if file else None
+    request_trace_id = get_trace_id()
 
     async def event_generator():
+        trace_token = set_trace_id(request_trace_id)
         yield f": {' ' * 1024}\n\n"
         final_query = message or ""
         try:
-            yield f"data: {json.dumps({'status': 'processing', 'message': '[API Gateway] 📡 安全握手成功，已剥离 JWT 并唤醒底层引擎...'})}\n\n"
+            yield _sse_event("processing", "[API Gateway] 📡 安全握手成功，已剥离 JWT 并唤醒底层引擎...", trace_id=request_trace_id)
             await asyncio.sleep(0.5)
 
             if file_content:
                 if "pdf" in mime_type.lower():
-                    yield f"data: {json.dumps({'status': 'error', 'message': '❌ [格式校验] 拦截：国内引擎暂只支持图片输入，请截图重试'})}\n\n"
+                    yield _sse_event("error", "❌ [格式校验] 拦截：国内引擎暂只支持图片输入，请截图重试", trace_id=request_trace_id)
                     return
 
-                yield f"data: {json.dumps({'status': 'processing', 'message': f'[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...'})}\n\n"
+                yield _sse_event("processing", f"[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...", trace_id=request_trace_id)
 
                 base64_data = base64.b64encode(file_content).decode('utf-8')
                 try:
                     extracted_text = await analyze_image_with_domestic_ai(base64_data, mime_type)
                 except Exception as glm_err:
-                    yield f"data: {json.dumps({'status': 'error', 'message': f'❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}'})}\n\n"
+                    logger.exception("vision_model_failed", extra={"username": current_user.username, "event": "vision_model_failed"})
+                    yield _sse_event("error", f"❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}", trace_id=request_trace_id)
                     return
 
                 if extracted_text:
                     final_query = f"{final_query} [从文件识别到的内容]: {extracted_text}".replace('\n', '；').replace(
                         '\r', '')
-                    yield f"data: {json.dumps({'status': 'processing', 'message': '[Vision Module] ✅ 提取完毕，已成功结构化二维图纸特征！'})}\n\n"
+                    yield _sse_event("processing", "[Vision Module] ✅ 提取完毕，已成功结构化二维图纸特征！", trace_id=request_trace_id)
                     await asyncio.sleep(0.5)
                 else:
-                    yield f"data: {json.dumps({'status': 'error', 'message': '❌ [Vision Module] GLM-4V 返回空内容，请重试'})}\n\n"
+                    yield _sse_event("error", "❌ [Vision Module] GLM-4V 返回空内容，请重试", trace_id=request_trace_id)
                     return
             else:
                 if final_query.strip():
-                    yield f"data: {json.dumps({'status': 'processing', 'message': '[Text Module] 📝 识别纯文本指令，正在执行语义清洗...'})}\n\n"
+                    yield _sse_event("processing", "[Text Module] 📝 识别纯文本指令，正在执行语义清洗...", trace_id=request_trace_id)
                     await asyncio.sleep(0.5)
 
             if not final_query.strip():
-                yield f"data: {json.dumps({'status': 'error', 'message': '❌ 请输入业务指令或上传清单图片'})}\n\n"
+                yield _sse_event("error", "❌ 请输入业务指令或上传清单图片", trace_id=request_trace_id)
                 return
 
-            yield f"data: {json.dumps({'status': 'processing', 'message': '[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...\n(后台算力执行中，预计静候 15~30 秒，完成后将弹出核对面板)'})}\n\n"
+            yield _sse_event("processing", "[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...\n(后台算力执行中，预计静候 15~30 秒，完成后将弹出核对面板)", trace_id=request_trace_id)
 
             payload = {"text": {"content": final_query}, "conversationId": str(uuid.uuid4())}
             response = await asyncio.to_thread(requests.post, N8N_WEBHOOK_URL_CALC, json=payload, headers=_sign_payload(payload), timeout=180)
@@ -166,22 +189,29 @@ async def process_chat(
                     calc_result = response.json()
                 except Exception:
                     body_preview = response.text[:500].strip() if response.text else "<empty>"
-                    yield f"data: {json.dumps({'status': 'error', 'message': f'❌ [n8n Workflow] 响应体解析失败（HTTP 200）\n实际返回内容：{body_preview}\n→ 请确认 N8N budget-calc 工作流末尾有 Respond to Webhook 节点且 Response Body 设为 JSON'})}\n\n"
+                    logger.exception("n8n_response_parse_failed", extra={"username": current_user.username, "event": "n8n_response_parse_failed"})
+                    yield _sse_event("error", f"❌ [n8n Workflow] 响应体解析失败（HTTP 200）\n实际返回内容：{body_preview}\n→ 请确认 N8N budget-calc 工作流末尾有 Respond to Webhook 节点且 Response Body 设为 JSON", trace_id=request_trace_id)
                     return
                 current_user.quota -= 1
                 db.commit()
-                yield f"data: {json.dumps({'status': 'preview', 'message': '[n8n Workflow] ✅ AI 预审数据已就绪，请人工复核！', 'data': calc_result})}\n\n"
+                logger.info("quote_request_finished", extra={"username": current_user.username, "event": "quote_request_finished"})
+                yield _sse_event("preview", "[n8n Workflow] ✅ AI 预审数据已就绪，请人工复核！", trace_id=request_trace_id, data=calc_result)
             else:
                 try:
                     error_detail = response.json().get("message", "未知错误")
                 except Exception:
                     error_detail = f"状态码 {response.status_code}，响应体为空"
-                yield f"data: {json.dumps({'status': 'error', 'message': f'❌ [n8n Workflow] 中断: 底层算价引擎抛出异常 -> {error_detail}'})}\n\n"
+                logger.error("n8n_workflow_failed", extra={"username": current_user.username, "event": "n8n_workflow_failed", "status_code": response.status_code})
+                yield _sse_event("error", f"❌ [n8n Workflow] 中断: 底层算价引擎抛出异常 -> {error_detail}", trace_id=request_trace_id)
 
         except requests.exceptions.Timeout:
-            yield f"data: {json.dumps({'status': 'error', 'message': '❌ [n8n Workflow] 严重超时：请检查 Dify 模型是否拥堵挂起'})}\n\n"
+            logger.exception("quote_request_timeout", extra={"username": current_user.username, "event": "quote_request_timeout"})
+            yield _sse_event("error", "❌ [n8n Workflow] 严重超时：请检查 Dify 模型是否拥堵挂起", trace_id=request_trace_id)
         except Exception as e:
-            yield f"data: {json.dumps({'status': 'error', 'message': f'❌ [API Gateway] 流转崩溃: {str(e)}'})}\n\n"
+            logger.exception("quote_request_crashed", extra={"username": current_user.username, "event": "quote_request_crashed"})
+            yield _sse_event("error", f"❌ [API Gateway] 流转崩溃: {str(e)}", trace_id=request_trace_id)
+        finally:
+            reset_trace_id(trace_token)
 
     return StreamingResponse(
         event_generator(),
@@ -197,6 +227,10 @@ async def confirm_and_push(
         db: Session = Depends(get_db)
 ):
     try:
+        payload = dict(payload)
+        payload.setdefault("excel_filename", _build_quote_filename(current_user.username))
+        payload.setdefault("download_filename", payload["excel_filename"])
+        payload.setdefault("display_title", f"AI报价单-{datetime.now().strftime('%Y-%m-%d %H:%M')}")
         response = requests.post(N8N_WEBHOOK_URL_PUSH, json=payload, headers=_sign_payload(payload), timeout=60)
         if response.status_code == 200:
             # 写入历史记录
@@ -233,18 +267,19 @@ class MaterialItem(BaseModel):
     is_draft: Optional[bool] = False
 
 
-DATA_FILE = "rag_materials.json"
+DATA_FILE = settings.materials_file
 
 
 def load_data():
-    if not os.path.exists(DATA_FILE):
+    if not DATA_FILE.exists():
         return []
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
+    with DATA_FILE.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with DATA_FILE.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 

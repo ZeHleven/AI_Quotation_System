@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+python-dotenv
+python-multipart
+requests
+urllib3
+PyJWT
+bcrypt
+pymysql

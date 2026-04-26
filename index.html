@@ -216,7 +216,8 @@
             historyList.value = res.data.data;
             historyTotal.value = res.data.total;
           } catch (e) {
-            ElMessage.error('获取历史记录失败');
+            if (e.response?.status === 401) handleUnauthorized();
+            ElMessage.error(e.response?.data?.detail || '获取历史记录失败');
           } finally {
             historyLoading.value = false;
           }
@@ -238,6 +239,21 @@
         const messageHistory = ref([{ role: 'assistant', content: '您好，内部多模态 AI 业务中台 V2.0 已就绪。\n随时可以接收您的业务指令或图纸。' }]);
         const scrollbarRef = ref(null);
 
+        const formatApiError = (prefix, detail, traceId) => {
+          const parts = [`❌ ${prefix}`];
+          if (detail) parts.push(String(detail));
+          if (traceId) parts.push(`追踪ID：${traceId}`);
+          parts.push('您可以点击重试；若连续失败，请把追踪ID发给管理员排查。');
+          return parts.join('\n');
+        };
+
+        const handleUnauthorized = () => {
+          localStorage.removeItem('ai_token');
+          localStorage.removeItem('app_user_info');
+          isLoggedIn.value = false;
+          ElMessage.warning('登录状态已过期，请重新登录');
+        };
+
         // 防爆盾计算属性
         const finalTotalAmount = computed(() => {
             if (!Array.isArray(previewData.value)) return "0.00";
@@ -254,9 +270,15 @@
             localStorage.setItem('ai_token', res.data.access_token);
             currentUser.value = authForm.value.username;
             isLoggedIn.value = true;
-          } catch (error) { ElMessage.error('获取底层 Token 失败，请检查密码'); } finally { loading.value = false; }
+          } catch (error) { ElMessage.error(error.response?.data?.detail || '获取底层 Token 失败，请检查密码'); } finally { loading.value = false; }
         };
-        const logout = () => { localStorage.removeItem('ai_token'); isLoggedIn.value = false; authForm.value.password = ''; messageHistory.value = [{ role: 'assistant', content: '您好，业务中台已连接。' }]; };
+        const logout = () => {
+          localStorage.removeItem('ai_token');
+          localStorage.removeItem('app_user_info');
+          isLoggedIn.value = false;
+          authForm.value.password = '';
+          messageHistory.value = [{ role: 'assistant', content: '您好，业务中台已连接。' }];
+        };
         const handleFileChange = (file) => { selectedFile.value = file.raw; ElMessage.info(`已选中附件`); };
 
         const sendMessage = async () => {
@@ -299,7 +321,10 @@
             const response = await fetch(`${API_BASE_URL}/chat`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
 
             if (!response.ok) {
-              charQueue.push(...(`\n❌ 请求失败 (${response.status})`).split(''));
+              const traceId = response.headers.get('X-Trace-Id');
+              const errorData = await response.json().catch(() => ({}));
+              if (response.status === 401) handleUnauthorized();
+              charQueue.push(...('\n' + formatApiError(`请求失败 (${response.status})`, errorData.detail || response.statusText, traceId)).split(''));
               messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
               streamEnded = true; sending.value = false; return;
             }
@@ -307,15 +332,18 @@
             const reader = response.body.getReader();
             const decoder = new TextDecoder('utf-8');
             let done = false;
+            let streamBuffer = '';
 
             while (!done) {
               const { value, done: readerDone } = await reader.read();
               done = readerDone;
               if (value) {
-                const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split('\n');
-                for (const line of lines) {
-                  if (line.startsWith('data: ')) {
+                streamBuffer += decoder.decode(value, { stream: true });
+                const events = streamBuffer.split('\n\n');
+                streamBuffer = events.pop() || '';
+                for (const eventText of events) {
+                  const line = eventText.split('\n').find(item => item.startsWith('data: '));
+                  if (line) {
                     try {
                       const data = JSON.parse(line.substring(6));
                       if (data.status === 'processing') {
@@ -362,7 +390,10 @@
                          setTimeout(() => { showPreviewDialog.value = true; }, 1000);
 
                       } else if (data.status === 'error') {
-                         charQueue.push(...(data.message).split(''));
+                         const message = data.trace_id
+                           ? `${data.message}\n追踪ID：${data.trace_id}\n您可以点击重试；若连续失败，请把追踪ID发给管理员排查。`
+                           : data.message;
+                         charQueue.push(...(message).split(''));
                          messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
                          sending.value = false;
                       } else if (data.status === 'success') {
@@ -376,7 +407,7 @@
             }
             streamEnded = true;
           } catch (error) {
-            charQueue.push(...(`\n❌ 严重异常: ${error.message}`).split(''));
+            charQueue.push(...('\n' + formatApiError('网络异常', error.message)).split(''));
             messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
             streamEnded = true; sending.value = false;
           }

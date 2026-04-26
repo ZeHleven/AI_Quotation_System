@@ -115,6 +115,16 @@ RELOAD_SECRET=rag_reload_7f3a9d2e1b4c8f6a
 
 ## 四、已完成的所有优化项
 
+### ✅ 任务10：第一轮稳定性升级（2026-04-25）
+- `app/core/config.py`：集中读取 `.env` 配置，统一数据库、JWT、N8N、RAG、代理、CORS、物料库路径
+- `app/core/logging.py`：新增 JSON 结构化日志与 `trace_id` 上下文
+- `main.py`：新增请求追踪中间件、`X-Trace-Id` 响应头、`/health/live` 与 `/health/ready`
+- `auth.py`：新增 `GET /api/v1/auth/me`，刷新页面时可校验 Token 有效性
+- `chat.py`：报价 SSE 事件统一附带 `trace_id`，关键异常写入结构化日志，物料库路径不再依赖启动目录
+- `app.html`：刷新后通过 `/auth/me` 恢复登录态，退出时清理完整本地状态
+- `index.html`：报价失败时显示后端错误详情和追踪 ID，401 自动清理登录态
+- `requirements.txt` 与 `.env.example`：补齐后端依赖和配置模板
+
 ### ✅ 任务9：admin 强制修改初始密码（2026-04-22）
 - `main.py` 启动时检测 admin 密码是否仍为 `123`，是则设 `must_change_password=True`
 - `auth.py` 新增 `POST /api/v1/auth/change_password`，新密码不少于6位

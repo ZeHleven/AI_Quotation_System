@@ -3,10 +3,12 @@ import jwt
 import bcrypt
 from datetime import datetime, timedelta
 
+from app.core.config import settings
+
 # JWT 配置
-SECRET_KEY = "your_super_secret_key_for_ai_middle_office"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 小时有效
+SECRET_KEY = settings.jwt_secret_key
+ALGORITHM = settings.jwt_algorithm
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     # bcrypt 要求入参必须是 bytes 格式

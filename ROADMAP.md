@@ -10,9 +10,10 @@
 - **位置**：`AI_Middle_Office/app/api/v1/chat.py`
 - **修复**：改为每次请求生成 `str(uuid.uuid4())`，彻底隔离多用户上下文
 
-### ~~2. N8N Webhook 无签名验证~~（✅ 2026-04-21 已完成）
-- **修复**：FastAPI 每次请求计算 `HMAC-SHA256(WEBHOOK_SECRET, JSON.stringify(body))` 并附加 `X-Webhook-Signature` 头
-- **N8N 侧**：两个 workflow（budget-calc / budget-push）Webhook 节点后新增 Code 节点验签，签名错误直接抛出异常终止流程
+### ~~2. N8N Webhook 鉴权不统一~~（✅ 2026-04-26 已兼容升级）
+- **修复**：FastAPI 保留 `X-Webhook-Secret` 以兼容现有 N8N 校验，同时新增 `X-Webhook-Signature`
+- **签名算法**：`HMAC-SHA256(WEBHOOK_SECRET, canonical_json_body)`，其中 `canonical_json_body` 使用 key 排序和紧凑 JSON
+- **N8N 侧**：现有 workflow 可继续校验 `X-Webhook-Secret`；后续可平滑升级为校验 `X-Webhook-Signature`
 - **密钥存储**：`AI_Middle_Office/.env` 的 `WEBHOOK_SECRET` 字段
 
 ### ~~3. 用户配额无管理界面~~（✅ 2026-04-21 已完成）
@@ -25,6 +26,20 @@
 - **健康检查**：新增 `/health/live` 与 `/health/ready`
 - **登录态**：`app.html` 刷新时通过 `/api/v1/auth/me` 校验 Token，退出时清理完整本地状态
 - **错误提示**：`index.html` 报价失败展示后端错误详情与追踪 ID，便于排查
+
+### ~~11. 钉钉 Excel 文件名与表头乱码~~（✅ 2026-04-26 已完成并验证）
+- **后端修复**：`confirm_push` 推送前生成 ASCII 安全文件名，例如 `quote_20260426_142030_admin.xlsx`
+- **兼容字段**：同时下发 `excel_filename`、`download_filename`、`filename`、`fileName`、`file_name`、`attachment_name`
+- **N8N 修复**：`Convert to File` 使用 Webhook 中的安全文件名，最后发送文件消息节点修复 `msgParam` JSON Body
+- **Excel 表头**：`Code in JavaScript1` 已将乱码表头修复为 `施工项目`、`AI核准单价(元)`、`项目合计(元)`、`工艺备注`
+- **验证结果**：钉钉 markdown 报价单、Excel 附件、文件名、表头均已验证通过
+- **备份文件**：`n8n_budget_push_fixed.json`
+
+### ~~12. 后端自动化测试与 CI 基线~~（✅ 2026-04-26 已落地）
+- **测试框架**：新增 `pytest.ini`、`requirements-dev.txt` 与 `AI_Middle_Office/tests/`
+- **覆盖范围**：健康检查、登录/鉴权、报价文件名兼容字段、Webhook HMAC 签名
+- **隔离策略**：测试强制使用本地 SQLite 测试库，不访问真实 MySQL、N8N、RAG 或外部模型
+- **CI**：新增 `.github/workflows/backend-ci.yml`，在 push/PR 时执行依赖安装、`compileall` 和 `pytest`
 
 ---
 

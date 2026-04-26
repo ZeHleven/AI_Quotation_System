@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import hmac
 import re
 import os
 import csv
@@ -44,8 +46,18 @@ RELOAD_SECRET = settings.reload_secret
 
 
 def _sign_payload(body: dict) -> dict:
-    """返回带共享密钥的请求头（N8N Webhook 内置 Header Auth）"""
-    return {"Content-Type": "application/json", "X-Webhook-Secret": WEBHOOK_SECRET}
+    """Return backward-compatible n8n auth headers plus an HMAC signature."""
+    canonical_body = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    signature = hmac.new(
+        WEBHOOK_SECRET.encode("utf-8"),
+        canonical_body.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return {
+        "Content-Type": "application/json",
+        "X-Webhook-Secret": WEBHOOK_SECRET,
+        "X-Webhook-Signature": signature,
+    }
 
 
 def _sse_event(status_name: str, message: str, trace_id: Optional[str] = None, **extra):
@@ -58,6 +70,24 @@ def _build_quote_filename(username: str) -> str:
     safe_user = re.sub(r"[^A-Za-z0-9_-]+", "_", username or "user").strip("_") or "user"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"quote_{timestamp}_{safe_user}.xlsx"
+
+
+def _attach_quote_filename(payload: dict, username: str) -> dict:
+    payload = dict(payload)
+    filename = payload.get("excel_filename") or payload.get("filename") or _build_quote_filename(username)
+    display_title = payload.get("display_title") or f"AI报价单-{datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    payload.update(
+        {
+            "excel_filename": filename,
+            "download_filename": filename,
+            "filename": filename,
+            "fileName": filename,
+            "file_name": filename,
+            "attachment_name": filename,
+            "display_title": display_title,
+        }
+    )
+    return payload
 
 
 # ==========================================
@@ -227,10 +257,7 @@ async def confirm_and_push(
         db: Session = Depends(get_db)
 ):
     try:
-        payload = dict(payload)
-        payload.setdefault("excel_filename", _build_quote_filename(current_user.username))
-        payload.setdefault("download_filename", payload["excel_filename"])
-        payload.setdefault("display_title", f"AI报价单-{datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        payload = _attach_quote_filename(payload, current_user.username)
         response = requests.post(N8N_WEBHOOK_URL_PUSH, json=payload, headers=_sign_payload(payload), timeout=60)
         if response.status_code == 200:
             # 写入历史记录

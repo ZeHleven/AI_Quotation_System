@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+.pytest_cache/
 
 # Environment & secrets
 .env
@@ -17,6 +18,11 @@ __pycache__/
 # Logs
 logs/
 *.log
+
+# Local n8n workflow exports may contain webhook/app secrets
+n8n_current_workflow.json
+n8n_node_summary.json
+n8n_budget_push_fixed.json
 
 # Milvus volumes (large binary data)
 volumes/

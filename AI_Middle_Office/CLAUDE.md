@@ -125,6 +125,22 @@ RELOAD_SECRET=rag_reload_7f3a9d2e1b4c8f6a
 - `index.html`：报价失败时显示后端错误详情和追踪 ID，401 自动清理登录态
 - `requirements.txt` 与 `.env.example`：补齐后端依赖和配置模板
 
+### ✅ 任务11：钉钉文件名、Excel 表头与 Webhook 鉴权兼容升级（2026-04-26）
+- `confirm_push` 推送前会生成 ASCII 安全 Excel 文件名，避免中文文件名在钉钉链路中显示为 `???`
+- 同一文件名会写入 `excel_filename`、`download_filename`、`filename`、`fileName`、`file_name`、`attachment_name`
+- N8N `Convert to File` 已绑定 Webhook 中的安全文件名，最后发送文件消息节点已修复 `msgParam` JSON Body
+- N8N `Code in JavaScript1` 已将 Excel 表头修复为 `施工项目`、`AI核准单价(元)`、`项目合计(元)`、`工艺备注`
+- 已验证：钉钉 markdown 报价单、Excel 附件、文件名、表头均正常
+- 修复后工作流备份：`C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\n8n_budget_push_fixed.json`
+- `_sign_payload()` 保留旧 `X-Webhook-Secret`，并新增 `X-Webhook-Signature` HMAC-SHA256 签名头，便于后续平滑升级 N8N 验签逻辑
+
+### ✅ 任务12：后端自动化测试与 CI 基线（2026-04-26）
+- 新增 `pytest.ini`、`requirements-dev.txt`、`AI_Middle_Office/tests/`
+- 测试覆盖健康检查、注册/登录/`/auth/me`、报价文件名字段、Webhook HMAC 签名
+- 测试环境强制使用本地 SQLite 测试库，不访问真实 MySQL、N8N、RAG 或外部模型
+- 新增 GitHub Actions：`.github/workflows/backend-ci.yml`
+- CI 在 push/PR 时运行依赖安装、`python -m compileall app`、`pytest -q`
+
 ### ✅ 任务9：admin 强制修改初始密码（2026-04-22）
 - `main.py` 启动时检测 admin 密码是否仍为 `123`，是则设 `must_change_password=True`
 - `auth.py` 新增 `POST /api/v1/auth/change_password`，新密码不少于6位

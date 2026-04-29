@@ -9,6 +9,7 @@ import urllib3
 import logging
 from datetime import datetime
 from io import StringIO
+from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Body
 from fastapi.responses import StreamingResponse
@@ -28,6 +29,7 @@ from app.models.quote_history import QuoteHistory
 from app.core.security import SECRET_KEY, ALGORITHM
 from app.core.config import settings
 from app.core.logging import get_trace_id, reset_trace_id, set_trace_id
+from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -110,44 +112,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 async def analyze_image_with_domestic_ai(base64_image: str, mime_type: str):
     """利用国内智谱大模型 (GLM-4V) 提取业务信息"""
-    if "请在这里" in ZHIPU_API_KEY or re.search(r'[\u4e00-\u9fa5]', ZHIPU_API_KEY):
-        raise ValueError("API Key 格式异常(包含中文字符)")
-
-    prompt = """你是一个专业的装修造价数据提取员。请严格提取这张图片表格中的【所有】行的完整信息。
-⚠️ 提取红线：每一行必须完整包含【施工空间】、【施工项目】、【规格/工艺/材料要求】、【预估工程量】（面积/长度）四项数据。
-⚠️ 分隔符生死线（极度重要）：
-1. 每一行的所有信息自然合并为一句话，这句话【内部绝对不允许】出现分号（请统一用逗号替代）。
-2. 【仅在】换行到下一个独立项目时，强制使用全角分号“；”作为分割。
-示范格式：客厅直线型吊顶，使用龙牌轻钢龙骨无造型平顶要求做L型抗裂及接缝处理，50平米；厕所铲墙皮，铲除原大白腻子，50平米。
-请直接输出结果，严禁包含任何Markdown格式或多余解释。"""
-
-    url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {ZHIPU_API_KEY.strip()}"}
-    payload = {
-        "model": "glm-4v-flash",
-        "messages": [
-            {"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {
-                "url": f"data:{mime_type};base64,{base64_image}"}}]}
-        ]
-    }
-
-    last_error = "未知错误"
-    for delay in [1, 2]:
-        try:
-            response = await asyncio.to_thread(
-                requests.post, url, headers=headers, json=payload, timeout=20,
-                proxies={"http": None, "https": None}, verify=False
-            )
-            if response.status_code == 200:
-                return response.json().get('choices', [{}])[0].get('message', {}).get('content', '')
-            else:
-                last_error = f"HTTP {response.status_code}: {response.text[:300]}"
-                await asyncio.sleep(delay)
-        except Exception as e:
-            last_error = str(e)
-            await asyncio.sleep(delay)
-
-    raise RuntimeError(last_error)
+    return await call_glm_vision_extract(base64_image, mime_type, trace_id=get_trace_id())
 
 
 # ==========================================
@@ -186,7 +151,12 @@ async def process_chat(
 
                 base64_data = base64.b64encode(file_content).decode('utf-8')
                 try:
-                    extracted_text = await analyze_image_with_domestic_ai(base64_data, mime_type)
+                    extracted_text = await call_glm_vision_extract(
+                        base64_data,
+                        mime_type,
+                        username=current_user.username,
+                        trace_id=request_trace_id,
+                    )
                 except Exception as glm_err:
                     logger.exception("vision_model_failed", extra={"username": current_user.username, "event": "vision_model_failed"})
                     yield _sse_event("error", f"❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}", trace_id=request_trace_id)
@@ -212,7 +182,17 @@ async def process_chat(
             yield _sse_event("processing", "[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...\n(后台算力执行中，预计静候 15~30 秒，完成后将弹出核对面板)", trace_id=request_trace_id)
 
             payload = {"text": {"content": final_query}, "conversationId": str(uuid.uuid4())}
-            response = await asyncio.to_thread(requests.post, N8N_WEBHOOK_URL_CALC, json=payload, headers=_sign_payload(payload), timeout=180)
+            response = await post_json_via_gateway(
+                provider="n8n",
+                model="dify-deepseek",
+                endpoint_type="quote_calc",
+                url=N8N_WEBHOOK_URL_CALC,
+                json_payload=payload,
+                headers=_sign_payload(payload),
+                timeout=180,
+                username=current_user.username,
+                trace_id=request_trace_id,
+            )
 
             if response.status_code == 200:
                 try:
@@ -258,7 +238,17 @@ async def confirm_and_push(
 ):
     try:
         payload = _attach_quote_filename(payload, current_user.username)
-        response = requests.post(N8N_WEBHOOK_URL_PUSH, json=payload, headers=_sign_payload(payload), timeout=60)
+        response = await post_json_via_gateway(
+            provider="n8n",
+            model="dingtalk-export",
+            endpoint_type="quote_push",
+            url=N8N_WEBHOOK_URL_PUSH,
+            json_payload=payload,
+            headers=_sign_payload(payload),
+            timeout=60,
+            username=current_user.username,
+            trace_id=get_trace_id(),
+        )
         if response.status_code == 200:
             # 写入历史记录
             try:
@@ -295,6 +285,8 @@ class MaterialItem(BaseModel):
 
 
 DATA_FILE = settings.materials_file
+MATERIAL_AUDIT_DIR = DATA_FILE.parent / "materials_audit"
+SNAPSHOT_ID_PATTERN = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{8}$")
 
 
 def load_data():
@@ -310,6 +302,67 @@ def save_data(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+def _snapshot_metadata(snapshot: dict) -> dict:
+    return {
+        "snapshot_id": snapshot.get("snapshot_id"),
+        "created_at": snapshot.get("created_at"),
+        "username": snapshot.get("username"),
+        "action": snapshot.get("action"),
+        "reason": snapshot.get("reason"),
+        "item_count": snapshot.get("item_count", 0),
+    }
+
+
+def _safe_snapshot_path(snapshot_id: str) -> Path:
+    if not SNAPSHOT_ID_PATTERN.match(snapshot_id or ""):
+        raise HTTPException(status_code=400, detail="Invalid snapshot id")
+    return MATERIAL_AUDIT_DIR / f"{snapshot_id}.json"
+
+
+def create_material_snapshot(username: str, action: str, reason: str = "", data: Optional[list] = None) -> dict:
+    snapshot_data = load_data() if data is None else data
+    snapshot_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    snapshot = {
+        "snapshot_id": snapshot_id,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "username": username,
+        "action": action,
+        "reason": reason,
+        "item_count": len(snapshot_data),
+        "data": snapshot_data,
+    }
+    MATERIAL_AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    with _safe_snapshot_path(snapshot_id).open("w", encoding="utf-8") as f:
+        json.dump(snapshot, f, ensure_ascii=False, indent=2)
+    return _snapshot_metadata(snapshot)
+
+
+def list_material_snapshots(limit: int = 30) -> list[dict]:
+    if not MATERIAL_AUDIT_DIR.exists():
+        return []
+    snapshots = []
+    for path in sorted(MATERIAL_AUDIT_DIR.glob("*.json"), reverse=True):
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                snapshots.append(_snapshot_metadata(json.load(f)))
+        except Exception:
+            logger.exception("material_snapshot_read_failed", extra={"path": str(path)})
+        if len(snapshots) >= limit:
+            break
+    return snapshots
+
+
+def load_material_snapshot(snapshot_id: str) -> dict:
+    path = _safe_snapshot_path(snapshot_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    with path.open("r", encoding="utf-8") as f:
+        snapshot = json.load(f)
+    if not isinstance(snapshot.get("data"), list):
+        raise HTTPException(status_code=400, detail="Snapshot data is invalid")
+    return snapshot
+
+
 def require_admin(current_user: User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="权限不足，仅管理员可操作")
@@ -323,9 +376,39 @@ async def get_materials(current_user: User = Depends(require_admin)):
 
 @router.post("/admin/materials", summary="保存/覆盖整个物料清单")
 async def save_materials(items: list[MaterialItem], current_user: User = Depends(require_admin)):
+    before_data = load_data()
+    snapshot = create_material_snapshot(
+        username=current_user.username,
+        action="save_before_overwrite",
+        reason="Auto snapshot before saving materials",
+        data=before_data,
+    )
     data = [item.dict() if hasattr(item, 'dict') else item.model_dump() for item in items]
     save_data(data)
-    return {"code": 200, "message": "保存成功"}
+    return {"code": 200, "message": "保存成功", "snapshot": snapshot}
+
+
+@router.get("/admin/materials/audit", summary="查看知识库变更快照")
+async def get_material_audit(limit: int = 30, current_user: User = Depends(require_admin)):
+    limit = max(1, min(limit, 100))
+    return {"code": 200, "data": list_material_snapshots(limit)}
+
+
+@router.post("/admin/materials/rollback/{snapshot_id}", summary="回滚知识库到指定快照")
+async def rollback_materials(snapshot_id: str, current_user: User = Depends(require_admin)):
+    snapshot = load_material_snapshot(snapshot_id)
+    current_snapshot = create_material_snapshot(
+        username=current_user.username,
+        action="rollback_before_restore",
+        reason=f"Auto snapshot before rollback to {snapshot_id}",
+    )
+    save_data(snapshot["data"])
+    return {
+        "code": 200,
+        "message": "Rollback completed",
+        "restored_snapshot": _snapshot_metadata(snapshot),
+        "current_snapshot": current_snapshot,
+    }
 
 
 # 🚀🚀 新增功能：CSV 历史记录提炼引擎

@@ -1,11 +1,13 @@
-# AI Middle Office - Windows Auto-Start Service Installer (Task Scheduler, no NSSM needed)
-# Run as Administrator in PowerShell
+# AI Middle Office - Celery Worker Auto-Start Installer (Task Scheduler)
+# Run as Administrator in PowerShell after Redis is reachable and dependencies are installed.
 
-$TaskName = "AI_MiddleOffice"
+$ErrorActionPreference = "Stop"
+
+$TaskName = "AI_MiddleOffice_CeleryWorker"
 $TaskPath = "\"
 $WorkDir  = $PSScriptRoot
 $LogDir   = "$WorkDir\logs"
-$Launcher = Join-Path $WorkDir "start_watchdog.ps1"
+$Launcher = Join-Path $WorkDir "start_celery_worker.ps1"
 
 $principalCheck = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principalCheck.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -13,43 +15,23 @@ if (-not $principalCheck.IsInRole([Security.Principal.WindowsBuiltInRole]::Admin
     exit 1
 }
 
-# 1. Find Python
-$PythonPath = $null
-$candidates = @(
-    "C:\Users\12521\miniconda3\python.exe",
-    "C:\Users\12521\anaconda3\python.exe",
-    "$env:USERPROFILE\miniconda3\python.exe",
-    "$env:USERPROFILE\anaconda3\python.exe"
-)
-foreach ($c in $candidates) {
-    if (Test-Path $c) { $PythonPath = $c; break }
-}
-if (-not $PythonPath) {
-    Write-Error "python.exe not found."
-    exit 1
-}
-Write-Host "[OK] Python: $PythonPath" -ForegroundColor Green
 if (-not (Test-Path $Launcher)) {
-    Write-Error "Startup launcher not found: $Launcher"
+    Write-Error "Worker launcher not found: $Launcher"
     exit 1
 }
-
-# 2. Create log directory
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
 
-# 3. Remove existing task if present
 if (Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue) {
     Write-Host "[INFO] Removing old task..." -ForegroundColor Yellow
     Stop-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Confirm:$false
 }
 
-# 4. Register scheduled task
-Write-Host "[Install] Registering scheduled task..." -ForegroundColor Cyan
+Write-Host "[Install] Registering Celery worker scheduled task..." -ForegroundColor Cyan
 
 $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -RetryIntervalSeconds 180 -MaxMinutes 60" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`"" `
     -WorkingDirectory $WorkDir
 
 $trigger = New-ScheduledTaskTrigger -AtStartup
@@ -74,16 +56,13 @@ Register-ScheduledTask `
     -Principal $principal `
     -Force | Out-Null
 
-# 5. Start immediately
 Start-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName
 Start-Sleep -Seconds 3
 $state = (Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName).State
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host " Task state: $state" -ForegroundColor Green
-Write-Host " URL: http://localhost:9000/" -ForegroundColor Green
-Write-Host " Startup mode: watchdog retry every 3 minutes for 60 minutes" -ForegroundColor Green
+Write-Host " Celery worker task state: $state" -ForegroundColor Green
 Write-Host " Logs: $LogDir" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
@@ -92,4 +71,3 @@ Write-Host "  Start:     Start-ScheduledTask -TaskPath '$TaskPath' -TaskName $Ta
 Write-Host "  Stop:      Stop-ScheduledTask  -TaskPath '$TaskPath' -TaskName $TaskName"
 Write-Host "  Query:     Get-ScheduledTask   -TaskPath '$TaskPath' -TaskName $TaskName"
 Write-Host "  Uninstall: Unregister-ScheduledTask -TaskPath '$TaskPath' -TaskName $TaskName -Confirm:`$false"
-Write-Host "  View GUI:  taskschd.msc"

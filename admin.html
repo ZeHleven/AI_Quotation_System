@@ -22,12 +22,125 @@
     .el-table .draft-row {
       background: #fff5f5 !important;
     }
+    .ops-service-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .ops-service-tile {
+      border: 1px solid #e4e7ed;
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+      min-height: 86px;
+    }
+    .ops-service-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #303133;
+    }
+    .ops-service-meta {
+      color: #606266;
+      font-size: 13px;
+      line-height: 1.6;
+      word-break: break-all;
+    }
+    .ops-alerts {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
   </style>
 </head>
 <body>
   <div id="app" class="app-container">
 
     <el-main class="main-content">
+
+      <!-- 运维监控与告警面板 -->
+      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
+        <template #header>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+            <span>🩺 运维监控与告警</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <el-tag :type="opsOverallType(opsDashboard.overall_status)" size="small">
+                {{ opsDashboard.overall_status || 'unknown' }}
+              </el-tag>
+              <span style="font-size:13px; color:#909399;">{{ opsDashboard.generated_at || '未检测' }}</span>
+              <el-button size="small" :loading="opsLoading" @click="fetchOpsDashboard(true)" plain>刷新</el-button>
+            </div>
+          </div>
+        </template>
+
+        <div v-if="opsAlerts.length" class="ops-alerts">
+          <el-alert
+            v-for="alert in opsAlerts"
+            :key="alert.title + alert.message"
+            :title="alert.title"
+            :description="alert.message"
+            :type="alert.level === 'critical' ? 'error' : 'warning'"
+            show-icon
+            :closable="false"
+          ></el-alert>
+        </div>
+
+        <div class="ops-service-grid" v-loading="opsLoading">
+          <div v-for="service in opsServices" :key="service.key" class="ops-service-tile">
+            <div class="ops-service-head">
+              <span>{{ service.name }}</span>
+              <el-tag :type="service.ok ? 'success' : 'danger'" size="small">
+                {{ service.ok ? '正常' : '异常' }}
+              </el-tag>
+            </div>
+            <div class="ops-service-meta">
+              <div>状态：{{ service.status || '-' }}</div>
+              <div>耗时：{{ service.latency_ms !== null && service.latency_ms !== undefined ? service.latency_ms + ' ms' : '-' }}</div>
+              <div v-if="service.detail">详情：{{ service.detail }}</div>
+            </div>
+          </div>
+        </div>
+
+        <el-row :gutter="16">
+          <el-col :span="10">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong>任务卡住提醒</strong>
+              <el-tag :type="opsJobs.stuck_count > 0 ? 'warning' : 'success'" size="small">
+                {{ opsJobs.stuck_count || 0 }} 个卡住
+              </el-tag>
+            </div>
+            <el-descriptions :column="3" border size="small" style="margin-bottom:10px;">
+              <el-descriptions-item label="活跃任务">{{ opsJobs.active_count || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="阈值">{{ opsJobs.stuck_minutes || 30 }} 分钟</el-descriptions-item>
+              <el-descriptions-item label="异常日志">{{ opsLogs.total_matches || 0 }}</el-descriptions-item>
+            </el-descriptions>
+            <el-table :data="opsStuckJobs" border size="small" height="220" empty-text="暂无卡住任务">
+              <el-table-column prop="updated_at" label="最后更新" width="145"></el-table-column>
+              <el-table-column prop="username" label="用户" width="90"></el-table-column>
+              <el-table-column prop="status" label="状态" width="85"></el-table-column>
+              <el-table-column prop="stage" label="阶段" width="95"></el-table-column>
+              <el-table-column prop="idle_minutes" label="空闲(分)" width="85" align="right"></el-table-column>
+              <el-table-column prop="message_preview" label="摘要" min-width="160" show-overflow-tooltip></el-table-column>
+            </el-table>
+          </el-col>
+          <el-col :span="14">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong>异常日志聚合</strong>
+              <span style="font-size:13px; color:#909399;">{{ opsLogs.log_dir || 'logs' }}</span>
+            </div>
+            <el-table :data="opsLogItems" border size="small" height="270" empty-text="最近未发现异常日志">
+              <el-table-column prop="modified_at" label="文件时间" width="145"></el-table-column>
+              <el-table-column prop="file" label="日志文件" width="180" show-overflow-tooltip></el-table-column>
+              <el-table-column prop="line" label="行" width="70" align="right"></el-table-column>
+              <el-table-column prop="message" label="异常线索" min-width="280" show-overflow-tooltip></el-table-column>
+            </el-table>
+          </el-col>
+        </el-row>
+      </el-card>
 
       <!-- 用户配额管理面板 -->
       <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
@@ -66,6 +179,129 @@
         </el-table>
       </el-card>
 
+      <!-- 模型调用统一网关观测面板 -->
+      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
+        <template #header>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>📡 模型调用统一网关</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <el-input-number v-model="gatewayHours" :min="1" :max="168" :controls="false" size="small" style="width:80px;"></el-input-number>
+              <span style="font-size:13px; color:#909399;">小时</span>
+              <el-button size="small" @click="fetchGatewayStats" plain>刷新</el-button>
+            </div>
+          </div>
+        </template>
+        <el-table :data="gatewayStats" border stripe style="width:100%" v-loading="gatewayLoading">
+          <el-table-column prop="provider" label="Provider" width="110"></el-table-column>
+          <el-table-column prop="model" label="模型/工作流" min-width="150"></el-table-column>
+          <el-table-column prop="endpoint_type" label="调用类型" width="130"></el-table-column>
+          <el-table-column prop="status" label="状态" width="90" align="center">
+            <template #default="scope">
+              <el-tag :type="scope.row.status === 'success' ? 'success' : 'danger'" size="small">{{ scope.row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="count" label="次数" width="80" align="right"></el-table-column>
+          <el-table-column prop="avg_latency_ms" label="平均耗时(ms)" width="130" align="right"></el-table-column>
+          <el-table-column prop="estimated_cost" label="估算费用" width="110" align="right"></el-table-column>
+          <el-table-column prop="input_chars" label="输入字符" width="110" align="right"></el-table-column>
+          <el-table-column prop="output_chars" label="输出字符" width="110" align="right"></el-table-column>
+        </el-table>
+        <div v-if="Object.keys(gatewayCircuits).length" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+          <el-tag v-for="(state, key) in gatewayCircuits" :key="key" :type="state.is_open ? 'danger' : 'success'" size="small">
+            {{ key }} · {{ state.is_open ? '熔断中' : '正常' }} · failures={{ state.failure_count }}
+          </el-tag>
+        </div>
+      </el-card>
+
+      <!-- 报价任务队列管理面板 -->
+      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
+        <template #header>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+            <span>🧾 报价任务队列管理</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <el-input v-model="jobUsernameFilter" size="small" clearable placeholder="按用户名筛选" style="width:140px;"></el-input>
+              <el-select v-model="jobStatusFilter" size="small" clearable placeholder="任务状态" style="width:150px;">
+                <el-option label="活跃任务" value="queued,running"></el-option>
+                <el-option label="排队中" value="queued"></el-option>
+                <el-option label="运行中" value="running"></el-option>
+                <el-option label="失败" value="failed"></el-option>
+                <el-option label="已取消" value="canceled"></el-option>
+                <el-option label="已超时" value="timed_out"></el-option>
+                <el-option label="已完成" value="succeeded"></el-option>
+              </el-select>
+              <el-button size="small" @click="fetchJobs(1)" plain>刷新</el-button>
+            </div>
+          </div>
+        </template>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-size:13px; color:#606266;">超时阈值</span>
+            <el-input-number v-model="timeoutMinutes" :min="1" :max="1440" :controls="false" size="small" style="width:90px;"></el-input-number>
+            <span style="font-size:13px; color:#909399;">分钟</span>
+            <el-button size="small" type="warning" plain :loading="markingTimeouts" @click="markTimeouts">标记超时任务</el-button>
+          </div>
+          <el-pagination v-model:current-page="jobPage" :page-size="10" :total="jobTotal"
+            layout="total, prev, pager, next" @current-change="fetchJobs" small />
+        </div>
+        <el-table :data="jobData" border stripe style="width:100%" v-loading="jobLoading">
+          <el-table-column prop="created_at" label="创建时间" width="160"></el-table-column>
+          <el-table-column prop="username" label="用户" width="120"></el-table-column>
+          <el-table-column prop="status" label="状态" width="100" align="center">
+            <template #default="scope">
+              <el-tag :type="statusTagType(scope.row.status)" size="small">{{ scope.row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="stage" label="阶段" width="110"></el-table-column>
+          <el-table-column prop="message_preview" label="任务摘要" min-width="220" show-overflow-tooltip></el-table-column>
+          <el-table-column prop="error_message" label="错误" min-width="180" show-overflow-tooltip></el-table-column>
+          <el-table-column label="操作" width="190" align="center" fixed="right">
+            <template #default="scope">
+              <el-button size="small" type="warning" plain :disabled="!['queued','running'].includes(scope.row.status)" @click="cancelJob(scope.row)">取消</el-button>
+              <el-button size="small" type="primary" plain :disabled="!['failed','canceled','timed_out'].includes(scope.row.status)" @click="retryJob(scope.row)">重试</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <!-- MinIO 文件存储面板 -->
+      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
+        <template #header>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+            <span>MinIO 文件存储</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <el-tag :type="storageHealth.ok ? 'success' : 'warning'" size="small">
+                {{ storageHealth.status || 'unknown' }}
+              </el-tag>
+              <el-button size="small" @click="fetchStorageHealth" plain>检测</el-button>
+              <el-button size="small" @click="fetchStorageFiles" plain>刷新列表</el-button>
+            </div>
+          </div>
+        </template>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+          <div style="display:flex; gap:8px; align-items:center;">
+            <el-input v-model="storagePurpose" size="small" clearable placeholder="文件用途，如 quote_attachment" style="width:220px;"></el-input>
+            <el-upload action="#" :auto-upload="false" :show-file-list="false" :on-change="handleStorageUpload">
+              <el-button size="small" type="primary" :loading="storageUploading">上传到 MinIO</el-button>
+            </el-upload>
+          </div>
+          <div style="font-size:13px; color:#909399;">
+            bucket: {{ storageHealth.bucket || 'quote-files' }} · 临时链接默认 1 小时有效
+          </div>
+        </div>
+        <el-table :data="storageFiles" border stripe style="width:100%" v-loading="storageLoading">
+          <el-table-column prop="created_at" label="上传时间" width="160"></el-table-column>
+          <el-table-column prop="username" label="用户" width="110"></el-table-column>
+          <el-table-column prop="purpose" label="用途" width="140"></el-table-column>
+          <el-table-column prop="original_filename" label="文件名" min-width="220" show-overflow-tooltip></el-table-column>
+          <el-table-column prop="size_bytes" label="大小(bytes)" width="120" align="right"></el-table-column>
+          <el-table-column label="操作" width="120" align="center">
+            <template #default="scope">
+              <el-button size="small" type="primary" plain @click="openStorageDownload(scope.row)">临时下载</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
       <el-row :gutter="20">
         <!-- 左侧状态看板 -->
         <el-col :span="6">
@@ -86,6 +322,31 @@
               </el-button>
               <div style="font-size: 12px; color: #909399; margin-top: 10px;">将下方表格确定的价格灌入底层算力库</div>
             </div>
+          </el-card>
+
+          <el-card class="box-card" shadow="never" style="margin-top:20px;">
+            <template #header>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span>知识库变更快照</span>
+                <el-button size="small" :loading="auditLoading" @click="fetchMaterialAudit" plain>刷新</el-button>
+              </div>
+            </template>
+            <el-alert
+              title="每次保存材料库前，系统会自动保存一份可回滚快照。"
+              type="info"
+              show-icon
+              :closable="false"
+              style="margin-bottom:12px;"
+            ></el-alert>
+            <el-table :data="materialAudit" border size="small" style="width:100%;" v-loading="auditLoading" empty-text="暂无快照">
+              <el-table-column prop="created_at" label="时间" min-width="140"></el-table-column>
+              <el-table-column prop="item_count" label="条数" width="70" align="right"></el-table-column>
+              <el-table-column label="操作" width="82" align="center">
+                <template #default="scope">
+                  <el-button size="small" type="warning" plain @click="rollbackMaterialSnapshot(scope.row)">回滚</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
           </el-card>
         </el-col>
 
@@ -167,13 +428,36 @@
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 
   <script>
-    const { createApp, ref, onMounted } = Vue;
-    const { ElMessage, ElMessageBox } = ElementPlus;
+    const { createApp, ref, computed, onMounted, onBeforeUnmount } = Vue;
+    const { ElMessage, ElMessageBox, ElNotification } = ElementPlus;
 
     const App = {
       setup() {
         // 如果你的 FastAPI 跑在其他地址或端口，请修改这里
         const API_BASE_URL = '/api/v1/admin';
+        const CORE_API_BASE_URL = '/api/v1';
+        let redirectingToLogin = false;
+        let opsTimer = null;
+
+        const redirectToLogin = (message = '登录状态已失效，请重新登录') => {
+          if (redirectingToLogin) return;
+          redirectingToLogin = true;
+          localStorage.removeItem('ai_token');
+          ElMessage.warning(message);
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 600);
+        };
+
+        axios.interceptors.response.use(
+          response => response,
+          error => {
+            if (error.response && error.response.status === 401) {
+              redirectToLogin();
+            }
+            return Promise.reject(error);
+          }
+        );
 
         const tableData = ref([]);
         const loading = ref(false);
@@ -181,9 +465,43 @@
         const syncing = ref(false);
         const lastSyncTime = ref(localStorage.getItem('last_milvus_sync') || '未同步');
 
+        // 运维监控
+        const opsDashboard = ref({ services: [], alerts: [], jobs: {}, logs: {} });
+        const opsLoading = ref(false);
+        const opsLastAlertKey = ref('');
+        const opsServices = computed(() => opsDashboard.value.services || []);
+        const opsAlerts = computed(() => opsDashboard.value.alerts || []);
+        const opsJobs = computed(() => opsDashboard.value.jobs || {});
+        const opsLogs = computed(() => opsDashboard.value.logs || {});
+        const opsStuckJobs = computed(() => opsJobs.value.stuck_jobs || []);
+        const opsLogItems = computed(() => opsLogs.value.items || []);
+
         // 用户管理
         const userData = ref([]);
         const userLoading = ref(false);
+
+        // 模型网关观测
+        const gatewayStats = ref([]);
+        const gatewayCircuits = ref({});
+        const gatewayLoading = ref(false);
+        const gatewayHours = ref(24);
+
+        // 报价任务队列
+        const jobData = ref([]);
+        const jobLoading = ref(false);
+        const jobTotal = ref(0);
+        const jobPage = ref(1);
+        const jobStatusFilter = ref('queued,running');
+        const jobUsernameFilter = ref('');
+        const timeoutMinutes = ref(30);
+        const markingTimeouts = ref(false);
+        const materialAudit = ref([]);
+        const auditLoading = ref(false);
+        const storageFiles = ref([]);
+        const storageLoading = ref(false);
+        const storageUploading = ref(false);
+        const storageHealth = ref({});
+        const storagePurpose = ref('quote_attachment');
 
         const fetchUsers = async () => {
           userLoading.value = true;
@@ -215,7 +533,213 @@
           ];
         };
 
-        const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('ai_token') || ''}` });
+        const authHeaders = () => {
+          const token = localStorage.getItem('ai_token') || '';
+          if (!token) redirectToLogin('请先登录后再进入管理员页面');
+          return { Authorization: `Bearer ${token}` };
+        };
+
+        const statusTagType = (status) => {
+          const mapping = {
+            queued: 'info',
+            running: 'warning',
+            succeeded: 'success',
+            failed: 'danger',
+            canceled: 'info',
+            timed_out: 'danger'
+          };
+          return mapping[status] || 'info';
+        };
+
+        const opsOverallType = (status) => {
+          if (status === 'ready') return 'success';
+          if (status === 'degraded') return 'warning';
+          return 'info';
+        };
+
+        const notifyOpsAlerts = (alerts) => {
+          if (!alerts || alerts.length === 0) {
+            opsLastAlertKey.value = '';
+            return;
+          }
+          const alertKey = alerts.map(item => `${item.level}:${item.title}:${item.message}`).join('|');
+          if (alertKey === opsLastAlertKey.value) return;
+          opsLastAlertKey.value = alertKey;
+          const hasCritical = alerts.some(item => item.level === 'critical');
+          ElNotification({
+            title: hasCritical ? '运维告警' : '运维提醒',
+            message: alerts.map(item => `${item.title}：${item.message}`).join('\n'),
+            type: hasCritical ? 'error' : 'warning',
+            duration: 7000
+          });
+        };
+
+        const fetchOpsDashboard = async (notify = false) => {
+          opsLoading.value = true;
+          try {
+            const res = await axios.get(`${CORE_API_BASE_URL}/admin/ops/dashboard`, { headers: authHeaders() });
+            opsDashboard.value = res.data.data || { services: [], alerts: [], jobs: {}, logs: {} };
+            if (notify) notifyOpsAlerts(opsDashboard.value.alerts || []);
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '获取运维监控状态失败');
+          } finally {
+            opsLoading.value = false;
+          }
+        };
+
+        const fetchGatewayStats = async () => {
+          gatewayLoading.value = true;
+          try {
+            const res = await axios.get(`${API_BASE_URL}/model_gateway/stats`, {
+              params: { hours: gatewayHours.value },
+              headers: authHeaders()
+            });
+            gatewayStats.value = res.data.data || [];
+            gatewayCircuits.value = res.data.circuit_breakers || {};
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '获取模型网关统计失败');
+          } finally {
+            gatewayLoading.value = false;
+          }
+        };
+
+        const fetchJobs = async (page = 1) => {
+          jobPage.value = page;
+          jobLoading.value = true;
+          try {
+            const params = { page, page_size: 10 };
+            if (jobStatusFilter.value) params.status = jobStatusFilter.value;
+            if (jobUsernameFilter.value) params.username = jobUsernameFilter.value;
+            const res = await axios.get(`${CORE_API_BASE_URL}/quote/jobs`, { params, headers: authHeaders() });
+            jobData.value = res.data.data || [];
+            jobTotal.value = res.data.total || 0;
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '获取任务队列失败');
+          } finally {
+            jobLoading.value = false;
+          }
+        };
+
+        const cancelJob = async (row) => {
+          try {
+            await ElMessageBox.confirm(`确定取消任务 ${row.job_id} 吗？`, '取消任务', { type: 'warning' });
+            await axios.post(`${CORE_API_BASE_URL}/quote/jobs/${row.job_id}/cancel`, {}, { headers: authHeaders() });
+            ElMessage.success('任务已取消');
+            fetchJobs(jobPage.value);
+          } catch (e) {
+            if (e !== 'cancel') ElMessage.error(e.response?.data?.detail || '取消任务失败');
+          }
+        };
+
+        const retryJob = async (row) => {
+          try {
+            await axios.post(`${CORE_API_BASE_URL}/quote/jobs/${row.job_id}/retry`, {}, { headers: authHeaders() });
+            ElMessage.success('重试任务已创建');
+            fetchJobs(1);
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '重试任务失败');
+          }
+        };
+
+        const markTimeouts = async () => {
+          markingTimeouts.value = true;
+          try {
+            const res = await axios.post(`${CORE_API_BASE_URL}/admin/quote/jobs/mark_timeouts`, {}, {
+              params: { timeout_minutes: timeoutMinutes.value },
+              headers: authHeaders()
+            });
+            ElMessage.success(`已标记 ${res.data.marked_count || 0} 个超时任务`);
+            fetchJobs(1);
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '标记超时任务失败');
+          } finally {
+            markingTimeouts.value = false;
+          }
+        };
+
+        const fetchMaterialAudit = async () => {
+          auditLoading.value = true;
+          try {
+            const res = await axios.get(`${API_BASE_URL}/materials/audit`, {
+              params: { limit: 20 },
+              headers: authHeaders()
+            });
+            materialAudit.value = res.data.data || [];
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '获取知识库快照失败');
+          } finally {
+            auditLoading.value = false;
+          }
+        };
+
+        const rollbackMaterialSnapshot = async (row) => {
+          try {
+            await ElMessageBox.confirm(
+              `确定回滚到 ${row.created_at} 的知识库快照吗？当前版本会先自动备份。`,
+              '回滚知识库快照',
+              { type: 'warning' }
+            );
+            await axios.post(`${API_BASE_URL}/materials/rollback/${row.snapshot_id}`, {}, { headers: authHeaders() });
+            ElMessage.success('知识库已回滚，请确认后再同步到 Milvus');
+            await fetchData();
+            await fetchMaterialAudit();
+          } catch (e) {
+            if (e !== 'cancel') ElMessage.error(e.response?.data?.detail || '回滚知识库快照失败');
+          }
+        };
+
+        const fetchStorageHealth = async () => {
+          try {
+            const res = await axios.get(`${CORE_API_BASE_URL}/admin/files/storage/health`, { headers: authHeaders() });
+            storageHealth.value = res.data.data || {};
+          } catch (e) {
+            storageHealth.value = { ok: false, status: 'error' };
+            ElMessage.error(e.response?.data?.detail || '检测 MinIO 存储失败');
+          }
+        };
+
+        const fetchStorageFiles = async () => {
+          storageLoading.value = true;
+          try {
+            const res = await axios.get(`${CORE_API_BASE_URL}/files`, {
+              params: { page: 1, page_size: 20 },
+              headers: authHeaders()
+            });
+            storageFiles.value = res.data.data || [];
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '获取文件列表失败');
+          } finally {
+            storageLoading.value = false;
+          }
+        };
+
+        const handleStorageUpload = async (file) => {
+          const formData = new FormData();
+          formData.append('file', file.raw);
+          formData.append('purpose', storagePurpose.value || 'general');
+          storageUploading.value = true;
+          try {
+            const res = await axios.post(`${CORE_API_BASE_URL}/files`, formData, { headers: authHeaders() });
+            ElMessage.success(`文件已上传：${res.data.data.original_filename}`);
+            await fetchStorageFiles();
+            await fetchStorageHealth();
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '上传文件失败，请检查 MinIO 配置');
+          } finally {
+            storageUploading.value = false;
+          }
+        };
+
+        const openStorageDownload = async (row) => {
+          try {
+            const res = await axios.get(`${CORE_API_BASE_URL}/files/${row.file_id}/download_url`, {
+              headers: authHeaders()
+            });
+            window.open(res.data.data.download_url, '_blank');
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '生成临时下载链接失败');
+          }
+        };
 
         const fetchData = async () => {
           loading.value = true;
@@ -277,6 +801,7 @@
           try {
             await axios.post(`${API_BASE_URL}/materials`, tableData.value, { headers: authHeaders() });
             tableData.value.forEach(item => item.is_draft = false);
+            fetchMaterialAudit();
             ElMessage.success('🎉 表格数据审核完毕，已安全保存到本地基础库！');
           } catch (error) {
             ElMessage.error('保存失败，请检查网关连接。');
@@ -295,6 +820,7 @@
             try {
               // 确保先保存最新数据
               await axios.post(`${API_BASE_URL}/materials`, tableData.value, { headers: authHeaders() });
+              fetchMaterialAudit();
               const res = await axios.post(`${API_BASE_URL}/sync_milvus`, {}, { headers: authHeaders() });
               ElMessage({ message: res.data.message || '热更新完毕，向量引擎已满血复活！', type: 'success', duration: 4000 });
 
@@ -316,12 +842,34 @@
             return row.is_draft ? 'draft-row' : '';
         };
 
-        onMounted(() => { fetchData(); fetchUsers(); });
+        onMounted(() => {
+          fetchOpsDashboard(true);
+          fetchData();
+          fetchUsers();
+          fetchGatewayStats();
+          fetchJobs();
+          fetchMaterialAudit();
+          fetchStorageHealth();
+          fetchStorageFiles();
+          opsTimer = setInterval(() => fetchOpsDashboard(true), 60000);
+        });
+
+        onBeforeUnmount(() => {
+          if (opsTimer) clearInterval(opsTimer);
+        });
 
         return {
+          opsDashboard, opsLoading, opsServices, opsAlerts, opsJobs, opsLogs, opsStuckJobs, opsLogItems,
+          fetchOpsDashboard, opsOverallType,
           tableData, loading, saving, syncing, lastSyncTime, tableRowClassName,
           handleAdd, handleDelete, handleImportCSV, saveData, syncToMilvus,
-          userData, userLoading, fetchUsers, updateQuota
+          userData, userLoading, fetchUsers, updateQuota,
+          gatewayStats, gatewayCircuits, gatewayLoading, gatewayHours, fetchGatewayStats,
+          jobData, jobLoading, jobTotal, jobPage, jobStatusFilter, jobUsernameFilter, timeoutMinutes, markingTimeouts,
+          fetchJobs, cancelJob, retryJob, markTimeouts, statusTagType,
+          materialAudit, auditLoading, fetchMaterialAudit, rollbackMaterialSnapshot,
+          storageFiles, storageLoading, storageUploading, storageHealth, storagePurpose,
+          fetchStorageHealth, fetchStorageFiles, handleStorageUpload, openStorageDownload
         };
       }
     };

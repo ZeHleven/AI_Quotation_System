@@ -6,113 +6,401 @@
     <title>企业级 AI 智能造价中台</title>
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f0f2f5; }
-        #app { height: 100%; }
+        * {
+            box-sizing: border-box;
+        }
 
-        /* 登录页样式 */
-        .login-container { display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); }
-        .login-card { width: 400px; padding: 40px; background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
-        .login-title { text-align: center; margin-bottom: 30px; color: #303133; font-size: 24px; font-weight: bold; }
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            background: #f0f2f5;
+            color: #303133;
+        }
 
-        /* 系统框架样式 */
-        .layout-container { height: 100%; display: flex; flex-direction: column; }
-        .sys-header { background-color: #2b303b; color: #fff; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; height: 60px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 10; }
-        .sys-logo { font-size: 18px; font-weight: bold; letter-spacing: 1px; display: flex; align-items: center; gap: 10px; }
-        .sys-main-wrapper { flex: 1; display: flex; overflow: hidden; }
-        .sys-sidebar { width: 220px; background-color: #fff; border-right: 1px solid #e6e6e6; display: flex; flex-direction: column; }
-        .sys-content { flex: 1; padding: 20px; overflow-y: auto; background-color: #f0f2f5; position: relative; }
+        #app {
+            height: 100%;
+        }
 
-        /* 嵌入的 iframe 样式 (用来承载现有的 index 和 admin 页面) */
-        .page-iframe { width: 100%; height: 100%; border: none; border-radius: 8px; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.05); background-color: #fff; }
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            background: linear-gradient(135deg, #1d3557 0%, #457b9d 100%);
+        }
+
+        .login-card {
+            width: min(420px, 100%);
+            padding: 36px;
+            background: rgba(255, 255, 255, 0.96);
+            border-radius: 8px;
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.16);
+        }
+
+        .login-title {
+            margin-bottom: 28px;
+            text-align: center;
+            color: #1f2d3d;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .login-tip {
+            text-align: center;
+            color: #909399;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .layout-container {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #f0f2f5;
+        }
+
+        .sys-header {
+            height: 60px;
+            padding: 0 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            color: #fff;
+            background: #263241;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+        }
+
+        .sys-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+
+        .user-trigger {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #fff;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .portal-main {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .portal-wrap {
+            max-width: 1180px;
+            margin: 0 auto;
+        }
+
+        .portal-summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
+            padding: 22px;
+            background: #fff;
+            border: 1px solid #e4e7ed;
+            border-radius: 8px;
+            box-shadow: 0 8px 22px rgba(31, 45, 61, 0.05);
+        }
+
+        .portal-title {
+            margin: 0;
+            color: #1f2d3d;
+            font-size: 24px;
+            line-height: 1.35;
+            font-weight: 700;
+        }
+
+        .portal-subtitle {
+            margin-top: 8px;
+            max-width: 680px;
+            color: #606266;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .status-strip {
+            min-width: 360px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
+        .status-item {
+            padding: 12px 14px;
+            background: #fafafa;
+            border: 1px solid #ebeef5;
+            border-radius: 8px;
+        }
+
+        .status-item span {
+            display: block;
+            margin-bottom: 6px;
+            color: #909399;
+            font-size: 12px;
+        }
+
+        .status-item strong {
+            color: #303133;
+            font-size: 15px;
+        }
+
+        .module-grid {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+        }
+
+        .module-card {
+            min-height: 178px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            background: #fff;
+            border: 1px solid #e4e7ed;
+            border-radius: 8px;
+            box-shadow: 0 8px 22px rgba(31, 45, 61, 0.04);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+
+        .module-card:hover {
+            transform: translateY(-2px);
+            border-color: #c6e2ff;
+            box-shadow: 0 12px 26px rgba(31, 45, 61, 0.08);
+        }
+
+        .module-card.disabled {
+            opacity: 0.62;
+        }
+
+        .module-card.disabled:hover {
+            transform: none;
+            border-color: #e4e7ed;
+            box-shadow: 0 8px 22px rgba(31, 45, 61, 0.04);
+        }
+
+        .module-name {
+            color: #1f2d3d;
+            font-size: 17px;
+            font-weight: 700;
+            line-height: 1.45;
+        }
+
+        .module-desc {
+            margin-top: 10px;
+            color: #606266;
+            font-size: 13px;
+            line-height: 1.65;
+        }
+
+        .module-meta {
+            margin-top: 12px;
+            color: #909399;
+            font-size: 12px;
+        }
+
+        .module-actions {
+            margin-top: 18px;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        .module-actions .el-button {
+            min-width: 132px;
+        }
+
+        @media (max-width: 768px) {
+            .sys-header {
+                padding: 0 14px;
+            }
+
+            .sys-logo {
+                font-size: 16px;
+            }
+
+            .portal-main {
+                padding: 16px;
+            }
+
+            .portal-summary {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .status-strip {
+                min-width: 0;
+                width: 100%;
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
 <div id="app">
-    <!-- 未登录状态：显示登录表单 -->
     <div v-if="!isLoggedIn" class="login-container">
         <div class="login-card">
-            <div class="login-title">AI 造价中台登录</div>
+            <div class="login-title">AI 智能造价中台登录</div>
             <el-form :model="loginForm" :rules="rules" ref="loginFormRef">
                 <el-form-item prop="username">
-                    <el-input v-model="loginForm.username" placeholder="请输入用户名" prefix-icon="User" size="large"></el-input>
+                    <el-input v-model="loginForm.username" placeholder="请输入用户名" size="large"></el-input>
                 </el-form-item>
                 <el-form-item prop="password">
-                    <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" prefix-icon="Lock" size="large" @keyup.enter="handleLogin"></el-input>
+                    <el-input
+                        v-model="loginForm.password"
+                        type="password"
+                        placeholder="请输入密码"
+                        show-password
+                        size="large"
+                        @keyup.enter="handleLogin"
+                    ></el-input>
                 </el-form-item>
                 <el-form-item>
-                    <el-button type="primary" size="large" style="width: 100%;" :loading="loading" @click="handleLogin">登 录</el-button>
+                    <el-button type="primary" size="large" style="width: 100%;" :loading="loading" @click="handleLogin">
+                        登录
+                    </el-button>
                 </el-form-item>
-                <div style="text-align: center; font-size: 12px; color: #909399;">
-                    管理员账号需手动在数据库中将 role 设为 admin
-                </div>
+                <div class="login-tip">管理员账号可进入知识库、模型网关和任务队列管理页面。</div>
             </el-form>
         </div>
     </div>
 
-    <!-- 强制修改密码弹窗 -->
-    <el-dialog v-model="showChangePwdDialog" title="🔐 请修改初始密码" width="400px" :close-on-click-modal="false" :show-close="false">
-        <el-alert title="当前使用的是默认密码，存在安全风险，请立即修改。" type="warning" show-icon style="margin-bottom:16px;"></el-alert>
-        <el-form :model="changePwdForm" label-width="80px">
+    <el-dialog
+        v-model="showChangePwdDialog"
+        title="请修改初始密码"
+        width="400px"
+        :close-on-click-modal="false"
+        :show-close="false"
+    >
+        <el-alert
+            title="当前使用的是默认密码，存在安全风险，请立即修改。"
+            type="warning"
+            show-icon
+            style="margin-bottom: 16px;"
+        ></el-alert>
+        <el-form :model="changePwdForm" label-width="90px">
             <el-form-item label="原密码">
                 <el-input v-model="changePwdForm.old_password" type="password" show-password placeholder="请输入原密码"></el-input>
             </el-form-item>
             <el-form-item label="新密码">
-                <el-input v-model="changePwdForm.new_password" type="password" show-password placeholder="至少6位"></el-input>
+                <el-input v-model="changePwdForm.new_password" type="password" show-password placeholder="至少 6 位"></el-input>
             </el-form-item>
             <el-form-item label="确认密码">
                 <el-input v-model="changePwdForm.confirm_password" type="password" show-password placeholder="再次输入新密码"></el-input>
             </el-form-item>
         </el-form>
         <template #footer>
-            <el-button type="primary" :loading="changePwdLoading" @click="submitChangePassword" style="width:100%">确认修改</el-button>
+            <el-button type="primary" :loading="changePwdLoading" style="width: 100%;" @click="submitChangePassword">
+                确认修改
+            </el-button>
         </template>
     </el-dialog>
 
-    <!-- 已登录状态：显示系统主框架 -->
     <div v-else class="layout-container">
         <header class="sys-header">
-            <div class="sys-logo">
-                🖥️ AI 智能造价中台
-            </div>
-            <div class="user-info">
-                <el-dropdown @command="handleCommand">
-                    <span style="color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                        <el-avatar size="small" :src="'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'"></el-avatar>
-                        {{ currentUser.name }} ({{ currentUser.role === 'admin' ? '管理员' : '业务员' }}) ▾
-                    </span>
-                    <template #dropdown>
-                        <el-dropdown-menu>
-                            <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-                        </el-dropdown-menu>
-                    </template>
-                </el-dropdown>
-            </div>
+            <div class="sys-logo">企业级 AI 智能造价中台</div>
+            <el-dropdown @command="handleCommand">
+                <span class="user-trigger">
+                    <el-avatar size="small" :src="'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'"></el-avatar>
+                    {{ currentUser.name }}（{{ currentUser.role === 'admin' ? '管理员' : '业务员' }}）
+                </span>
+                <template #dropdown>
+                    <el-dropdown-menu>
+                        <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                    </el-dropdown-menu>
+                </template>
+            </el-dropdown>
         </header>
 
-        <div class="sys-main-wrapper">
-            <!-- 侧边菜单栏 -->
-            <aside class="sys-sidebar">
-                <!-- 这里的 default-active 绑定当前选中的菜单 -->
-                <el-menu :default-active="activeMenu" @select="handleSelectMenu" style="border-right: none; height: 100%;">
+        <main class="portal-main">
+            <div class="portal-wrap">
+                <section class="portal-summary">
+                    <div>
+                        <h1 class="portal-title">系统首页</h1>
+                        <div class="portal-subtitle">
+                            统一进入报价测算、知识库管理、模型网关和任务队列能力。点击模块后会跳转到独立页面，浏览器地址会同步变化。
+                        </div>
+                    </div>
+                    <div class="status-strip">
+                        <div class="status-item">
+                            <span>当前账号</span>
+                            <strong>{{ currentUser.username }}</strong>
+                        </div>
+                        <div class="status-item">
+                            <span>访问角色</span>
+                            <strong>{{ currentUser.role === 'admin' ? '管理员' : '普通用户' }}</strong>
+                        </div>
+                    </div>
+                </section>
 
-                    <el-menu-item index="workspace">
-                        <span>📊 业务工作台 (AI测算)</span>
-                    </el-menu-item>
+                <section class="module-grid">
+                    <article class="module-card">
+                        <div>
+                            <div class="module-name">业务工作台（AI 测算）</div>
+                            <div class="module-desc">上传图纸或输入项目需求，创建异步报价任务，查看进度并进入预审面板。</div>
+                            <div class="module-meta">页面：/index.html</div>
+                        </div>
+                        <div class="module-actions">
+                            <el-button type="primary" @click="goToPage('/index.html')">进入业务工作台</el-button>
+                        </div>
+                    </article>
 
-                    <el-menu-item index="admin" v-if="currentUser.role === 'admin'">
-                        <span>⚙️ 知识库管理 (价格中枢)</span>
-                    </el-menu-item>
+                    <article class="module-card" :class="{ disabled: currentUser.role !== 'admin' }">
+                        <div>
+                            <div class="module-name">知识库管理（价格中枢）</div>
+                            <div class="module-desc">维护材料与工艺知识库，查看模型调用统一网关、报价任务队列管理。</div>
+                            <div class="module-meta">页面：/admin.html，仅管理员可进入</div>
+                        </div>
+                        <div class="module-actions">
+                            <el-button
+                                type="success"
+                                :disabled="currentUser.role !== 'admin'"
+                                @click="goToPage('/admin.html', true)"
+                            >
+                                进入知识库管理
+                            </el-button>
+                        </div>
+                    </article>
 
-                </el-menu>
-            </aside>
+                    <article class="module-card">
+                        <div>
+                            <div class="module-name">接口文档</div>
+                            <div class="module-desc">查看 FastAPI 自动生成的接口清单，便于联调报价任务、模型网关和管理接口。</div>
+                            <div class="module-meta">页面：/docs</div>
+                        </div>
+                        <div class="module-actions">
+                            <el-button @click="goToPage('/docs')">查看接口文档</el-button>
+                        </div>
+                    </article>
 
-            <!-- 主内容区：使用 iframe 动态加载对应的 HTML 页面 -->
-            <main class="sys-content">
-                <iframe v-if="activeMenu === 'workspace'" src="index.html" class="page-iframe" title="业务工作台"></iframe>
-                <!-- 双重保险：即使 URL 被篡改，非 admin 角色也加载不出来这个 iframe -->
-                <iframe v-if="activeMenu === 'admin' && currentUser.role === 'admin'" src="admin.html" class="page-iframe" title="知识库管理"></iframe>
-            </main>
-        </div>
+                    <article class="module-card">
+                        <div>
+                            <div class="module-name">系统健康检查</div>
+                            <div class="module-desc">查看数据库、RAG 服务地址、Redis/Celery 队列和 worker 在线状态。</div>
+                            <div class="module-meta">接口：/health/ready</div>
+                        </div>
+                        <div class="module-actions">
+                            <el-button @click="goToPage('/health/ready')">查看健康状态</el-button>
+                        </div>
+                    </article>
+                </section>
+            </div>
+        </main>
     </div>
 </div>
 
@@ -128,53 +416,55 @@
             const isLoggedIn = ref(false);
             const loading = ref(false);
             const loginFormRef = ref(null);
-            const activeMenu = ref('workspace');
-
             const showChangePwdDialog = ref(false);
             const changePwdLoading = ref(false);
-            const changePwdForm = reactive({ old_password: '', new_password: '', confirm_password: '' });
 
-            // 当前用户信息
             const currentUser = reactive({
-                username: '',
-                name: '',
-                role: '' // 'admin' 或 'user'
+                username: "",
+                name: "",
+                role: ""
             });
 
-            const loginForm = reactive({ username: '', password: '' });
+            const loginForm = reactive({
+                username: "",
+                password: ""
+            });
+
+            const changePwdForm = reactive({
+                old_password: "",
+                new_password: "",
+                confirm_password: ""
+            });
+
             const rules = {
-                username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-                password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+                username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+                password: [{ required: true, message: "请输入密码", trigger: "blur" }]
             };
 
             const applyUserInfo = (user) => {
-                currentUser.username = user.username;
-                currentUser.name = user.role === 'admin' ? '系统主管' : '业务员 ' + user.username;
-                currentUser.role = user.role;
-                localStorage.setItem('app_user_info', JSON.stringify({
+                currentUser.username = user.username || "";
+                currentUser.role = user.role || "user";
+                currentUser.name = currentUser.role === "admin" ? "系统主管" : `业务员 ${currentUser.username}`;
+                localStorage.setItem("app_user_info", JSON.stringify({
                     username: currentUser.username,
                     name: currentUser.name,
                     role: currentUser.role
                 }));
                 isLoggedIn.value = true;
-                if(currentUser.role !== 'admin' && activeMenu.value === 'admin') {
-                    activeMenu.value = 'workspace';
-                }
             };
 
             const clearLoginState = () => {
-                localStorage.removeItem('ai_token');
-                localStorage.removeItem('app_user_info');
-                Object.assign(currentUser, { username: '', name: '', role: '' });
+                localStorage.removeItem("ai_token");
+                localStorage.removeItem("app_user_info");
+                Object.assign(currentUser, { username: "", name: "", role: "" });
                 isLoggedIn.value = false;
             };
 
-            // 检查本地 Token 是否仍有效，避免刷新后使用过期登录态
             const checkLoginState = async () => {
-                const token = localStorage.getItem('ai_token');
+                const token = localStorage.getItem("ai_token");
                 if (!token) return;
                 try {
-                    const res = await axios.get('/api/v1/auth/me', {
+                    const res = await axios.get("/api/v1/auth/me", {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     applyUserInfo(res.data);
@@ -183,7 +473,7 @@
                     }
                 } catch (error) {
                     clearLoginState();
-                    ElMessage.warning('登录状态已过期，请重新登录');
+                    ElMessage.warning("登录状态已过期，请重新登录");
                 }
             };
 
@@ -193,24 +483,23 @@
                     loading.value = true;
                     try {
                         const params = new URLSearchParams();
-                        params.append('username', loginForm.username);
-                        params.append('password', loginForm.password);
-                        const res = await axios.post('/api/v1/auth/login', params);
-                        const { access_token, role, username } = res.data;
+                        params.append("username", loginForm.username);
+                        params.append("password", loginForm.password);
+                        const res = await axios.post("/api/v1/auth/login", params);
+                        const { access_token, role, username, must_change_password } = res.data;
 
-                        localStorage.setItem('ai_token', access_token);
+                        localStorage.setItem("ai_token", access_token);
                         applyUserInfo({ username, role });
-                        activeMenu.value = 'workspace';
-                        ElMessage.success('登录成功，欢迎回来！');
+                        ElMessage.success("登录成功");
 
-                        if (res.data.must_change_password) {
-                            changePwdForm.old_password = '';
-                            changePwdForm.new_password = '';
-                            changePwdForm.confirm_password = '';
+                        if (must_change_password) {
+                            changePwdForm.old_password = "";
+                            changePwdForm.new_password = "";
+                            changePwdForm.confirm_password = "";
                             showChangePwdDialog.value = true;
                         }
                     } catch (error) {
-                        ElMessage.error(error.response?.data?.detail || '用户名或密码错误');
+                        ElMessage.error(error.response?.data?.detail || "用户名或密码错误");
                     } finally {
                         loading.value = false;
                     }
@@ -219,40 +508,48 @@
 
             const submitChangePassword = async () => {
                 if (!changePwdForm.new_password || changePwdForm.new_password.length < 6) {
-                    return ElMessage.warning('新密码不能少于6位');
+                    ElMessage.warning("新密码不能少于 6 位");
+                    return;
                 }
                 if (changePwdForm.new_password !== changePwdForm.confirm_password) {
-                    return ElMessage.warning('两次输入的密码不一致');
+                    ElMessage.warning("两次输入的密码不一致");
+                    return;
                 }
+
                 changePwdLoading.value = true;
                 try {
-                    const token = localStorage.getItem('ai_token');
-                    await axios.post('/api/v1/auth/change_password',
-                        { old_password: changePwdForm.old_password, new_password: changePwdForm.new_password },
+                    const token = localStorage.getItem("ai_token");
+                    await axios.post(
+                        "/api/v1/auth/change_password",
+                        {
+                            old_password: changePwdForm.old_password,
+                            new_password: changePwdForm.new_password
+                        },
                         { headers: { Authorization: `Bearer ${token}` } }
                     );
-                    ElMessage.success('密码修改成功！');
+                    ElMessage.success("密码修改成功");
                     showChangePwdDialog.value = false;
-                } catch (e) {
-                    ElMessage.error(e.response?.data?.detail || '修改失败');
+                } catch (error) {
+                    ElMessage.error(error.response?.data?.detail || "修改失败");
                 } finally {
                     changePwdLoading.value = false;
                 }
             };
 
-            // 菜单切换逻辑
-            const handleSelectMenu = (index) => {
-                activeMenu.value = index;
+            const goToPage = (path, requiresAdmin = false) => {
+                if (requiresAdmin && currentUser.role !== "admin") {
+                    ElMessage.warning("当前账号无权访问该模块");
+                    return;
+                }
+                window.location.href = path;
             };
 
-            // 顶栏下拉菜单命令处理
             const handleCommand = (command) => {
-                if (command === 'logout') {
+                if (command === "logout") {
                     clearLoginState();
-                    loginForm.username = '';
-                    loginForm.password = '';
-                    activeMenu.value = 'workspace';
-                    ElMessage.info('已退出登录');
+                    loginForm.username = "";
+                    loginForm.password = "";
+                    ElMessage.info("已退出登录");
                 }
             };
 
@@ -261,16 +558,26 @@
             });
 
             return {
-                isLoggedIn, loading, loginForm, rules, loginFormRef, currentUser, activeMenu,
-                showChangePwdDialog, changePwdLoading, changePwdForm,
-                handleLogin, handleSelectMenu, handleCommand, submitChangePassword
+                isLoggedIn,
+                loading,
+                loginForm,
+                rules,
+                loginFormRef,
+                currentUser,
+                showChangePwdDialog,
+                changePwdLoading,
+                changePwdForm,
+                handleLogin,
+                handleCommand,
+                submitChangePassword,
+                goToPage
             };
         }
     };
 
     const app = createApp(App);
     app.use(ElementPlus);
-    app.mount('#app');
+    app.mount("#app");
 </script>
 </body>
 </html>

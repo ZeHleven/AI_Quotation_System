@@ -1,5 +1,5 @@
 # AI 智能报价中台 — 项目上下文文档
-> 最后更新：2026-04-22
+> 最后更新：2026-04-28
 
 ---
 
@@ -47,10 +47,18 @@ C:\Users\12521\Desktop\Clear_test\
     │   ├── main.py              # FastAPI 入口 + 启动时自动迁移 must_change_password 列
     │   ├── api\v1\
     │   │   ├── chat.py          # 核心路由：GLM-4V、N8N、sync_milvus、历史记录、用户管理
+    │   │   ├── quote_jobs.py    # 异步报价任务：创建、状态查询、SSE 事件订阅
     │   │   └── auth.py          # 登录/注册/change_password 接口
     │   ├── models\
     │   │   ├── user.py          # User 表（含 must_change_password 字段）
-    │   │   └── quote_history.py # QuoteHistory 表
+    │   │   ├── quote_history.py # QuoteHistory 表
+    │   │   └── quote_job.py     # QuoteJob 异步任务表
+    │   ├── services\
+    │   │   ├── quote_dispatcher.py   # local/celery/disabled 调度入口
+    │   │   └── quote_job_runner.py   # 报价任务执行器
+    │   ├── tasks\
+    │   │   ├── celery_app.py         # Celery 应用配置
+    │   │   └── quote_tasks.py        # Celery 报价任务
     │   └── core\
     │       ├── database.py
     │       └── security.py
@@ -84,6 +92,9 @@ RAG_SERVICE_URL = "http://192.168.88.128:8001"
 ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY", "")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")   # HMAC-SHA256 签名密钥
 RELOAD_SECRET  = os.environ.get("RELOAD_SECRET", "")    # RAG 热更新鉴权
+TASK_QUEUE_MODE=local                                   # local / celery / disabled
+CELERY_BROKER_URL=redis://192.168.88.128:6380/0
+CELERY_RESULT_BACKEND=redis://192.168.88.128:6380/1
 ```
 
 ### Milvus 连接
@@ -109,6 +120,9 @@ GREEN = "quotation_green"            # 物理集合
 ZHIPU_API_KEY=...
 WEBHOOK_SECRET=019483697d32bcfe5ba55084d4ad23d5f244fb1662b92db9e0c9b0f871c832d9
 RELOAD_SECRET=rag_reload_7f3a9d2e1b4c8f6a
+TASK_QUEUE_MODE=local
+CELERY_BROKER_URL=redis://192.168.88.128:6380/0
+CELERY_RESULT_BACKEND=redis://192.168.88.128:6380/1
 ```
 
 ---
@@ -140,6 +154,41 @@ RELOAD_SECRET=rag_reload_7f3a9d2e1b4c8f6a
 - 测试环境强制使用本地 SQLite 测试库，不访问真实 MySQL、N8N、RAG 或外部模型
 - 新增 GitHub Actions：`.github/workflows/backend-ci.yml`
 - CI 在 push/PR 时运行依赖安装、`python -m compileall app`、`pytest -q`
+
+### ✅ 任务13：报价任务异步化基线（2026-04-26）
+- 新增 `QuoteJob` 表，持久化异步报价任务的 job_id、状态、阶段、trace_id、事件流、结果和错误
+- 新增接口：`POST /api/v1/quote/jobs` 创建任务，`GET /api/v1/quote/jobs/{job_id}` 查询状态，`GET /api/v1/quote/jobs/{job_id}/events` 订阅事件
+- 新增 `TASK_QUEUE_MODE`：`local` 使用 Windows 本地后台线程，`celery` 使用 Celery + Redis，`disabled` 用于测试隔离
+- 新增 Celery worker 入口：`app/tasks/celery_app.py`、`app/tasks/quote_tasks.py`
+- `index.html` 已切换为任务化调用：先 `POST /quote/jobs`，再用带 Authorization 头的 `fetch` 读取 `/quote/jobs/{job_id}/events`
+- 保留原 `/api/v1/chat` SSE 接口，作为回退兼容入口
+- 新增测试 `tests/test_quote_jobs.py`；本地验证 `python -m compileall app` 与 `pytest -q`，结果 `9 passed`
+
+### ✅ 任务14：Redis/Celery 正式生产化部署配置（2026-04-27）
+- `rag_docker/docker-compose.yml` 新增 `quote-redis` 服务，宿主机端口 `6380`，数据目录 `/opt/rag_service/volumes/redis`
+- 新增 `start_celery_worker.ps1`，Windows 下用 `--pool=solo --concurrency=1` 启动报价 Worker
+- 新增 `install_celery_worker_service.ps1`，注册开机自启任务 `AI_MiddleOffice_CeleryWorker`
+- `install_service.ps1` 和 `start_server.vbs` 的工作目录改为脚本所在目录，避免旧路径导致自启失败
+- `/health/ready` 新增 `task_queue` 字段，Celery 模式检查 Redis broker 和 worker ping
+- 新增 `DEPLOY_CELERY.md`，记录 CentOS Redis、Windows Worker、`.env` 切换与健康检查步骤
+
+### ✅ 任务15：报价任务管理增强（2026-04-27）
+- `GET /api/v1/quote/jobs`：任务列表，普通用户仅本人，admin 可按 `username` / `status` 查看全队列
+- `POST /api/v1/quote/jobs/{job_id}/cancel`：取消 queued/running 任务，并尝试 revoke Celery task
+- `POST /api/v1/quote/jobs/{job_id}/retry`：失败、取消、超时任务可重新创建并派发
+- `POST /api/v1/admin/quote/jobs/mark_timeouts`：管理员批量标记超时任务，默认按 30 分钟阈值
+- `admin.html` 新增报价任务队列面板，可筛选状态/用户并执行取消、重试、超时标记
+- Worker 执行过程中会检查终态，避免已取消/超时任务继续写入预审结果
+- 测试新增列表、取消、重试、管理员超时标记覆盖
+
+### ✅ 任务16：模型调用统一网关（2026-04-27）
+- 新增 `app/services/model_gateway.py`，统一封装 GLM-4V 图像识别与 n8n/Dify/DeepSeek 工作流调用
+- 新增 `ModelCallLog` 表，记录 provider/model/endpoint/status/http_status/latency/input_chars/output_chars/estimated_cost/trace_id
+- 新增内存级熔断保护，按 `provider:endpoint` 统计连续失败，超过阈值后短时间拒绝调用
+- 新增配置：`GLM_VISION_MODEL`、`GLM_VISION_URL`、`MODEL_GATEWAY_TIMEOUT_SECONDS`、`MODEL_GATEWAY_FAILURE_THRESHOLD`、`MODEL_GATEWAY_CIRCUIT_RESET_SECONDS`、`MODEL_GATEWAY_COST_PER_1K_CHARS`
+- 新增接口：`GET /api/v1/admin/model_gateway/stats`、`GET /api/v1/admin/model_gateway/circuits`
+- `admin.html` 新增模型网关观测面板，展示调用次数、平均耗时、估算费用和熔断状态
+- 测试新增模型网关统计与 admin 权限覆盖
 
 ### ✅ 任务9：admin 强制修改初始密码（2026-04-22）
 - `main.py` 启动时检测 admin 密码是否仍为 `123`，是则设 `must_change_password=True`
@@ -194,7 +243,11 @@ RELOAD_SECRET=rag_reload_7f3a9d2e1b4c8f6a
 
 ## 五、冷启动步骤
 
-### CentOS（先启动）
+### CentOS（先启动虚拟机）
+`ens33` 已通过第 20 步配置为开机 DHCP 自动联网，正常情况下不再需要手动执行 `sudo dhclient ens33`。
+
+Docker 已启用开机自启，Compose 服务使用 `restart: unless-stopped`。如需手动恢复：
+
 ```bash
 cd /opt/rag_service && docker compose up -d
 # 验证
@@ -205,13 +258,36 @@ curl -s -X POST http://localhost:8001/api/v1/retrieve \
 ```
 
 ### Windows（自动）
-开机后任务计划程序自动启动 FastAPI，直接访问：`http://localhost:9000/`
+开机后任务计划程序 `AI_MiddleOffice` 执行 `start_watchdog.ps1`。
+
+`start_watchdog.ps1` 会每 3 分钟重试一次 `start_all.ps1 -NoBrowser`，最多持续 60 分钟，适配 Windows 先启动、CentOS 后启动的顺序。
+
+`start_all.ps1` 每次启动会：
+
+1. 等待 MySQL `5455`
+2. 等待 Redis `6380`
+3. 等待 RAG `8001`
+4. 等待 n8n `5678`
+5. 等待 MinIO `9002`
+6. 启动 Celery Worker
+7. 启动 FastAPI
+
+直接访问：`http://localhost:9000/`
+
+手动一键启动：
+
+```powershell
+cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1
+```
 
 手动控制：
 ```powershell
-Start-ScheduledTask -TaskName AI_MiddleOffice   # 启动
-Stop-ScheduledTask  -TaskName AI_MiddleOffice   # 停止
+Start-ScheduledTask -TaskPath "\" -TaskName AI_MiddleOffice   # 启动
+Stop-ScheduledTask  -TaskPath "\" -TaskName AI_MiddleOffice   # 停止
 ```
+
+详细说明见根目录 `STARTUP.md` 与 `AI_Middle_Office/DEPLOY_STARTUP.md`。
 
 ### 账号信息
 | 用户名 | 密码 | 角色 |
@@ -242,6 +318,15 @@ print(r.text)
 df -h / && docker system df
 ```
 
+### 异步报价 Worker（Windows，启用 Celery 模式时）
+```powershell
+cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
+$env:TASK_QUEUE_MODE="celery"
+C:\Users\12521\miniconda3\python.exe -m celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --pool=solo
+```
+
+默认 `TASK_QUEUE_MODE=local` 不要求 Redis，会在 FastAPI 进程内用后台线程执行报价任务；生产切换为 `celery` 前需先部署 Redis。完整步骤见 `DEPLOY_CELERY.md`。
+
 ---
 
 ## 七、协作规范
@@ -257,7 +342,7 @@ df -h / && docker system df
 
 | 分类 | 组件 |
 |------|------|
-| 后端框架 | FastAPI · uvicorn · SQLAlchemy · bcrypt · python-dotenv · python-jose |
+| 后端框架 | FastAPI · uvicorn · SQLAlchemy · Alembic · Celery · Redis · bcrypt · python-dotenv · python-jose |
 | AI/大模型 | GLM-4V（图像识别）· DeepSeek-R1（报价优化）· BCEmbedding bce-embedding-base_v1（768维）|
 | 向量数据库 | Milvus v2.3.1 · pymilvus 2.3.6 · HNSW · COSINE |
 | 混合检索 | sentence-transformers · rank-bm25 · jieba · RRF 融合 |
@@ -285,7 +370,7 @@ df -h / && docker system df
 
 **处理流程（约 15~30 秒）：**
 ```
-发送 → GLM-4V（图片）→ N8N → RAG 检索底价 → Dify+DeepSeek-R1 优化 → 预审弹窗
+发送 → 创建异步报价任务 → GLM-4V（图片）→ N8N → RAG 检索底价 → Dify+DeepSeek-R1 优化 → 事件流返回进度 → 预审弹窗
 ```
 
 **失败时**：错误气泡下方显示"🔄 重试"按钮，点击自动重发。
@@ -298,3 +383,15 @@ df -h / && docker system df
 
 ### 9.6 历史记录
 点击输入区"📋 历史记录"按钮，右侧抽屉展示历史列表，支持分页和查看明细。
+
+# 2026-04-27 升级补充
+
+- 第 17 步知识库变更快照与回滚基础版已落地：保存材料库前自动快照，管理员可通过 `GET /api/v1/admin/materials/audit` 查看快照，并通过 `POST /api/v1/admin/materials/rollback/{snapshot_id}` 回滚。
+- 第 18 步 MinIO 文件存储与临时下载链接已落地：新增 `quote-minio` 编排、`FileObject` 元数据表、`/api/v1/files` 文件接口和 `admin.html` 文件存储面板。
+- 第 19 步报价任务附件接入 MinIO 已落地：`MINIO_ENABLED=true` 时异步报价上传附件写入 MinIO，Worker 通过 `file_object_id` 拉取附件，未启用时回退 `file_base64`。
+
+# 2026-04-28 升级补充
+
+- 第 20 步一键启动与自愈编排已落地：新增 `start_all.ps1`、`start_watchdog.ps1`、`install_centos_autostart.ps1`、`rag_docker/enable_centos_autostart.sh`，冷启动时自动等待 MySQL/Redis/RAG/n8n/MinIO，再拉起 Celery 和 FastAPI。
+- 第 21 步运维监控与告警已落地：新增 `app/services/ops_monitor.py`、`app/api/v1/ops.py` 和管理员页“运维监控与告警”面板，支持 MySQL/Redis/Celery/RAG/MinIO/n8n 探活、异常日志聚合与卡住任务提醒。
+- 第 22 步数据库迁移治理已落地：新增 Alembic 迁移体系、`20260428_0001_initial_schema` 基线迁移、`upgrade_database.ps1` 和启动前自动迁移；后续表结构变更统一通过 `alembic/versions/` 管理。

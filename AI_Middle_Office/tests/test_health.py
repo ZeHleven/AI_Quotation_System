@@ -12,4 +12,6 @@ def test_health_ready(client):
     assert response.status_code == 200
     assert response.json()["status"] == "ready"
     assert response.json()["database"] == "ok"
+    assert response.json()["task_queue"]["mode"] == "disabled"
+    assert response.json()["task_queue"]["worker"] == "disabled"
     assert response.headers.get("x-trace-id")

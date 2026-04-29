@@ -281,6 +281,75 @@
         };
         const handleFileChange = (file) => { selectedFile.value = file.raw; ElMessage.info(`已选中附件`); };
 
+        const parsePreviewPayload = (rawData) => {
+          rawData = rawData || {};
+          let extractedArray = [];
+          let extractedNotes = "无";
+
+          const targetStr = typeof rawData === 'string'
+            ? rawData
+            : (rawData.text || rawData.answer || rawData.response || rawData.message || "");
+
+          if (typeof targetStr === 'string' && targetStr.length > 0) {
+            try {
+              const startIndex = targetStr.indexOf('{');
+              const endIndex = targetStr.lastIndexOf('}');
+              if (startIndex !== -1 && endIndex !== -1) {
+                const cleanStr = targetStr.substring(startIndex, endIndex + 1);
+                const parsedData = JSON.parse(cleanStr);
+                if (parsedData.project_details && Array.isArray(parsedData.project_details)) {
+                  extractedArray = parsedData.project_details;
+                  extractedNotes = parsedData.customer_questions_answered || "无";
+                }
+              }
+            } catch(e) { console.error('JSON反序列化出错:', e); }
+          }
+
+          if (extractedArray.length === 0) {
+            if (rawData.project_details && Array.isArray(rawData.project_details)) {
+              extractedArray = rawData.project_details;
+              extractedNotes = rawData.customer_questions_answered || "无";
+            } else if (Array.isArray(rawData)) {
+              extractedArray = rawData;
+            } else if (rawData.data && Array.isArray(rawData.data)) {
+              extractedArray = rawData.data;
+            }
+          }
+
+          return {
+            rows: Array.isArray(extractedArray) ? extractedArray : [],
+            notes: extractedNotes
+          };
+        };
+
+        const readSseStream = async (response, onEvent) => {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let done = false;
+          let streamBuffer = '';
+
+          while (!done) {
+            const { value, done: readerDone } = await reader.read();
+            done = readerDone;
+            if (!value) continue;
+
+            streamBuffer += decoder.decode(value, { stream: true });
+            const events = streamBuffer.split('\n\n');
+            streamBuffer = events.pop() || '';
+
+            for (const eventText of events) {
+              const line = eventText.split('\n').find(item => item.startsWith('data: '));
+              if (!line) continue;
+
+              try {
+                onEvent(JSON.parse(line.substring(6)));
+              } catch(e) {
+                console.error("SSE解析出错:", e);
+              }
+            }
+          }
+        };
+
         const sendMessage = async () => {
           const text = inputText.value.trim();
           if (!text && !selectedFile.value) return;
@@ -300,7 +369,7 @@
           lastInputFile.value = selectedFile.value;
           inputText.value = ''; selectedFile.value = null; sending.value = true; isTyping.value = true; scrollToBottom();
 
-          let charQueue = Array.from('⏳ 正在唤醒网关层，建立长连接...\n\n');
+          let charQueue = Array.from('⏳ 正在唤醒网关层，创建异步报价任务...\n\n');
           let streamEnded = false;
 
           const typeNextChar = () => {
@@ -318,93 +387,83 @@
 
           try {
             const token = localStorage.getItem('ai_token');
-            const response = await fetch(`${API_BASE_URL}/chat`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+            const createResponse = await fetch(`${API_BASE_URL}/quote/jobs`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+              body: formData
+            });
 
-            if (!response.ok) {
-              const traceId = response.headers.get('X-Trace-Id');
-              const errorData = await response.json().catch(() => ({}));
-              if (response.status === 401) handleUnauthorized();
-              charQueue.push(...('\n' + formatApiError(`请求失败 (${response.status})`, errorData.detail || response.statusText, traceId)).split(''));
+            if (!createResponse.ok) {
+              const traceId = createResponse.headers.get('X-Trace-Id');
+              const errorData = await createResponse.json().catch(() => ({}));
+              if (createResponse.status === 401) handleUnauthorized();
+              charQueue.push(...('\n' + formatApiError(`任务创建失败 (${createResponse.status})`, errorData.detail || createResponse.statusText, traceId)).split(''));
               messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
               streamEnded = true; sending.value = false; return;
             }
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder('utf-8');
-            let done = false;
-            let streamBuffer = '';
+            const job = await createResponse.json();
+            charQueue.push(...(`✅ 异步报价任务已创建\n任务编号：${job.job_id}\n\n`).split(''));
 
-            while (!done) {
-              const { value, done: readerDone } = await reader.read();
-              done = readerDone;
-              if (value) {
-                streamBuffer += decoder.decode(value, { stream: true });
-                const events = streamBuffer.split('\n\n');
-                streamBuffer = events.pop() || '';
-                for (const eventText of events) {
-                  const line = eventText.split('\n').find(item => item.startsWith('data: '));
-                  if (line) {
-                    try {
-                      const data = JSON.parse(line.substring(6));
-                      if (data.status === 'processing') {
-                         charQueue.push(...(data.message + '\n\n').split(''));
-                      } else if (data.status === 'preview') {
-                         charQueue.push(...(data.message).split(''));
-                         sending.value = false;
+            const eventResponse = await fetch(`${API_BASE_URL}/quote/jobs/${job.job_id}/events`, {
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
 
-                         let rawData = data.data || {};
-                         let extractedArray = [];
-                         let extractedNotes = "无";
+            if (!eventResponse.ok) {
+              const traceId = eventResponse.headers.get('X-Trace-Id') || job.trace_id;
+              const errorData = await eventResponse.json().catch(() => ({}));
+              if (eventResponse.status === 401) handleUnauthorized();
+              charQueue.push(...('\n' + formatApiError(`任务订阅失败 (${eventResponse.status})`, errorData.detail || eventResponse.statusText, traceId)).split(''));
+              messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+              streamEnded = true; sending.value = false; return;
+            }
 
-                         let targetStr = typeof rawData === 'string' ? rawData : (rawData.text || rawData.answer || rawData.response || rawData.message || "");
+            await readSseStream(eventResponse, (data) => {
+              if (data.status === 'queued') {
+                charQueue.push(...(`${data.message}\n\n`).split(''));
+              } else if (data.status === 'processing') {
+                charQueue.push(...(`${data.message}\n\n`).split(''));
+              } else if (data.status === 'preview') {
+                charQueue.push(...(data.message).split(''));
+                sending.value = false;
 
-                         if (typeof targetStr === 'string' && targetStr.length > 0) {
-                             try {
-                                 let startIndex = targetStr.indexOf('{');
-                                 let endIndex = targetStr.lastIndexOf('}');
-                                 if (startIndex !== -1 && endIndex !== -1) {
-                                     let cleanStr = targetStr.substring(startIndex, endIndex + 1);
-                                     let parsedData = JSON.parse(cleanStr);
-                                     if (parsedData.project_details && Array.isArray(parsedData.project_details)) {
-                                         extractedArray = parsedData.project_details;
-                                         extractedNotes = parsedData.customer_questions_answered || "无";
-                                     }
-                                 }
-                             } catch(e) { console.error('JSON反序列化出错:', e); }
-                         }
+                const parsed = parsePreviewPayload(data.data || {});
+                previewData.value = parsed.rows;
+                globalNotes.value = parsed.notes;
 
-                         if (extractedArray.length === 0) {
-                             if (rawData.project_details && Array.isArray(rawData.project_details)) {
-                                 extractedArray = rawData.project_details;
-                                 extractedNotes = rawData.customer_questions_answered || "无";
-                             } else if (Array.isArray(rawData)) {
-                                 extractedArray = rawData;
-                             } else if (rawData.data && Array.isArray(rawData.data)) {
-                                 extractedArray = rawData.data;
-                             }
-                         }
+                setTimeout(() => { showPreviewDialog.value = true; }, 1000);
+              } else if (data.status === 'error') {
+                const message = data.trace_id
+                  ? `${data.message}\n追踪ID：${data.trace_id}\n您可以点击重试；若连续失败，请把追踪ID发给管理员排查。`
+                  : data.message;
+                charQueue.push(...(message).split(''));
+                messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+                sending.value = false;
+              } else if (data.status === 'success') {
+                charQueue.push(...(data.message).split(''));
+                sending.value = false;
+              }
+            });
 
-                         previewData.value = Array.isArray(extractedArray) ? extractedArray : [];
-                         globalNotes.value = extractedNotes;
-
-                         setTimeout(() => { showPreviewDialog.value = true; }, 1000);
-
-                      } else if (data.status === 'error') {
-                         const message = data.trace_id
-                           ? `${data.message}\n追踪ID：${data.trace_id}\n您可以点击重试；若连续失败，请把追踪ID发给管理员排查。`
-                           : data.message;
-                         charQueue.push(...(message).split(''));
-                         messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
-                         sending.value = false;
-                      } else if (data.status === 'success') {
-                         charQueue.push(...(data.message).split(''));
-                         sending.value = false;
-                      }
-                    } catch(e) { console.error("SSE解析出错:", e); }
-                  }
-                }
+            const statusResponse = await fetch(`${API_BASE_URL}/quote/jobs/${job.job_id}`, {
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (statusResponse.ok) {
+              const latest = await statusResponse.json();
+              if (latest.status === 'failed' && latest.error_message && !messageHistory.value[msgIndex].canRetry) {
+                charQueue.push(...(`\n${latest.error_message}`).split(''));
+                messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+                sending.value = false;
+              } else if (latest.status === 'succeeded' && latest.result && !showPreviewDialog.value) {
+                const parsed = parsePreviewPayload(latest.result);
+                previewData.value = parsed.rows;
+                globalNotes.value = parsed.notes;
+                setTimeout(() => { showPreviewDialog.value = true; }, 1000);
               }
             }
+
             streamEnded = true;
           } catch (error) {
             charQueue.push(...('\n' + formatApiError('网络异常', error.message)).split(''));

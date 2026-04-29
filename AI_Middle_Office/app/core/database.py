@@ -7,7 +7,16 @@ from app.core.config import settings
 SQLALCHEMY_DATABASE_URL = settings.database_url
 
 connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)
+engine_kwargs = {"connect_args": connect_args, "pool_pre_ping": True}
+if SQLALCHEMY_DATABASE_URL.startswith("mysql"):
+    engine_kwargs.update(
+        {
+            "pool_recycle": 1800,
+            "pool_timeout": 10,
+        }
+    )
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

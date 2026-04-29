@@ -58,6 +58,11 @@ Clear_test/
 - Milvus: `192.168.88.128:19530`，集合别名 `enterprise_quotation_rag`（蓝绿：`quotation_blue` / `quotation_green`）
 - 向量模型：`maidalun1020/bce-embedding-base_v1`，768维，COSINE，HNSW
 - RAG 服务: `http://192.168.88.128:8001`
+- 异步报价任务：`index.html` 已使用 `/api/v1/quote/jobs`，支持任务列表/取消/重试/超时标记；生产已按 `AI_Middle_Office/DEPLOY_CELERY.md` 切换 Celery + Redis
+- 模型网关：GLM-4V 与 n8n/Dify/DeepSeek 调用已统一经过 `app/services/model_gateway.py`，admin 可查看调用统计和熔断状态
+- 文件存储：报价附件与通用文件已接入独立 `quote-minio`，临时下载链接由 `/api/v1/files/{file_id}/download_url` 生成
+- 运维监控：`/api/v1/admin/ops/dashboard` 聚合 MySQL、Redis、Celery、RAG、MinIO、n8n 探活、异常日志和卡住任务提醒
+- 数据库迁移：第 22 步已引入 Alembic，`start_all.ps1` 启动前执行 `alembic upgrade head`，手动入口为 `AI_Middle_Office/upgrade_database.ps1`
 
 ## 账号
 
@@ -67,21 +72,34 @@ Clear_test/
 
 ## 冷启动
 
-**CentOS（先启动）**
+**CentOS（先启动虚拟机）**
+- `ens33` 已配置为开机 DHCP 自动联网，正常情况下不再需要手动执行 `sudo dhclient ens33`
+- Docker 已启用开机自启，`/opt/rag_service` 内服务使用 `restart: unless-stopped`
+- 如需手动恢复：
 ```bash
 cd /opt/rag_service && docker compose up -d
 ```
 
-**Windows（自动）** — 任务计划程序 `AI_MiddleOffice` 开机自启
+**Windows（自动）** — 任务计划程序 `AI_MiddleOffice` 开机执行 `start_watchdog.ps1`
 ```
 http://localhost:9000/
 ```
+
+`start_watchdog.ps1` 会每 3 分钟重试一次 `start_all.ps1 -NoBrowser`，最多持续 60 分钟，适配 Windows 先启动、CentOS 后启动的顺序。
+
+**手动一键启动**
+```powershell
+cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1
+```
+
+详细说明见 `STARTUP.md` 和 `AI_Middle_Office/DEPLOY_STARTUP.md`。
 
 ## 技术栈
 
 | 分类 | 组件 |
 |------|------|
-| 后端 | FastAPI · uvicorn · SQLAlchemy · python-jose · bcrypt |
+| 后端 | FastAPI · uvicorn · SQLAlchemy · Alembic · Celery · Redis · python-jose · bcrypt |
 | AI | GLM-4V · DeepSeek-R1 · BCEmbedding bce-embedding-base_v1 |
 | 检索 | Milvus v2.3.1 · pymilvus 2.3.6 · rank-bm25 · jieba · RRF融合 |
 | 自动化 | N8N · Dify · 钉钉 Webhook |
@@ -93,3 +111,15 @@ http://localhost:9000/
 - 所有文件修改、脚本执行由 AI 自行完成并检查，只汇报结果。
 - 破坏性操作（删文件、强制推送、清空数据库等）或需在 CentOS 执行的命令，先向用户申请许可。
 - 操作结束简短告知"做了什么"，不做多余解释。
+
+# 2026-04-27 升级补充
+
+- 第 17 步知识库变更快照与回滚基础版已落地：保存材料库前自动快照，管理员可在 `admin.html` 查看快照并一键回滚。
+- 第 18 步 MinIO 文件存储与临时下载链接已落地：新增 `quote-minio` 编排、`/api/v1/files` 文件接口和 `admin.html` 文件存储面板。
+- 第 19 步报价任务附件接入 MinIO 已落地：`MINIO_ENABLED=true` 时异步报价上传附件写入 MinIO，任务表只保存 `file_object_id`。
+
+# 2026-04-28 升级补充
+
+- 第 20 步一键启动与自愈编排已落地：CentOS `ens33` 自动 DHCP，Docker 服务自恢复，Windows `start_watchdog.ps1` 开机后台重试，`start_all.ps1` 启动前等待 MySQL/Redis/RAG/n8n/MinIO，再启动 Celery 和 FastAPI。
+- 第 21 步运维监控与告警已落地：新增 `/api/v1/admin/ops/dashboard`，管理员页面顶部可查看基础服务探活、异常日志聚合和卡住任务提醒。
+- 第 22 步数据库迁移治理已落地：新增 Alembic 迁移体系、基线迁移、`upgrade_database.ps1` 和启动前自动迁移，后续表结构变更不再继续堆到 `main.py`。

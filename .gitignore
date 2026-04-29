@@ -19,6 +19,10 @@ __pycache__/
 logs/
 *.log
 
+# Runtime knowledge-base snapshots
+AI_Middle_Office/materials_audit/
+AI_Middle_Office/tests/materials_audit/
+
 # Local n8n workflow exports may contain webhook/app secrets
 n8n_current_workflow.json
 n8n_node_summary.json

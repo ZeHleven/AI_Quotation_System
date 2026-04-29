@@ -85,11 +85,27 @@ services:
     environment:
       - HF_ENDPOINT=https://hf-mirror.com
       - HF_HOME=/model_cache
+      - HF_HUB_CACHE=/model_cache/hub
+      - TRANSFORMERS_CACHE=/model_cache/transformers
+      - SENTENCE_TRANSFORMERS_HOME=/model_cache
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - RAG_MODEL_OFFLINE=true
+      - EMBEDDING_MODEL_NAME=maidalun1020/bce-embedding-base_v1
+      - EMBEDDING_MODEL_PATH=/model_cache/hub/models--maidalun1020--bce-embedding-base_v1/snapshots/9c0d82af44af61abe171ffae23fde5740c0ec1a8
+      - RAG_MAX_SUB_QUERIES=6
+      - RAG_MAX_QUERY_CHARS=80
+      - MILVUS_LOAD_TIMEOUT_SECONDS=90
+      - MILVUS_SEARCH_TIMEOUT_SECONDS=20
+      - RAG_BM25_FALLBACK_ON_MILVUS_ERROR=true
+      - RAG_VECTOR_ENABLED=true
       - MILVUS_HOST=standalone
       - MILVUS_PORT=19530
-      - RELOAD_SECRET=rag_reload_7f3a9d2e1b4c8f6a
+      - RELOAD_SECRET=${RELOAD_SECRET:-change-me-rag-reload-secret}
     volumes:
       - /opt/rag_service/model_cache:/model_cache
+      - /opt/rag_service/hybrid_searcher.py:/app/hybrid_searcher.py:ro
+      - /opt/rag_service/rag_materials.json:/app/rag_materials.json:ro
     depends_on:
       - standalone
     networks:
@@ -100,6 +116,56 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+
+  redis:
+    container_name: quote-redis
+    image: redis:7.2-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - /opt/rag_service/volumes/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - rag_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  quote-minio:
+    container_name: quote-minio
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ROOT_USER: ${QUOTE_MINIO_ROOT_USER:-quoteadmin}
+      MINIO_ROOT_PASSWORD: ${QUOTE_MINIO_ROOT_PASSWORD:-change-this-password}
+      MINIO_ACCESS_KEY: ${QUOTE_MINIO_ROOT_USER:-quoteadmin}
+      MINIO_SECRET_KEY: ${QUOTE_MINIO_ROOT_PASSWORD:-change-this-password}
+    command: minio server /data --console-address ":9001"
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    volumes:
+      - /opt/rag_service/volumes/quote-minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - rag_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
 networks:
   rag_net:

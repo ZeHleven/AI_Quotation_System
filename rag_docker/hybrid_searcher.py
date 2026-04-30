@@ -47,6 +47,26 @@ RAG_VECTOR_ENABLED = os.environ.get("RAG_VECTOR_ENABLED", "true").lower() in {"1
 # RRF 最低分数阈值——低于此值视为无关结果，直接丢弃
 RRF_SCORE_THRESHOLD = 0.008
 
+# 施工口语同义词：用于把业务员/图纸上的短语展开成知识库标准项目名，
+# 尤其修复多意图短句（如“拆墙、砌墙、刷漆”）被切开后语义太短的问题。
+QUERY_SYNONYMS = {
+    "拆墙": ["拆除墙体"],
+    "拆除墙": ["拆除墙体"],
+    "砸墙": ["拆除墙体"],
+    "砌墙": ["砌筑墙体"],
+    "新建墙": ["砌筑墙体"],
+    "隔墙": ["轻钢龙骨隔墙", "砌筑墙体"],
+    "刷漆": ["乳胶漆涂刷"],
+    "刷墙": ["乳胶漆涂刷"],
+    "墙漆": ["乳胶漆涂刷"],
+    "铺地砖": ["地砖铺贴"],
+    "水管": ["水路改造"],
+    "电线": ["电路改造"],
+    "布线": ["电路改造"],
+    "坐便器": ["马桶安装"],
+    "洗手盆": ["洗手盆安装"],
+}
+
 # ==========================================
 # 读取物料库（jieba 词典注册依赖此数据）
 # ==========================================
@@ -98,15 +118,29 @@ def _build_sub_queries(query_text: str) -> list:
     raw_sub_queries = re.split(r'[；。;|\n、，,]', query_text)
     sub_queries = []
     seen = set()
-    for raw in raw_sub_queries:
-        sq = _normalize_sub_query(raw)
+
+    def add_query(value: str) -> bool:
+        sq = _normalize_sub_query(value)
         if _is_noise_sub_query(sq):
-            continue
+            return False
         key = sq.lower()
         if key in seen:
-            continue
+            return False
         seen.add(key)
         sub_queries.append(sq)
+        return len(sub_queries) >= RAG_MAX_SUB_QUERIES
+
+    for raw in raw_sub_queries:
+        sq = _normalize_sub_query(raw)
+        if add_query(sq):
+            break
+        for trigger, aliases in QUERY_SYNONYMS.items():
+            if trigger in sq:
+                for alias in aliases:
+                    if add_query(alias):
+                        break
+            if len(sub_queries) >= RAG_MAX_SUB_QUERIES:
+                break
         if len(sub_queries) >= RAG_MAX_SUB_QUERIES:
             break
     if not sub_queries:

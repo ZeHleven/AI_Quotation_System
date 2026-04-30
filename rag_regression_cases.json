@@ -1,0 +1,37 @@
+{
+  "description": "Baseline RAG regression cases for quotation material retrieval. Run after every knowledge-base change.",
+  "cases": [
+    {"level": 1, "query": "直线型吊顶", "expected": ["直线型吊顶"]},
+    {"level": 1, "query": "地砖铺贴", "expected": ["地砖铺贴"]},
+    {"level": 1, "query": "水路改造", "expected": ["水路改造"]},
+    {"level": 1, "query": "电路改造", "expected": ["电路改造"]},
+    {"level": 1, "query": "卫生间防水", "expected": ["卫生间防水"]},
+    {"level": 1, "query": "乳胶漆涂刷", "expected": ["乳胶漆涂刷"]},
+    {"level": 1, "query": "铲墙皮", "expected": ["铲墙皮"]},
+    {"level": 1, "query": "地暖铺设", "expected": ["地暖铺设"]},
+
+    {"level": 2, "query": "铺地砖多少钱", "expected": ["地砖铺贴"]},
+    {"level": 2, "query": "刷墙漆", "expected": ["乳胶漆涂刷"]},
+    {"level": 2, "query": "水管改造", "expected": ["水路改造"]},
+    {"level": 2, "query": "走线布线", "expected": ["电路改造"]},
+    {"level": 2, "query": "厨卫铝扣板天花板", "expected": ["铝扣板吊顶"]},
+    {"level": 2, "query": "拆旧瓷砖", "expected": ["旧墙砖拆除", "地面砖拆除"]},
+    {"level": 2, "query": "坐便器安装", "expected": ["马桶安装"]},
+    {"level": 2, "query": "做隔墙", "expected": ["轻钢龙骨隔墙", "砌筑墙体"]},
+
+    {"level": 3, "query": "客厅吊顶和地砖", "expected": ["直线型吊顶", "地砖铺贴"]},
+    {"level": 3, "query": "水电改造", "expected": ["水路改造", "电路改造"]},
+    {"level": 3, "query": "卫生间防水和铺墙砖", "expected": ["卫生间防水", "墙面瓷砖铺贴"]},
+    {"level": 3, "query": "拆墙、砌墙、刷漆", "expected": ["拆除墙体", "砌筑墙体", "乳胶漆涂刷"]},
+    {"level": 3, "query": "马桶、洗手盆、淋浴房安装", "expected": ["马桶安装", "洗手盆安装", "淋浴房安装"]},
+
+    {"level": 4, "query": "轻钢龙骨石膏板天花", "expected": ["直线型吊顶"]},
+    {"level": 4, "query": "PPR管热熔连接", "expected": ["水路改造"]},
+    {"level": 4, "query": "BV2.5铜芯线穿PVC管", "expected": ["电路改造"]},
+    {"level": 4, "query": "东方雨虹防水涂料刷墙", "expected": ["墙面防水处理", "卫生间防水"]},
+    {"level": 4, "query": "自流平水泥", "expected": ["地面找平"]},
+    {"level": 4, "query": "PE-RT管分集水器", "expected": ["地暖铺设"]},
+    {"level": 4, "query": "耐水腻子打磨阴阳角", "expected": ["墙面腻子批刮"]},
+    {"level": 4, "query": "加气混凝土砌块室内隔断", "expected": ["砌筑墙体"]}
+  ]
+}

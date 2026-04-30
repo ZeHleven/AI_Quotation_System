@@ -46,6 +46,8 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - `app/api/v1/ops.py` + `app/services/ops_monitor.py`：管理员运维面板，聚合基础服务、日志和卡住任务。
 - `app/tasks/`：Celery app 与 worker task 入口。
 - `alembic/`：数据库迁移基线。
+- `verify_startup.ps1`：重启后固定验收脚本，检查 FastAPI、worker、RAG、n8n、MinIO、MySQL、Redis。
+- `run_centos_backup.ps1`：Windows 侧触发 CentOS 备份的入口，实际备份逻辑在 `rag_docker/backup_production.sh`。
 
 ## CentOS 侧服务
 

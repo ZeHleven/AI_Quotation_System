@@ -87,6 +87,19 @@ task_queue_mode : celery
 task_queue.ok   : True
 ```
 
+也可以运行固定验收脚本，一次性检查 FastAPI、worker、RAG、n8n、MinIO、MySQL、Redis：
+
+```powershell
+cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify_startup.ps1
+```
+
+正常结果：
+
+```text
+[PASS] Acceptance check passed
+```
+
 ---
 
 ## 四、检查 CentOS 服务是否可达

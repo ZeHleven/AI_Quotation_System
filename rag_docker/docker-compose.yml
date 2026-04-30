@@ -30,8 +30,8 @@ services:
     container_name: milvus-minio
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: ${MILVUS_MINIO_ACCESS_KEY:-milvus-minio}
+      MINIO_SECRET_KEY: ${MILVUS_MINIO_SECRET_KEY:-change-this-password}
     # ⚠️ 端口已移除：服务器上 RAGFlow 的 MinIO 已占用 9000/9001
     # 此 MinIO 仅供 Milvus 内部使用，无需对外暴露
     volumes:
@@ -58,6 +58,8 @@ services:
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY: ${MILVUS_MINIO_ACCESS_KEY:-milvus-minio}
+      MINIO_SECRET_KEY: ${MILVUS_MINIO_SECRET_KEY:-change-this-password}
     volumes:
       - /opt/rag_service/volumes/milvus:/var/lib/milvus
     ports:

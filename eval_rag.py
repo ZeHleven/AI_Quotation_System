@@ -19,6 +19,7 @@ import json
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
 try:
     import requests
@@ -69,6 +70,33 @@ TEST_CASES = [
 ]
 
 
+def load_cases(path: str | None) -> list[dict]:
+    """Load regression cases from JSON, falling back to the embedded baseline."""
+    if not path:
+        return TEST_CASES
+
+    case_path = Path(path)
+    if not case_path.exists():
+        print(f"[WARN] 用例文件不存在，使用内置基线: {case_path}")
+        return TEST_CASES
+
+    with case_path.open("r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    cases = payload.get("cases", payload) if isinstance(payload, dict) else payload
+    if not isinstance(cases, list) or not cases:
+        raise ValueError(f"无效 RAG 回归用例文件: {case_path}")
+
+    for index, case in enumerate(cases, 1):
+        missing = {"level", "query", "expected"} - set(case)
+        if missing:
+            raise ValueError(f"第 {index} 条用例缺少字段: {', '.join(sorted(missing))}")
+        if not isinstance(case["expected"], list) or not case["expected"]:
+            raise ValueError(f"第 {index} 条用例 expected 必须是非空列表")
+
+    return cases
+
+
 def call_rag(url: str, query: str, top_k: int) -> list[str]:
     """调用 RAG 服务，返回 item_name 列表（按排名顺序）"""
     try:
@@ -103,10 +131,11 @@ def hit_at_k(returned: list[str], expected: list[str]) -> bool:
     return False
 
 
-def run_eval(url: str, top_k: int):
+def run_eval(url: str, top_k: int, cases: list[dict] | None = None, output_dir: str = "."):
+    cases = cases or TEST_CASES
     print(f"\n{'='*60}")
     print(f"  RAG 检索效果评测  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"  服务地址: {url}   top_k={top_k}")
+    print(f"  服务地址: {url}   top_k={top_k}   cases={len(cases)}")
     print(f"{'='*60}\n")
 
     # 先验证服务是否可达
@@ -119,7 +148,7 @@ def run_eval(url: str, top_k: int):
     results = []
     level_stats = {1: [], 2: [], 3: [], 4: []}
 
-    for i, case in enumerate(TEST_CASES, 1):
+    for i, case in enumerate(cases, 1):
         returned = call_rag(url, case["query"], top_k)
         if returned is None:
             print(f"[FATAL] 服务中途断连，评测中止")
@@ -169,6 +198,7 @@ def run_eval(url: str, top_k: int):
         "timestamp": datetime.now().isoformat(),
         "url": url,
         "top_k": top_k,
+        "case_count": total,
         "hit_rate": round(total_hit / total, 4),
         "mrr": round(total_mrr, 4),
         "by_level": {
@@ -181,8 +211,10 @@ def run_eval(url: str, top_k: int):
         "cases": results,
     }
 
-    output_path = f"rag_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    with open(output_path, "w", encoding="utf-8") as f:
+    output_root = Path(output_dir)
+    output_root.mkdir(parents=True, exist_ok=True)
+    output_path = output_root / f"rag_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    with output_path.open("w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
     print(f"  详细结果已保存至: {output_path}")
 
@@ -193,6 +225,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="RAG 检索效果评测")
     parser.add_argument("--url", default="http://192.168.88.128:8001", help="RAG 服务地址")
     parser.add_argument("--top_k", type=int, default=5, help="检索返回条数")
+    parser.add_argument("--cases", default="rag_regression_cases.json", help="RAG 回归用例 JSON 文件")
+    parser.add_argument("--output_dir", default="rag_eval_reports", help="评测报告输出目录")
+    parser.add_argument("--min_hit_rate", type=float, default=0.0, help="低于该 Hit@K 阈值时返回失败")
+    parser.add_argument("--min_mrr", type=float, default=0.0, help="低于该 MRR 阈值时返回失败")
     args = parser.parse_args()
 
-    run_eval(args.url, args.top_k)
+    try:
+        loaded_cases = load_cases(args.cases)
+        report = run_eval(args.url, args.top_k, loaded_cases, args.output_dir)
+    except Exception as exc:
+        print(f"[FATAL] {exc}")
+        sys.exit(1)
+
+    failed_thresholds = []
+    if args.min_hit_rate and report["hit_rate"] < args.min_hit_rate:
+        failed_thresholds.append(f"Hit@{args.top_k} {report['hit_rate']:.4f} < {args.min_hit_rate:.4f}")
+    if args.min_mrr and report["mrr"] < args.min_mrr:
+        failed_thresholds.append(f"MRR {report['mrr']:.4f} < {args.min_mrr:.4f}")
+
+    if failed_thresholds:
+        print("[FAIL] RAG 回归阈值未通过: " + "; ".join(failed_thresholds))
+        sys.exit(2)

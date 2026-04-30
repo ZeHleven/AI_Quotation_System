@@ -11,7 +11,7 @@
 - API：`192.168.88.128:9002`
 - Console：`http://192.168.88.128:9003`
 
-默认账号：
+示例账号（上线前必须在 CentOS `/opt/rag_service/.env` 中替换）：
 
 - `quoteadmin`
 - `change-this-password`

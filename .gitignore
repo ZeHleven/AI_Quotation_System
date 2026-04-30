@@ -22,6 +22,13 @@ logs/
 # Runtime knowledge-base snapshots
 AI_Middle_Office/materials_audit/
 AI_Middle_Office/tests/materials_audit/
+rag_eval_*.json
+rag_eval_reports/
+
+# Local backup artifacts
+backups/
+AI_Middle_Office/backups/
+rag_docker/backups/
 
 # Local n8n workflow exports may contain webhook/app secrets
 n8n_current_workflow.json

@@ -117,9 +117,9 @@ GREEN = "quotation_green"            # 物理集合
 
 ### .env 配置（Windows AI_Middle_Office/.env）
 ```
-ZHIPU_API_KEY=...
-WEBHOOK_SECRET=019483697d32bcfe5ba55084d4ad23d5f244fb1662b92db9e0c9b0f871c832d9
-RELOAD_SECRET=rag_reload_7f3a9d2e1b4c8f6a
+ZHIPU_API_KEY=<your-zhipu-api-key>
+WEBHOOK_SECRET=<your-webhook-secret>
+RELOAD_SECRET=<your-reload-secret>
 TASK_QUEUE_MODE=local
 CELERY_BROKER_URL=redis://192.168.88.128:6380/0
 CELERY_RESULT_BACKEND=redis://192.168.88.128:6380/1
@@ -310,7 +310,7 @@ docker exec rag-api-service python -c "
 import json, requests
 materials = json.load(open('/app/rag_materials.json'))
 r = requests.post('http://localhost:8001/admin/reload',
-    json={'materials': materials, 'secret': 'rag_reload_7f3a9d2e1b4c8f6a'}, timeout=120)
+    json={'materials': materials, 'secret': '<RELOAD_SECRET>'}, timeout=120)
 print(r.text)
 "
 

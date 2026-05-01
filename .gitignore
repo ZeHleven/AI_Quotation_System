@@ -34,6 +34,8 @@ rag_docker/backups/
 n8n_current_workflow.json
 n8n_node_summary.json
 n8n_budget_push_fixed.json
+n8n_import.json
+n8n_workflows_backup.json
 
 # Milvus volumes (large binary data)
 volumes/
@@ -50,9 +52,3 @@ ai-web/dist/
 .claude/
 
 # IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db

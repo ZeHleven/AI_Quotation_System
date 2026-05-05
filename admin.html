@@ -661,6 +661,16 @@
       { id: 'knowledge', icon: '📚', label: '知识库' },
     ];
 
+    const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+    const apiBody = (res) => res?.data || {};
+    const apiData = (res, fallback = null) => {
+      const body = apiBody(res);
+      return hasOwn(body, 'data') ? body.data : fallback;
+    };
+    const apiMessage = (res, fallback = '操作成功') => apiBody(res).message || fallback;
+    const apiErrorMessage = (error, fallback = '操作失败') =>
+      error.response?.data?.detail || error.response?.data?.message || fallback;
+
     const App = {
       setup() {
         const API_BASE_URL      = '/api/v1/admin';
@@ -783,10 +793,10 @@
           opsLoading.value = true;
           try {
             const res = await axios.get(`${CORE_API_BASE_URL}/admin/ops/dashboard`, { headers: authHeaders() });
-            opsDashboard.value = res.data.data || { services: [], alerts: [], jobs: {}, logs: {} };
+            opsDashboard.value = apiData(res, { services: [], alerts: [], jobs: {}, logs: {} }) || { services: [], alerts: [], jobs: {}, logs: {} };
             if (notify) notifyOpsAlerts(opsDashboard.value.alerts || []);
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '获取运维监控状态失败');
+            ElMessage.error(apiErrorMessage(e, '获取运维监控状态失败'));
           } finally {
             opsLoading.value = false;
           }
@@ -796,9 +806,9 @@
           userLoading.value = true;
           try {
             const res = await axios.get(`${API_BASE_URL}/users`, { headers: authHeaders() });
-            userData.value = res.data.data.map(u => ({ ...u, _newQuota: u.quota }));
+            userData.value = (apiData(res, []) || []).map(u => ({ ...u, _newQuota: u.quota }));
           } catch (e) {
-            ElMessage.error('获取用户列表失败');
+            ElMessage.error(apiErrorMessage(e, '获取用户列表失败'));
           } finally {
             userLoading.value = false;
           }
@@ -810,9 +820,9 @@
             const res = await axios.patch(`${API_BASE_URL}/users/${row.id}/quota`,
               { quota: row._newQuota }, { headers: authHeaders() });
             row.quota = row._newQuota;
-            ElMessage.success(res.data.message);
+            ElMessage.success(apiMessage(res, '额度已更新'));
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '更新失败');
+            ElMessage.error(apiErrorMessage(e, '更新失败'));
           }
         };
 
@@ -822,10 +832,11 @@
             const res = await axios.get(`${API_BASE_URL}/model_gateway/stats`, {
               params: { hours: gatewayHours.value }, headers: authHeaders()
             });
-            gatewayStats.value    = res.data.data            || [];
-            gatewayCircuits.value = res.data.circuit_breakers || {};
+            const body = apiBody(res);
+            gatewayStats.value    = apiData(res, []) || [];
+            gatewayCircuits.value = body.circuit_breakers || {};
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '获取模型网关统计失败');
+            ElMessage.error(apiErrorMessage(e, '获取模型网关统计失败'));
           } finally {
             gatewayLoading.value = false;
           }
@@ -839,10 +850,11 @@
             if (jobStatusFilter.value)   params.status   = jobStatusFilter.value;
             if (jobUsernameFilter.value) params.username = jobUsernameFilter.value;
             const res = await axios.get(`${CORE_API_BASE_URL}/quote/jobs`, { params, headers: authHeaders() });
-            jobData.value  = res.data.data  || [];
-            jobTotal.value = res.data.total || 0;
+            const body = apiBody(res);
+            jobData.value  = apiData(res, []) || [];
+            jobTotal.value = body.total || 0;
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '获取任务队列失败');
+            ElMessage.error(apiErrorMessage(e, '获取任务队列失败'));
           } finally {
             jobLoading.value = false;
           }
@@ -855,7 +867,7 @@
             ElMessage.success('任务已取消');
             fetchJobs(jobPage.value);
           } catch (e) {
-            if (e !== 'cancel') ElMessage.error(e.response?.data?.detail || '取消任务失败');
+            if (e !== 'cancel') ElMessage.error(apiErrorMessage(e, '取消任务失败'));
           }
         };
 
@@ -865,7 +877,7 @@
             ElMessage.success('重试任务已创建');
             fetchJobs(1);
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '重试任务失败');
+            ElMessage.error(apiErrorMessage(e, '重试任务失败'));
           }
         };
 
@@ -875,10 +887,10 @@
             const res = await axios.post(`${CORE_API_BASE_URL}/admin/quote/jobs/mark_timeouts`, {}, {
               params: { timeout_minutes: timeoutMinutes.value }, headers: authHeaders()
             });
-            ElMessage.success(`已标记 ${res.data.marked_count || 0} 个超时任务`);
+            ElMessage.success(`已标记 ${apiBody(res).marked_count || 0} 个超时任务`);
             fetchJobs(1);
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '标记超时任务失败');
+            ElMessage.error(apiErrorMessage(e, '标记超时任务失败'));
           } finally {
             markingTimeouts.value = false;
           }
@@ -890,9 +902,9 @@
           jobDetailLoading.value = true;
           try {
             const res = await axios.get(`${CORE_API_BASE_URL}/quote/jobs/${row.job_id}`, { headers: authHeaders() });
-            jobDetail.value = res.data.data || res.data;
+            jobDetail.value = apiData(res, apiBody(res));
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '获取任务详情失败');
+            ElMessage.error(apiErrorMessage(e, '获取任务详情失败'));
             showJobDetail.value = false;
           } finally {
             jobDetailLoading.value = false;
@@ -908,7 +920,7 @@
         const fetchRagEvalResult = async () => {
           try {
             const res = await axios.get(`${API_BASE_URL}/rag_eval/latest`, { headers: authHeaders() });
-            ragEvalResult.value = res.data.data || null;
+            ragEvalResult.value = apiData(res, null);
           } catch (e) { /* 静默失败 */ }
         };
 
@@ -928,9 +940,9 @@
           try {
             const res = await axios.get(`${API_BASE_URL}/materials/audit`,
               { params: { limit: 20 }, headers: authHeaders() });
-            materialAudit.value = res.data.data || [];
+            materialAudit.value = apiData(res, []) || [];
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '获取知识库快照失败');
+            ElMessage.error(apiErrorMessage(e, '获取知识库快照失败'));
           } finally {
             auditLoading.value = false;
           }
@@ -947,17 +959,17 @@
             await fetchData();
             await fetchMaterialAudit();
           } catch (e) {
-            if (e !== 'cancel') ElMessage.error(e.response?.data?.detail || '回滚知识库快照失败');
+            if (e !== 'cancel') ElMessage.error(apiErrorMessage(e, '回滚知识库快照失败'));
           }
         };
 
         const fetchStorageHealth = async () => {
           try {
             const res = await axios.get(`${CORE_API_BASE_URL}/admin/files/storage/health`, { headers: authHeaders() });
-            storageHealth.value = res.data.data || {};
+            storageHealth.value = apiData(res, {}) || {};
           } catch (e) {
             storageHealth.value = { ok: false, status: 'error' };
-            ElMessage.error(e.response?.data?.detail || '检测 MinIO 存储失败');
+            ElMessage.error(apiErrorMessage(e, '检测 MinIO 存储失败'));
           }
         };
 
@@ -966,9 +978,9 @@
           try {
             const res = await axios.get(`${CORE_API_BASE_URL}/files`,
               { params: { page: 1, page_size: 20 }, headers: authHeaders() });
-            storageFiles.value = res.data.data || [];
+            storageFiles.value = apiData(res, []) || [];
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '获取文件列表失败');
+            ElMessage.error(apiErrorMessage(e, '获取文件列表失败'));
           } finally {
             storageLoading.value = false;
           }
@@ -981,11 +993,12 @@
           storageUploading.value = true;
           try {
             const res = await axios.post(`${CORE_API_BASE_URL}/files`, formData, { headers: authHeaders() });
-            ElMessage.success(`文件已上传：${res.data.data.original_filename}`);
+            const uploaded = apiData(res, {});
+            ElMessage.success(`文件已上传：${uploaded.original_filename}`);
             await fetchStorageFiles();
             await fetchStorageHealth();
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '上传文件失败，请检查 MinIO 配置');
+            ElMessage.error(apiErrorMessage(e, '上传文件失败，请检查 MinIO 配置'));
           } finally {
             storageUploading.value = false;
           }
@@ -994,9 +1007,9 @@
         const openStorageDownload = async (row) => {
           try {
             const res = await axios.get(`${CORE_API_BASE_URL}/files/${row.file_id}/download_url`, { headers: authHeaders() });
-            window.open(res.data.data.download_url, '_blank');
+            window.open(apiData(res, {}).download_url, '_blank');
           } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '生成临时下载链接失败');
+            ElMessage.error(apiErrorMessage(e, '生成临时下载链接失败'));
           }
         };
 
@@ -1008,7 +1021,8 @@
           loading.value = true;
           try {
             const res = await axios.get(`${API_BASE_URL}/materials`, { headers: authHeaders() });
-            tableData.value = (res.data.data && res.data.data.length > 0) ? res.data.data : initMockData();
+            const rows = apiData(res, []);
+            tableData.value = (rows && rows.length > 0) ? rows : initMockData();
           } catch (error) {
             ElMessage.warning('未能连接到后台，正使用本地模拟数据运行。');
             tableData.value = initMockData();
@@ -1033,7 +1047,7 @@
           loading.value = true;
           try {
             const res = await axios.post(`${API_BASE_URL}/upload_csv`, formData, { headers: authHeaders() });
-            const newDrafts = res.data.data;
+            const newDrafts = apiData(res, []);
             if (newDrafts && newDrafts.length > 0) {
               tableData.value.push(...newDrafts);
               ElMessage.success(`解析成功！智能提炼出 ${newDrafts.length} 条待审异常/新项目，已追加至末尾。`);
@@ -1042,7 +1056,7 @@
               ElMessage.info('过滤完毕。导入的文件与现有标准库高度一致，无需新增处理项。');
             }
           } catch (error) {
-            ElMessage.error(error.response?.data?.detail || 'CSV 解析失败，请检查文件格式。');
+            ElMessage.error(apiErrorMessage(error, 'CSV 解析失败，请检查文件格式。'));
           } finally {
             loading.value = false;
           }
@@ -1056,7 +1070,7 @@
             fetchMaterialAudit();
             ElMessage.success('🎉 表格数据审核完毕，已安全保存到本地基础库！');
           } catch (error) {
-            ElMessage.error('保存失败，请检查网关连接。');
+            ElMessage.error(apiErrorMessage(error, '保存失败，请检查网关连接。'));
           } finally {
             saving.value = false;
           }
@@ -1073,14 +1087,15 @@
               await axios.post(`${API_BASE_URL}/materials`, tableData.value, { headers: authHeaders() });
               fetchMaterialAudit();
               const res = await axios.post(`${API_BASE_URL}/sync_milvus`, {}, { headers: authHeaders() });
-              ElMessage({ message: res.data.message || '热更新完毕，向量引擎已满血复活！', type: 'success', duration: 4000 });
-              if (res.data.eval_triggered) { ragEvalResult.value = { status: 'running' }; startRagEvalPolling(); }
+              const body = apiBody(res);
+              ElMessage({ message: apiMessage(res, '热更新完毕，向量引擎已满血复活！'), type: 'success', duration: 4000 });
+              if (body.eval_triggered) { ragEvalResult.value = { status: 'running' }; startRagEvalPolling(); }
               const now = new Date().toLocaleString();
               lastSyncTime.value = now;
               localStorage.setItem('last_milvus_sync', now);
               tableData.value.forEach(item => item.is_draft = false);
             } catch (error) {
-              ElMessage.error(error.response?.data?.detail || '向量引擎同步失败，请检查底层 Milvus 状态。');
+              ElMessage.error(apiErrorMessage(error, '向量引擎同步失败，请检查底层 Milvus 状态。'));
             } finally {
               syncing.value = false;
             }

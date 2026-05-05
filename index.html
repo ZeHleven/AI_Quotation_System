@@ -354,6 +354,14 @@
       { icon: '✏️', label: '生成报价' }
     ];
 
+    const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+    const apiBody = (res) => res?.data || {};
+    const apiPayloadData = (body, fallback = null) =>
+      hasOwn(body, 'data') ? body.data : (body || fallback);
+    const apiData = (res, fallback = null) => apiPayloadData(apiBody(res), fallback);
+    const apiErrorMessage = (error, fallback = '操作失败') =>
+      error.response?.data?.detail || error.response?.data?.message || fallback;
+
     const App = {
       setup() {
         const API_BASE_URL = '/api/v1';
@@ -389,11 +397,12 @@
             const token = localStorage.getItem('ai_token');
             const res = await axios.get(`${API_BASE_URL}/history?page=${page}&page_size=20`,
               { headers: { Authorization: `Bearer ${token}` } });
-            historyList.value = res.data.data;
-            historyTotal.value = res.data.total;
+            const body = apiBody(res);
+            historyList.value = apiData(res, []);
+            historyTotal.value = body.total || 0;
           } catch (e) {
             if (e.response?.status === 401) handleUnauthorized();
-            ElMessage.error(e.response?.data?.detail || '获取历史记录失败');
+            ElMessage.error(apiErrorMessage(e, '获取历史记录失败'));
           } finally {
             historyLoading.value = false;
           }
@@ -447,11 +456,13 @@
             params.append('username', authForm.value.username);
             params.append('password', authForm.value.password);
             const res = await axios.post(`${API_BASE_URL}/auth/login`, params);
-            localStorage.setItem('ai_token', res.data.access_token);
+            const body = apiBody(res);
+            const authData = apiData(res, body);
+            localStorage.setItem('ai_token', authData.access_token);
             currentUser.value = authForm.value.username;
             isLoggedIn.value = true;
           } catch (error) {
-            ElMessage.error(error.response?.data?.detail || '获取底层 Token 失败，请检查密码');
+            ElMessage.error(apiErrorMessage(error, '获取底层 Token 失败，请检查密码'));
           } finally { loading.value = false; }
         };
 
@@ -585,7 +596,8 @@
               streamEnded = true; sending.value = false; return;
             }
 
-            const job = await createResponse.json();
+            const createBody = await createResponse.json();
+            const job = apiPayloadData(createBody, createBody);
             charQueue.push(...(`✅ 异步报价任务已创建\n任务编号：${job.job_id}\n\n`).split(''));
 
             const eventResponse = await fetch(`${API_BASE_URL}/quote/jobs/${job.job_id}/events`, {
@@ -638,7 +650,8 @@
               headers: { 'Authorization': `Bearer ${token}` }
             });
             if (statusResponse.ok) {
-              const latest = await statusResponse.json();
+              const statusBody = await statusResponse.json();
+              const latest = apiPayloadData(statusBody, statusBody);
               if (latest.status === 'failed' && latest.error_message && !messageHistory.value[msgIndex].canRetry) {
                 charQueue.push(...(`\n${latest.error_message}`).split(''));
                 messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
@@ -692,7 +705,7 @@
             messageHistory.value.push({ role: 'assistant', content: '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！' });
             scrollToBottom();
           } catch (error) {
-            ElMessage.error(error.response?.data?.detail || '推送钉钉失败，请检查推送流服务状态');
+            ElMessage.error(apiErrorMessage(error, '推送钉钉失败，请检查推送流服务状态'));
           } finally {
             pushing.value = false;
           }

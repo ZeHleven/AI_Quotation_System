@@ -647,6 +647,7 @@
   <script src="/static/element-plus.full.min.js"></script>
   <script src="/static/element-plus-icons.iife.min.js"></script>
   <script src="/static/axios.min.js"></script>
+  <script src="/static/js/shared.js"></script>
 
   <script>
     const { createApp, ref, computed, onMounted, onBeforeUnmount } = Vue;
@@ -661,15 +662,15 @@
       { id: 'knowledge', icon: '📚', label: '知识库' },
     ];
 
-    const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
-    const apiBody = (res) => res?.data || {};
-    const apiData = (res, fallback = null) => {
-      const body = apiBody(res);
-      return hasOwn(body, 'data') ? body.data : fallback;
-    };
-    const apiMessage = (res, fallback = '操作成功') => apiBody(res).message || fallback;
-    const apiErrorMessage = (error, fallback = '操作失败') =>
-      error.response?.data?.detail || error.response?.data?.message || fallback;
+    const {
+      apiBody,
+      apiData,
+      apiMessage,
+      apiErrorMessage,
+      clearAuth,
+      authHeaders: buildAuthHeaders,
+      installAxiosUnauthorizedHandler
+    } = window.AIMO;
 
     const App = {
       setup() {
@@ -690,18 +691,12 @@
         const redirectToLogin = (message = '登录状态已失效，请重新登录') => {
           if (redirectingToLogin) return;
           redirectingToLogin = true;
-          localStorage.removeItem('ai_token');
+          clearAuth();
           ElMessage.warning(message);
           setTimeout(() => { window.location.href = '/'; }, 600);
         };
 
-        axios.interceptors.response.use(
-          response => response,
-          error => {
-            if (error.response && error.response.status === 401) redirectToLogin();
-            return Promise.reject(error);
-          }
-        );
+        installAxiosUnauthorizedHandler(axios, redirectToLogin);
 
         const tableData    = ref([]);
         const loading      = ref(false);
@@ -759,9 +754,7 @@
         const storagePurpose  = ref('quote_attachment');
 
         const authHeaders = () => {
-          const token = localStorage.getItem('ai_token') || '';
-          if (!token) redirectToLogin('请先登录后再进入管理员页面');
-          return { Authorization: `Bearer ${token}` };
+          return buildAuthHeaders(() => redirectToLogin('请先登录后再进入管理员页面'));
         };
 
         const statusTagType = (status) => {

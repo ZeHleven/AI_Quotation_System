@@ -17,9 +17,10 @@
   - Checklist entries use scenario, operation, expected result, and notes/risk.
   - Covers login/auth, quote workflow, history, admin permissions, materials, RAG sync/evaluation, quote jobs, ops monitoring, model gateway, file storage, common errors, and layout smoke checks.
 
-- [ ] **P1 Shared browser logic**
-  - Extract token handling, auth redirect, unified API response parsing, and common error handling into a shared static JS file.
-  - Run acceptance sections A, K, and each touched page section after extraction.
+- [x] **P1 Shared browser logic**
+  - Added `static/js/shared.js` with token/user storage helpers, auth header creation, unified API response parsing, common error extraction, and axios 401 handling.
+  - `index.html` and `admin.html` now load the shared helper instead of carrying duplicate token/API parsing code.
+  - Acceptance focus for future verification: A1, A3, B1, C1, D2, H1, and K1-K3.
 
 - [ ] **P2 Admin module split**
   - Split admin-only feature areas such as ops, materials, quote jobs, model gateway, and files into isolated static JS modules without adding a build step.

@@ -95,7 +95,6 @@ async def _alert_loop() -> None:
     from app.core.database import SessionLocal
     from app.services.ops_monitor import build_ops_dashboard, send_dingtalk_alerts
 
-    loop = asyncio.get_event_loop()
     while True:
         await asyncio.sleep(settings.alert_check_interval_seconds)
         try:
@@ -106,7 +105,7 @@ async def _alert_loop() -> None:
                     send_dingtalk_alerts(dashboard.get("alerts", []))
                 finally:
                     db.close()
-            await loop.run_in_executor(None, _check)
+            await asyncio.to_thread(_check)
         except asyncio.CancelledError:
             break
         except Exception:

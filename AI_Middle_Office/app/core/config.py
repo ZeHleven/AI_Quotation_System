@@ -61,8 +61,8 @@ class Settings:
     database_url: str = _env("DATABASE_URL", "sqlite:///./sql_app.db")
     database_startup_wait_seconds: int = _env_int("DATABASE_STARTUP_WAIT_SECONDS", 120)
     database_startup_retry_interval_seconds: float = _env_float("DATABASE_STARTUP_RETRY_INTERVAL_SECONDS", 3.0)
-    auto_create_tables: bool = _env_bool("AUTO_CREATE_TABLES", True)
-    startup_compat_migrations: bool = _env_bool("STARTUP_COMPAT_MIGRATIONS", True)
+    auto_create_tables: bool = _env_bool("AUTO_CREATE_TABLES", False)
+    startup_compat_migrations: bool = _env_bool("STARTUP_COMPAT_MIGRATIONS", False)
     auto_run_db_migrations: bool = _env_bool("AUTO_RUN_DB_MIGRATIONS", True)
     jwt_secret_key: str = _env("JWT_SECRET_KEY", "your_super_secret_key_for_ai_middle_office")
     jwt_algorithm: str = _env("JWT_ALGORITHM", "HS256")
@@ -118,7 +118,11 @@ class Settings:
     materials_file: Path = field(default_factory=lambda: Path(_env("MATERIALS_FILE", str(BASE_DIR / "rag_materials.json"))))
 
     def __post_init__(self) -> None:
-        if not self.strict_config and self.app_env.lower() not in {"prod", "production"}:
+        app_env = self.app_env.lower()
+        database_url = self.database_url.lower()
+        uses_external_database = not database_url.startswith("sqlite:")
+        should_validate_secrets = self.strict_config or app_env in {"prod", "production"} or uses_external_database
+        if not should_validate_secrets:
             return
 
         errors = []

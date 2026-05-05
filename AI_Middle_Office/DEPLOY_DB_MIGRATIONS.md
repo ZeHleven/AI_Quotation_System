@@ -50,11 +50,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1 -SkipMig
 
 ## 4. 启动兼容开关
 
-为保护已有测试库和旧部署，FastAPI 仍保留两个兼容开关：
+FastAPI 仍保留两个兼容开关，但默认值已经调整为关闭：
 
 ```env
-AUTO_CREATE_TABLES=true
-STARTUP_COMPAT_MIGRATIONS=true
+AUTO_CREATE_TABLES=false
+STARTUP_COMPAT_MIGRATIONS=false
 ```
 
 含义：
@@ -62,12 +62,21 @@ STARTUP_COMPAT_MIGRATIONS=true
 - `AUTO_CREATE_TABLES=true`：启动时仍执行 SQLAlchemy `create_all`，便于测试库和小型本地库自动建表
 - `STARTUP_COMPAT_MIGRATIONS=true`：保留旧库缺字段时的保守补列逻辑
 
-生产环境确认 Alembic 流程稳定后，可以改为：
+生产环境必须显式设置：
 
 ```env
 AUTO_CREATE_TABLES=false
 STARTUP_COMPAT_MIGRATIONS=false
 AUTO_RUN_DB_MIGRATIONS=true
+```
+
+前提条件：生产数据库初始化或结构变更必须先执行 `alembic upgrade head`，或保持 `AUTO_RUN_DB_MIGRATIONS=true` 由 `start_all.ps1` 在启动 FastAPI 前自动执行。新环境如果关闭自动迁移且没有手动执行 Alembic，FastAPI 不再通过 `create_all` 自动补建表结构。
+
+仅在临时本地 SQLite 沙箱或旧部署救急时，才建议短期开启：
+
+```env
+AUTO_CREATE_TABLES=true
+STARTUP_COMPAT_MIGRATIONS=true
 ```
 
 ## 5. 新增迁移

@@ -3,46 +3,164 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>企业级 AI 业务中台 V2.0 (HITL版)</title>
-  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <title>闪筑智价 · 业务工作台</title>
+  <link rel="stylesheet" href="/static/element-plus.min.css">
   <style>
-    body { margin: 0; padding: 0; background-color: #f5f7fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    :root {
+      --bg:     #F0F5F9;
+      --steel:  #C9D6DF;
+      --slate:  #52616B;
+      --dark:   #1E2022;
+      --white:  #FFFFFF;
+      --green:  #67C23A;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }
     .app-container { height: 100vh; display: flex; flex-direction: column; }
-    /* 去掉了 header 的相关样式 */
-    .main-content { display: flex; justify-content: center; align-items: center; flex: 1; overflow: hidden; padding: 10px; }
+
+    /* ── 顶部导航 ── */
+    .sys-header {
+      height: 52px; padding: 0 24px;
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+      background: var(--dark); color: var(--white);
+      box-shadow: 0 1px 0 rgba(201,214,223,0.10);
+    }
+    .sys-logo { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+    .sys-logo-mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 3px;
+      background: var(--slate); font-size: 11px; font-weight: 800; color: var(--white);
+    }
+    .sys-nav { display: flex; align-items: center; gap: 16px; }
+    .sys-nav a { color: var(--steel); font-size: 13px; text-decoration: none; transition: color 0.15s; }
+    .sys-nav a:hover { color: var(--white); }
+    .sys-user { color: var(--steel); font-size: 13px; }
+
+    .main-content { display: flex; justify-content: center; align-items: center; flex: 1; overflow: hidden; padding: 16px; }
     .auth-panel { width: 400px; }
     .full-btn { width: 100%; margin-top: 10px; }
-    .chat-panel { width: 100%; max-width: 1000px; height: 100%; display: flex; flex-direction: column; box-sizing: border-box;}
-    .chat-card { height: 100%; display: flex; flex-direction: column; border-radius: 12px; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,0.05); border: none;}
+    .chat-panel { width: 100%; max-width: 1000px; height: 100%; display: flex; flex-direction: column; }
+    .chat-card { height: 100%; display: flex; flex-direction: column; border-radius: 2px; background: var(--white); box-shadow: 0 4px 20px rgba(30,32,34,0.08); border: 1px solid var(--steel); }
     .chat-card .el-card__body { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-    .message-list { flex: 1; padding: 20px; background-color: #fafafa; overflow-y: auto; scroll-behavior: smooth;}
-    .message-item { display: flex; margin-bottom: 24px; align-items: flex-start; }
+    .message-list { flex: 1; padding: 20px; background: var(--bg); overflow-y: auto; scroll-behavior: smooth; }
+
+    /* ── 优化1：对话气泡 ── */
+    .message-item { display: flex; margin-bottom: 20px; align-items: flex-start; }
     .message-item.user { flex-direction: row-reverse; }
-    .avatar { font-size: 26px; margin: 0 12px; line-height: 1;}
-    .bubble { max-width: 80%; padding: 14px 18px; border-radius: 10px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; box-shadow: 0 2px 6px rgba(0,0,0,0.02);}
-    .message-item.assistant .bubble { background-color: #fff; border: 1px solid #ebeef5; color: #333;}
-    .message-item.user .bubble { background-color: #409eff; color: #fff; border: 1px solid #409eff;}
+
+    .avatar-circle {
+      flex-shrink: 0;
+      width: 34px; height: 34px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: var(--white);
+      margin: 0 10px; letter-spacing: 0;
+    }
+    .avatar-circle.av-ai   { background: var(--dark); }
+    .avatar-circle.av-user { background: var(--slate); }
+
+    .bubble {
+      max-width: 78%; padding: 12px 16px;
+      font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-all;
+      box-shadow: 0 1px 4px rgba(30,32,34,0.06);
+    }
+    .message-item.assistant .bubble {
+      background: var(--white); border: 1px solid var(--steel); color: var(--dark);
+      border-radius: 4px 12px 12px 12px;
+    }
+    .message-item.user .bubble {
+      background: var(--slate); color: var(--white); border: 1px solid var(--slate);
+      border-radius: 12px 4px 12px 12px;
+    }
     .file-preview { margin-bottom: 10px; }
-    .preview-img { width: 160px; height: 160px; border-radius: 6px; object-fit: cover; border: 1px solid #ddd; }
-    .input-area { padding: 15px 20px; background-color: #fff; border-top: 1px solid #ebeef5; }
-    .input-container { display: flex; align-items: flex-end; gap: 12px; }
-    .upload-preview { margin-bottom: 10px; }
-    .action-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
-    .tip-text { font-size: 12px; color: #909399; }
+    .preview-img { width: 160px; height: 160px; border-radius: 8px; object-fit: cover; border: 1px solid var(--steel); }
+
+    /* ── 优化2：阶段进度条 ── */
+    .stage-indicator {
+      display: flex; align-items: center;
+      background: var(--bg); border-radius: 8px;
+      padding: 7px 12px; margin-bottom: 10px;
+    }
+    .stage-item {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 12px; color: var(--steel); transition: color 0.25s;
+    }
+    .stage-item.active { color: var(--dark); font-weight: 600; }
+    .stage-item.done   { color: var(--green); }
+    .stage-sep { margin: 0 8px; color: var(--steel); font-size: 11px; }
+
+    /* ── 优化3：欢迎卡 ── */
+    .welcome-wrap {
+      height: 100%; display: flex; align-items: center; justify-content: center;
+    }
+    .welcome-card {
+      text-align: center; padding: 40px 36px;
+      background: var(--white); border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(30,32,34,0.07);
+      max-width: 520px; width: 100%;
+    }
+    .welcome-logo-big {
+      width: 56px; height: 56px; border-radius: 12px;
+      background: var(--dark); color: var(--white);
+      font-size: 22px; font-weight: 800;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 16px;
+    }
+    .welcome-title { font-size: 20px; font-weight: 700; color: var(--dark); margin: 0 0 8px; }
+    .welcome-sub   { font-size: 14px; color: var(--slate); margin: 0 0 24px; }
+    .quick-chips   { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .quick-chip {
+      padding: 8px 16px; border-radius: 20px;
+      background: var(--bg); border: 1px solid var(--steel);
+      font-size: 13px; color: var(--slate); cursor: pointer; transition: all 0.15s;
+    }
+    .quick-chip:hover { background: var(--steel); color: var(--dark); border-color: var(--slate); }
+
+    /* ── 优化4：输入工具栏 ── */
+    .input-area {
+      padding: 10px 14px 12px;
+      background: var(--white); border-top: 1px solid var(--steel);
+    }
+    .upload-preview  { margin-bottom: 8px; }
+    .input-textarea-wrap { margin-bottom: 8px; }
+    .input-toolbar   { display: flex; align-items: center; gap: 8px; }
+    .toolbar-left    { display: flex; align-items: center; gap: 6px; }
+    .toolbar-center  { flex: 1; text-align: center; }
+    .char-count      { font-size: 11px; color: var(--steel); }
+    .toolbar-right   { display: flex; align-items: center; }
+
+    /* ── 优化5：预审弹窗摘要栏 ── */
+    .preview-summary-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--dark); color: var(--white);
+      border-radius: 8px; padding: 12px 20px; margin-bottom: 14px;
+    }
+    .summary-label { font-size: 13px; opacity: 0.7; }
+    .summary-total { font-size: 24px; font-weight: 700; }
 
     .cursor {
-        display: inline-block; width: 7px; height: 16px; background-color: #409eff;
-        vertical-align: text-bottom; margin-left: 4px; animation: blink 1s step-end infinite; border-radius: 2px;
+      display: inline-block; width: 6px; height: 15px; background: var(--slate);
+      vertical-align: text-bottom; margin-left: 4px; border-radius: 1px;
+      animation: blink 1s step-end infinite;
     }
     @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
   </style>
 </head>
 <body>
   <div id="app" class="app-container">
-    <el-container style="height: 100%;">
-      <!-- 删除了原本独立的 el-header，让页面完美融入 app.html -->
+    <header class="sys-header">
+      <div class="sys-logo">
+        <span class="sys-logo-mark">筑</span>
+        闪筑智价 · 业务工作台
+      </div>
+      <div class="sys-nav">
+        <span class="sys-user" v-if="isLoggedIn">{{ currentUser }}</span>
+        <a href="/app.html">← 返回门户</a>
+      </div>
+    </header>
+    <el-container style="height: calc(100% - 52px);">
 
       <el-main class="main-content">
+        <!-- 未登录 -->
         <div v-if="!isLoggedIn" class="auth-panel">
           <el-card class="box-card" shadow="hover">
             <el-tabs v-model="activeTab">
@@ -64,12 +182,45 @@
           </el-card>
         </div>
 
+        <!-- 已登录：聊天面板 -->
         <div v-else class="chat-panel">
           <el-card class="chat-card" shadow="never">
+
+            <!-- 消息列表 -->
             <div class="message-list" ref="scrollbarRef">
+
+              <!-- 优化3：空状态欢迎卡 -->
+              <div v-if="messageHistory.length === 0 && !sending" class="welcome-wrap">
+                <div class="welcome-card">
+                  <div class="welcome-logo-big">筑</div>
+                  <p class="welcome-title">你好，{{ currentUser }}</p>
+                  <p class="welcome-sub">告诉我您的装修需求，我来帮您生成专业报价</p>
+                  <div class="quick-chips">
+                    <span class="quick-chip" @click="useExample('客厅吊顶50m²，铺地砖80m²')">客厅吊顶50m²</span>
+                    <span class="quick-chip" @click="useExample('卫生间防水及贴砖')">卫生间防水</span>
+                    <span class="quick-chip" @click="useExample('全屋乳胶漆120m²')">全屋乳胶漆</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 消息气泡 -->
               <div v-for="(msg, index) in messageHistory" :key="index" :class="['message-item', msg.role]">
-                <div class="avatar">{{ msg.role === 'user' ? '🧑‍💻' : '🤖' }}</div>
+
+                <!-- 优化1：字母头像 -->
+                <div :class="['avatar-circle', msg.role === 'user' ? 'av-user' : 'av-ai']">
+                  {{ msg.role === 'user' ? currentUser.charAt(0).toUpperCase() : 'AI' }}
+                </div>
+
                 <div class="bubble">
+                  <!-- 优化2：阶段进度条（仅最后一条 AI 消息 & 正在处理时） -->
+                  <div v-if="index === messageHistory.length - 1 && msg.role === 'assistant' && isTyping" class="stage-indicator">
+                    <div v-for="(stage, si) in stages" :key="si" :class="['stage-item', currentStage > si ? 'done' : currentStage === si ? 'active' : '']">
+                      <span>{{ currentStage > si ? '✓' : stage.icon }}</span>
+                      <span>{{ stage.label }}</span>
+                      <span v-if="si < stages.length - 1" class="stage-sep">→</span>
+                    </div>
+                  </div>
+
                   <div v-if="msg.fileUrl" class="file-preview"><img :src="msg.fileUrl" class="preview-img" /></div>
                   <div class="text-content">{{ msg.content }}<span v-if="index === messageHistory.length - 1 && isTyping" class="cursor"></span></div>
                   <div v-if="msg.canRetry && !sending" style="margin-top:10px;">
@@ -79,21 +230,30 @@
               </div>
             </div>
 
+            <!-- 优化4：输入工具栏 -->
             <div class="input-area">
               <div v-if="selectedFile" class="upload-preview">
                 <el-tag closable @close="selectedFile = null" type="warning" effect="dark">📄 已挂载附件: {{ selectedFile.name }}</el-tag>
               </div>
-              <div class="input-container">
-                <el-upload class="upload-trigger" action="#" :auto-upload="false" :show-file-list="false" :on-change="handleFileChange">
-                  <el-button circle size="large">📎</el-button>
-                </el-upload>
-                <el-input v-model="inputText" type="textarea" :rows="2" placeholder="描述需求或上传图片清单..." resize="none" @keyup.enter.exact="sendMessage" :disabled="sending"></el-input>
+              <div class="input-textarea-wrap">
+                <el-input v-model="inputText" type="textarea" :autosize="{minRows:1,maxRows:4}" placeholder="描述需求或上传图片清单..." resize="none" @keyup.enter.exact="sendMessage" :disabled="sending"></el-input>
               </div>
-              <div class="action-bar">
-                <el-button size="small" plain @click="openHistory">📋 历史记录</el-button>
-                <el-button type="primary" :loading="sending" @click="sendMessage" round>🚀 发送至 AI 中枢</el-button>
+              <div class="input-toolbar">
+                <div class="toolbar-left">
+                  <el-upload action="#" :auto-upload="false" :show-file-list="false" :on-change="handleFileChange">
+                    <el-button circle size="small" title="上传图片附件">📎</el-button>
+                  </el-upload>
+                  <el-button circle size="small" title="历史记录" @click="openHistory">📋</el-button>
+                </div>
+                <div class="toolbar-center">
+                  <span class="char-count" v-if="inputText.length > 0">{{ inputText.length }} 字</span>
+                </div>
+                <div class="toolbar-right">
+                  <el-button type="primary" :loading="sending" @click="sendMessage" round size="small">🚀 发送</el-button>
+                </div>
               </div>
             </div>
+
           </el-card>
         </div>
       </el-main>
@@ -128,8 +288,15 @@
         </el-table>
       </el-dialog>
 
-      <!-- 人在回路 (HITL) 预审数据源弹窗 -->
+      <!-- 人在回路预审弹窗 -->
       <el-dialog v-model="showPreviewDialog" title="🧐 AI 报价明细预审 (支持手工干预)" width="850px" :close-on-click-modal="false" :show-close="false">
+
+        <!-- 优化5：置顶摘要栏 -->
+        <div class="preview-summary-bar">
+          <span class="summary-label">共 {{ previewData.length }} 个施工项目</span>
+          <span class="summary-total">¥ {{ finalTotalAmount }}</span>
+        </div>
+
         <el-alert title="请仔细核对以下 AI 提取的数据，如有遗漏或单价错误，请直接点击表格框进行修改。" type="warning" show-icon style="margin-bottom: 15px;"></el-alert>
 
         <el-table :data="previewData" border stripe style="width: 100%">
@@ -155,9 +322,6 @@
           </el-table-column>
         </el-table>
 
-        <div style="margin-top: 20px; font-size: 16px; text-align: right; color: #f56c6c; font-weight: bold;">
-          人工核定总价：¥ {{ finalTotalAmount }}
-        </div>
         <template #footer>
           <span class="dialog-footer">
             <el-button @click="cancelPreview">打回重填</el-button>
@@ -171,40 +335,52 @@
     </el-container>
   </div>
 
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-  <script src="https://unpkg.com/element-plus"></script>
-  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script src="/static/vue.global.prod.min.js"></script>
+  <script src="/static/element-plus.full.min.js"></script>
+  <script src="/static/axios.min.js"></script>
 
   <script>
     const { createApp, ref, computed, nextTick, onMounted } = Vue;
     const { ElMessage } = ElementPlus;
 
+    const STAGES_WITH_IMAGE = [
+      { icon: '🖼', label: '图像识别' },
+      { icon: '📚', label: '知识库检索' },
+      { icon: '✏️', label: '生成报价' }
+    ];
+    const STAGES_TEXT_ONLY = [
+      { icon: '📝', label: '需求解析' },
+      { icon: '📚', label: '知识库检索' },
+      { icon: '✏️', label: '生成报价' }
+    ];
+
     const App = {
       setup() {
         const API_BASE_URL = '/api/v1';
 
-        const isLoggedIn = ref(false);
-        const currentUser = ref('');
-        const activeTab = ref('login');
-        const loading = ref(false);
-        const sending = ref(false);
-        const isTyping = ref(false);
+        const isLoggedIn    = ref(false);
+        const currentUser   = ref('');
+        const activeTab     = ref('login');
+        const loading       = ref(false);
+        const sending       = ref(false);
+        const isTyping      = ref(false);
         const lastInputText = ref('');
         const lastInputFile = ref(null);
+        const currentStage  = ref(-1);
+        const stages        = ref(STAGES_WITH_IMAGE);
 
         const showPreviewDialog = ref(false);
-        const previewData = ref([]);
-        const globalNotes = ref("");
-        const pushing = ref(false);
+        const previewData       = ref([]);
+        const globalNotes       = ref('');
+        const pushing           = ref(false);
 
-        // 历史记录
-        const showHistory = ref(false);
-        const historyList = ref([]);
-        const historyLoading = ref(false);
-        const historyTotal = ref(0);
-        const historyPage = ref(1);
+        const showHistory     = ref(false);
+        const historyList     = ref([]);
+        const historyLoading  = ref(false);
+        const historyTotal    = ref(0);
+        const historyPage     = ref(1);
         const showDetailDialog = ref(false);
-        const detailRows = ref([]);
+        const detailRows      = ref([]);
 
         const fetchHistory = async (page = 1) => {
           historyPage.value = page;
@@ -233,15 +409,17 @@
           showDetailDialog.value = true;
         };
 
-        const authForm = ref({ username: '', password: '' });
-        const inputText = ref('');
-        const selectedFile = ref(null);
-        const messageHistory = ref([{ role: 'assistant', content: '您好，内部多模态 AI 业务中台 V2.0 已就绪。\n随时可以接收您的业务指令或图纸。' }]);
-        const scrollbarRef = ref(null);
+        const authForm      = ref({ username: '', password: '' });
+        const inputText     = ref('');
+        const selectedFile  = ref(null);
+        const messageHistory = ref([]);
+        const scrollbarRef  = ref(null);
+
+        const useExample = (text) => { inputText.value = text; };
 
         const formatApiError = (prefix, detail, traceId) => {
           const parts = [`❌ ${prefix}`];
-          if (detail) parts.push(String(detail));
+          if (detail)  parts.push(String(detail));
           if (traceId) parts.push(`追踪ID：${traceId}`);
           parts.push('您可以点击重试；若连续失败，请把追踪ID发给管理员排查。');
           return parts.join('\n');
@@ -254,52 +432,58 @@
           ElMessage.warning('登录状态已过期，请重新登录');
         };
 
-        // 防爆盾计算属性
         const finalTotalAmount = computed(() => {
-            if (!Array.isArray(previewData.value)) return "0.00";
-            return previewData.value.reduce((sum, item) => sum + (Number(item.total_price) || 0), 0).toFixed(2);
+          if (!Array.isArray(previewData.value)) return '0.00';
+          return previewData.value.reduce((sum, item) => sum + (Number(item.total_price) || 0), 0).toFixed(2);
         });
 
         const handleRegister = async () => { /*省略*/ };
+
         const handleLogin = async () => {
           if (!authForm.value.username || !authForm.value.password) return ElMessage.warning('账号和密码不能为空！');
           loading.value = true;
           try {
-            const params = new URLSearchParams(); params.append('username', authForm.value.username); params.append('password', authForm.value.password);
+            const params = new URLSearchParams();
+            params.append('username', authForm.value.username);
+            params.append('password', authForm.value.password);
             const res = await axios.post(`${API_BASE_URL}/auth/login`, params);
             localStorage.setItem('ai_token', res.data.access_token);
             currentUser.value = authForm.value.username;
             isLoggedIn.value = true;
-          } catch (error) { ElMessage.error(error.response?.data?.detail || '获取底层 Token 失败，请检查密码'); } finally { loading.value = false; }
+          } catch (error) {
+            ElMessage.error(error.response?.data?.detail || '获取底层 Token 失败，请检查密码');
+          } finally { loading.value = false; }
         };
+
         const logout = () => {
           localStorage.removeItem('ai_token');
           localStorage.removeItem('app_user_info');
           isLoggedIn.value = false;
           authForm.value.password = '';
-          messageHistory.value = [{ role: 'assistant', content: '您好，业务中台已连接。' }];
+          messageHistory.value = [];
         };
-        const handleFileChange = (file) => { selectedFile.value = file.raw; ElMessage.info(`已选中附件`); };
+
+        const handleFileChange = (file) => { selectedFile.value = file.raw; ElMessage.info('已选中附件'); };
 
         const parsePreviewPayload = (rawData) => {
           rawData = rawData || {};
           let extractedArray = [];
-          let extractedNotes = "无";
+          let extractedNotes = '无';
 
           const targetStr = typeof rawData === 'string'
             ? rawData
-            : (rawData.text || rawData.answer || rawData.response || rawData.message || "");
+            : (rawData.text || rawData.answer || rawData.response || rawData.message || '');
 
           if (typeof targetStr === 'string' && targetStr.length > 0) {
             try {
               const startIndex = targetStr.indexOf('{');
-              const endIndex = targetStr.lastIndexOf('}');
+              const endIndex   = targetStr.lastIndexOf('}');
               if (startIndex !== -1 && endIndex !== -1) {
-                const cleanStr = targetStr.substring(startIndex, endIndex + 1);
+                const cleanStr  = targetStr.substring(startIndex, endIndex + 1);
                 const parsedData = JSON.parse(cleanStr);
                 if (parsedData.project_details && Array.isArray(parsedData.project_details)) {
                   extractedArray = parsedData.project_details;
-                  extractedNotes = parsedData.customer_questions_answered || "无";
+                  extractedNotes = parsedData.customer_questions_answered || '无';
                 }
               }
             } catch(e) { console.error('JSON反序列化出错:', e); }
@@ -308,7 +492,7 @@
           if (extractedArray.length === 0) {
             if (rawData.project_details && Array.isArray(rawData.project_details)) {
               extractedArray = rawData.project_details;
-              extractedNotes = rawData.customer_questions_answered || "无";
+              extractedNotes = rawData.customer_questions_answered || '无';
             } else if (Array.isArray(rawData)) {
               extractedArray = rawData;
             } else if (rawData.data && Array.isArray(rawData.data)) {
@@ -316,14 +500,11 @@
             }
           }
 
-          return {
-            rows: Array.isArray(extractedArray) ? extractedArray : [],
-            notes: extractedNotes
-          };
+          return { rows: Array.isArray(extractedArray) ? extractedArray : [], notes: extractedNotes };
         };
 
         const readSseStream = async (response, onEvent) => {
-          const reader = response.body.getReader();
+          const reader  = response.body.getReader();
           const decoder = new TextDecoder('utf-8');
           let done = false;
           let streamBuffer = '';
@@ -332,20 +513,13 @@
             const { value, done: readerDone } = await reader.read();
             done = readerDone;
             if (!value) continue;
-
             streamBuffer += decoder.decode(value, { stream: true });
             const events = streamBuffer.split('\n\n');
             streamBuffer = events.pop() || '';
-
             for (const eventText of events) {
               const line = eventText.split('\n').find(item => item.startsWith('data: '));
               if (!line) continue;
-
-              try {
-                onEvent(JSON.parse(line.substring(6)));
-              } catch(e) {
-                console.error("SSE解析出错:", e);
-              }
+              try { onEvent(JSON.parse(line.substring(6))); } catch(e) { console.error('SSE解析出错:', e); }
             }
           }
         };
@@ -359,26 +533,35 @@
           if (selectedFile.value) formData.append('file', selectedFile.value);
 
           const userMsg = { role: 'user', content: text || '发起多模态文件解析请求' };
-          if (selectedFile.value && selectedFile.value.type.startsWith('image/')) userMsg.fileUrl = URL.createObjectURL(selectedFile.value);
+          if (selectedFile.value && selectedFile.value.type.startsWith('image/'))
+            userMsg.fileUrl = URL.createObjectURL(selectedFile.value);
           messageHistory.value.push(userMsg);
-
           messageHistory.value.push({ role: 'assistant', content: '' });
           const msgIndex = messageHistory.value.length - 1;
 
           lastInputText.value = text;
           lastInputFile.value = selectedFile.value;
-          inputText.value = ''; selectedFile.value = null; sending.value = true; isTyping.value = true; scrollToBottom();
+          const hasImage = !!(lastInputFile.value && lastInputFile.value.type.startsWith('image/'));
+          stages.value = hasImage ? STAGES_WITH_IMAGE : STAGES_TEXT_ONLY;
+          inputText.value = '';
+          selectedFile.value = null;
+          sending.value = true;
+          isTyping.value = true;
+          currentStage.value = 0;
+          let processingCount = 0;
+          scrollToBottom();
 
-          let charQueue = Array.from('⏳ 正在唤醒网关层，创建异步报价任务...\n\n');
+          let charQueue  = Array.from('⏳ 正在唤醒网关层，创建异步报价任务...\n\n');
           let streamEnded = false;
 
           const typeNextChar = () => {
             if (charQueue.length > 0) {
-              const charsToProcess = charQueue.length > 60 ? 4 : (charQueue.length > 20 ? 2 : 1);
-              for(let i = 0; i < charsToProcess; i++) {
-                  if(charQueue.length > 0) messageHistory.value[msgIndex].content += charQueue.shift();
+              const n = charQueue.length > 60 ? 4 : charQueue.length > 20 ? 2 : 1;
+              for (let i = 0; i < n; i++) {
+                if (charQueue.length > 0) messageHistory.value[msgIndex].content += charQueue.shift();
               }
-              scrollToBottom(); setTimeout(typeNextChar, 25);
+              scrollToBottom();
+              setTimeout(typeNextChar, 25);
             } else {
               if (streamEnded) { isTyping.value = false; } else { setTimeout(typeNextChar, 50); }
             }
@@ -394,7 +577,7 @@
             });
 
             if (!createResponse.ok) {
-              const traceId = createResponse.headers.get('X-Trace-Id');
+              const traceId   = createResponse.headers.get('X-Trace-Id');
               const errorData = await createResponse.json().catch(() => ({}));
               if (createResponse.status === 401) handleUnauthorized();
               charQueue.push(...('\n' + formatApiError(`任务创建失败 (${createResponse.status})`, errorData.detail || createResponse.statusText, traceId)).split(''));
@@ -411,7 +594,7 @@
             });
 
             if (!eventResponse.ok) {
-              const traceId = eventResponse.headers.get('X-Trace-Id') || job.trace_id;
+              const traceId   = eventResponse.headers.get('X-Trace-Id') || job.trace_id;
               const errorData = await eventResponse.json().catch(() => ({}));
               if (eventResponse.status === 401) handleUnauthorized();
               charQueue.push(...('\n' + formatApiError(`任务订阅失败 (${eventResponse.status})`, errorData.detail || eventResponse.statusText, traceId)).split(''));
@@ -421,26 +604,30 @@
 
             await readSseStream(eventResponse, (data) => {
               if (data.status === 'queued') {
+                currentStage.value = 0;
                 charQueue.push(...(`${data.message}\n\n`).split(''));
               } else if (data.status === 'processing') {
+                processingCount++;
+                currentStage.value = Math.min(processingCount, 2);
                 charQueue.push(...(`${data.message}\n\n`).split(''));
               } else if (data.status === 'preview') {
+                currentStage.value = 3;
                 charQueue.push(...(data.message).split(''));
                 sending.value = false;
-
                 const parsed = parsePreviewPayload(data.data || {});
-                previewData.value = parsed.rows;
-                globalNotes.value = parsed.notes;
-
+                previewData.value  = parsed.rows;
+                globalNotes.value  = parsed.notes;
                 setTimeout(() => { showPreviewDialog.value = true; }, 1000);
               } else if (data.status === 'error') {
-                const message = data.trace_id
+                currentStage.value = -1;
+                const msg = data.trace_id
                   ? `${data.message}\n追踪ID：${data.trace_id}\n您可以点击重试；若连续失败，请把追踪ID发给管理员排查。`
                   : data.message;
-                charQueue.push(...(message).split(''));
+                charQueue.push(...msg.split(''));
                 messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
                 sending.value = false;
               } else if (data.status === 'success') {
+                currentStage.value = 3;
                 charQueue.push(...(data.message).split(''));
                 sending.value = false;
               }
@@ -473,66 +660,67 @@
         };
 
         const retryLastMessage = () => {
-          // 移除失败的 assistant 消息和对应的 user 消息，恢复输入后重发
           if (messageHistory.value.length >= 2) {
             messageHistory.value.splice(messageHistory.value.length - 2, 2);
           }
-          inputText.value = lastInputText.value;
+          inputText.value  = lastInputText.value;
           selectedFile.value = lastInputFile.value;
           sendMessage();
         };
 
         const cancelPreview = () => {
-            showPreviewDialog.value = false;
-            sending.value = false;
-            messageHistory.value.push({ role: 'assistant', content: '⏸️ 人工审核不通过，流程已打回。您可以修改参数后重新输入指令。' });
-            scrollToBottom();
+          showPreviewDialog.value = false;
+          sending.value = false;
+          messageHistory.value.push({ role: 'assistant', content: '⏸️ 人工审核不通过，流程已打回。您可以修改参数后重新输入指令。' });
+          scrollToBottom();
         };
 
         const submitFinalQuote = async () => {
-            pushing.value = true;
-            try {
-                const token = localStorage.getItem('ai_token');
-                const finalPayload = {
-                    project_details: previewData.value,
-                    customer_questions_answered: globalNotes.value
-                };
-
-                await axios.post(`${API_BASE_URL}/confirm_push`, finalPayload, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                ElMessage.success('🎉 确认成功！最终报价单已推送到钉钉！');
-                showPreviewDialog.value = false;
-                sending.value = false;
-                messageHistory.value.push({ role: 'assistant', content: '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！' });
-                scrollToBottom();
-            } catch (error) {
-                ElMessage.error(error.response?.data?.detail || '推送钉钉失败，请检查推送流服务状态');
-            } finally {
-                pushing.value = false;
-            }
+          pushing.value = true;
+          try {
+            const token = localStorage.getItem('ai_token');
+            const finalPayload = {
+              project_details: previewData.value,
+              customer_questions_answered: globalNotes.value
+            };
+            await axios.post(`${API_BASE_URL}/confirm_push`, finalPayload, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            ElMessage.success('🎉 确认成功！最终报价单已推送到钉钉！');
+            showPreviewDialog.value = false;
+            sending.value = false;
+            messageHistory.value.push({ role: 'assistant', content: '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！' });
+            scrollToBottom();
+          } catch (error) {
+            ElMessage.error(error.response?.data?.detail || '推送钉钉失败，请检查推送流服务状态');
+          } finally {
+            pushing.value = false;
+          }
         };
 
-        const scrollToBottom = () => { nextTick(() => { if (scrollbarRef.value) scrollbarRef.value.scrollTop = scrollbarRef.value.scrollHeight; }); };
+        const scrollToBottom = () => {
+          nextTick(() => { if (scrollbarRef.value) scrollbarRef.value.scrollTop = scrollbarRef.value.scrollHeight; });
+        };
 
-        // 🚀 新增自动加载本地 Token 逻辑 (支持跨框架共享态)
         onMounted(() => {
-            const token = localStorage.getItem('ai_token');
-            if (token) {
-                isLoggedIn.value = true;
-                const sysUser = localStorage.getItem('app_user_info');
-                currentUser.value = sysUser ? JSON.parse(sysUser).username : '已授权用户';
-            }
+          const token = localStorage.getItem('ai_token');
+          if (token) {
+            isLoggedIn.value = true;
+            const sysUser = localStorage.getItem('app_user_info');
+            currentUser.value = sysUser ? JSON.parse(sysUser).username : '已授权用户';
+          }
         });
 
         return {
-          isLoggedIn, currentUser, activeTab, loading, sending, isTyping, showPreviewDialog, previewData, pushing, finalTotalAmount,
+          isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
+          showPreviewDialog, previewData, pushing, finalTotalAmount,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
-          handleRegister, handleLogin, logout, handleFileChange, sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
-          retryLastMessage,
-          showHistory, historyList, historyLoading, historyTotal, historyPage, showDetailDialog, detailRows,
-          fetchHistory, openHistory, viewDetail
+          stages, currentStage,
+          handleRegister, handleLogin, logout, handleFileChange,
+          sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
+          retryLastMessage, useExample,
+          showHistory, historyList, historyLoading, historyTotal, historyPage,
+          showDetailDialog, detailRows, fetchHistory, openHistory, viewDetail
         };
       }
     };

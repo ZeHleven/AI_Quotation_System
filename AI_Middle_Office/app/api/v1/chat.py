@@ -8,7 +8,9 @@ import uuid
 import urllib3
 import logging
 from datetime import datetime
-from io import StringIO
+from io import StringIO, BytesIO
+import openpyxl
+from openpyxl.utils import get_column_letter
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Body
@@ -23,7 +25,7 @@ from pydantic import BaseModel
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.models.user import User
 from app.models.quote_history import QuoteHistory
 from app.core.security import SECRET_KEY, ALGORITHM
@@ -90,6 +92,45 @@ def _attach_quote_filename(payload: dict, username: str) -> dict:
         }
     )
     return payload
+
+
+def _cjk_len(s: str) -> int:
+    """计算字符串显示宽度：CJK 字符按 2 计，其余按 1 计"""
+    w = 0
+    for ch in str(s):
+        code = ord(ch)
+        if (0x4E00 <= code <= 0x9FFF) or (0x3400 <= code <= 0x4DBF) or (0xFF01 <= code <= 0xFFEE):
+            w += 2
+        else:
+            w += 1
+    return w
+
+
+def _build_excel_base64(project_details: list) -> str:
+    """用 openpyxl 生成自适应列宽的 Excel，返回 base64 字符串"""
+    try:
+        headers = ["施工项目", "AI核准单价(元)", "项目合计(元)", "工艺备注"]
+        field_map = ["project_name", "unit_price", "total_price", "notes"]
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "报价单"
+        ws.append(headers)
+
+        for item in project_details:
+            ws.append([item.get(f, "") for f in field_map])
+
+        for col_idx in range(1, len(headers) + 1):
+            col_letter = get_column_letter(col_idx)
+            max_w = max(_cjk_len(str(cell.value or "")) for cell in ws[col_letter])
+            ws.column_dimensions[col_letter].width = max_w + 4
+
+        buf = BytesIO()
+        wb.save(buf)
+        return base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        logger.exception("build_excel_base64_failed")
+        return ""
 
 
 # ==========================================
@@ -238,6 +279,14 @@ async def confirm_and_push(
 ):
     try:
         payload = _attach_quote_filename(payload, current_user.username)
+        details = payload.get("project_details", [])
+        excel_b64 = _build_excel_base64(details)
+        logger.info("confirm_push_excel_check", extra={"excel_b64_len": len(excel_b64), "details_count": len(details)})
+        if not excel_b64:
+            raise HTTPException(status_code=500, detail="❌ Excel生成失败，请查看FastAPI日志中的 build_excel_base64_failed 错误")
+        payload = dict(payload)
+        payload["excel_base64"] = excel_b64
+        logger.info("confirm_push_payload_keys", extra={"keys": list(payload.keys())})
         response = await post_json_via_gateway(
             provider="n8n",
             model="dingtalk-export",
@@ -508,7 +557,16 @@ async def sync_to_milvus(current_user: User = Depends(require_admin)):
             timeout=120,
         )
         if response.status_code == 200:
-            return {"code": 200, "message": response.json().get("message", "同步完成")}
+            eval_report_id = None
+            if settings.rag_eval_enabled:
+                from app.services.rag_evaluator import trigger_eval_background
+                eval_report_id = trigger_eval_background(current_user.username, SessionLocal)
+            return {
+                "code": 200,
+                "message": response.json().get("message", "同步完成"),
+                "eval_triggered": settings.rag_eval_enabled,
+                "eval_report_id": eval_report_id,
+            }
         else:
             detail = response.json().get("detail", f"状态码 {response.status_code}")
             raise HTTPException(status_code=500, detail=f"RAG 服务返回错误: {detail}")

@@ -12,3 +12,6 @@ pymysql
 celery[redis]
 redis
 minio
+aiofiles
+slowapi
+openpyxl

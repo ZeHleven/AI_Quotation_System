@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.chat import get_current_user
 from app.core.database import get_db
 from app.models.user import User
-from app.services.ops_monitor import build_ops_dashboard, collect_error_logs, collect_job_status, collect_service_statuses
+from app.services.ops_monitor import build_ops_dashboard, collect_error_logs, collect_job_status, collect_service_statuses, send_dingtalk_alerts
 
 
 router = APIRouter()
@@ -44,3 +44,13 @@ async def get_ops_jobs(
     db: Session = Depends(get_db),
 ):
     return {"code": 200, "data": collect_job_status(db, stuck_minutes=stuck_minutes)}
+
+
+@router.post("/admin/ops/test_alert", summary="发送测试告警到钉钉")
+async def test_alert(current_user: User = Depends(_require_admin)):
+    test_alerts = [{"level": "warning", "title": "测试告警", "message": "这是一条来自 AI 中台的测试告警，说明钉钉推送配置正常。"}]
+    send_dingtalk_alerts(test_alerts)
+    from app.core.config import settings
+    if not settings.alert_dingtalk_webhook:
+        return {"code": 200, "message": "ALERT_DINGTALK_WEBHOOK 未配置，未发送"}
+    return {"code": 200, "message": "测试告警已发送，请检查钉钉群"}

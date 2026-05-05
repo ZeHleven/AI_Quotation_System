@@ -3,535 +3,750 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>V3.0 知识库管理员驾驶舱 - 智能提炼中心</title>
-  <!-- 引入 Element Plus CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <title>闪筑智价 · 管理员驾驶舱</title>
+  <link rel="stylesheet" href="/static/element-plus.min.css">
   <style>
-    body { margin: 0; padding: 0; background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    .app-container { height: 100vh; display: flex; flex-direction: column; }
-    /* 已去掉 header 相关样式，完美适配 app.html 的 iframe 嵌入 */
-    .main-content { padding: 20px; flex: 1; overflow-y: auto; }
-    .box-card { margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: none; }
-    .toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; align-items: center;}
-    .title-area { display: flex; align-items: center; gap: 10px; }
-    .title-area h3 { margin: 0; color: #303133; }
-    .milvus-btn { background: linear-gradient(135deg, #67c23a, #529b2e); border: none; color: white; }
-    .milvus-btn:hover { background: linear-gradient(135deg, #85ce61, #67c23a); box-shadow: 0 4px 12px rgba(103,194,58,0.4); }
-
-    /* 使得新导入的草稿行有醒目的背景色提示 */
-    .el-table .draft-row {
-      background: #fff5f5 !important;
+    :root {
+      --bg:     #F0F5F9;
+      --steel:  #C9D6DF;
+      --slate:  #52616B;
+      --dark:   #1E2022;
+      --white:  #FFFFFF;
+      --green:  #67C23A;
+      --red:    #F56C6C;
+      --orange: #E6A23C;
     }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    .app-container { height: 100vh; display: flex; flex-direction: column; }
+
+    /* ── 顶部导航 ── */
+    .sys-header {
+      height: 52px; padding: 0 24px; flex-shrink: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--dark); color: var(--white);
+    }
+    .sys-logo { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+    .sys-logo-mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 3px;
+      background: var(--slate); font-size: 11px; font-weight: 800; color: var(--white);
+    }
+    .sys-nav a { color: var(--steel); font-size: 13px; text-decoration: none; transition: color 0.15s; }
+    .sys-nav a:hover { color: var(--white); }
+
+    /* ── 优化3：顶部状态摘要条 ── */
+    .status-bar {
+      height: 38px; padding: 0 20px 0 80px; flex-shrink: 0;
+      display: flex; align-items: center; gap: 20px;
+      background: #2a2d30; border-top: 1px solid rgba(201,214,223,0.12);
+      font-size: 12px; color: var(--steel);
+    }
+    .status-bar-item { display: flex; align-items: center; gap: 6px; }
+    .status-sep { color: rgba(201,214,223,0.2); user-select: none; }
+    .status-label { opacity: 0.6; }
+
+    /* ── 优化1：侧边导航栏 ── */
+    .page-body { display: flex; flex: 1; overflow: hidden; }
+    .side-nav {
+      width: 60px; flex-shrink: 0;
+      background: var(--dark);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 10px 0; gap: 2px; overflow-y: auto;
+    }
+    .side-nav-item {
+      width: 48px; height: 52px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border-radius: 8px; cursor: pointer; gap: 3px;
+      color: var(--steel); font-size: 10px; text-align: center;
+      transition: all 0.15s; user-select: none;
+    }
+    .side-nav-item:hover { background: rgba(201,214,223,0.1); color: var(--white); }
+    .side-nav-item.active { background: var(--slate); color: var(--white); }
+    .nav-icon { font-size: 17px; line-height: 1; }
+
+    /* ── 主内容区 ── */
+    .main-content { flex: 1; padding: 20px; overflow-y: auto; }
+
+    /* ── 优化5：统一面板标题 ── */
+    .panel-header {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .panel-title {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 600; color: var(--dark); font-size: 14px;
+    }
+    .panel-accent {
+      width: 3px; height: 16px; border-radius: 2px;
+      background: var(--slate); flex-shrink: 0;
+    }
+    .panel-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* ── 优化2：卡片圆角统一 ── */
+    .box-card { margin-bottom: 20px; border-radius: 8px !important; box-shadow: 0 2px 12px rgba(30,32,34,0.07) !important; border: 1px solid var(--steel) !important; }
+
+    .el-table .draft-row { background: #fff8f0 !important; }
+
+    /* ── 优化4：服务探活磁贴 ── */
     .ops-service-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 10px;
-      margin-bottom: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+      gap: 10px; margin-bottom: 16px;
     }
     .ops-service-tile {
-      border: 1px solid #e4e7ed;
+      border: 1.5px solid var(--steel);
       border-radius: 8px;
-      background: #fff;
-      padding: 12px;
-      min-height: 86px;
+      background: var(--white);
+      padding: 12px 14px;
+      transition: border-color 0.2s;
     }
-    .ops-service-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
-      font-weight: 600;
-      color: #303133;
+    .ops-service-tile.tile-ok  { border-color: var(--green); }
+    .ops-service-tile.tile-err { border-color: var(--red); }
+    .tile-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .tile-name { font-size: 12px; font-weight: 600; color: var(--dark); }
+    .tile-dot  { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .tile-dot.ok  { background: var(--green); box-shadow: 0 0 0 3px rgba(103,194,58,0.15); }
+    .tile-dot.err { background: var(--red);   box-shadow: 0 0 0 3px rgba(245,108,108,0.15); }
+    .tile-latency {
+      font-size: 22px; font-weight: 700; color: var(--dark);
+      line-height: 1.2; margin-bottom: 2px;
     }
-    .ops-service-meta {
-      color: #606266;
-      font-size: 13px;
-      line-height: 1.6;
-      word-break: break-all;
+    .tile-latency-unit { font-size: 12px; font-weight: 400; color: var(--slate); }
+    .tile-status { font-size: 11px; color: var(--slate); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .ops-alerts { display: grid; gap: 8px; margin-bottom: 14px; }
+
+    /* 代码块 */
+    .code-block {
+      font-size: 12px; white-space: pre-wrap; word-break: break-all;
+      max-height: 420px; overflow-y: auto;
+      background: #f5f7fa; padding: 12px; border-radius: 8px;
     }
-    .ops-alerts {
-      display: grid;
-      gap: 8px;
-      margin-bottom: 12px;
+    .event-item {
+      border-left: 3px solid #409eff; padding: 6px 12px; margin-bottom: 8px;
+      background: #f5f7fa; border-radius: 0 6px 6px 0;
     }
+    .event-item-head { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .event-time { font-size: 12px; color: #909399; }
+
+    /* Milvus 同步按钮 */
+    .milvus-btn { background: var(--dark); border: none; color: var(--white); }
+    .milvus-btn:hover { background: var(--slate); }
   </style>
 </head>
 <body>
   <div id="app" class="app-container">
 
-    <el-main class="main-content">
+    <!-- 顶部导航 -->
+    <header class="sys-header">
+      <div class="sys-logo">
+        <span class="sys-logo-mark">筑</span>
+        闪筑智价 · 管理员驾驶舱
+      </div>
+      <div class="sys-nav">
+        <a href="/app.html">← 返回门户</a>
+      </div>
+    </header>
 
-      <!-- 运维监控与告警面板 -->
-      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
-        <template #header>
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-            <span>🩺 运维监控与告警</span>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <el-tag :type="opsOverallType(opsDashboard.overall_status)" size="small">
-                {{ opsDashboard.overall_status || 'unknown' }}
-              </el-tag>
-              <span style="font-size:13px; color:#909399;">{{ opsDashboard.generated_at || '未检测' }}</span>
-              <el-button size="small" :loading="opsLoading" @click="fetchOpsDashboard(true)" plain>刷新</el-button>
-            </div>
-          </div>
-        </template>
+    <!-- 优化3：状态摘要条 -->
+    <div class="status-bar">
+      <div class="status-bar-item">
+        <span class="status-label">系统</span>
+        <el-tag :type="opsOverallType(opsDashboard.overall_status)" size="small" effect="dark">
+          {{ opsDashboard.overall_status || 'unknown' }}
+        </el-tag>
+      </div>
+      <span class="status-sep">|</span>
+      <div class="status-bar-item">
+        <span class="status-label">活跃任务</span>
+        <span style="color:#fff; font-weight:600;">{{ opsJobs.active_count || 0 }}</span>
+      </div>
+      <span class="status-sep">|</span>
+      <div class="status-bar-item">
+        <span class="status-label">告警</span>
+        <span :style="opsAlerts.length ? 'color:#E6A23C; font-weight:600;' : 'color:#fff;'">{{ opsAlerts.length }}</span>
+      </div>
+      <span class="status-sep">|</span>
+      <div class="status-bar-item">
+        <span class="status-label">刷新于</span>
+        <span>{{ opsDashboard.generated_at || '—' }}</span>
+      </div>
+      <div style="margin-left:auto;">
+        <el-button size="small" :loading="opsLoading" @click="fetchOpsDashboard(true)" style="height:24px; font-size:11px;" plain>刷新监控</el-button>
+      </div>
+    </div>
 
-        <div v-if="opsAlerts.length" class="ops-alerts">
-          <el-alert
-            v-for="alert in opsAlerts"
-            :key="alert.title + alert.message"
-            :title="alert.title"
-            :description="alert.message"
-            :type="alert.level === 'critical' ? 'error' : 'warning'"
-            show-icon
-            :closable="false"
-          ></el-alert>
+    <div class="page-body">
+      <!-- 优化1：侧边导航栏 -->
+      <nav class="side-nav">
+        <div
+          v-for="item in navItems"
+          :key="item.id"
+          :class="['side-nav-item', activeSection === item.id ? 'active' : '']"
+          @click="scrollToSection(item.id)"
+        >
+          <span class="nav-icon">{{ item.icon }}</span>
+          <span>{{ item.label }}</span>
         </div>
+      </nav>
 
-        <div class="ops-service-grid" v-loading="opsLoading">
-          <div v-for="service in opsServices" :key="service.key" class="ops-service-tile">
-            <div class="ops-service-head">
-              <span>{{ service.name }}</span>
-              <el-tag :type="service.ok ? 'success' : 'danger'" size="small">
-                {{ service.ok ? '正常' : '异常' }}
-              </el-tag>
-            </div>
-            <div class="ops-service-meta">
-              <div>状态：{{ service.status || '-' }}</div>
-              <div>耗时：{{ service.latency_ms !== null && service.latency_ms !== undefined ? service.latency_ms + ' ms' : '-' }}</div>
-              <div v-if="service.detail">详情：{{ service.detail }}</div>
-            </div>
-          </div>
-        </div>
+      <!-- 主内容区 -->
+      <div class="main-content">
 
-        <el-row :gutter="16">
-          <el-col :span="10">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-              <strong>任务卡住提醒</strong>
-              <el-tag :type="opsJobs.stuck_count > 0 ? 'warning' : 'success'" size="small">
-                {{ opsJobs.stuck_count || 0 }} 个卡住
-              </el-tag>
-            </div>
-            <el-descriptions :column="3" border size="small" style="margin-bottom:10px;">
-              <el-descriptions-item label="活跃任务">{{ opsJobs.active_count || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="阈值">{{ opsJobs.stuck_minutes || 30 }} 分钟</el-descriptions-item>
-              <el-descriptions-item label="异常日志">{{ opsLogs.total_matches || 0 }}</el-descriptions-item>
-            </el-descriptions>
-            <el-table :data="opsStuckJobs" border size="small" height="220" empty-text="暂无卡住任务">
-              <el-table-column prop="updated_at" label="最后更新" width="145"></el-table-column>
-              <el-table-column prop="username" label="用户" width="90"></el-table-column>
-              <el-table-column prop="status" label="状态" width="85"></el-table-column>
-              <el-table-column prop="stage" label="阶段" width="95"></el-table-column>
-              <el-table-column prop="idle_minutes" label="空闲(分)" width="85" align="right"></el-table-column>
-              <el-table-column prop="message_preview" label="摘要" min-width="160" show-overflow-tooltip></el-table-column>
-            </el-table>
-          </el-col>
-          <el-col :span="14">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-              <strong>异常日志聚合</strong>
-              <span style="font-size:13px; color:#909399;">{{ opsLogs.log_dir || 'logs' }}</span>
-            </div>
-            <el-table :data="opsLogItems" border size="small" height="270" empty-text="最近未发现异常日志">
-              <el-table-column prop="modified_at" label="文件时间" width="145"></el-table-column>
-              <el-table-column prop="file" label="日志文件" width="180" show-overflow-tooltip></el-table-column>
-              <el-table-column prop="line" label="行" width="70" align="right"></el-table-column>
-              <el-table-column prop="message" label="异常线索" min-width="280" show-overflow-tooltip></el-table-column>
-            </el-table>
-          </el-col>
-        </el-row>
-      </el-card>
-
-      <!-- 用户配额管理面板 -->
-      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
-        <template #header>
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span>👥 员工账号 & AI 额度管理</span>
-            <el-button size="small" @click="fetchUsers" plain>刷新</el-button>
-          </div>
-        </template>
-        <el-table :data="userData" border stripe style="width:100%" v-loading="userLoading">
-          <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
-          <el-table-column prop="username" label="用户名" min-width="120"></el-table-column>
-          <el-table-column prop="role" label="角色" width="100" align="center">
-            <template #default="scope">
-              <el-tag :type="scope.row.role === 'admin' ? 'danger' : 'info'" size="small">
-                {{ scope.row.role === 'admin' ? '管理员' : '业务员' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="quota" label="剩余额度（次）" width="140" align="center">
-            <template #default="scope">
-              <el-tag :type="scope.row.quota > 10 ? 'success' : scope.row.quota > 0 ? 'warning' : 'danger'" size="small">
-                {{ scope.row.quota }} 次
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="充值额度" width="220" align="center">
-            <template #default="scope">
-              <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
-                <el-input-number v-model="scope.row._newQuota" :min="0" :max="9999" :controls="false"
-                  size="small" style="width:80px;" placeholder="新额度"></el-input-number>
-                <el-button size="small" type="primary" @click="updateQuota(scope.row)">确认</el-button>
+        <!-- 运维监控面板 -->
+        <el-card id="section-ops" class="box-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="panel-accent"></span>
+                <span>运维监控与告警</span>
+                <el-tag v-if="opsAlerts.length" type="danger" size="small" effect="dark">{{ opsAlerts.length }} 条告警</el-tag>
               </div>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <!-- 模型调用统一网关观测面板 -->
-      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
-        <template #header>
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span>📡 模型调用统一网关</span>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <el-input-number v-model="gatewayHours" :min="1" :max="168" :controls="false" size="small" style="width:80px;"></el-input-number>
-              <span style="font-size:13px; color:#909399;">小时</span>
-              <el-button size="small" @click="fetchGatewayStats" plain>刷新</el-button>
-            </div>
-          </div>
-        </template>
-        <el-table :data="gatewayStats" border stripe style="width:100%" v-loading="gatewayLoading">
-          <el-table-column prop="provider" label="Provider" width="110"></el-table-column>
-          <el-table-column prop="model" label="模型/工作流" min-width="150"></el-table-column>
-          <el-table-column prop="endpoint_type" label="调用类型" width="130"></el-table-column>
-          <el-table-column prop="status" label="状态" width="90" align="center">
-            <template #default="scope">
-              <el-tag :type="scope.row.status === 'success' ? 'success' : 'danger'" size="small">{{ scope.row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="count" label="次数" width="80" align="right"></el-table-column>
-          <el-table-column prop="avg_latency_ms" label="平均耗时(ms)" width="130" align="right"></el-table-column>
-          <el-table-column prop="estimated_cost" label="估算费用" width="110" align="right"></el-table-column>
-          <el-table-column prop="input_chars" label="输入字符" width="110" align="right"></el-table-column>
-          <el-table-column prop="output_chars" label="输出字符" width="110" align="right"></el-table-column>
-        </el-table>
-        <div v-if="Object.keys(gatewayCircuits).length" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-          <el-tag v-for="(state, key) in gatewayCircuits" :key="key" :type="state.is_open ? 'danger' : 'success'" size="small">
-            {{ key }} · {{ state.is_open ? '熔断中' : '正常' }} · failures={{ state.failure_count }}
-          </el-tag>
-        </div>
-      </el-card>
-
-      <!-- 报价任务队列管理面板 -->
-      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
-        <template #header>
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-            <span>🧾 报价任务队列管理</span>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <el-input v-model="jobUsernameFilter" size="small" clearable placeholder="按用户名筛选" style="width:140px;"></el-input>
-              <el-select v-model="jobStatusFilter" size="small" clearable placeholder="任务状态" style="width:150px;">
-                <el-option label="活跃任务" value="queued,running"></el-option>
-                <el-option label="排队中" value="queued"></el-option>
-                <el-option label="运行中" value="running"></el-option>
-                <el-option label="失败" value="failed"></el-option>
-                <el-option label="已取消" value="canceled"></el-option>
-                <el-option label="已超时" value="timed_out"></el-option>
-                <el-option label="已完成" value="succeeded"></el-option>
-              </el-select>
-              <el-button size="small" @click="fetchJobs(1)" plain>刷新</el-button>
-            </div>
-          </div>
-        </template>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <div style="display:flex; gap:8px; align-items:center;">
-            <span style="font-size:13px; color:#606266;">超时阈值</span>
-            <el-input-number v-model="timeoutMinutes" :min="1" :max="1440" :controls="false" size="small" style="width:90px;"></el-input-number>
-            <span style="font-size:13px; color:#909399;">分钟</span>
-            <el-button size="small" type="warning" plain :loading="markingTimeouts" @click="markTimeouts">标记超时任务</el-button>
-          </div>
-          <el-pagination v-model:current-page="jobPage" :page-size="10" :total="jobTotal"
-            layout="total, prev, pager, next" @current-change="fetchJobs" small />
-        </div>
-        <el-table :data="jobData" border stripe style="width:100%" v-loading="jobLoading">
-          <el-table-column prop="created_at" label="创建时间" width="160"></el-table-column>
-          <el-table-column prop="username" label="用户" width="120"></el-table-column>
-          <el-table-column prop="status" label="状态" width="100" align="center">
-            <template #default="scope">
-              <el-tag :type="statusTagType(scope.row.status)" size="small">{{ scope.row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="stage" label="阶段" width="110"></el-table-column>
-          <el-table-column prop="message_preview" label="任务摘要" min-width="220" show-overflow-tooltip></el-table-column>
-          <el-table-column prop="error_message" label="错误" min-width="180" show-overflow-tooltip></el-table-column>
-          <el-table-column label="操作" width="190" align="center" fixed="right">
-            <template #default="scope">
-              <el-button size="small" type="warning" plain :disabled="!['queued','running'].includes(scope.row.status)" @click="cancelJob(scope.row)">取消</el-button>
-              <el-button size="small" type="primary" plain :disabled="!['failed','canceled','timed_out'].includes(scope.row.status)" @click="retryJob(scope.row)">重试</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <!-- MinIO 文件存储面板 -->
-      <el-card class="box-card" shadow="never" style="margin-bottom: 20px;">
-        <template #header>
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-            <span>MinIO 文件存储</span>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <el-tag :type="storageHealth.ok ? 'success' : 'warning'" size="small">
-                {{ storageHealth.status || 'unknown' }}
-              </el-tag>
-              <el-button size="small" @click="fetchStorageHealth" plain>检测</el-button>
-              <el-button size="small" @click="fetchStorageFiles" plain>刷新列表</el-button>
-            </div>
-          </div>
-        </template>
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
-          <div style="display:flex; gap:8px; align-items:center;">
-            <el-input v-model="storagePurpose" size="small" clearable placeholder="文件用途，如 quote_attachment" style="width:220px;"></el-input>
-            <el-upload action="#" :auto-upload="false" :show-file-list="false" :on-change="handleStorageUpload">
-              <el-button size="small" type="primary" :loading="storageUploading">上传到 MinIO</el-button>
-            </el-upload>
-          </div>
-          <div style="font-size:13px; color:#909399;">
-            bucket: {{ storageHealth.bucket || 'quote-files' }} · 临时链接默认 1 小时有效
-          </div>
-        </div>
-        <el-table :data="storageFiles" border stripe style="width:100%" v-loading="storageLoading">
-          <el-table-column prop="created_at" label="上传时间" width="160"></el-table-column>
-          <el-table-column prop="username" label="用户" width="110"></el-table-column>
-          <el-table-column prop="purpose" label="用途" width="140"></el-table-column>
-          <el-table-column prop="original_filename" label="文件名" min-width="220" show-overflow-tooltip></el-table-column>
-          <el-table-column prop="size_bytes" label="大小(bytes)" width="120" align="right"></el-table-column>
-          <el-table-column label="操作" width="120" align="center">
-            <template #default="scope">
-              <el-button size="small" type="primary" plain @click="openStorageDownload(scope.row)">临时下载</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <el-row :gutter="20">
-        <!-- 左侧状态看板 -->
-        <el-col :span="6">
-          <el-card class="box-card" shadow="never">
-            <template #header>
-              <div class="card-header"><span>🧠 Milvus 向量库引擎状态</span></div>
-            </template>
-            <el-descriptions direction="vertical" :column="1" border>
-              <el-descriptions-item label="引擎状态">
-                <el-tag type="success" size="small">在线 (Running)</el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="当前物料条数">{{ tableData.length }} 条</el-descriptions-item>
-              <el-descriptions-item label="最后同步时间">{{ lastSyncTime }}</el-descriptions-item>
-            </el-descriptions>
-            <div style="margin-top: 20px; text-align: center;">
-              <el-button class="milvus-btn" size="large" :loading="syncing" @click="syncToMilvus" style="width: 100%;">
-                <el-icon style="margin-right: 5px"><UploadCloud /></el-icon> 一键热更新至 Milvus
-              </el-button>
-              <div style="font-size: 12px; color: #909399; margin-top: 10px;">将下方表格确定的价格灌入底层算力库</div>
-            </div>
-          </el-card>
-
-          <el-card class="box-card" shadow="never" style="margin-top:20px;">
-            <template #header>
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span>知识库变更快照</span>
-                <el-button size="small" :loading="auditLoading" @click="fetchMaterialAudit" plain>刷新</el-button>
+              <div class="panel-actions">
+                <el-button size="small" :loading="opsLoading" @click="fetchOpsDashboard(true)" plain>刷新</el-button>
               </div>
-            </template>
+            </div>
+          </template>
+
+          <div v-if="opsAlerts.length" class="ops-alerts">
             <el-alert
-              title="每次保存材料库前，系统会自动保存一份可回滚快照。"
-              type="info"
+              v-for="alert in opsAlerts"
+              :key="alert.title + alert.message"
+              :title="alert.title"
+              :description="alert.message"
+              :type="alert.level === 'critical' ? 'error' : 'warning'"
               show-icon
               :closable="false"
-              style="margin-bottom:12px;"
             ></el-alert>
-            <el-table :data="materialAudit" border size="small" style="width:100%;" v-loading="auditLoading" empty-text="暂无快照">
-              <el-table-column prop="created_at" label="时间" min-width="140"></el-table-column>
-              <el-table-column prop="item_count" label="条数" width="70" align="right"></el-table-column>
-              <el-table-column label="操作" width="82" align="center">
-                <template #default="scope">
-                  <el-button size="small" type="warning" plain @click="rollbackMaterialSnapshot(scope.row)">回滚</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </el-card>
-        </el-col>
+          </div>
 
-        <!-- 右侧数据管理表格 -->
-        <el-col :span="18">
-          <el-card class="box-card" shadow="never">
-            <div class="toolbar">
-              <div class="title-area">
-                <h3>💰 核心施工物料基准单价库 (RAG源数据)</h3>
+          <!-- 优化4：服务探活磁贴 -->
+          <div class="ops-service-grid" v-loading="opsLoading">
+            <div
+              v-for="service in opsServices"
+              :key="service.key"
+              :class="['ops-service-tile', service.ok ? 'tile-ok' : 'tile-err']"
+            >
+              <div class="tile-head">
+                <span class="tile-name">{{ service.name }}</span>
+                <span :class="['tile-dot', service.ok ? 'ok' : 'err']"></span>
               </div>
-              <div class="action-area" style="display: flex; gap: 10px; align-items: center;">
-                <el-upload
-                  action="#"
-                  :auto-upload="false"
-                  :show-file-list="false"
-                  accept=".csv"
-                  :on-change="handleImportCSV"
-                >
-                  <el-button type="warning" plain>
-                     <el-icon style="margin-right: 5px;"><DocumentAdd /></el-icon>
-                     导入新历史记录(CSV)提取草稿
-                  </el-button>
-                </el-upload>
-                <el-button type="primary" @click="handleAdd" plain>+ 新增自定义物料</el-button>
-                <el-button type="success" :loading="saving" @click="saveData">💾 保存表格并核定草稿</el-button>
+              <div class="tile-latency">
+                {{ service.latency_ms !== null && service.latency_ms !== undefined ? service.latency_ms : '—' }}<span class="tile-latency-unit" v-if="service.latency_ms !== null && service.latency_ms !== undefined"> ms</span>
+              </div>
+              <div class="tile-status">{{ service.status || '—' }}</div>
+              <div class="tile-status" v-if="service.detail">{{ service.detail }}</div>
+            </div>
+          </div>
+
+          <el-row :gutter="16">
+            <el-col :span="10">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <strong style="font-size:13px; color:var(--dark);">任务卡住提醒</strong>
+                <el-tag :type="opsJobs.stuck_count > 0 ? 'warning' : 'success'" size="small">
+                  {{ opsJobs.stuck_count || 0 }} 个卡住
+                </el-tag>
+              </div>
+              <el-descriptions :column="3" border size="small" style="margin-bottom:10px;">
+                <el-descriptions-item label="活跃任务">{{ opsJobs.active_count || 0 }}</el-descriptions-item>
+                <el-descriptions-item label="阈值">{{ opsJobs.stuck_minutes || 30 }} 分钟</el-descriptions-item>
+                <el-descriptions-item label="异常日志">{{ opsLogs.total_matches || 0 }}</el-descriptions-item>
+              </el-descriptions>
+              <el-table :data="opsStuckJobs" border size="small" height="220" empty-text="暂无卡住任务">
+                <el-table-column prop="updated_at" label="最后更新" width="145"></el-table-column>
+                <el-table-column prop="username" label="用户" width="90"></el-table-column>
+                <el-table-column prop="status" label="状态" width="85"></el-table-column>
+                <el-table-column prop="stage" label="阶段" width="95"></el-table-column>
+                <el-table-column prop="idle_minutes" label="空闲(分)" width="85" align="right"></el-table-column>
+                <el-table-column prop="message_preview" label="摘要" min-width="160" show-overflow-tooltip></el-table-column>
+              </el-table>
+            </el-col>
+            <el-col :span="14">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <strong style="font-size:13px; color:var(--dark);">异常日志聚合</strong>
+                <span style="font-size:12px; color:#909399;">{{ opsLogs.log_dir || 'logs' }}</span>
+              </div>
+              <el-table :data="opsLogItems" border size="small" height="270" empty-text="最近未发现异常日志">
+                <el-table-column prop="modified_at" label="文件时间" width="145"></el-table-column>
+                <el-table-column prop="file" label="日志文件" width="180" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="line" label="行" width="70" align="right"></el-table-column>
+                <el-table-column prop="message" label="异常线索" min-width="280" show-overflow-tooltip></el-table-column>
+              </el-table>
+            </el-col>
+          </el-row>
+        </el-card>
+
+        <!-- 员工账号面板 -->
+        <el-card id="section-users" class="box-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="panel-accent"></span>
+                <span>员工账号 & AI 额度管理</span>
+              </div>
+              <div class="panel-actions">
+                <el-button size="small" @click="fetchUsers" plain>刷新</el-button>
               </div>
             </div>
+          </template>
+          <el-table :data="userData" border stripe style="width:100%" v-loading="userLoading">
+            <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+            <el-table-column prop="username" label="用户名" min-width="120"></el-table-column>
+            <el-table-column prop="role" label="角色" width="100" align="center">
+              <template #default="scope">
+                <el-tag :type="scope.row.role === 'admin' ? 'danger' : 'info'" size="small">
+                  {{ scope.row.role === 'admin' ? '管理员' : '业务员' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="quota" label="剩余额度（次）" width="140" align="center">
+              <template #default="scope">
+                <el-tag :type="scope.row.quota > 10 ? 'success' : scope.row.quota > 0 ? 'warning' : 'danger'" size="small">
+                  {{ scope.row.quota }} 次
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="充值额度" width="220" align="center">
+              <template #default="scope">
+                <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
+                  <el-input-number v-model="scope.row._newQuota" :min="0" :max="9999" :controls="false"
+                    size="small" style="width:80px;" placeholder="新额度"></el-input-number>
+                  <el-button size="small" type="primary" @click="updateQuota(scope.row)">确认</el-button>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
 
-            <el-alert title="工作流：导入 CSV 文件提炼异动记录 -> 在表格中修改完善并【保存】 -> 点击左侧【一键热更新至 Milvus】让其正式对 AI 生效。" type="info" show-icon style="margin-bottom: 15px;"></el-alert>
+        <!-- 模型网关面板 -->
+        <el-card id="section-gateway" class="box-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="panel-accent"></span>
+                <span>模型调用统一网关</span>
+              </div>
+              <div class="panel-actions">
+                <el-input-number v-model="gatewayHours" :min="1" :max="168" :controls="false" size="small" style="width:70px;"></el-input-number>
+                <span style="font-size:12px; color:#909399; margin-left:4px;">小时</span>
+                <el-button size="small" @click="fetchGatewayStats" plain>刷新</el-button>
+              </div>
+            </div>
+          </template>
+          <el-table :data="gatewayStats" border stripe style="width:100%" v-loading="gatewayLoading">
+            <el-table-column prop="provider" label="Provider" width="110"></el-table-column>
+            <el-table-column prop="model" label="模型/工作流" min-width="150"></el-table-column>
+            <el-table-column prop="endpoint_type" label="调用类型" width="130"></el-table-column>
+            <el-table-column prop="status" label="状态" width="90" align="center">
+              <template #default="scope">
+                <el-tag :type="scope.row.status === 'success' ? 'success' : 'danger'" size="small">{{ scope.row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="count" label="次数" width="80" align="right"></el-table-column>
+            <el-table-column prop="avg_latency_ms" label="平均耗时(ms)" width="130" align="right"></el-table-column>
+            <el-table-column prop="estimated_cost" label="估算费用" width="110" align="right"></el-table-column>
+            <el-table-column prop="input_chars" label="输入字符" width="110" align="right"></el-table-column>
+            <el-table-column prop="output_chars" label="输出字符" width="110" align="right"></el-table-column>
+          </el-table>
+          <div v-if="Object.keys(gatewayCircuits).length" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+            <el-tag v-for="(state, key) in gatewayCircuits" :key="key" :type="state.is_open ? 'danger' : 'success'" size="small">
+              {{ key }} · {{ state.is_open ? '熔断中' : '正常' }} · failures={{ state.failure_count }}
+            </el-tag>
+          </div>
+        </el-card>
 
-            <!-- 利用 row-class-name 动态给草稿加上红色的弱底色 -->
-            <el-table :data="tableData" :row-class-name="tableRowClassName" border style="width: 100%" v-loading="loading">
-              <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+        <!-- 报价任务队列面板 -->
+        <el-card id="section-jobs" class="box-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="panel-accent"></span>
+                <span>报价任务队列管理</span>
+              </div>
+              <div class="panel-actions">
+                <el-input v-model="jobUsernameFilter" size="small" clearable placeholder="按用户名筛选" style="width:130px;"></el-input>
+                <el-select v-model="jobStatusFilter" size="small" clearable placeholder="任务状态" style="width:140px;">
+                  <el-option label="活跃任务" value="queued,running"></el-option>
+                  <el-option label="排队中" value="queued"></el-option>
+                  <el-option label="运行中" value="running"></el-option>
+                  <el-option label="失败" value="failed"></el-option>
+                  <el-option label="已取消" value="canceled"></el-option>
+                  <el-option label="已超时" value="timed_out"></el-option>
+                  <el-option label="已完成" value="succeeded"></el-option>
+                </el-select>
+                <el-button size="small" @click="fetchJobs(1)" plain>刷新</el-button>
+              </div>
+            </div>
+          </template>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span style="font-size:12px; color:#606266;">超时阈值</span>
+              <el-input-number v-model="timeoutMinutes" :min="1" :max="1440" :controls="false" size="small" style="width:80px;"></el-input-number>
+              <span style="font-size:12px; color:#909399;">分钟</span>
+              <el-button size="small" type="warning" plain :loading="markingTimeouts" @click="markTimeouts">标记超时任务</el-button>
+            </div>
+            <el-pagination v-model:current-page="jobPage" :page-size="10" :total="jobTotal"
+              layout="total, prev, pager, next" @current-change="fetchJobs" small />
+          </div>
+          <el-table :data="jobData" border stripe style="width:100%" v-loading="jobLoading">
+            <el-table-column prop="created_at" label="创建时间" width="160"></el-table-column>
+            <el-table-column prop="username" label="用户" width="120"></el-table-column>
+            <el-table-column prop="status" label="状态" width="100" align="center">
+              <template #default="scope">
+                <el-tag :type="statusTagType(scope.row.status)" size="small">{{ scope.row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="stage" label="阶段" width="110"></el-table-column>
+            <el-table-column prop="message_preview" label="任务摘要" min-width="220" show-overflow-tooltip></el-table-column>
+            <el-table-column prop="error_message" label="错误" min-width="180" show-overflow-tooltip></el-table-column>
+            <el-table-column label="操作" width="220" align="center" fixed="right">
+              <template #default="scope">
+                <el-button size="small" type="warning" plain :disabled="!['queued','running'].includes(scope.row.status)" @click="cancelJob(scope.row)">取消</el-button>
+                <el-button size="small" type="primary" plain :disabled="!['failed','canceled','timed_out'].includes(scope.row.status)" @click="retryJob(scope.row)">重试</el-button>
+                <el-button size="small" plain @click="openJobDetail(scope.row)">详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
 
-              <el-table-column prop="item_name" label="施工项目名称" min-width="220">
-                <template #default="scope">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                      <el-input v-model="scope.row.item_name" placeholder="例如：直线型吊顶"></el-input>
-                      <el-tag v-if="scope.row.is_draft" type="danger" effect="dark" size="small" disable-transitions>新提炼草稿</el-tag>
+        <!-- MinIO 文件存储面板 -->
+        <el-card id="section-storage" class="box-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="panel-accent"></span>
+                <span>MinIO 文件存储</span>
+                <el-tag :type="storageHealth.ok ? 'success' : 'warning'" size="small">
+                  {{ storageHealth.status || 'unknown' }}
+                </el-tag>
+              </div>
+              <div class="panel-actions">
+                <el-button size="small" @click="fetchStorageHealth" plain>检测</el-button>
+                <el-button size="small" @click="fetchStorageFiles" plain>刷新列表</el-button>
+              </div>
+            </div>
+          </template>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <el-input v-model="storagePurpose" size="small" clearable placeholder="文件用途，如 quote_attachment" style="width:210px;"></el-input>
+              <el-upload action="#" :auto-upload="false" :show-file-list="false" :on-change="handleStorageUpload">
+                <el-button size="small" type="primary" :loading="storageUploading">上传到 MinIO</el-button>
+              </el-upload>
+            </div>
+            <span style="font-size:12px; color:#909399;">bucket: {{ storageHealth.bucket || 'quote-files' }} · 临时链接默认 1 小时有效</span>
+          </div>
+          <el-table :data="storageFiles" border stripe style="width:100%" v-loading="storageLoading">
+            <el-table-column prop="created_at" label="上传时间" width="160"></el-table-column>
+            <el-table-column prop="username" label="用户" width="110"></el-table-column>
+            <el-table-column prop="purpose" label="用途" width="140"></el-table-column>
+            <el-table-column prop="original_filename" label="文件名" min-width="220" show-overflow-tooltip></el-table-column>
+            <el-table-column prop="size_bytes" label="大小(bytes)" width="120" align="right"></el-table-column>
+            <el-table-column label="操作" width="120" align="center">
+              <template #default="scope">
+                <el-button size="small" type="primary" plain @click="openStorageDownload(scope.row)">临时下载</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+
+        <!-- 知识库面板 -->
+        <div id="section-knowledge">
+          <el-row :gutter="20">
+            <!-- 左侧状态 + 快照 -->
+            <el-col :span="6">
+              <el-card class="box-card" shadow="never">
+                <template #header>
+                  <div class="panel-title">
+                    <span class="panel-accent"></span>
+                    <span>Milvus 向量引擎</span>
                   </div>
                 </template>
-              </el-table-column>
-
-              <el-table-column prop="unit_price" label="底层刚性单价(元)" width="150">
-                <template #default="scope">
-                  <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" style="width: 100%;"></el-input-number>
-                </template>
-              </el-table-column>
-
-              <el-table-column prop="unit" label="计价单位" width="100">
-                <template #default="scope">
-                  <el-input v-model="scope.row.unit" placeholder="平米/项"></el-input>
-                </template>
-              </el-table-column>
-
-              <el-table-column prop="notes" label="标准施工工艺约束 (喂给大模型的要求)" min-width="250">
-                <template #default="scope">
-                  <el-input v-model="scope.row.notes" type="textarea" :rows="2" placeholder="填写工艺要求以防 AI 乱编"></el-input>
-                </template>
-              </el-table-column>
-
-              <el-table-column label="操作" width="80" align="center" fixed="right">
-                <template #default="scope">
-                  <el-button size="small" type="danger" circle @click="handleDelete(scope.$index)">
-                    <el-icon><Delete /></el-icon>
+                <el-descriptions direction="vertical" :column="1" border>
+                  <el-descriptions-item label="引擎状态">
+                    <el-tag type="success" size="small">在线 (Running)</el-tag>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="当前物料条数">{{ tableData.length }} 条</el-descriptions-item>
+                  <el-descriptions-item label="最后同步时间">{{ lastSyncTime }}</el-descriptions-item>
+                </el-descriptions>
+                <div style="margin-top:16px; text-align:center;">
+                  <el-button class="milvus-btn" size="large" :loading="syncing" @click="syncToMilvus" style="width:100%;">
+                    <el-icon style="margin-right:5px;"><UploadCloud /></el-icon>
+                    一键热更新至 Milvus
                   </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </el-card>
-        </el-col>
-      </el-row>
-    </el-main>
-  </div>
+                  <div style="font-size:12px; color:#909399; margin-top:8px;">将下方表格确定的价格灌入底层算力库</div>
+                </div>
 
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-  <script src="https://unpkg.com/element-plus"></script>
-  <script src="https://unpkg.com/@element-plus/icons-vue"></script>
-  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+                <!-- RAG 评测结果 -->
+                <div v-if="ragEvalResult" style="margin-top:16px; border-top:1px solid #ebeef5; padding-top:12px;">
+                  <div style="font-size:13px; font-weight:600; margin-bottom:8px; color:var(--dark);">RAG 检索质量评测</div>
+                  <div v-if="ragEvalResult.status === 'running'" style="text-align:center; color:#909399; padding:8px 0;">
+                    <el-icon class="is-loading" style="margin-right:4px;"><Loading /></el-icon>评测进行中…
+                  </div>
+                  <div v-else-if="ragEvalResult.status === 'completed'">
+                    <el-alert
+                      v-if="!ragEvalResult.quality_ok"
+                      title="RAG 质量下滑，建议检查知识库"
+                      type="warning" show-icon :closable="false"
+                      style="margin-bottom:8px; font-size:12px;"
+                    ></el-alert>
+                    <el-tag v-else type="success" size="small" style="margin-bottom:8px;">✓ 质量达标</el-tag>
+                    <el-descriptions :column="1" size="small" border>
+                      <el-descriptions-item label="Hit@K">{{ ragEvalResult.hit_rate != null ? (ragEvalResult.hit_rate * 100).toFixed(1) + '%' : '-' }}</el-descriptions-item>
+                      <el-descriptions-item label="MRR">{{ ragEvalResult.mrr != null ? ragEvalResult.mrr.toFixed(3) : '-' }}</el-descriptions-item>
+                      <el-descriptions-item label="用例数">{{ ragEvalResult.case_count ?? '-' }}</el-descriptions-item>
+                      <el-descriptions-item label="评测时间">{{ ragEvalResult.started_at ? ragEvalResult.started_at.slice(0, 19).replace('T', ' ') : '-' }}</el-descriptions-item>
+                    </el-descriptions>
+                  </div>
+                  <el-alert
+                    v-else-if="ragEvalResult.status === 'failed'"
+                    :title="'评测失败：' + (ragEvalResult.error || '未知错误')"
+                    type="error" show-icon :closable="false"
+                    style="font-size:12px;"
+                  ></el-alert>
+                </div>
+              </el-card>
+
+              <el-card class="box-card" shadow="never" style="margin-top:0;">
+                <template #header>
+                  <div class="panel-header">
+                    <div class="panel-title">
+                      <span class="panel-accent"></span>
+                      <span>知识库变更快照</span>
+                    </div>
+                    <el-button size="small" :loading="auditLoading" @click="fetchMaterialAudit" plain>刷新</el-button>
+                  </div>
+                </template>
+                <el-alert
+                  title="每次保存材料库前，系统会自动保存一份可回滚快照。"
+                  type="info" show-icon :closable="false"
+                  style="margin-bottom:12px;"
+                ></el-alert>
+                <el-table :data="materialAudit" border size="small" style="width:100%;" v-loading="auditLoading" empty-text="暂无快照">
+                  <el-table-column prop="created_at" label="时间" min-width="140"></el-table-column>
+                  <el-table-column prop="item_count" label="条数" width="70" align="right"></el-table-column>
+                  <el-table-column label="操作" width="80" align="center">
+                    <template #default="scope">
+                      <el-button size="small" type="warning" plain @click="rollbackMaterialSnapshot(scope.row)">回滚</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </el-card>
+            </el-col>
+
+            <!-- 右侧物料表格 -->
+            <el-col :span="18">
+              <el-card class="box-card" shadow="never">
+                <template #header>
+                  <div class="panel-header">
+                    <div class="panel-title">
+                      <span class="panel-accent"></span>
+                      <span>核心施工物料基准单价库 (RAG 源数据)</span>
+                    </div>
+                    <div class="panel-actions">
+                      <el-upload action="#" :auto-upload="false" :show-file-list="false" accept=".csv" :on-change="handleImportCSV">
+                        <el-button type="warning" plain size="small">
+                          <el-icon style="margin-right:4px;"><DocumentAdd /></el-icon>导入 CSV 草稿
+                        </el-button>
+                      </el-upload>
+                      <el-button type="primary" size="small" @click="handleAdd" plain>+ 新增物料</el-button>
+                      <el-button type="success" size="small" :loading="saving" @click="saveData">💾 保存核定</el-button>
+                    </div>
+                  </div>
+                </template>
+
+                <el-alert title="工作流：导入 CSV 提炼异动记录 → 表格中修改完善并【保存核定】→ 点击左侧【一键热更新至 Milvus】正式对 AI 生效。" type="info" show-icon style="margin-bottom:14px;"></el-alert>
+
+                <el-table :data="tableData" :row-class-name="tableRowClassName" border style="width:100%" v-loading="loading">
+                  <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+                  <el-table-column prop="item_name" label="施工项目名称" min-width="220">
+                    <template #default="scope">
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <el-input v-model="scope.row.item_name" placeholder="例如：直线型吊顶"></el-input>
+                        <el-tag v-if="scope.row.is_draft" type="danger" effect="dark" size="small" disable-transitions>草稿</el-tag>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="unit_price" label="底层刚性单价(元)" width="150">
+                    <template #default="scope">
+                      <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" style="width:100%;"></el-input-number>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="unit" label="计价单位" width="100">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.unit" placeholder="平米/项"></el-input>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="notes" label="标准施工工艺约束 (喂给大模型的要求)" min-width="250">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.notes" type="textarea" :rows="2" placeholder="填写工艺要求以防 AI 乱编"></el-input>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="70" align="center" fixed="right">
+                    <template #default="scope">
+                      <el-button size="small" type="danger" circle @click="handleDelete(scope.$index)">
+                        <el-icon><Delete /></el-icon>
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </el-card>
+            </el-col>
+          </el-row>
+        </div>
+
+      </div><!-- /main-content -->
+    </div><!-- /page-body -->
+
+    <!-- 报价任务详情弹窗 -->
+    <el-dialog v-model="showJobDetail" title="报价任务详情" width="860px" destroy-on-close top="5vh">
+      <div v-loading="jobDetailLoading" style="min-height:200px;">
+        <div v-if="jobDetail">
+          <el-descriptions :column="3" border size="small" style="margin-bottom:16px;">
+            <el-descriptions-item label="Job ID" :span="2">{{ jobDetail.job_id }}</el-descriptions-item>
+            <el-descriptions-item label="Trace ID">{{ jobDetail.trace_id || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="用户">{{ jobDetail.username }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag :type="statusTagType(jobDetail.status)" size="small">{{ jobDetail.status }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="阶段">{{ jobDetail.stage || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">{{ jobDetail.created_at || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="完成时间">{{ jobDetail.finished_at || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="文件名">{{ jobDetail.file_name || '（无附件）' }}</el-descriptions-item>
+          </el-descriptions>
+          <div v-if="jobDetail.error_message" style="margin-bottom:12px;">
+            <el-alert :title="'错误：' + jobDetail.error_message" type="error" :closable="false" show-icon></el-alert>
+          </div>
+          <el-tabs type="border-card">
+            <el-tab-pane label="处理事件流">
+              <div v-if="jobDetail.events && jobDetail.events.length">
+                <div v-for="(evt, idx) in jobDetail.events" :key="idx" class="event-item">
+                  <div class="event-item-head">
+                    <el-tag size="small" effect="plain">{{ evt.event || evt.type || 'event' }}</el-tag>
+                    <span class="event-time">{{ evt.timestamp || evt.ts || '' }}</span>
+                  </div>
+                  <pre class="code-block" style="max-height:160px; margin:0;">{{ formatJson(evt.data !== undefined ? evt.data : evt) }}</pre>
+                </div>
+              </div>
+              <el-empty v-else description="无事件记录" :image-size="60"></el-empty>
+            </el-tab-pane>
+            <el-tab-pane label="AI 报价结果">
+              <pre v-if="jobDetail.result" class="code-block">{{ formatJson(jobDetail.result) }}</pre>
+              <el-empty v-else description="无结果数据" :image-size="60"></el-empty>
+            </el-tab-pane>
+            <el-tab-pane label="完整消息">
+              <pre class="code-block">{{ jobDetail.message_preview || '（无消息）' }}</pre>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+      </div>
+    </el-dialog>
+
+  </div><!-- /app -->
+
+  <script src="/static/vue.global.prod.min.js"></script>
+  <script src="/static/element-plus.full.min.js"></script>
+  <script src="/static/element-plus-icons.iife.min.js"></script>
+  <script src="/static/axios.min.js"></script>
 
   <script>
     const { createApp, ref, computed, onMounted, onBeforeUnmount } = Vue;
     const { ElMessage, ElMessageBox, ElNotification } = ElementPlus;
 
+    const NAV_ITEMS = [
+      { id: 'ops',       icon: '🩺', label: '运维' },
+      { id: 'users',     icon: '👥', label: '账号' },
+      { id: 'gateway',   icon: '📡', label: '网关' },
+      { id: 'jobs',      icon: '🧾', label: '任务' },
+      { id: 'storage',   icon: '🗄',  label: '存储' },
+      { id: 'knowledge', icon: '📚', label: '知识库' },
+    ];
+
     const App = {
       setup() {
-        // 如果你的 FastAPI 跑在其他地址或端口，请修改这里
-        const API_BASE_URL = '/api/v1/admin';
+        const API_BASE_URL      = '/api/v1/admin';
         const CORE_API_BASE_URL = '/api/v1';
-        let redirectingToLogin = false;
-        let opsTimer = null;
+        let redirectingToLogin  = false;
+        let opsTimer            = null;
+
+        // ── 侧边导航 ──
+        const navItems     = NAV_ITEMS;
+        const activeSection = ref('ops');
+        const scrollToSection = (id) => {
+          activeSection.value = id;
+          const el = document.getElementById('section-' + id);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
 
         const redirectToLogin = (message = '登录状态已失效，请重新登录') => {
           if (redirectingToLogin) return;
           redirectingToLogin = true;
           localStorage.removeItem('ai_token');
           ElMessage.warning(message);
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 600);
+          setTimeout(() => { window.location.href = '/'; }, 600);
         };
 
         axios.interceptors.response.use(
           response => response,
           error => {
-            if (error.response && error.response.status === 401) {
-              redirectToLogin();
-            }
+            if (error.response && error.response.status === 401) redirectToLogin();
             return Promise.reject(error);
           }
         );
 
-        const tableData = ref([]);
-        const loading = ref(false);
-        const saving = ref(false);
-        const syncing = ref(false);
+        const tableData    = ref([]);
+        const loading      = ref(false);
+        const saving       = ref(false);
+        const syncing      = ref(false);
         const lastSyncTime = ref(localStorage.getItem('last_milvus_sync') || '未同步');
 
         // 运维监控
-        const opsDashboard = ref({ services: [], alerts: [], jobs: {}, logs: {} });
-        const opsLoading = ref(false);
+        const opsDashboard    = ref({ services: [], alerts: [], jobs: {}, logs: {} });
+        const opsLoading      = ref(false);
         const opsLastAlertKey = ref('');
-        const opsServices = computed(() => opsDashboard.value.services || []);
-        const opsAlerts = computed(() => opsDashboard.value.alerts || []);
-        const opsJobs = computed(() => opsDashboard.value.jobs || {});
-        const opsLogs = computed(() => opsDashboard.value.logs || {});
-        const opsStuckJobs = computed(() => opsJobs.value.stuck_jobs || []);
-        const opsLogItems = computed(() => opsLogs.value.items || []);
+        const opsServices  = computed(() => opsDashboard.value.services || []);
+        const opsAlerts    = computed(() => opsDashboard.value.alerts   || []);
+        const opsJobs      = computed(() => opsDashboard.value.jobs     || {});
+        const opsLogs      = computed(() => opsDashboard.value.logs     || {});
+        const opsStuckJobs = computed(() => opsJobs.value.stuck_jobs    || []);
+        const opsLogItems  = computed(() => opsLogs.value.items         || []);
 
         // 用户管理
-        const userData = ref([]);
+        const userData    = ref([]);
         const userLoading = ref(false);
 
-        // 模型网关观测
-        const gatewayStats = ref([]);
+        // 模型网关
+        const gatewayStats    = ref([]);
         const gatewayCircuits = ref({});
-        const gatewayLoading = ref(false);
-        const gatewayHours = ref(24);
+        const gatewayLoading  = ref(false);
+        const gatewayHours    = ref(24);
 
         // 报价任务队列
-        const jobData = ref([]);
-        const jobLoading = ref(false);
-        const jobTotal = ref(0);
-        const jobPage = ref(1);
-        const jobStatusFilter = ref('queued,running');
+        const jobData           = ref([]);
+        const jobLoading        = ref(false);
+        const jobTotal          = ref(0);
+        const jobPage           = ref(1);
+        const jobStatusFilter   = ref('queued,running');
         const jobUsernameFilter = ref('');
-        const timeoutMinutes = ref(30);
-        const markingTimeouts = ref(false);
+        const timeoutMinutes    = ref(30);
+        const markingTimeouts   = ref(false);
+        const showJobDetail     = ref(false);
+        const jobDetail         = ref(null);
+        const jobDetailLoading  = ref(false);
+
+        // 知识库快照
         const materialAudit = ref([]);
-        const auditLoading = ref(false);
-        const storageFiles = ref([]);
-        const storageLoading = ref(false);
+        const auditLoading  = ref(false);
+
+        // RAG 评测
+        const ragEvalResult  = ref(null);
+        const ragEvalPolling = ref(null);
+
+        // 文件存储
+        const storageFiles    = ref([]);
+        const storageLoading  = ref(false);
         const storageUploading = ref(false);
-        const storageHealth = ref({});
-        const storagePurpose = ref('quote_attachment');
-
-        const fetchUsers = async () => {
-          userLoading.value = true;
-          try {
-            const res = await axios.get(`${API_BASE_URL}/users`, { headers: authHeaders() });
-            userData.value = res.data.data.map(u => ({ ...u, _newQuota: u.quota }));
-          } catch (e) {
-            ElMessage.error('获取用户列表失败');
-          } finally {
-            userLoading.value = false;
-          }
-        };
-
-        const updateQuota = async (row) => {
-          if (row._newQuota === undefined || row._newQuota === null) return;
-          try {
-            const res = await axios.patch(`${API_BASE_URL}/users/${row.id}/quota`,
-              { quota: row._newQuota }, { headers: authHeaders() });
-            row.quota = row._newQuota;
-            ElMessage.success(res.data.message);
-          } catch (e) {
-            ElMessage.error(e.response?.data?.detail || '更新失败');
-          }
-        };
-
-        const initMockData = () => {
-          return [
-            { id: "1", item_name: "直线型吊顶", unit_price: 120.00, unit: "平米", notes: "使用龙牌轻钢龙骨泰山石膏板，L型抗裂及接缝处理。" }
-          ];
-        };
+        const storageHealth   = ref({});
+        const storagePurpose  = ref('quote_attachment');
 
         const authHeaders = () => {
           const token = localStorage.getItem('ai_token') || '';
@@ -540,28 +755,18 @@
         };
 
         const statusTagType = (status) => {
-          const mapping = {
-            queued: 'info',
-            running: 'warning',
-            succeeded: 'success',
-            failed: 'danger',
-            canceled: 'info',
-            timed_out: 'danger'
-          };
-          return mapping[status] || 'info';
+          const map = { queued: 'info', running: 'warning', succeeded: 'success', failed: 'danger', canceled: 'info', timed_out: 'danger' };
+          return map[status] || 'info';
         };
 
         const opsOverallType = (status) => {
-          if (status === 'ready') return 'success';
+          if (status === 'ready')    return 'success';
           if (status === 'degraded') return 'warning';
           return 'info';
         };
 
         const notifyOpsAlerts = (alerts) => {
-          if (!alerts || alerts.length === 0) {
-            opsLastAlertKey.value = '';
-            return;
-          }
+          if (!alerts || alerts.length === 0) { opsLastAlertKey.value = ''; return; }
           const alertKey = alerts.map(item => `${item.level}:${item.title}:${item.message}`).join('|');
           if (alertKey === opsLastAlertKey.value) return;
           opsLastAlertKey.value = alertKey;
@@ -587,14 +792,37 @@
           }
         };
 
+        const fetchUsers = async () => {
+          userLoading.value = true;
+          try {
+            const res = await axios.get(`${API_BASE_URL}/users`, { headers: authHeaders() });
+            userData.value = res.data.data.map(u => ({ ...u, _newQuota: u.quota }));
+          } catch (e) {
+            ElMessage.error('获取用户列表失败');
+          } finally {
+            userLoading.value = false;
+          }
+        };
+
+        const updateQuota = async (row) => {
+          if (row._newQuota === undefined || row._newQuota === null) return;
+          try {
+            const res = await axios.patch(`${API_BASE_URL}/users/${row.id}/quota`,
+              { quota: row._newQuota }, { headers: authHeaders() });
+            row.quota = row._newQuota;
+            ElMessage.success(res.data.message);
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '更新失败');
+          }
+        };
+
         const fetchGatewayStats = async () => {
           gatewayLoading.value = true;
           try {
             const res = await axios.get(`${API_BASE_URL}/model_gateway/stats`, {
-              params: { hours: gatewayHours.value },
-              headers: authHeaders()
+              params: { hours: gatewayHours.value }, headers: authHeaders()
             });
-            gatewayStats.value = res.data.data || [];
+            gatewayStats.value    = res.data.data            || [];
             gatewayCircuits.value = res.data.circuit_breakers || {};
           } catch (e) {
             ElMessage.error(e.response?.data?.detail || '获取模型网关统计失败');
@@ -608,10 +836,10 @@
           jobLoading.value = true;
           try {
             const params = { page, page_size: 10 };
-            if (jobStatusFilter.value) params.status = jobStatusFilter.value;
+            if (jobStatusFilter.value)   params.status   = jobStatusFilter.value;
             if (jobUsernameFilter.value) params.username = jobUsernameFilter.value;
             const res = await axios.get(`${CORE_API_BASE_URL}/quote/jobs`, { params, headers: authHeaders() });
-            jobData.value = res.data.data || [];
+            jobData.value  = res.data.data  || [];
             jobTotal.value = res.data.total || 0;
           } catch (e) {
             ElMessage.error(e.response?.data?.detail || '获取任务队列失败');
@@ -645,8 +873,7 @@
           markingTimeouts.value = true;
           try {
             const res = await axios.post(`${CORE_API_BASE_URL}/admin/quote/jobs/mark_timeouts`, {}, {
-              params: { timeout_minutes: timeoutMinutes.value },
-              headers: authHeaders()
+              params: { timeout_minutes: timeoutMinutes.value }, headers: authHeaders()
             });
             ElMessage.success(`已标记 ${res.data.marked_count || 0} 个超时任务`);
             fetchJobs(1);
@@ -657,13 +884,50 @@
           }
         };
 
+        const openJobDetail = async (row) => {
+          jobDetail.value = null;
+          showJobDetail.value = true;
+          jobDetailLoading.value = true;
+          try {
+            const res = await axios.get(`${CORE_API_BASE_URL}/quote/jobs/${row.job_id}`, { headers: authHeaders() });
+            jobDetail.value = res.data.data || res.data;
+          } catch (e) {
+            ElMessage.error(e.response?.data?.detail || '获取任务详情失败');
+            showJobDetail.value = false;
+          } finally {
+            jobDetailLoading.value = false;
+          }
+        };
+
+        const formatJson = (val) => {
+          if (!val) return '（无数据）';
+          try { return JSON.stringify(typeof val === 'string' ? JSON.parse(val) : val, null, 2); }
+          catch { return String(val); }
+        };
+
+        const fetchRagEvalResult = async () => {
+          try {
+            const res = await axios.get(`${API_BASE_URL}/rag_eval/latest`, { headers: authHeaders() });
+            ragEvalResult.value = res.data.data || null;
+          } catch (e) { /* 静默失败 */ }
+        };
+
+        const startRagEvalPolling = () => {
+          if (ragEvalPolling.value) clearInterval(ragEvalPolling.value);
+          ragEvalPolling.value = setInterval(async () => {
+            await fetchRagEvalResult();
+            if (ragEvalResult.value && ragEvalResult.value.status !== 'running') {
+              clearInterval(ragEvalPolling.value);
+              ragEvalPolling.value = null;
+            }
+          }, 3000);
+        };
+
         const fetchMaterialAudit = async () => {
           auditLoading.value = true;
           try {
-            const res = await axios.get(`${API_BASE_URL}/materials/audit`, {
-              params: { limit: 20 },
-              headers: authHeaders()
-            });
+            const res = await axios.get(`${API_BASE_URL}/materials/audit`,
+              { params: { limit: 20 }, headers: authHeaders() });
             materialAudit.value = res.data.data || [];
           } catch (e) {
             ElMessage.error(e.response?.data?.detail || '获取知识库快照失败');
@@ -676,8 +940,7 @@
           try {
             await ElMessageBox.confirm(
               `确定回滚到 ${row.created_at} 的知识库快照吗？当前版本会先自动备份。`,
-              '回滚知识库快照',
-              { type: 'warning' }
+              '回滚知识库快照', { type: 'warning' }
             );
             await axios.post(`${API_BASE_URL}/materials/rollback/${row.snapshot_id}`, {}, { headers: authHeaders() });
             ElMessage.success('知识库已回滚，请确认后再同步到 Milvus');
@@ -701,10 +964,8 @@
         const fetchStorageFiles = async () => {
           storageLoading.value = true;
           try {
-            const res = await axios.get(`${CORE_API_BASE_URL}/files`, {
-              params: { page: 1, page_size: 20 },
-              headers: authHeaders()
-            });
+            const res = await axios.get(`${CORE_API_BASE_URL}/files`,
+              { params: { page: 1, page_size: 20 }, headers: authHeaders() });
             storageFiles.value = res.data.data || [];
           } catch (e) {
             ElMessage.error(e.response?.data?.detail || '获取文件列表失败');
@@ -732,26 +993,23 @@
 
         const openStorageDownload = async (row) => {
           try {
-            const res = await axios.get(`${CORE_API_BASE_URL}/files/${row.file_id}/download_url`, {
-              headers: authHeaders()
-            });
+            const res = await axios.get(`${CORE_API_BASE_URL}/files/${row.file_id}/download_url`, { headers: authHeaders() });
             window.open(res.data.data.download_url, '_blank');
           } catch (e) {
             ElMessage.error(e.response?.data?.detail || '生成临时下载链接失败');
           }
         };
 
+        const initMockData = () => [
+          { id: '1', item_name: '直线型吊顶', unit_price: 120.00, unit: '平米', notes: '使用龙牌轻钢龙骨泰山石膏板，L型抗裂及接缝处理。' }
+        ];
+
         const fetchData = async () => {
           loading.value = true;
           try {
             const res = await axios.get(`${API_BASE_URL}/materials`, { headers: authHeaders() });
-            if (res.data.data && res.data.data.length > 0) {
-              tableData.value = res.data.data;
-            } else {
-              tableData.value = initMockData();
-            }
+            tableData.value = (res.data.data && res.data.data.length > 0) ? res.data.data : initMockData();
           } catch (error) {
-            console.error(error);
             ElMessage.warning('未能连接到后台，正使用本地模拟数据运行。');
             tableData.value = initMockData();
           } finally {
@@ -760,9 +1018,7 @@
         };
 
         const handleAdd = () => {
-          tableData.value.push({
-            id: Date.now().toString(), item_name: "", unit_price: 0.00, unit: "平米", notes: "", is_draft: false
-          });
+          tableData.value.push({ id: Date.now().toString(), item_name: '', unit_price: 0.00, unit: '平米', notes: '', is_draft: false });
         };
 
         const handleDelete = (index) => {
@@ -771,29 +1027,25 @@
             .catch(() => {});
         };
 
-        // 处理 CSV 导入与后端提炼接口对接
         const handleImportCSV = async (file) => {
-            const formData = new FormData();
-            formData.append('file', file.raw);
-            loading.value = true;
-            try {
-                const res = await axios.post(`${API_BASE_URL}/upload_csv`, formData, { headers: authHeaders() });
-                const newDrafts = res.data.data;
-                if (newDrafts && newDrafts.length > 0) {
-                    tableData.value.push(...newDrafts);
-                    ElMessage.success(`解析成功！智能提炼出 ${newDrafts.length} 条待审异常/新项目，已追加至末尾。`);
-                    setTimeout(() => {
-                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                    }, 500);
-                } else {
-                    ElMessage.info('过滤完毕。导入的文件与现有标准库高度一致，无需新增处理项。');
-                }
-            } catch (error) {
-                // 如果后端返回了错误信息（比如不是真实的 CSV），直接弹出显示
-                ElMessage.error(error.response?.data?.detail || 'CSV 解析失败，请检查文件格式。');
-            } finally {
-                loading.value = false;
+          const formData = new FormData();
+          formData.append('file', file.raw);
+          loading.value = true;
+          try {
+            const res = await axios.post(`${API_BASE_URL}/upload_csv`, formData, { headers: authHeaders() });
+            const newDrafts = res.data.data;
+            if (newDrafts && newDrafts.length > 0) {
+              tableData.value.push(...newDrafts);
+              ElMessage.success(`解析成功！智能提炼出 ${newDrafts.length} 条待审异常/新项目，已追加至末尾。`);
+              setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 500);
+            } else {
+              ElMessage.info('过滤完毕。导入的文件与现有标准库高度一致，无需新增处理项。');
             }
+          } catch (error) {
+            ElMessage.error(error.response?.data?.detail || 'CSV 解析失败，请检查文件格式。');
+          } finally {
+            loading.value = false;
+          }
         };
 
         const saveData = async () => {
@@ -811,23 +1063,21 @@
         };
 
         const syncToMilvus = async () => {
-          ElMessageBox.confirm('此操作会将上方表格的数据完全覆盖灌入 Milvus 向量引擎，直接成为 AI 报价算力的唯一标准，是否继续？', '🚀 发布指令', {
-            confirmButtonText: '⚡ 确认发布',
-            cancelButtonText: '取消',
-            type: 'warning',
-          }).then(async () => {
+          ElMessageBox.confirm(
+            '此操作会将上方表格的数据完全覆盖灌入 Milvus 向量引擎，直接成为 AI 报价算力的唯一标准，是否继续？',
+            '🚀 发布指令',
+            { confirmButtonText: '⚡ 确认发布', cancelButtonText: '取消', type: 'warning' }
+          ).then(async () => {
             syncing.value = true;
             try {
-              // 确保先保存最新数据
               await axios.post(`${API_BASE_URL}/materials`, tableData.value, { headers: authHeaders() });
               fetchMaterialAudit();
               const res = await axios.post(`${API_BASE_URL}/sync_milvus`, {}, { headers: authHeaders() });
               ElMessage({ message: res.data.message || '热更新完毕，向量引擎已满血复活！', type: 'success', duration: 4000 });
-
+              if (res.data.eval_triggered) { ragEvalResult.value = { status: 'running' }; startRagEvalPolling(); }
               const now = new Date().toLocaleString();
               lastSyncTime.value = now;
               localStorage.setItem('last_milvus_sync', now);
-              // 同步成功后清除草稿标记
               tableData.value.forEach(item => item.is_draft = false);
             } catch (error) {
               ElMessage.error(error.response?.data?.detail || '向量引擎同步失败，请检查底层 Milvus 状态。');
@@ -837,13 +1087,11 @@
           }).catch(() => {});
         };
 
-        // 动态绑定背景色样式
-        const tableRowClassName = ({row}) => {
-            return row.is_draft ? 'draft-row' : '';
-        };
+        const tableRowClassName = ({ row }) => row.is_draft ? 'draft-row' : '';
 
         onMounted(() => {
           fetchOpsDashboard(true);
+          fetchRagEvalResult();
           fetchData();
           fetchUsers();
           fetchGatewayStats();
@@ -855,18 +1103,22 @@
         });
 
         onBeforeUnmount(() => {
-          if (opsTimer) clearInterval(opsTimer);
+          if (opsTimer)           clearInterval(opsTimer);
+          if (ragEvalPolling.value) clearInterval(ragEvalPolling.value);
         });
 
         return {
+          navItems, activeSection, scrollToSection,
           opsDashboard, opsLoading, opsServices, opsAlerts, opsJobs, opsLogs, opsStuckJobs, opsLogItems,
           fetchOpsDashboard, opsOverallType,
           tableData, loading, saving, syncing, lastSyncTime, tableRowClassName,
           handleAdd, handleDelete, handleImportCSV, saveData, syncToMilvus,
           userData, userLoading, fetchUsers, updateQuota,
           gatewayStats, gatewayCircuits, gatewayLoading, gatewayHours, fetchGatewayStats,
-          jobData, jobLoading, jobTotal, jobPage, jobStatusFilter, jobUsernameFilter, timeoutMinutes, markingTimeouts,
-          fetchJobs, cancelJob, retryJob, markTimeouts, statusTagType,
+          jobData, jobLoading, jobTotal, jobPage, jobStatusFilter, jobUsernameFilter,
+          timeoutMinutes, markingTimeouts, showJobDetail, jobDetail, jobDetailLoading,
+          fetchJobs, cancelJob, retryJob, markTimeouts, openJobDetail, formatJson, statusTagType,
+          ragEvalResult, fetchRagEvalResult,
           materialAudit, auditLoading, fetchMaterialAudit, rollbackMaterialSnapshot,
           storageFiles, storageLoading, storageUploading, storageHealth, storagePurpose,
           fetchStorageHealth, fetchStorageFiles, handleStorageUpload, openStorageDownload
@@ -875,7 +1127,6 @@
     };
 
     const app = createApp(App);
-    // 注册所有的 Element UI 图标
     for (const [key, component] of Object.entries(ElementPlusIconsVue)) { app.component(key, component); }
     app.use(ElementPlus);
     app.mount('#app');

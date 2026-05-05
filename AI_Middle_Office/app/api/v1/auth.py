@@ -1,9 +1,11 @@
 # 部署路径: AI_Middle_Office/app/api/v1/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import jwt
 from app.core.database import get_db
+from app.core.rate_limit import limiter
+from app.core.config import settings
 from app.models.user import User
 from app.core.security import get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 from pydantic import BaseModel
@@ -51,7 +53,8 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", summary="账号登录获取 Token")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit(settings.login_rate_limit)
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(

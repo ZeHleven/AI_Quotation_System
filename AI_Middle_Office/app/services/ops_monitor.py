@@ -1,12 +1,14 @@
+import json
+import logging
 import socket
 import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.error import HTTPError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
@@ -342,3 +344,78 @@ def build_ops_dashboard(db: Session) -> Dict[str, Any]:
         "logs": logs,
         "alerts": alerts,
     }
+
+
+_logger = logging.getLogger(__name__)
+
+# 内存状态：去重缓存（title → 上次发送时间）+ 限流滑动窗口
+_dedup_cache: Dict[str, datetime] = {}
+_rate_window: deque = deque()
+
+
+def _should_send_alert(alert: dict) -> bool:
+    now = _utcnow()
+    title = alert.get("title", "")
+
+    last_sent = _dedup_cache.get(title)
+    if last_sent and (now - last_sent).total_seconds() < settings.alert_dedup_minutes * 60:
+        return False
+
+    window_seconds = settings.alert_rate_limit_window_minutes * 60
+    while _rate_window and (now - _rate_window[0]).total_seconds() > window_seconds:
+        _rate_window.popleft()
+    if len(_rate_window) >= settings.alert_rate_limit_count:
+        return False
+
+    return True
+
+
+def _mark_sent(alert: dict) -> None:
+    title = alert.get("title", "")
+    now = _utcnow()
+    _dedup_cache[title] = now
+    _rate_window.append(now)
+
+
+def send_dingtalk_alerts(alerts: List[dict]) -> None:
+    """过滤并推送告警到钉钉。webhook 未配置或无需发送时直接返回。"""
+    if not settings.alert_dingtalk_webhook:
+        return
+
+    to_send = [a for a in alerts if _should_send_alert(a)]
+    if not to_send:
+        return
+
+    has_critical = any(a.get("level") == "critical" for a in to_send)
+    lines = ["## AI 中台运维告警\n"]
+    for alert in to_send:
+        icon = "🔴" if alert.get("level") == "critical" else "🟡"
+        lines.append(f"{icon} **{alert['title']}**\n\n> {alert['message']}\n")
+
+    payload: dict = {
+        "msgtype": "markdown",
+        "markdown": {
+            "title": "AI 中台运维告警",
+            "text": "\n".join(lines),
+        },
+    }
+    if has_critical:
+        payload["at"] = {"isAtAll": True}
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = Request(
+            settings.alert_dingtalk_webhook,
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read())
+        if result.get("errcode", 0) != 0:
+            _logger.warning("dingtalk_alert_rejected", extra={"response": result})
+            return
+        for alert in to_send:
+            _mark_sent(alert)
+        _logger.info("dingtalk_alerts_sent", extra={"count": len(to_send)})
+    except Exception:
+        _logger.warning("dingtalk_alert_send_failed", exc_info=True)

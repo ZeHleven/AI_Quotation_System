@@ -102,7 +102,7 @@ if (-not $CentosHost) {
     }
 }
 
-$ragUrl = Get-DotEnvValue -Name "RAG_SERVICE_URL" -Default "http://$CentosHost:8001"
+$ragUrl = Get-DotEnvValue -Name "RAG_SERVICE_URL" -Default "http://${CentosHost}:8001"
 $minioEnabled = (Get-DotEnvValue -Name "MINIO_ENABLED" -Default "false").ToLowerInvariant()
 $shouldCheckMinio = $RequireMinio -or ($minioEnabled -in @("1", "true", "yes", "on"))
 
@@ -121,7 +121,7 @@ $checks["rag_port"] = Test-TcpPort -Name "RAG service" -TargetHost $CentosHost -
 $checks["n8n_port"] = Test-TcpPort -Name "n8n" -TargetHost $CentosHost -Port 5678
 if ($shouldCheckMinio) {
     $checks["minio_port"] = Test-TcpPort -Name "MinIO" -TargetHost $CentosHost -Port 9002
-    $checks["minio_health"] = Test-HttpGet -Name "MinIO health" -Url "http://$CentosHost:9002/minio/health/live"
+    $checks["minio_health"] = Test-HttpGet -Name "MinIO health" -Url "http://${CentosHost}:9002/minio/health/live"
 } else {
     Write-Host "[SKIP] MinIO acceptance skipped because MINIO_ENABLED is false" -ForegroundColor Yellow
 }

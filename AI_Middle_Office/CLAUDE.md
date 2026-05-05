@@ -37,7 +37,7 @@ Milvus 向量数据库 (CentOS, Port 19530)
 
 ### Windows 端
 ```
-C:\Users\12521\Desktop\Clear_test\
+C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\
 ├── app.html                     # 登录门户（Vue3 + ElementPlus，JWT鉴权 + 强制改密弹窗）
 ├── index.html                   # 业务工作台（AI测算 + 重试按钮 + 历史记录抽屉）
 ├── admin.html                   # 知识库管理（仅admin，含用户配额管理面板）
@@ -128,6 +128,12 @@ CELERY_RESULT_BACKEND=redis://192.168.88.128:6380/1
 ---
 
 ## 四、已完成的所有优化项
+
+### ✅ P2 报价一致性治理（2026-05-02）
+- `admin.html`（Codex 路径）：报价任务队列管理面板新增"详情"按钮
+- 弹窗三个 tab：**处理事件流**（含 RAG 检索上下文）、**AI 报价结果**（result_json）、**完整消息**
+- 无需新增表结构，直接复用 `QuoteJob.events_json` / `result_json` 字段
+- 诊断方法：admin.html → 报价任务队列管理 → 清空状态筛选 → 点"详情" → 对比事件流
 
 ### ✅ 任务10：第一轮稳定性升级（2026-04-25）
 - `app/core/config.py`：集中读取 `.env` 配置，统一数据库、JWT、N8N、RAG、代理、CORS、物料库路径
@@ -395,3 +401,7 @@ C:\Users\12521\miniconda3\python.exe -m celery -A app.tasks.celery_app.celery_ap
 - 第 20 步一键启动与自愈编排已落地：新增 `start_all.ps1`、`start_watchdog.ps1`、`install_centos_autostart.ps1`、`rag_docker/enable_centos_autostart.sh`，冷启动时自动等待 MySQL/Redis/RAG/n8n/MinIO，再拉起 Celery 和 FastAPI。
 - 第 21 步运维监控与告警已落地：新增 `app/services/ops_monitor.py`、`app/api/v1/ops.py` 和管理员页“运维监控与告警”面板，支持 MySQL/Redis/Celery/RAG/MinIO/n8n 探活、异常日志聚合与卡住任务提醒。
 - 第 22 步数据库迁移治理已落地：新增 Alembic 迁移体系、`20260428_0001_initial_schema` 基线迁移、`upgrade_database.ps1` 和启动前自动迁移；后续表结构变更统一通过 `alembic/versions/` 管理。
+
+# 2026-05-02 升级补充
+
+- 第 P4 步知识库发布流程增强已落地：热更新至 Milvus 成功后自动触发 RAG 检索评测（后台线程），结果写入 `rag_eval_reports` 表；新增接口 `GET /api/v1/admin/rag_eval/latest` 和 `/history`；`admin.html` 知识库面板内嵌评测结果展示区，质量下滑时显示橙色警告；阈值通过 `RAG_EVAL_WARN_HIT_RATE`（默认 0.70）和 `RAG_EVAL_WARN_MRR`（默认 0.50）配置。

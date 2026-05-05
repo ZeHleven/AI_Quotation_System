@@ -52,3 +52,9 @@ ai-web/dist/
 .claude/
 
 # IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

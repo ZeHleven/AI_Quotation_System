@@ -3,581 +3,885 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企业级 AI 智能造价中台</title>
-    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <title>闪筑智价 · AI地产报价专家</title>
     <style>
-        * {
-            box-sizing: border-box;
+        /* ── Reset & Base ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --dark:   #1E2022;
+            --slate:  #52616B;
+            --steel:  #C9D6DF;
+            --bg:     #F0F5F9;
+            --white:  #FFFFFF;
+            --accent: #8BA7B5;
         }
 
-        body,
-        html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
-            background: #f0f2f5;
-            color: #303133;
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+            background: var(--bg);
+            color: var(--dark);
+            overflow-x: hidden;
         }
 
-        #app {
-            height: 100%;
-        }
-
-        .login-container {
-            min-height: 100vh;
+        /* ── 导航栏 ── */
+        .navbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 64px;
+            z-index: 999;
             display: flex;
-            justify-content: center;
             align-items: center;
-            padding: 24px;
-            background: linear-gradient(135deg, #1d3557 0%, #457b9d 100%);
-        }
-
-        .login-card {
-            width: min(420px, 100%);
-            padding: 36px;
-            background: rgba(255, 255, 255, 0.96);
-            border-radius: 8px;
-            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.16);
-        }
-
-        .login-title {
-            margin-bottom: 28px;
-            text-align: center;
-            color: #1f2d3d;
-            font-size: 24px;
-            font-weight: 700;
-        }
-
-        .login-tip {
-            text-align: center;
-            color: #909399;
-            font-size: 12px;
-            line-height: 1.6;
-        }
-
-        .layout-container {
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            background: #f0f2f5;
-        }
-
-        .sys-header {
-            height: 60px;
-            padding: 0 22px;
-            display: flex;
             justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
-            color: #fff;
-            background: #263241;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+            padding: 0 48px;
+            transition: background 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .sys-logo {
+        .navbar.scrolled {
+            background: rgba(30, 32, 34, 0.97);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 1px 0 rgba(201, 214, 223, 0.1);
+        }
+
+        .nav-logo {
             display: flex;
             align-items: center;
             gap: 10px;
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: 0;
+            text-decoration: none;
+            color: var(--white);
         }
 
-        .user-trigger {
+        .nav-logo-mark {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px; height: 30px;
+            border-radius: 4px;
+            background: var(--slate);
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--white);
+            flex-shrink: 0;
+        }
+
+        .nav-logo-name {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+
+        .nav-links {
             display: flex;
             align-items: center;
-            gap: 8px;
-            color: #fff;
+            list-style: none;
+            gap: 36px;
+        }
+
+        .nav-links a {
+            color: rgba(255,255,255,0.75);
+            text-decoration: none;
+            font-size: 14px;
+            letter-spacing: 0.3px;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover { color: var(--white); }
+
+        .nav-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 22px;
+            background: var(--white);
+            color: var(--dark) !important;
+            border-radius: 2px;
+            font-weight: 600;
+            font-size: 13px;
+            transition: background 0.2s, transform 0.15s !important;
+        }
+
+        .nav-cta:hover {
+            background: var(--steel) !important;
+            transform: translateY(-1px);
+        }
+
+        /* 汉堡菜单 */
+        .nav-toggle {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
             cursor: pointer;
-            white-space: nowrap;
+            padding: 4px;
+        }
+        .nav-toggle span {
+            display: block; width: 22px; height: 2px;
+            background: var(--white); border-radius: 1px;
+            transition: all 0.3s;
         }
 
-        .portal-main {
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
-            padding: 24px;
+        /* ── 英雄区 ── */
+        .hero {
+            position: relative;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow: hidden;
         }
 
-        .portal-wrap {
-            max-width: 1180px;
+        .hero-bg {
+            position: absolute;
+            inset: 0;
+            background-image: url('/static/hero-bg.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        /* 深色遮罩，让文字清晰 */
+        .hero-bg::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                160deg,
+                rgba(20, 22, 24, 0.78) 0%,
+                rgba(30, 32, 34, 0.65) 50%,
+                rgba(20, 22, 24, 0.80) 100%
+            );
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            max-width: 860px;
+            padding: 0 24px;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            padding: 5px 14px;
+            border: 1px solid rgba(201, 214, 223, 0.4);
+            border-radius: 20px;
+            color: var(--steel);
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 28px;
+        }
+
+        .hero-title {
+            font-size: clamp(36px, 6vw, 70px);
+            font-weight: 900;
+            color: var(--white);
+            line-height: 1.1;
+            letter-spacing: -2px;
+            margin-bottom: 20px;
+        }
+
+        .hero-title span {
+            color: var(--steel);
+        }
+
+        .hero-subtitle {
+            font-size: clamp(15px, 2vw, 18px);
+            color: rgba(201, 214, 223, 0.85);
+            line-height: 1.75;
+            max-width: 600px;
+            margin: 0 auto 44px;
+        }
+
+        .hero-actions {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 40px;
+            background: var(--white);
+            color: var(--dark);
+            border-radius: 2px;
+            font-size: 16px;
+            font-weight: 700;
+            text-decoration: none;
+            letter-spacing: 0.3px;
+            transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        }
+
+        .btn-primary:hover {
+            background: var(--steel);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+        }
+
+        .btn-outline {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 15px 36px;
+            border: 1.5px solid rgba(201,214,223,0.55);
+            color: var(--steel);
+            border-radius: 2px;
+            font-size: 15px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: border-color 0.2s, color 0.2s;
+        }
+
+        .btn-outline:hover {
+            border-color: var(--white);
+            color: var(--white);
+        }
+
+        /* 滚动提示 */
+        .hero-scroll {
+            position: absolute;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: rgba(201,214,223,0.6);
+            font-size: 11px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            animation: float 2.5s ease-in-out infinite;
+            text-decoration: none;
+        }
+
+        .hero-scroll::after {
+            content: '';
+            display: block;
+            width: 1px;
+            height: 40px;
+            background: linear-gradient(to bottom, rgba(201,214,223,0.6), transparent);
+        }
+
+        @keyframes float { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(6px); } }
+
+        /* ── 通用 section ── */
+        section {
+            padding: 96px 24px;
+        }
+
+        .container {
+            max-width: 1100px;
             margin: 0 auto;
         }
 
-        .portal-summary {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 18px;
-            padding: 22px;
-            background: #fff;
-            border: 1px solid #e4e7ed;
-            border-radius: 8px;
-            box-shadow: 0 8px 22px rgba(31, 45, 61, 0.05);
-        }
-
-        .portal-title {
-            margin: 0;
-            color: #1f2d3d;
-            font-size: 24px;
-            line-height: 1.35;
+        .section-badge {
+            display: inline-block;
+            font-size: 11px;
             font-weight: 700;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: var(--slate);
+            margin-bottom: 14px;
         }
 
-        .portal-subtitle {
-            margin-top: 8px;
-            max-width: 680px;
-            color: #606266;
+        .section-title {
+            font-size: clamp(26px, 4vw, 40px);
+            font-weight: 800;
+            color: var(--dark);
+            letter-spacing: -1px;
+            margin-bottom: 16px;
+            line-height: 1.15;
+        }
+
+        .section-lead {
+            font-size: 16px;
+            color: var(--slate);
+            line-height: 1.8;
+            max-width: 620px;
+        }
+
+        .section-header {
+            margin-bottom: 56px;
+        }
+
+        /* ── 数据统计带 ── */
+        .stats-band {
+            background: var(--dark);
+            padding: 56px 24px;
+        }
+
+        .stats-grid {
+            max-width: 900px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 24px 16px;
+            border-right: 1px solid rgba(201,214,223,0.15);
+        }
+
+        .stat-item:last-child { border-right: none; }
+
+        .stat-num {
+            font-size: 40px;
+            font-weight: 900;
+            color: var(--white);
+            letter-spacing: -2px;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .stat-num em {
+            font-style: normal;
+            font-size: 22px;
+            font-weight: 500;
+            color: var(--steel);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--slate);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        /* ── 关于系统 ── */
+        .about { background: var(--white); }
+
+        .about-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 64px;
+            align-items: center;
+        }
+
+        .about-text p {
+            font-size: 15px;
+            color: var(--slate);
+            line-height: 1.85;
+            margin-bottom: 16px;
+        }
+
+        .about-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 24px;
+        }
+
+        .tag {
+            padding: 5px 14px;
+            border: 1px solid var(--steel);
+            border-radius: 2px;
+            font-size: 12px;
+            color: var(--slate);
+            letter-spacing: 0.5px;
+        }
+
+        .about-vis {
+            background: var(--bg);
+            border: 1px solid var(--steel);
+            border-radius: 2px;
+            padding: 36px 32px;
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--steel);
+        }
+
+        .flow-step:last-child { border-bottom: none; }
+
+        .flow-num {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: var(--dark);
+            color: var(--white);
+            font-size: 12px;
+            font-weight: 700;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .flow-body strong {
+            display: block;
             font-size: 14px;
+            color: var(--dark);
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .flow-body span {
+            font-size: 13px;
+            color: var(--slate);
+            line-height: 1.6;
+        }
+
+        /* ── 核心功能 ── */
+        .features { background: var(--bg); }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .feature-card {
+            background: var(--white);
+            border: 1px solid var(--steel);
+            border-radius: 2px;
+            padding: 32px 28px;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--slate);
+            box-shadow: 0 12px 36px rgba(30,32,34,0.10);
+        }
+
+        .feature-icon {
+            font-size: 32px;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .feature-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 10px;
+        }
+
+        .feature-desc {
+            font-size: 13px;
+            color: var(--slate);
             line-height: 1.7;
         }
 
-        .status-strip {
-            min-width: 360px;
+        /* ── 使用教程 ── */
+        .tutorial { background: var(--dark); }
+
+        .tutorial .section-badge { color: var(--steel); }
+        .tutorial .section-title { color: var(--white); }
+        .tutorial .section-lead { color: var(--steel); }
+
+        .steps-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(140px, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0;
+            position: relative;
         }
 
-        .status-item {
-            padding: 12px 14px;
-            background: #fafafa;
-            border: 1px solid #ebeef5;
-            border-radius: 8px;
+        .steps-grid::before {
+            content: '';
+            position: absolute;
+            top: 32px;
+            left: 10%;
+            right: 10%;
+            height: 1px;
+            background: rgba(201,214,223,0.2);
         }
 
-        .status-item span {
-            display: block;
-            margin-bottom: 6px;
-            color: #909399;
-            font-size: 12px;
+        .step-item {
+            text-align: center;
+            padding: 0 16px;
+            position: relative;
         }
 
-        .status-item strong {
-            color: #303133;
-            font-size: 15px;
-        }
-
-        .module-grid {
-            margin-top: 20px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 16px;
-        }
-
-        .module-card {
-            min-height: 178px;
-            padding: 18px;
+        .step-circle {
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            border: 2px solid rgba(201,214,223,0.3);
             display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            background: #fff;
-            border: 1px solid #e4e7ed;
-            border-radius: 8px;
-            box-shadow: 0 8px 22px rgba(31, 45, 61, 0.04);
-            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 24px;
+            background: rgba(255,255,255,0.04);
+            position: relative;
+            z-index: 1;
         }
 
-        .module-card:hover {
-            transform: translateY(-2px);
-            border-color: #c6e2ff;
-            box-shadow: 0 12px 26px rgba(31, 45, 61, 0.08);
-        }
-
-        .module-card.disabled {
-            opacity: 0.62;
-        }
-
-        .module-card.disabled:hover {
-            transform: none;
-            border-color: #e4e7ed;
-            box-shadow: 0 8px 22px rgba(31, 45, 61, 0.04);
-        }
-
-        .module-name {
-            color: #1f2d3d;
-            font-size: 17px;
+        .step-num {
+            position: absolute;
+            top: -6px; right: -6px;
+            width: 20px; height: 20px;
+            background: var(--slate);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px;
             font-weight: 700;
-            line-height: 1.45;
+            color: var(--white);
         }
 
-        .module-desc {
-            margin-top: 10px;
-            color: #606266;
+        .step-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--white);
+            margin-bottom: 10px;
+        }
+
+        .step-desc {
             font-size: 13px;
+            color: var(--steel);
             line-height: 1.65;
         }
 
-        .module-meta {
-            margin-top: 12px;
-            color: #909399;
-            font-size: 12px;
+        /* ── 页脚 ── */
+        footer {
+            background: var(--dark);
+            border-top: 1px solid rgba(201,214,223,0.12);
+            padding: 48px 24px;
+            text-align: center;
         }
 
-        .module-actions {
-            margin-top: 18px;
-            display: flex;
-            justify-content: flex-start;
+        .footer-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            text-decoration: none;
         }
 
-        .module-actions .el-button {
-            min-width: 132px;
+        .footer-logo-mark {
+            width: 28px; height: 28px;
+            border-radius: 4px;
+            background: var(--slate);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--white);
         }
 
-        @media (max-width: 768px) {
-            .sys-header {
-                padding: 0 14px;
-            }
+        .footer-logo-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--white);
+        }
 
-            .sys-logo {
-                font-size: 16px;
-            }
+        footer p {
+            font-size: 13px;
+            color: var(--slate);
+            line-height: 1.7;
+            margin-bottom: 6px;
+        }
 
-            .portal-main {
-                padding: 16px;
-            }
+        footer a {
+            color: var(--steel);
+            text-decoration: none;
+        }
 
-            .portal-summary {
-                align-items: flex-start;
+        footer a:hover { color: var(--white); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 900px) {
+            .navbar { padding: 0 24px; }
+            .nav-links { display: none; }
+            .nav-toggle { display: flex; }
+            .nav-links.open {
+                display: flex;
                 flex-direction: column;
+                position: fixed;
+                top: 64px; left: 0; right: 0;
+                background: var(--dark);
+                padding: 24px;
+                gap: 20px;
+                border-top: 1px solid rgba(201,214,223,0.1);
             }
+            .about-grid { grid-template-columns: 1fr; gap: 32px; }
+            .features-grid { grid-template-columns: 1fr; }
+            .steps-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+            .steps-grid::before { display: none; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .stat-item { border-right: none; border-bottom: 1px solid rgba(201,214,223,0.15); }
+            .stat-item:nth-child(2n) { border-right: none; }
+        }
 
-            .status-strip {
-                min-width: 0;
-                width: 100%;
-                grid-template-columns: 1fr;
-            }
+        @media (max-width: 560px) {
+            .hero-title { letter-spacing: -1px; }
+            .steps-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-<div id="app">
-    <div v-if="!isLoggedIn" class="login-container">
-        <div class="login-card">
-            <div class="login-title">AI 智能造价中台登录</div>
-            <el-form :model="loginForm" :rules="rules" ref="loginFormRef">
-                <el-form-item prop="username">
-                    <el-input v-model="loginForm.username" placeholder="请输入用户名" size="large"></el-input>
-                </el-form-item>
-                <el-form-item prop="password">
-                    <el-input
-                        v-model="loginForm.password"
-                        type="password"
-                        placeholder="请输入密码"
-                        show-password
-                        size="large"
-                        @keyup.enter="handleLogin"
-                    ></el-input>
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" size="large" style="width: 100%;" :loading="loading" @click="handleLogin">
-                        登录
-                    </el-button>
-                </el-form-item>
-                <div class="login-tip">管理员账号可进入知识库、模型网关和任务队列管理页面。</div>
-            </el-form>
+
+<!-- ── 导航栏 ── -->
+<nav class="navbar" id="navbar">
+    <a href="#hero" class="nav-logo">
+        <span class="nav-logo-mark">筑</span>
+        <span class="nav-logo-name">闪筑智价</span>
+    </a>
+
+    <ul class="nav-links" id="navLinks">
+        <li><a href="#about">系统简介</a></li>
+        <li><a href="#features">功能特色</a></li>
+        <li><a href="#tutorial">使用教程</a></li>
+        <li><a href="/index.html" class="nav-cta">开始使用 →</a></li>
+    </ul>
+
+    <div class="nav-toggle" id="navToggle" onclick="toggleNav()">
+        <span></span><span></span><span></span>
+    </div>
+</nav>
+
+<!-- ── 英雄区 ── -->
+<section class="hero" id="hero">
+    <div class="hero-bg"></div>
+
+    <div class="hero-content">
+        <span class="hero-badge">AI 驱动的智能造价平台</span>
+        <h1 class="hero-title">
+            万千业态，<br>
+            一客一价，<span>智在分秒。</span>
+        </h1>
+        <p class="hero-subtitle">
+            闪筑智价是面向地产与装修行业的 AI 智能报价中台，融合多模态识别、知识库检索与人工预审，将复杂的造价流程压缩至分钟级别，精准输出每一份报价单。
+        </p>
+        <div class="hero-actions">
+            <a href="/index.html" class="btn-primary">开始使用 →</a>
+            <a href="#about" class="btn-outline">了解更多</a>
         </div>
     </div>
 
-    <el-dialog
-        v-model="showChangePwdDialog"
-        title="请修改初始密码"
-        width="400px"
-        :close-on-click-modal="false"
-        :show-close="false"
-    >
-        <el-alert
-            title="当前使用的是默认密码，存在安全风险，请立即修改。"
-            type="warning"
-            show-icon
-            style="margin-bottom: 16px;"
-        ></el-alert>
-        <el-form :model="changePwdForm" label-width="90px">
-            <el-form-item label="原密码">
-                <el-input v-model="changePwdForm.old_password" type="password" show-password placeholder="请输入原密码"></el-input>
-            </el-form-item>
-            <el-form-item label="新密码">
-                <el-input v-model="changePwdForm.new_password" type="password" show-password placeholder="至少 6 位"></el-input>
-            </el-form-item>
-            <el-form-item label="确认密码">
-                <el-input v-model="changePwdForm.confirm_password" type="password" show-password placeholder="再次输入新密码"></el-input>
-            </el-form-item>
-        </el-form>
-        <template #footer>
-            <el-button type="primary" :loading="changePwdLoading" style="width: 100%;" @click="submitChangePassword">
-                确认修改
-            </el-button>
-        </template>
-    </el-dialog>
+    <a href="#about" class="hero-scroll">向下滚动</a>
+</section>
 
-    <div v-else class="layout-container">
-        <header class="sys-header">
-            <div class="sys-logo">企业级 AI 智能造价中台</div>
-            <el-dropdown @command="handleCommand">
-                <span class="user-trigger">
-                    <el-avatar size="small" :src="'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'"></el-avatar>
-                    {{ currentUser.name }}（{{ currentUser.role === 'admin' ? '管理员' : '业务员' }}）
-                </span>
-                <template #dropdown>
-                    <el-dropdown-menu>
-                        <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-                    </el-dropdown-menu>
-                </template>
-            </el-dropdown>
-        </header>
-
-        <main class="portal-main">
-            <div class="portal-wrap">
-                <section class="portal-summary">
-                    <div>
-                        <h1 class="portal-title">系统首页</h1>
-                        <div class="portal-subtitle">
-                            统一进入报价测算、知识库管理、模型网关和任务队列能力。点击模块后会跳转到独立页面，浏览器地址会同步变化。
-                        </div>
-                    </div>
-                    <div class="status-strip">
-                        <div class="status-item">
-                            <span>当前账号</span>
-                            <strong>{{ currentUser.username }}</strong>
-                        </div>
-                        <div class="status-item">
-                            <span>访问角色</span>
-                            <strong>{{ currentUser.role === 'admin' ? '管理员' : '普通用户' }}</strong>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="module-grid">
-                    <article class="module-card">
-                        <div>
-                            <div class="module-name">业务工作台（AI 测算）</div>
-                            <div class="module-desc">上传图纸或输入项目需求，创建异步报价任务，查看进度并进入预审面板。</div>
-                            <div class="module-meta">页面：/index.html</div>
-                        </div>
-                        <div class="module-actions">
-                            <el-button type="primary" @click="goToPage('/index.html')">进入业务工作台</el-button>
-                        </div>
-                    </article>
-
-                    <article class="module-card" :class="{ disabled: currentUser.role !== 'admin' }">
-                        <div>
-                            <div class="module-name">知识库管理（价格中枢）</div>
-                            <div class="module-desc">维护材料与工艺知识库，查看模型调用统一网关、报价任务队列管理。</div>
-                            <div class="module-meta">页面：/admin.html，仅管理员可进入</div>
-                        </div>
-                        <div class="module-actions">
-                            <el-button
-                                type="success"
-                                :disabled="currentUser.role !== 'admin'"
-                                @click="goToPage('/admin.html', true)"
-                            >
-                                进入知识库管理
-                            </el-button>
-                        </div>
-                    </article>
-
-                    <article class="module-card">
-                        <div>
-                            <div class="module-name">接口文档</div>
-                            <div class="module-desc">查看 FastAPI 自动生成的接口清单，便于联调报价任务、模型网关和管理接口。</div>
-                            <div class="module-meta">页面：/docs</div>
-                        </div>
-                        <div class="module-actions">
-                            <el-button @click="goToPage('/docs')">查看接口文档</el-button>
-                        </div>
-                    </article>
-
-                    <article class="module-card">
-                        <div>
-                            <div class="module-name">系统健康检查</div>
-                            <div class="module-desc">查看数据库、RAG 服务地址、Redis/Celery 队列和 worker 在线状态。</div>
-                            <div class="module-meta">接口：/health/ready</div>
-                        </div>
-                        <div class="module-actions">
-                            <el-button @click="goToPage('/health/ready')">查看健康状态</el-button>
-                        </div>
-                    </article>
-                </section>
-            </div>
-        </main>
+<!-- ── 数据统计 ── -->
+<div class="stats-band">
+    <div class="stats-grid">
+        <div class="stat-item">
+            <div class="stat-num">60<em>s</em></div>
+            <div class="stat-label">平均出价耗时</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-num">40<em>+</em></div>
+            <div class="stat-label">知识库价格条目</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-num">95<em>%</em></div>
+            <div class="stat-label">识别准确率</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-num">0<em>次</em></div>
+            <div class="stat-label">重复手工输入</div>
+        </div>
     </div>
 </div>
 
-<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-<script src="https://unpkg.com/element-plus"></script>
-<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<!-- ── 关于系统 ── -->
+<section class="about" id="about">
+    <div class="container">
+        <div class="about-grid">
+            <div class="about-text">
+                <span class="section-badge">关于系统</span>
+                <h2 class="section-title">让报价像搜索一样简单</h2>
+                <p>
+                    传统造价工作依赖人工查阅图纸、逐项核价、手写 Excel，耗时长、易出错、难复用。闪筑智价将 AI 大模型能力注入造价全流程——上传图纸或口述需求，系统即刻完成识别、检索、定价与审核。
+                </p>
+                <p>
+                    平台深度整合 GLM-4V 多模态识别、BCEmbedding 向量检索与 Milvus 知识库，确保每条工程单价都源自真实的北京 2024 年市场行情，而非凭空估算。
+                </p>
+                <p>
+                    最终报价单经人工预审确认后，一键生成 Excel 并自动推送至钉钉，全程无需人工搬运数据。
+                </p>
+                <div class="about-tags">
+                    <span class="tag">GLM-4V 多模态</span>
+                    <span class="tag">RAG 向量检索</span>
+                    <span class="tag">Human-in-the-Loop</span>
+                    <span class="tag">钉钉自动推送</span>
+                    <span class="tag">DeepSeek-R1 优化</span>
+                </div>
+            </div>
+
+            <div class="about-vis">
+                <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--slate);margin-bottom:20px;">报价流程</div>
+                <div class="flow-step">
+                    <div class="flow-num">1</div>
+                    <div class="flow-body">
+                        <strong>上传图纸 / 输入需求</strong>
+                        <span>支持 JPG/PNG 图片识别，或直接用自然语言描述施工清单</span>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-num">2</div>
+                    <div class="flow-body">
+                        <strong>GLM-4V 多模态识别</strong>
+                        <span>从图纸中自动提取施工项目、材料和工程量</span>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-num">3</div>
+                    <div class="flow-body">
+                        <strong>RAG 检索 + DeepSeek 优化</strong>
+                        <span>从知识库检索最新市场单价，DeepSeek-R1 生成优化报价方案</span>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-num">4</div>
+                    <div class="flow-body">
+                        <strong>人工预审 → 钉钉推送</strong>
+                        <span>确认明细后，自动生成 Excel 并推送到钉钉群</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── 核心功能 ── -->
+<section class="features" id="features">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-badge">功能特色</span>
+            <h2 class="section-title">一站式智能造价能力</h2>
+            <p class="section-lead">六大核心能力，覆盖地产装修报价的每一个关键环节，从识别到推送全程自动化。</p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <span class="feature-icon">📸</span>
+                <div class="feature-name">多模态图纸识别</div>
+                <p class="feature-desc">上传装修清单图片，GLM-4V 自动识别施工项目与工程量，无需手动录入，识别准确率超过 95%。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">🔍</span>
+                <div class="feature-name">RAG 智能检索定价</div>
+                <p class="feature-desc">基于 Milvus 向量数据库与 BM25 混合检索，从 40+ 条北京 2024 年市场价格库中精准匹配底价，杜绝虚高报价。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">🤖</span>
+                <div class="feature-name">DeepSeek-R1 报价优化</div>
+                <p class="feature-desc">DeepSeek-R1 对报价方案进行二次优化，结合项目背景给出工艺建议与避坑提示，提升客户信任度。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">👁️</span>
+                <div class="feature-name">Human-in-the-Loop 预审</div>
+                <p class="feature-desc">AI 报价生成后，进入人工预审面板，支持逐项修改单价与备注，确认无误再下发，全程可控。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">📊</span>
+                <div class="feature-name">一键生成 Excel & 推送</div>
+                <p class="feature-desc">审核通过后自动生成标准 Excel 报价单，即时推送至钉钉群，结束「复制粘贴、来回转发」的低效循环。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">🛡️</span>
+                <div class="feature-name">企业级权限与监控</div>
+                <p class="feature-desc">JWT 鉴权、用户配额管理、Alembic 数据库迁移、运维监控面板，保障企业内部数据安全与系统稳定。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── 使用教程 ── -->
+<section class="tutorial" id="tutorial">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-badge">使用教程</span>
+            <h2 class="section-title">四步完成一份专业报价</h2>
+            <p class="section-lead">无需任何造价专业知识，按以下步骤操作，分钟级输出完整报价单。</p>
+        </div>
+
+        <div class="steps-grid">
+            <div class="step-item">
+                <div class="step-circle">
+                    <span class="step-num">1</span>
+                    📝
+                </div>
+                <div class="step-title">登录 & 进入工作台</div>
+                <p class="step-desc">使用企业账号登录系统，在业务工作台界面准备好项目信息。</p>
+            </div>
+            <div class="step-item">
+                <div class="step-circle">
+                    <span class="step-num">2</span>
+                    📤
+                </div>
+                <div class="step-title">上传图纸或描述需求</div>
+                <p class="step-desc">上传装修图纸（JPG/PNG）或直接用文字描述：「客厅吊顶50平，铺地砖80平」。</p>
+            </div>
+            <div class="step-item">
+                <div class="step-circle">
+                    <span class="step-num">3</span>
+                    ✅
+                </div>
+                <div class="step-title">AI 报价 → 人工预审</div>
+                <p class="step-desc">系统自动完成识别、检索、定价，AI 报价完成后弹出预审面板，逐项确认或修改。</p>
+            </div>
+            <div class="step-item">
+                <div class="step-circle">
+                    <span class="step-num">4</span>
+                    🔔
+                </div>
+                <div class="step-title">确认下发 → 钉钉推送</div>
+                <p class="step-desc">点击「确认无误，下发」后，Excel 报价单自动生成并推送至指定钉钉群，客户即时收到。</p>
+            </div>
+        </div>
+
+        <div style="text-align:center; margin-top:64px;">
+            <a href="/index.html" class="btn-primary">立即开始使用 →</a>
+        </div>
+    </div>
+</section>
+
+<!-- ── 页脚 ── -->
+<footer>
+    <a href="#hero" class="footer-logo">
+        <span class="footer-logo-mark">筑</span>
+        <span class="footer-logo-name">闪筑智价</span>
+    </a>
+    <p>AI地产报价专家 · 万千业态，一客一价，智在分秒</p>
+    <p style="margin-top:8px;">
+        企业内部系统 &nbsp;·&nbsp;
+        <a href="/index.html">业务工作台</a> &nbsp;·&nbsp;
+        <a href="/admin.html">管理后台</a> &nbsp;·&nbsp;
+        <a href="/docs">接口文档</a>
+    </p>
+    <p style="margin-top:20px; font-size:12px; color:#3d4a52;">© 2026 闪筑智价. 企业内部使用。</p>
+</footer>
+
 <script>
-    const { createApp, ref, reactive, onMounted } = Vue;
-    const { ElMessage } = ElementPlus;
-
-    const App = {
-        setup() {
-            const isLoggedIn = ref(false);
-            const loading = ref(false);
-            const loginFormRef = ref(null);
-            const showChangePwdDialog = ref(false);
-            const changePwdLoading = ref(false);
-
-            const currentUser = reactive({
-                username: "",
-                name: "",
-                role: ""
-            });
-
-            const loginForm = reactive({
-                username: "",
-                password: ""
-            });
-
-            const changePwdForm = reactive({
-                old_password: "",
-                new_password: "",
-                confirm_password: ""
-            });
-
-            const rules = {
-                username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
-                password: [{ required: true, message: "请输入密码", trigger: "blur" }]
-            };
-
-            const applyUserInfo = (user) => {
-                currentUser.username = user.username || "";
-                currentUser.role = user.role || "user";
-                currentUser.name = currentUser.role === "admin" ? "系统主管" : `业务员 ${currentUser.username}`;
-                localStorage.setItem("app_user_info", JSON.stringify({
-                    username: currentUser.username,
-                    name: currentUser.name,
-                    role: currentUser.role
-                }));
-                isLoggedIn.value = true;
-            };
-
-            const clearLoginState = () => {
-                localStorage.removeItem("ai_token");
-                localStorage.removeItem("app_user_info");
-                Object.assign(currentUser, { username: "", name: "", role: "" });
-                isLoggedIn.value = false;
-            };
-
-            const checkLoginState = async () => {
-                const token = localStorage.getItem("ai_token");
-                if (!token) return;
-                try {
-                    const res = await axios.get("/api/v1/auth/me", {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    applyUserInfo(res.data);
-                    if (res.data.must_change_password) {
-                        showChangePwdDialog.value = true;
-                    }
-                } catch (error) {
-                    clearLoginState();
-                    ElMessage.warning("登录状态已过期，请重新登录");
-                }
-            };
-
-            const handleLogin = () => {
-                loginFormRef.value.validate(async (valid) => {
-                    if (!valid) return;
-                    loading.value = true;
-                    try {
-                        const params = new URLSearchParams();
-                        params.append("username", loginForm.username);
-                        params.append("password", loginForm.password);
-                        const res = await axios.post("/api/v1/auth/login", params);
-                        const { access_token, role, username, must_change_password } = res.data;
-
-                        localStorage.setItem("ai_token", access_token);
-                        applyUserInfo({ username, role });
-                        ElMessage.success("登录成功");
-
-                        if (must_change_password) {
-                            changePwdForm.old_password = "";
-                            changePwdForm.new_password = "";
-                            changePwdForm.confirm_password = "";
-                            showChangePwdDialog.value = true;
-                        }
-                    } catch (error) {
-                        ElMessage.error(error.response?.data?.detail || "用户名或密码错误");
-                    } finally {
-                        loading.value = false;
-                    }
-                });
-            };
-
-            const submitChangePassword = async () => {
-                if (!changePwdForm.new_password || changePwdForm.new_password.length < 6) {
-                    ElMessage.warning("新密码不能少于 6 位");
-                    return;
-                }
-                if (changePwdForm.new_password !== changePwdForm.confirm_password) {
-                    ElMessage.warning("两次输入的密码不一致");
-                    return;
-                }
-
-                changePwdLoading.value = true;
-                try {
-                    const token = localStorage.getItem("ai_token");
-                    await axios.post(
-                        "/api/v1/auth/change_password",
-                        {
-                            old_password: changePwdForm.old_password,
-                            new_password: changePwdForm.new_password
-                        },
-                        { headers: { Authorization: `Bearer ${token}` } }
-                    );
-                    ElMessage.success("密码修改成功");
-                    showChangePwdDialog.value = false;
-                } catch (error) {
-                    ElMessage.error(error.response?.data?.detail || "修改失败");
-                } finally {
-                    changePwdLoading.value = false;
-                }
-            };
-
-            const goToPage = (path, requiresAdmin = false) => {
-                if (requiresAdmin && currentUser.role !== "admin") {
-                    ElMessage.warning("当前账号无权访问该模块");
-                    return;
-                }
-                window.location.href = path;
-            };
-
-            const handleCommand = (command) => {
-                if (command === "logout") {
-                    clearLoginState();
-                    loginForm.username = "";
-                    loginForm.password = "";
-                    ElMessage.info("已退出登录");
-                }
-            };
-
-            onMounted(() => {
-                checkLoginState();
-            });
-
-            return {
-                isLoggedIn,
-                loading,
-                loginForm,
-                rules,
-                loginFormRef,
-                currentUser,
-                showChangePwdDialog,
-                changePwdLoading,
-                changePwdForm,
-                handleLogin,
-                handleCommand,
-                submitChangePassword,
-                goToPage
-            };
+    // 导航栏滚动效果
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 60) {
+            navbar.classList.add('scrolled');
+        } else {
+            navbar.classList.remove('scrolled');
         }
-    };
+    });
+    // 初始检查
+    if (window.scrollY > 60) navbar.classList.add('scrolled');
 
-    const app = createApp(App);
-    app.use(ElementPlus);
-    app.mount("#app");
+    // 汉堡菜单
+    function toggleNav() {
+        document.getElementById('navLinks').classList.toggle('open');
+    }
+
+    // 点击导航链接时收起菜单
+    document.querySelectorAll('.nav-links a').forEach(link => {
+        link.addEventListener('click', () => {
+            document.getElementById('navLinks').classList.remove('open');
+        });
+    });
 </script>
 </body>
 </html>

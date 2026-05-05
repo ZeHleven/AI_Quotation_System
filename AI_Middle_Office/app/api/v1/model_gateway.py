@@ -8,7 +8,7 @@ from app.api.v1.chat import get_current_user
 from app.core.database import get_db
 from app.models.model_call_log import ModelCallLog
 from app.models.user import User
-from app.services.model_gateway import get_circuit_status
+from app.services.model_gateway import get_circuit_status, reset_circuit_breakers
 
 
 router = APIRouter()
@@ -73,3 +73,9 @@ async def get_model_gateway_stats(
 @router.get("/admin/model_gateway/circuits", summary="模型网关熔断状态")
 async def get_model_gateway_circuits(current_user: User = Depends(require_admin)):
     return {"code": 200, "data": get_circuit_status()}
+
+
+@router.post("/admin/model_gateway/circuits/reset", summary="手动重置所有熔断器")
+async def reset_all_circuits(current_user: User = Depends(require_admin)):
+    reset_circuit_breakers()
+    return {"code": 200, "message": "所有熔断器已重置"}

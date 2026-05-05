@@ -1,20 +1,27 @@
+import asyncio
 import logging
 import os
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from app.core.config import settings
+from app.core.rate_limit import limiter
 
 settings.apply_proxy_env()
 
-from app.api.v1 import auth, chat, files, model_gateway, ops, quote_jobs
+from app.api.v1 import auth, chat, files, model_gateway, ops, quote_jobs, rag_eval
 from app.core.database import engine, Base, get_db
 from app.models import user, quote_history, quote_job, model_call_log  # noqa: F401 — 触发 SQLAlchemy 建表
 from app.models import file_object  # noqa: F401 — 触发文件对象表建表
+from app.models import rag_eval_report  # noqa: F401 — 触发 rag_eval_reports 表建表
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -83,7 +90,45 @@ def _mark_default_admin_password():
 _run_schema_compat_migrations()
 _mark_default_admin_password()
 
-app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+async def _alert_loop() -> None:
+    from app.core.database import SessionLocal
+    from app.services.ops_monitor import build_ops_dashboard, send_dingtalk_alerts
+
+    loop = asyncio.get_event_loop()
+    while True:
+        await asyncio.sleep(settings.alert_check_interval_seconds)
+        try:
+            def _check():
+                db = SessionLocal()
+                try:
+                    dashboard = build_ops_dashboard(db)
+                    send_dingtalk_alerts(dashboard.get("alerts", []))
+                finally:
+                    db.close()
+            await loop.run_in_executor(None, _check)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("alert_loop_error")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(_alert_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -99,6 +144,7 @@ app.include_router(quote_jobs.router, prefix="/api/v1", tags=["Async Quote Jobs"
 app.include_router(model_gateway.router, prefix="/api/v1", tags=["Model Gateway"])
 app.include_router(files.router, prefix="/api/v1", tags=["File Storage"])
 app.include_router(ops.router, prefix="/api/v1", tags=["Operations"])
+app.include_router(rag_eval.router, prefix="/api/v1", tags=["RAG Eval"])
 
 
 @app.middleware("http")
@@ -160,6 +206,7 @@ def health_ready():
 
 # 前端 HTML 文件所在目录（Clear_test/）
 _FRONTEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+app.mount("/static", StaticFiles(directory=os.path.join(_FRONTEND_DIR, "static")), name="static")
 
 @app.get("/", include_in_schema=False)
 def serve_root():

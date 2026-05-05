@@ -1,6 +1,6 @@
 # 系统升级路线图
 
-> 最后更新：2026-04-28
+> 最后更新：2026-05-06
 
 ---
 
@@ -126,6 +126,24 @@
 - **兼容开关**：新增 `AUTO_CREATE_TABLES`、`STARTUP_COMPAT_MIGRATIONS`、`AUTO_RUN_DB_MIGRATIONS`，生产稳定后可关闭启动时建表和保守补列
 - **迁移脚本**：新增 `upgrade_database.ps1`，支持手动执行数据库升级
 - **部署文档**：新增 `AI_Middle_Office/DEPLOY_DB_MIGRATIONS.md`，记录安装依赖、执行迁移、版本查看和新增 revision 流程
+
+### ~~后端重构 P0：chat.py 拆分 + lifespan 启动治理 + 统一鉴权依赖~~（✅ 2026-05-06 已完成）
+- **chat.py 拆分**：643 行 God File 拆为 `quote.py`（201行）、`materials.py`（410行）、`history.py`（47行）、`users.py`（41行）；辅助逻辑提取至 `services/excel_service.py` 和 `services/quote_helpers.py`；chat.py 保留兼容层（72行），所有 API 路径不变
+- **lifespan 启动治理**：`_wait_for_database_ready`、`_run_schema_compat_migrations`、`_mark_default_admin_password` 合并为 `_run_startup_database_tasks()`，通过 `asyncio.to_thread()` 在 `lifespan` 内执行，消除模块级副作用
+- **统一鉴权依赖**：新增 `app/dependencies.py`，`get_current_user` / `require_admin` 统一维护，所有路由模块从此导入
+
+### ~~后端重构 P1：confirm_push schema + 物料库入库~~（✅ 2026-05-06 已完成）
+- **Pydantic schema**：新增 `app/schemas/quote.py`，`confirm_push` 请求体字段类型与必填约束明确，消除裸 `dict` 传递
+- **物料库入库**：新增 `app/models/material.py`，知识库条目持久化至 MySQL `materials` 表
+
+### ~~后端重构 P2：requests → httpx~~（✅ 2026-05-06 已完成）
+- 所有对外 HTTP 调用（`quote.py`、`materials.py`、`rag_eval.py` 等）改为 `httpx.AsyncClient`，消除异步路由中的同步阻塞
+
+### ~~后端重构 P3：统一响应格式 + 前端收口~~（✅ 2026-05-06 已完成）
+- **统一响应**：新增 `app/core/responses.py`，`api_ok` / `api_page` 统一所有 REST 接口返回 `{"code": 200, "message": "ok", "data": ...}`
+- **前端收口**：`index.html`、`admin.html`、`app.html` 统一通过 `res.data` 读取响应，与后端格式一一对应
+
+---
 
 ## 中优先级
 

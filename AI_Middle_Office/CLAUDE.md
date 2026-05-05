@@ -1,5 +1,5 @@
 # AI 智能报价中台 — 项目上下文文档
-> 最后更新：2026-05-05
+> 最后更新：2026-05-06
 
 ---
 
@@ -44,23 +44,38 @@ C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\
 ├── eval_rag.py                  # RAG检索效果评测脚本（30条测试集，Hit@K + MRR）
 └── AI_Middle_Office\
     ├── app\
-    │   ├── main.py              # FastAPI 入口 + 启动时自动迁移 must_change_password 列
+    │   ├── main.py              # FastAPI 入口；所有启动副作用已移入 lifespan
+    │   ├── dependencies.py      # 统一鉴权依赖：get_current_user / require_admin
     │   ├── api\v1\
-    │   │   ├── chat.py          # 核心路由：GLM-4V、N8N、sync_milvus、历史记录、用户管理
+    │   │   ├── quote.py         # 报价核心路由：SSE 流 + confirm_push（Pydantic schema）
+    │   │   ├── materials.py     # 知识库管理：CRUD、快照回滚、CSV 导入、Milvus 热更新
+    │   │   ├── history.py       # 报价历史记录
+    │   │   ├── users.py         # 用户配额管理（admin）
+    │   │   ├── chat.py          # 兼容层（仅 re-export，勿直接引用）
     │   │   ├── quote_jobs.py    # 异步报价任务：创建、状态查询、SSE 事件订阅
     │   │   └── auth.py          # 登录/注册/change_password 接口
+    │   ├── schemas\
+    │   │   ├── quote.py         # confirm_push / 报价请求 Pydantic schema
+    │   │   └── response.py      # 通用响应体 schema
     │   ├── models\
     │   │   ├── user.py          # User 表（含 must_change_password 字段）
+    │   │   ├── material.py      # Material 表（知识库条目持久化）
     │   │   ├── quote_history.py # QuoteHistory 表
     │   │   └── quote_job.py     # QuoteJob 异步任务表
     │   ├── services\
+    │   │   ├── excel_service.py      # Excel 生成（从 chat.py 抽取）
+    │   │   ├── quote_helpers.py      # 文件名生成 / HMAC 签名（从 chat.py 抽取）
     │   │   ├── quote_dispatcher.py   # local/celery/disabled 调度入口
     │   │   └── quote_job_runner.py   # 报价任务执行器
     │   ├── tasks\
     │   │   ├── celery_app.py         # Celery 应用配置
     │   │   └── quote_tasks.py        # Celery 报价任务
     │   └── core\
+    │       ├── responses.py     # api_ok / api_page 统一响应工具函数
+    │       ├── config.py
     │       ├── database.py
+    │       ├── logging.py
+    │       ├── rate_limit.py
     │       └── security.py
     ├── create_admin.py          # 一次性脚本：创建 admin 用户
     ├── install_service.ps1      # Windows 任务计划程序安装脚本
@@ -84,7 +99,7 @@ C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\
 
 ## 三、核心配置参数
 
-### FastAPI (chat.py)
+### FastAPI 应用配置（core/config.py + .env）
 ```python
 N8N_WEBHOOK_URL_CALC = "http://192.168.88.128:5678/webhook/budget-calc"
 N8N_WEBHOOK_URL_PUSH = "http://192.168.88.128:5678/webhook/budget-push"
@@ -128,6 +143,36 @@ CELERY_RESULT_BACKEND=redis://192.168.88.128:6380/1
 ---
 
 ## 四、已完成的所有优化项
+
+### ✅ 后端重构 P3收口：前端统一响应读取（2026-05-06）
+- 前端（`index.html`、`admin.html`、`app.html`）统一通过 `res.data` 读取响应体，不再各处散落 `res.items` / `res.result` 等字段
+- 与后端 `api_ok` / `api_page` 格式一一对应，后续 API 增改前端无需修改解析逻辑
+
+### ✅ 后端重构 P3：统一响应格式（2026-05-06）
+- 新增 `app/core/responses.py`，提供 `api_ok(data, message)` 和 `api_page(data, total, page, page_size)` 工具函数
+- 所有 REST 接口统一返回 `{"code": 200, "message": "ok", "data": ...}` 结构
+- SSE 流式接口保持原有事件格式不变
+
+### ✅ 后端重构 P2：requests → httpx（2026-05-06）
+- `quote.py`、`materials.py`、`rag_eval.py` 等所有对外 HTTP 调用从同步 `requests` 改为 `httpx.AsyncClient`
+- 彻底消除异步路由中的同步阻塞，提升并发吞吐
+
+### ✅ 后端重构 P1：schema + 物料库入库（2026-05-06）
+- 新增 `app/schemas/quote.py`：`confirm_push` 请求体从 `payload: dict = Body(...)` 改为 Pydantic schema，字段类型与必填约束明确
+- 新增 `app/schemas/response.py`：通用响应体 schema
+- 新增 `app/models/material.py`：知识库条目持久化至 MySQL `materials` 表，不再依赖纯文件存储
+
+### ✅ 后端重构 P0：chat.py 拆分 + lifespan 启动治理 + 统一鉴权依赖（2026-05-06）
+- **chat.py 拆分**：原 643 行 God File 拆分为四个职责单一的路由模块：
+  - `quote.py`（201 行）：SSE 报价流 + `confirm_push`
+  - `materials.py`（410 行）：知识库 CRUD + 快照回滚 + CSV 导入 + Milvus 热更新
+  - `history.py`（47 行）：报价历史记录
+  - `users.py`（41 行）：用户配额管理
+  - `services/excel_service.py`（48 行）：Excel 生成
+  - `services/quote_helpers.py`（46 行）：文件名 / HMAC 签名
+  - `chat.py` 保留为兼容层（72 行），仅做 re-export，API 路径全部不变
+- **lifespan 启动治理**：`_wait_for_database_ready`、`_run_schema_compat_migrations`、`_mark_default_admin_password` 三个函数合并为 `_run_startup_database_tasks()`，通过 `asyncio.to_thread()` 在 `lifespan` 内执行，消除模块级副作用
+- **统一鉴权依赖**：新增 `app/dependencies.py`，`get_current_user` / `require_admin` 从 chat.py 抽取至共享模块，所有路由统一 `from app.dependencies import ...`
 
 ### ✅ E4. 登录接口限流（2026-05-02）
 - 新增 `app/core/rate_limit.py`，集成 `slowapi`，复用 Redis 作分布式存储
@@ -463,3 +508,14 @@ C:\Users\12521\miniconda3\python.exe -m celery -A app.tasks.celery_app.celery_ap
 - **E2 HTTPS 接入**：Windows 端 Caddy 反向代理，`tls internal` 自签 CA，CORS 已收紧。
 - **E3 定时备份**：`backup_all.ps1` 每日 03:00 备份 MySQL + 知识库 + 审计快照，滚动保留 7 天。
 - **E4 登录限流**：`slowapi` 集成，每 IP 每 5 分钟最多 10 次登录尝试，Redis 不可用时内存降级。
+
+# 2026-05-06 升级补充（后端架构重构）
+
+- **P0 chat.py 拆分**：原 643 行 God File 按职责拆分为 `quote.py`（SSE+confirm_push）、`materials.py`（知识库）、`history.py`、`users.py`，chat.py 保留兼容层；新增 `services/excel_service.py` 和 `services/quote_helpers.py`。
+- **P0 lifespan 启动治理**：数据库等待、schema 兼容迁移、默认密码检测三个启动副作用合并为 `_run_startup_database_tasks()`，通过 `asyncio.to_thread()` 在 `lifespan` 内执行，消除模块级副作用。
+- **P0 统一鉴权依赖**：新增 `app/dependencies.py`，`get_current_user` / `require_admin` 统一维护，所有路由模块从此导入。
+- **P1 confirm_push schema**：请求体改为 Pydantic schema（`schemas/quote.py`），字段类型约束明确，消除裸 `dict` 传递。
+- **P1 物料库入库**：新增 `models/material.py`，知识库条目持久化至 MySQL `materials` 表。
+- **P2 requests → httpx**：所有对外 HTTP 调用改为 `httpx.AsyncClient`，消除异步路由中的同步阻塞。
+- **P3 统一响应格式**：新增 `core/responses.py`，`api_ok` / `api_page` 统一所有 REST 接口返回结构 `{"code": 200, "message": "ok", "data": ...}`。
+- **P3收口 前端统一读取**：前端三个页面统一通过 `res.data` 读取响应，与后端格式一一对应。

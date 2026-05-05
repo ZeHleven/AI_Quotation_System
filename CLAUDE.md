@@ -41,9 +41,13 @@ Clear_test/
 ├── admin.html                       # 知识库管理（仅admin）
 ├── AI_Middle_Office/
 │   ├── CLAUDE.md                    # 完整项目文档
-│   ├── app/main.py                  # FastAPI 入口
-│   ├── app/api/v1/chat.py           # 核心路由：GLM-4V、N8N、sync_milvus
+│   ├── app/main.py                  # FastAPI 入口（启动副作用已移入 lifespan）
+│   ├── app/dependencies.py          # 统一鉴权依赖：get_current_user / require_admin
+│   ├── app/api/v1/quote.py          # SSE 报价流 + confirm_push
+│   ├── app/api/v1/materials.py      # 知识库管理（原 chat.py 拆分）
+│   ├── app/api/v1/chat.py           # 兼容层（仅 re-export，API 路径不变）
 │   ├── app/api/v1/auth.py           # 登录接口
+│   ├── app/core/responses.py        # api_ok / api_page 统一响应工具
 │   └── .env                        # ZHIPU_API_KEY（不提交 git）
 └── rag_docker/
     ├── docker-compose.yml           # CentOS 端服务编排
@@ -139,3 +143,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1
 - **E2 HTTPS**：Caddy 反向代理，`tls internal` 自签 CA，访问入口改为 `https://<局域网IP>/`。
 - **E3 定时备份**：`backup_all.ps1` 每日 03:00 备份，滚动保留 7 天。
 - **E4 登录限流**：`slowapi` 集成，每 IP 每 5 分钟最多 10 次登录，Redis 不可用时内存降级。
+
+# 2026-05-06 升级补充（后端架构重构）
+
+- **P0 chat.py 拆分**：643 行 God File 按职责拆为 `quote.py`、`materials.py`、`history.py`、`users.py`；chat.py 保留兼容层，API 路径全部不变。
+- **P0 lifespan 启动治理**：启动副作用（数据库等待、schema 迁移、默认密码检测）集中为 `_run_startup_database_tasks()`，在 `lifespan` 内执行，消除模块级副作用。
+- **P0 统一鉴权依赖**：新增 `app/dependencies.py`，`get_current_user` / `require_admin` 所有路由共用。
+- **P1 confirm_push schema**：请求体改为 Pydantic schema，`schemas/quote.py` 明确字段约束。
+- **P1 物料库入库**：新增 `models/material.py`，知识库条目持久化至 MySQL。
+- **P2 requests → httpx**：对外 HTTP 调用全改为 `httpx.AsyncClient`，消除异步路由同步阻塞。
+- **P3 统一响应格式**：新增 `core/responses.py`，`api_ok` / `api_page` 统一 REST 接口响应结构。
+- **P3收口 前端统一读取**：前端三页面统一通过 `res.data` 读取响应。

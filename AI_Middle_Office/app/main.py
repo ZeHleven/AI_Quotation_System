@@ -17,9 +17,9 @@ from app.core.rate_limit import limiter
 
 settings.apply_proxy_env()
 
-from app.api.v1 import auth, chat, files, model_gateway, ops, quote_jobs, rag_eval
+from app.api.v1 import auth, files, history, materials, model_gateway, ops, quote, quote_jobs, rag_eval, users
 from app.core.database import engine, Base, get_db
-from app.models import user, quote_history, quote_job, model_call_log  # noqa: F401 — 触发 SQLAlchemy 建表
+from app.models import material, user, quote_history, quote_job, model_call_log  # noqa: F401 — 触发 SQLAlchemy 建表
 from app.models import file_object  # noqa: F401 — 触发文件对象表建表
 from app.models import rag_eval_report  # noqa: F401 — 触发 rag_eval_reports 表建表
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
@@ -55,10 +55,6 @@ def _wait_for_database_ready():
             time.sleep(settings.database_startup_retry_interval_seconds)
 
 
-_wait_for_database_ready()
-if settings.auto_create_tables:
-    Base.metadata.create_all(bind=engine)
-
 # 兼容旧库的保守 schema 迁移。正式 schema 变更应使用 Alembic，见 DEPLOY_DB_MIGRATIONS.md。
 def _run_schema_compat_migrations():
     if not settings.startup_compat_migrations:
@@ -87,8 +83,12 @@ def _mark_default_admin_password():
             pass
 
 
-_run_schema_compat_migrations()
-_mark_default_admin_password()
+def _run_startup_database_tasks():
+    _wait_for_database_ready()
+    if settings.auto_create_tables:
+        Base.metadata.create_all(bind=engine)
+    _run_schema_compat_migrations()
+    _mark_default_admin_password()
 
 
 async def _alert_loop() -> None:
@@ -115,6 +115,7 @@ async def _alert_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await asyncio.to_thread(_run_startup_database_tasks)
     task = asyncio.create_task(_alert_loop())
     try:
         yield
@@ -139,7 +140,10 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
-app.include_router(chat.router, prefix="/api/v1", tags=["AI Core"])
+app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
+app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
+app.include_router(users.router, prefix="/api/v1", tags=["Users"])
+app.include_router(history.router, prefix="/api/v1", tags=["History"])
 app.include_router(quote_jobs.router, prefix="/api/v1", tags=["Async Quote Jobs"])
 app.include_router(model_gateway.router, prefix="/api/v1", tags=["Model Gateway"])
 app.include_router(files.router, prefix="/api/v1", tags=["File Storage"])

@@ -1,17 +1,17 @@
 # 部署路径: AI_Middle_Office/app/api/v1/auth.py
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-import jwt
+from pydantic import BaseModel
+
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.config import settings
+from app.dependencies import get_current_user
 from app.models.user import User
-from app.core.security import get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
-from pydantic import BaseModel
+from app.core.security import get_password_hash, verify_password, create_access_token
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 class UserCreate(BaseModel):
@@ -22,19 +22,6 @@ class UserCreate(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
-
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token 无效")
-
-    user = db.query(User).filter(User.username == username).first()
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录状态已失效")
-    return user
 
 
 @router.post("/register", summary="注册新员工账号")

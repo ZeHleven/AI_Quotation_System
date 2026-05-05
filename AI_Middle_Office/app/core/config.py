@@ -54,6 +54,8 @@ def _env_list(name: str, default: str = "*") -> List[str]:
 class Settings:
     app_name: str = _env("APP_NAME", "Enterprise AI Middle Office")
     app_version: str = _env("APP_VERSION", "1.0.0")
+    app_env: str = _env("APP_ENV", "development")
+    strict_config: bool = _env_bool("STRICT_CONFIG", False)
     log_level: str = _env("LOG_LEVEL", "INFO")
 
     database_url: str = _env("DATABASE_URL", "sqlite:///./sql_app.db")
@@ -114,6 +116,31 @@ class Settings:
     )
     allowed_origins: List[str] = field(default_factory=lambda: _env_list("CORS_ALLOW_ORIGINS", "*"))
     materials_file: Path = field(default_factory=lambda: Path(_env("MATERIALS_FILE", str(BASE_DIR / "rag_materials.json"))))
+
+    def __post_init__(self) -> None:
+        if not self.strict_config and self.app_env.lower() not in {"prod", "production"}:
+            return
+
+        errors = []
+
+        def require_secret(name: str, value: str, weak_values: set[str] | None = None) -> None:
+            weak_values = weak_values or set()
+            if not value or value in weak_values:
+                errors.append(f"{name} must be set to a non-default secret")
+
+        require_secret(
+            "JWT_SECRET_KEY",
+            self.jwt_secret_key,
+            {"your_super_secret_key_for_ai_middle_office", "change-me-in-production"},
+        )
+        require_secret("WEBHOOK_SECRET", self.webhook_secret)
+        require_secret("RELOAD_SECRET", self.reload_secret)
+        require_secret("ZHIPU_API_KEY", self.zhipu_api_key)
+        if self.minio_enabled:
+            require_secret("MINIO_SECRET_KEY", self.minio_secret_key, {"change-this-password"})
+
+        if errors:
+            raise RuntimeError("Invalid production configuration: " + "; ".join(errors))
 
     def apply_proxy_env(self) -> None:
         if self.https_proxy:

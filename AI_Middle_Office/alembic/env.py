@@ -12,7 +12,7 @@ if str(BASE_DIR) not in sys.path:
 
 from app.core.config import settings  # noqa: E402
 from app.core.database import Base  # noqa: E402
-from app.models import file_object, model_call_log, quote_history, quote_job, user  # noqa: F401,E402
+from app.models import file_object, material, model_call_log, quote_history, quote_job, rag_eval_report, user  # noqa: F401,E402
 
 
 config = context.config

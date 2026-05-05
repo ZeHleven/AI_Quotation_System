@@ -6,9 +6,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.v1.chat import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
+from app.dependencies import get_current_user, require_admin
 from app.models.file_object import FileObject
 from app.models.user import User
 from app.services.file_storage import (
@@ -21,12 +21,6 @@ from app.services.file_storage import (
 
 
 router = APIRouter()
-
-
-def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="权限不足，仅管理员可操作")
-    return current_user
 
 
 def _format_dt(value) -> Optional[str]:
@@ -166,5 +160,5 @@ async def get_file_download_url(
 
 
 @router.get("/admin/files/storage/health", summary="查看 MinIO 文件存储状态")
-async def get_file_storage_health(current_user: User = Depends(_require_admin)):
+async def get_file_storage_health(current_user: User = Depends(require_admin)):
     return {"code": 200, "data": await asyncio.to_thread(check_storage_health)}

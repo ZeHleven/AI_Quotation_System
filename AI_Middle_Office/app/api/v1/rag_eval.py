@@ -1,21 +1,15 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.v1.chat import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
+from app.dependencies import require_admin
 from app.models.rag_eval_report import RagEvalReport
 from app.models.user import User
 
 router = APIRouter()
-
-
-def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="权限不足，仅管理员可操作")
-    return current_user
 
 
 def _format_report(report: RagEvalReport) -> dict:
@@ -49,7 +43,7 @@ def _format_report(report: RagEvalReport) -> dict:
 
 @router.get("/admin/rag_eval/latest", summary="最新 RAG 评测结果")
 async def get_latest_rag_eval(
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     report = (
@@ -63,7 +57,7 @@ async def get_latest_rag_eval(
 @router.get("/admin/rag_eval/history", summary="RAG 评测历史记录")
 async def get_rag_eval_history(
     limit: int = Query(10, ge=1, le=50),
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     reports = (

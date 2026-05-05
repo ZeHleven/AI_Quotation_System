@@ -10,10 +10,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.v1.chat import get_current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.core.logging import get_trace_id
+from app.dependencies import get_current_user, require_admin
 from app.models.file_object import FileObject
 from app.models.quote_job import QuoteJob
 from app.models.user import User
@@ -76,12 +76,6 @@ def _get_accessible_job(job_id: str, current_user: User, db: Session) -> QuoteJo
     if current_user.role != "admin" and job.username != current_user.username:
         raise HTTPException(status_code=404, detail="报价任务不存在")
     return job
-
-
-def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="权限不足，仅管理员可操作")
-    return current_user
 
 
 def _dispatch_and_store(job: QuoteJob, db: Session) -> None:
@@ -313,7 +307,7 @@ async def retry_quote_job(
 @router.post("/admin/quote/jobs/mark_timeouts", summary="管理员标记超时任务")
 async def mark_quote_job_timeouts(
     timeout_minutes: int = Query(30, ge=1, le=1440),
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     stale_jobs = mark_stale_quote_jobs(db, timeout_minutes)

@@ -5,6 +5,7 @@ import uuid
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
+from app.models.material import Material, MaterialSnapshot
 from app.models.user import User
 
 
@@ -38,6 +39,32 @@ def _reset_material_store():
     if audit_dir.exists():
         shutil.rmtree(audit_dir)
     settings.materials_file.parent.mkdir(parents=True, exist_ok=True)
+    db = SessionLocal()
+    try:
+        db.query(MaterialSnapshot).delete()
+        db.query(Material).delete()
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_materials_import_legacy_json_on_first_read(client):
+    _reset_material_store()
+    headers = _create_admin_headers(client)
+    legacy = [
+        {"id": "legacy_1", "item_name": "Legacy item", "unit_price": 12.5, "unit": "m2", "notes": "from json", "is_draft": False}
+    ]
+    settings.materials_file.write_text(json.dumps(legacy, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    response = client.get("/api/v1/admin/materials", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["data"] == legacy
+
+    db = SessionLocal()
+    try:
+        assert db.query(Material).count() == 1
+    finally:
+        db.close()
 
 
 def test_material_save_creates_snapshot_and_rollback_restores_it(client):
@@ -50,7 +77,7 @@ def test_material_save_creates_snapshot_and_rollback_restores_it(client):
     updated = [
         {"id": "m2", "item_name": "Updated item", "unit_price": 25.0, "unit": "m2", "notes": "new", "is_draft": False}
     ]
-    settings.materials_file.write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
+    settings.materials_file.write_text(json.dumps(original, ensure_ascii=False, indent=2), encoding="utf-8")
 
     save_response = client.post("/api/v1/admin/materials", json=updated, headers=headers)
     assert save_response.status_code == 200

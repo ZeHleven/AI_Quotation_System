@@ -8,10 +8,7 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 import requests
 
-from app.api.v1.chat import (
-    N8N_WEBHOOK_URL_CALC,
-    _sign_payload,
-)
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.logging import reset_trace_id, set_trace_id
 from app.models.file_object import FileObject
@@ -19,6 +16,7 @@ from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.file_storage import get_object_bytes
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
+from app.services.quote_helpers import sign_payload
 
 
 logger = logging.getLogger(__name__)
@@ -200,9 +198,9 @@ async def _iter_quote_events(
             provider="n8n",
             model="dify-deepseek",
             endpoint_type="quote_calc",
-            url=N8N_WEBHOOK_URL_CALC,
+            url=settings.n8n_webhook_url_calc,
             json_payload=payload,
-            headers=_sign_payload(payload),
+            headers=sign_payload(payload),
             timeout=180,
             username=username,
         )

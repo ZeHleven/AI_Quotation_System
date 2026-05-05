@@ -31,13 +31,20 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - MinIO: `192.168.88.128:9002/9003`
 - 健康检查：`/health/live`、`/health/ready`
 - 当前任务队列模式：生产使用 `TASK_QUEUE_MODE=celery`
+- 当前后端优化状态：P0-P3 与配置收尾已完成，最新提交 `6e54c09 clarify legacy materials config` 已推送到 `main`
+- 当前数据库迁移版本：`20260505_0003`
+- 最新自动化验证：`python -m compileall app` 通过，`python -m pytest` 为 `55 passed`
 
 ## 关键模块
 
 - `app/main.py`：FastAPI 入口、HTML 托管、路由注册、健康检查、启动期数据库兼容迁移。
 - `app/core/config.py`：集中读取 `.env` 配置，包含 n8n、RAG、Celery、MinIO、代理、数据库和模型网关参数。
 - `app/api/v1/auth.py`：JWT 登录、当前用户、改密。
-- `app/api/v1/chat.py`：旧版 `/chat` SSE 兼容链路、`confirm_push`、物料管理和 RAG reload。
+- `app/api/v1/chat.py`：旧兼容导出层，核心路由已拆分，保留历史 import 路径。
+- `app/api/v1/quote.py`：`/chat` SSE 报价流与 `/confirm_push`。
+- `app/api/v1/materials.py`：物料库 CRUD、快照、回滚、CSV 导入和 RAG reload。
+- `app/api/v1/history.py`：报价历史记录。
+- `app/api/v1/users.py`：用户配额管理。
 - `app/api/v1/quote_jobs.py`：新版异步报价任务 API，创建、查询、事件流、取消、重试、超时标记。
 - `app/services/quote_job_runner.py`：后台任务执行链路，负责文件读取、GLM-4V、n8n 调用、结果落库和额度扣减。
 - `app/services/quote_dispatcher.py`：按 `TASK_QUEUE_MODE` 分发到 Celery/local/inline/disabled。
@@ -72,6 +79,9 @@ RAG 服务当前使用离线 HuggingFace 模型路径，挂载：
 - RAG 混合检索为向量 + BM25 + RRF
 - Milvus alias `enterprise_quotation_rag` 指向 `quotation_blue`
 - 正式知识库条数为 70 条
+- 物料库主存储为 MySQL `materials` / `material_snapshots`
+- `LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅作为旧 `rag_materials.json` 空库导入源
+- RAG 评测报告目录由 `RAG_EVAL_REPORT_DIR` 控制
 
 ## 启动方式
 

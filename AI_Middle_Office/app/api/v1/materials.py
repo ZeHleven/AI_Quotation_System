@@ -25,6 +25,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 LEGACY_DATA_FILE = settings.legacy_materials_file
+# Backward-compatible export for legacy imports from app.api.v1.chat.
 DATA_FILE = LEGACY_DATA_FILE
 MATERIAL_AUDIT_DIR = LEGACY_DATA_FILE.parent / "materials_audit"
 SNAPSHOT_ID_PATTERN = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{8}$")

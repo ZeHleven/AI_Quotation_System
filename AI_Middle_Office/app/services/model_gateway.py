@@ -134,6 +134,10 @@ def record_model_call(
         db.close()
 
 
+async def record_model_call_async(**kwargs: Any) -> None:
+    await asyncio.to_thread(record_model_call, **kwargs)
+
+
 async def call_glm_vision_extract(
     base64_image: str,
     mime_type: str,
@@ -149,7 +153,7 @@ async def call_glm_vision_extract(
     if "请在这里" in settings.zhipu_api_key or re.search(r"[\u4e00-\u9fa5]", settings.zhipu_api_key):
         error_message = "API Key 格式异常(包含中文字符)"
         _after_failure(provider, endpoint_type, error_message)
-        record_model_call(
+        await record_model_call_async(
             provider=provider,
             model=model,
             endpoint_type=endpoint_type,
@@ -189,7 +193,7 @@ async def call_glm_vision_extract(
             if response.status_code == 200:
                 content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
                 _after_success(provider, endpoint_type)
-                record_model_call(
+                await record_model_call_async(
                     provider=provider,
                     model=model,
                     endpoint_type=endpoint_type,
@@ -211,7 +215,7 @@ async def call_glm_vision_extract(
 
     latency_ms = (time.perf_counter() - started) * 1000
     _after_failure(provider, endpoint_type, last_error)
-    record_model_call(
+    await record_model_call_async(
         provider=provider,
         model=model,
         endpoint_type=endpoint_type,
@@ -255,7 +259,7 @@ async def post_json_via_gateway(
             _after_failure(provider, endpoint_type, error_message)
             status = "error"
 
-        record_model_call(
+        await record_model_call_async(
             provider=provider,
             model=model,
             endpoint_type=endpoint_type,
@@ -273,7 +277,7 @@ async def post_json_via_gateway(
         latency_ms = (time.perf_counter() - started) * 1000
         error_message = str(exc)
         _after_failure(provider, endpoint_type, error_message)
-        record_model_call(
+        await record_model_call_async(
             provider=provider,
             model=model,
             endpoint_type=endpoint_type,

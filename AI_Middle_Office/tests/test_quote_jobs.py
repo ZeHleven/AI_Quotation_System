@@ -33,6 +33,10 @@ def _admin_headers(client):
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
+def _response_data(response):
+    return response.json()["data"]
+
+
 def test_create_quote_job_returns_queued_status(client):
     headers = _login_headers(client)
 
@@ -43,7 +47,7 @@ def test_create_quote_job_returns_queued_status(client):
     )
 
     assert response.status_code == 202
-    body = response.json()
+    body = _response_data(response)
     assert body["job_id"]
     assert body["status"] == "queued"
     assert body["stage"] == "queued"
@@ -52,7 +56,7 @@ def test_create_quote_job_returns_queued_status(client):
 
     status_response = client.get(f"/api/v1/quote/jobs/{body['job_id']}", headers=headers)
     assert status_response.status_code == 200
-    assert status_response.json()["job_id"] == body["job_id"]
+    assert _response_data(status_response)["job_id"] == body["job_id"]
 
 
 def test_quote_job_requires_auth(client):
@@ -65,7 +69,7 @@ def test_list_and_cancel_quote_job(client):
     headers = _login_headers(client)
     create_response = client.post("/api/v1/quote/jobs", data={"message": "卧室刷漆20平米"}, headers=headers)
     assert create_response.status_code == 202
-    job_id = create_response.json()["job_id"]
+    job_id = _response_data(create_response)["job_id"]
 
     list_response = client.get("/api/v1/quote/jobs?status=queued", headers=headers)
     assert list_response.status_code == 200
@@ -73,7 +77,7 @@ def test_list_and_cancel_quote_job(client):
 
     cancel_response = client.post(f"/api/v1/quote/jobs/{job_id}/cancel", headers=headers)
     assert cancel_response.status_code == 200
-    body = cancel_response.json()
+    body = _response_data(cancel_response)
     assert body["status"] == "canceled"
     assert body["stage"] == "canceled"
     assert body["error_message"] == "任务已取消"
@@ -82,13 +86,13 @@ def test_list_and_cancel_quote_job(client):
 def test_retry_canceled_quote_job_creates_new_job(client):
     headers = _login_headers(client)
     create_response = client.post("/api/v1/quote/jobs", data={"message": "厨房吊顶5平米"}, headers=headers)
-    job_id = create_response.json()["job_id"]
+    job_id = _response_data(create_response)["job_id"]
     cancel_response = client.post(f"/api/v1/quote/jobs/{job_id}/cancel", headers=headers)
     assert cancel_response.status_code == 200
 
     retry_response = client.post(f"/api/v1/quote/jobs/{job_id}/retry", headers=headers)
     assert retry_response.status_code == 202
-    body = retry_response.json()
+    body = _response_data(retry_response)
     assert body["job_id"] != job_id
     assert body["status"] == "queued"
     assert body["events"][0]["source_job_id"] == job_id
@@ -98,7 +102,7 @@ def test_admin_can_list_all_jobs_and_mark_timeouts(client):
     user_headers = _login_headers(client)
     admin_headers = _admin_headers(client)
     create_response = client.post("/api/v1/quote/jobs", data={"message": "卫生间防水8平米"}, headers=user_headers)
-    job_id = create_response.json()["job_id"]
+    job_id = _response_data(create_response)["job_id"]
 
     db = SessionLocal()
     try:

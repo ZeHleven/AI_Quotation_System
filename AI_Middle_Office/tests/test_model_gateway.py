@@ -10,6 +10,7 @@ from app.services.model_gateway import (
     call_glm_vision_extract,
     post_json_via_gateway,
     record_model_call,
+    record_model_call_async,
     reset_circuit_breakers,
 )
 
@@ -72,6 +73,33 @@ def test_model_gateway_stats_requires_admin(client):
     )
 
     assert response.status_code == 403
+
+
+def test_record_model_call_async_uses_threadpool(monkeypatch):
+    calls = []
+
+    def fake_record_model_call(**kwargs):
+        calls.append({"recorded": kwargs})
+
+    async def fake_to_thread(fn, **kwargs):
+        calls.append({"threaded_fn": fn, "threaded_kwargs": kwargs})
+        return fn(**kwargs)
+
+    monkeypatch.setattr("app.services.model_gateway.record_model_call", fake_record_model_call)
+    monkeypatch.setattr("app.services.model_gateway.asyncio.to_thread", fake_to_thread)
+
+    asyncio.run(
+        record_model_call_async(
+            provider="zhipu",
+            model="glm-4v-flash",
+            endpoint_type="vision_extract",
+            status="success",
+        )
+    )
+
+    assert calls[0]["threaded_fn"] is fake_record_model_call
+    assert calls[0]["threaded_kwargs"]["provider"] == "zhipu"
+    assert calls[1]["recorded"]["status"] == "success"
 
 
 def test_post_json_via_gateway_uses_async_httpx(monkeypatch):

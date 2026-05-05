@@ -192,7 +192,7 @@ async def create_quote_job(
     _dispatch_and_store(job, db)
 
     data = _serialize_job(job)
-    return api_ok(data, **data)
+    return api_ok(data)
 
 
 @router.get("/quote/jobs", summary="查询报价任务列表（本人；admin 可查全队列）")
@@ -237,7 +237,7 @@ async def get_quote_job(
     db: Session = Depends(get_db),
 ):
     data = _serialize_job(_get_accessible_job(job_id, current_user, db))
-    return api_ok(data, **data)
+    return api_ok(data)
 
 
 @router.post("/quote/jobs/{job_id}/cancel", summary="取消报价任务")
@@ -249,7 +249,7 @@ async def cancel_quote_job(
     job = _get_accessible_job(job_id, current_user, db)
     if job.status == "canceled":
         data = _serialize_job(job)
-        return api_ok(data, **data)
+        return api_ok(data)
     if job.status in TERMINAL_STATUSES:
         raise HTTPException(status_code=409, detail=f"任务已结束，当前状态为 {job.status}，无法取消")
 
@@ -262,7 +262,7 @@ async def cancel_quote_job(
     db.commit()
     db.refresh(job)
     data = _serialize_job(job)
-    return api_ok(data, **data)
+    return api_ok(data)
 
 
 @router.post("/quote/jobs/{job_id}/retry", status_code=status.HTTP_202_ACCEPTED, summary="重试失败/取消/超时的报价任务")
@@ -306,7 +306,7 @@ async def retry_quote_job(
     db.refresh(retry_job)
     _dispatch_and_store(retry_job, db)
     data = _serialize_job(retry_job)
-    return api_ok(data, **data)
+    return api_ok(data)
 
 
 @router.post("/admin/quote/jobs/mark_timeouts", summary="管理员标记超时任务")

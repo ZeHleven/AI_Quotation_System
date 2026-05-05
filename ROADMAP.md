@@ -144,6 +144,21 @@
 - **统一响应**：新增 `app/core/responses.py`，`api_ok` / `api_page` 统一所有 REST 接口返回 `{"code": 200, "message": "ok", "data": ...}`
 - **前端收口**：`index.html`、`admin.html`、`app.html` 统一通过 `res.data` 读取响应，与后端格式一一对应
 
+### ~~后端重构收尾：配置语义清理 + 验收闭环~~（✅ 2026-05-06 已完成）
+- **配置清理**：`MATERIALS_FILE` 保留为兼容 alias，新增 `LEGACY_MATERIALS_FILE` 明确旧 JSON 导入语义，新增 `RAG_EVAL_REPORT_DIR` 独立控制评测报告目录
+- **运行态验收**：FastAPI `/health/ready`、Celery worker、RAG 服务均已确认 ready；旧 `rag_materials.json` 已导入数据库 70 条，RAG eval `quality_ok=True`
+- **测试闭环**：`python -m compileall app` 通过，`python -m pytest` 为 `55 passed`
+- **Git 状态**：最新后端重构收尾提交 `6e54c09 clarify legacy materials config` 已推送到 GitHub `main`
+
+### 后端补充优化路线（进行中，2026-05-06）
+> 本轮处理 P0-P3 后遗留的一致性与低阻塞风险；每完成一项后在本清单打勾，并补充验证结果。
+
+- [x] **B1 模型网关日志异步化**：为 `record_model_call` 增加 async 包装，`call_glm_vision_extract` / `post_json_via_gateway` 中的 DB 写入改为 `asyncio.to_thread`，避免 async 调用链被 MySQL commit 阻塞。验证：`pytest tests\test_model_gateway.py` 为 `5 passed`。
+- [x] **B2 运维监控阻塞治理 + httpx 统一**：`ops.py` 的 async 路由通过 `asyncio.to_thread` 调用同步探活/日志聚合；`ops_monitor.py` 中 HTTP 探活和钉钉告警从 `urllib` 统一到 `httpx`。验证：`pytest tests\test_ops_monitor.py` 为 `4 passed`。
+- [x] **B3 响应冗余字段收口**：优先清理 `quote_jobs.py` 的 `api_ok(data, **data)` 为 `api_ok(data)`；`auth.py` 顶层 token / 用户字段因 PowerShell 运维脚本兼容需求暂保留。验证：`pytest tests\test_quote_jobs.py tests\test_file_storage.py tests\test_api_response_format.py` 为 `13 passed`。
+- [x] **B4 兼容别名说明**：保留 `DATA_FILE = LEGACY_DATA_FILE` 作为 `chat.py` 旧 import 兼容 alias，并补充代码注释，避免后续误删。
+- [x] **B5 低风险项观察**：`/health/ready` 保持同步 `def` 路由；SSE 每秒短 session 轮询暂不调整，等并发压力或连接池指标证明有必要再改。
+
 ---
 
 ## 中优先级

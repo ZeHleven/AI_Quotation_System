@@ -154,3 +154,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1
 - **P2 requests → httpx**：对外 HTTP 调用全改为 `httpx.AsyncClient`，消除异步路由同步阻塞。
 - **P3 统一响应格式**：新增 `core/responses.py`，`api_ok` / `api_page` 统一 REST 接口响应结构。
 - **P3收口 前端统一读取**：前端三页面统一通过 `res.data` 读取响应。
+- **收尾配置清理**：新增 `LEGACY_MATERIALS_FILE` 和 `RAG_EVAL_REPORT_DIR`；`MATERIALS_FILE` 仅作为旧 JSON 导入兼容 alias。
+- **验收状态**：Alembic 当前为 `20260505_0003`；旧物料已入库 70 条；RAG eval `quality_ok=True`；`pytest` 为 `55 passed`。
+- **Git 状态**：最新提交 `6e54c09 clarify legacy materials config` 已推送至 GitHub `main`。

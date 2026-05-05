@@ -144,6 +144,13 @@ CELERY_RESULT_BACKEND=redis://192.168.88.128:6380/1
 
 ## 四、已完成的所有优化项
 
+### ✅ 后端重构收尾：配置语义清理 + 验收闭环（2026-05-06）
+- `MATERIALS_FILE` 保留为向后兼容 alias，新增 `LEGACY_MATERIALS_FILE` 明确旧 `rag_materials.json` 空库导入语义
+- 新增 `RAG_EVAL_REPORT_DIR`，RAG 评测报告输出不再依赖旧物料 JSON 文件路径
+- Alembic 当前版本为 `20260505_0003`；旧物料已导入数据库 70 条；RAG eval `quality_ok=True`
+- 最新验证：`python -m compileall app` 通过，`python -m pytest` 为 `55 passed`
+- 最新提交：`6e54c09 clarify legacy materials config` 已推送到 GitHub `main`
+
 ### ✅ 后端重构 P3收口：前端统一响应读取（2026-05-06）
 - 前端（`index.html`、`admin.html`、`app.html`）统一通过 `res.data` 读取响应体，不再各处散落 `res.items` / `res.result` 等字段
 - 与后端 `api_ok` / `api_page` 格式一一对应，后续 API 增改前端无需修改解析逻辑
@@ -519,3 +526,5 @@ C:\Users\12521\miniconda3\python.exe -m celery -A app.tasks.celery_app.celery_ap
 - **P2 requests → httpx**：所有对外 HTTP 调用改为 `httpx.AsyncClient`，消除异步路由中的同步阻塞。
 - **P3 统一响应格式**：新增 `core/responses.py`，`api_ok` / `api_page` 统一所有 REST 接口返回结构 `{"code": 200, "message": "ok", "data": ...}`。
 - **P3收口 前端统一读取**：前端三个页面统一通过 `res.data` 读取响应，与后端格式一一对应。
+- **收尾配置清理**：`LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅作为旧 JSON 导入源，RAG 评测报告目录独立为 `RAG_EVAL_REPORT_DIR`。
+- **验收闭环**：Alembic `20260505_0003`、物料入库 70 条、RAG eval `quality_ok=True`、`pytest 55 passed`、提交 `6e54c09` 已推送。

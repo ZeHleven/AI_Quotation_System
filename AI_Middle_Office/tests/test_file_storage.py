@@ -83,7 +83,7 @@ def test_quote_job_upload_uses_minio_when_enabled(client, monkeypatch):
             files={"file": ("drawing.png", b"fake-image", "image/png")},
         )
         assert response.status_code == 202
-        body = response.json()
+        body = response.json()["data"]
         assert body["file_object_id"]
 
         db = SessionLocal()

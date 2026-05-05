@@ -86,3 +86,18 @@ def test_auth_responses_keep_compatibility_fields(client):
     )
     assert me_body["username"] == username
     assert me_body["data"]["username"] == username
+
+
+def test_quote_job_write_responses_do_not_duplicate_payload_fields(client):
+    username = f"response_job_user_{uuid.uuid4().hex[:10]}"
+    password = "secret123"
+    client.post("/api/v1/auth/register", json={"username": username, "password": password})
+    login_body = client.post("/api/v1/auth/login", data={"username": username, "password": password}).json()
+    headers = {"Authorization": f"Bearer {login_body['access_token']}"}
+
+    create_body = client.post("/api/v1/quote/jobs", data={"message": "厨房墙砖 10 平米"}, headers=headers).json()
+
+    assert create_body["code"] == 200
+    assert "data" in create_body
+    assert "job_id" not in create_body
+    assert create_body["data"]["job_id"]

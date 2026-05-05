@@ -1,4 +1,3 @@
-import json
 import logging
 import socket
 import time
@@ -6,10 +5,9 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.error import HTTPError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
+import httpx
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
@@ -87,14 +85,12 @@ def _tcp_probe(host: str, port: int, timeout_seconds: float) -> None:
 
 
 def _http_probe(url: str, timeout_seconds: float) -> dict:
-    request = Request(url, headers={"User-Agent": "ai-middle-office-ops-probe"})
-    try:
-        with urlopen(request, timeout=timeout_seconds) as response:
-            return {"http_status": response.status}
-    except HTTPError as exc:
-        if exc.code < 500:
-            return {"http_status": exc.code}
-        raise
+    with httpx.Client(timeout=timeout_seconds, follow_redirects=False) as client:
+        response = client.get(url, headers={"User-Agent": "ai-middle-office-ops-probe"})
+    if response.status_code < 500:
+        return {"http_status": response.status_code}
+    response.raise_for_status()
+    return {"http_status": response.status_code}
 
 
 def check_database_service() -> dict:
@@ -403,14 +399,10 @@ def send_dingtalk_alerts(alerts: List[dict]) -> None:
         payload["at"] = {"isAtAll": True}
 
     try:
-        data = json.dumps(payload).encode("utf-8")
-        req = Request(
-            settings.alert_dingtalk_webhook,
-            data=data,
-            headers={"Content-Type": "application/json"},
-        )
-        with urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read())
+        with httpx.Client(timeout=10) as client:
+            response = client.post(settings.alert_dingtalk_webhook, json=payload)
+        response.raise_for_status()
+        result = response.json()
         if result.get("errcode", 0) != 0:
             _logger.warning("dingtalk_alert_rejected", extra={"response": result})
             return

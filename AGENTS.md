@@ -41,8 +41,12 @@ Clear_test/
 ├── admin.html                       # 知识库管理（仅admin）
 ├── AI_Middle_Office/
 │   ├── AGENTS.md                    # 完整项目文档
-│   ├── app/main.py                  # FastAPI 入口
-│   ├── app/api/v1/chat.py           # 核心路由：GLM-4V、N8N、sync_milvus
+│   ├── app/main.py                  # FastAPI 入口；启动副作用集中于 lifespan
+│   ├── app/dependencies.py          # 统一鉴权依赖：get_current_user / require_admin
+│   ├── app/core/responses.py        # api_ok / api_page 统一响应工具函数
+│   ├── app/api/v1/chat.py           # 旧兼容导出层（核心路由已拆分）
+│   ├── app/api/v1/quote.py          # /chat SSE + confirm_push
+│   ├── app/api/v1/materials.py      # 物料库 CRUD、快照、CSV、sync_milvus
 │   ├── app/api/v1/auth.py           # 登录接口
 │   └── .env                        # ZHIPU_API_KEY（不提交 git）
 └── rag_docker/
@@ -59,11 +63,18 @@ Clear_test/
 - 向量模型：`maidalun1020/bce-embedding-base_v1`，768维，COSINE，HNSW
 - RAG 服务: `http://192.168.88.128:8001`
 
+## 当前完成状态
+
+- 后端重构 P0-P3 已完成并推送到 `main`，最新提交：`6e54c09 clarify legacy materials config`。
+- 当前 Alembic 版本：`20260505_0003`；物料库主存储为 MySQL `materials` / `material_snapshots`。
+- `LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅保留为旧 `rag_materials.json` 自动导入源；RAG 评测报告目录由 `RAG_EVAL_REPORT_DIR` 控制。
+- 最新本地验证：`python -m compileall app` 通过，`python -m pytest` 为 `55 passed`。
+
 ## 账号
 
 | 用户名 | 密码 | 角色 |
 |--------|------|------|
-| admin | 123 | 管理员 |
+| admin | 已强制修改（初始 123）| 管理员 |
 
 ## 冷启动
 

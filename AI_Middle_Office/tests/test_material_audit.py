@@ -103,6 +103,77 @@ def test_material_save_creates_snapshot_and_rollback_restores_it(client):
     assert materials_response.json()["data"] == original
 
 
+def test_material_rollback_rejects_unsafe_snapshot_id(client):
+    _reset_material_store()
+    headers = _create_admin_headers(client)
+
+    response = client.post("/api/v1/admin/materials/rollback/../bad", headers=headers)
+
+    assert response.status_code == 404
+
+    response = client.post("/api/v1/admin/materials/rollback/20260505_bad", headers=headers)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid snapshot id"
+
+
+def test_upload_csv_extracts_new_and_changed_items(client):
+    _reset_material_store()
+    headers = _create_admin_headers(client)
+    client.post(
+        "/api/v1/admin/materials",
+        json=[
+            {
+                "id": "existing",
+                "item_name": "既有项目",
+                "unit_price": 10.0,
+                "unit": "项",
+                "notes": "旧价格",
+                "is_draft": False,
+            }
+        ],
+        headers=headers,
+    )
+    csv_text = "\n".join(
+        [
+            "施工项目,AI核准单价(元),单位,规格/工艺/材料说明",
+            "既有项目,10,项,价格一致不应提炼",
+            "既有项目,13,项,价格异动应提炼",
+            "新增项目,8,米,新增应提炼",
+            "新增项目,9,米,重复新增应去重",
+            "费用汇总,999,项,汇总行应忽略",
+            "结算合计,999,项,结算行应忽略",
+        ]
+    )
+
+    response = client.post(
+        "/api/v1/admin/upload_csv",
+        files={"file": ("history.csv", csv_text.encode("utf-8-sig"), "text/csv")},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    drafts = response.json()["data"]
+    names = [item["item_name"] for item in drafts]
+    assert names == ["既有项目 (历史异动待审)", "新增项目"]
+    assert drafts[0]["unit_price"] == 13.0
+    assert drafts[1]["notes"] == "新增应提炼"
+
+
+def test_upload_csv_rejects_renamed_excel_file(client):
+    _reset_material_store()
+    headers = _create_admin_headers(client)
+
+    response = client.post(
+        "/api/v1/admin/upload_csv",
+        files={"file": ("renamed.csv", b"PK\x03\x04not-real-csv", "text/csv")},
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert "直接修改了 Excel 文件的后缀名" in response.json()["detail"]
+
+
 def test_sync_milvus_uses_async_httpx(client, monkeypatch):
     _reset_material_store()
     headers = _create_admin_headers(client)

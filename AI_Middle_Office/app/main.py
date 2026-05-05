@@ -209,7 +209,11 @@ def health_ready():
 
 # 前端 HTML 文件所在目录（Clear_test/）
 _FRONTEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-app.mount("/static", StaticFiles(directory=os.path.join(_FRONTEND_DIR, "static")), name="static")
+_STATIC_DIR = os.path.join(_FRONTEND_DIR, "static")
+if os.path.isdir(_STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+else:
+    logger.warning("frontend_static_dir_missing", extra={"path": _STATIC_DIR})
 
 @app.get("/", include_in_schema=False)
 def serve_root():

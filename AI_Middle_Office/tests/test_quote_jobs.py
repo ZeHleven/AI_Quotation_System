@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -118,3 +119,79 @@ def test_admin_can_list_all_jobs_and_mark_timeouts(client):
     list_response = client.get("/api/v1/quote/jobs?status=timed_out", headers=admin_headers)
     assert list_response.status_code == 200
     assert any(item["job_id"] == job_id for item in list_response.json()["data"])
+
+
+def test_quote_job_events_stream_replays_terminal_events(client):
+    headers = _login_headers(client)
+    login_response = client.get("/api/v1/auth/me", headers=headers)
+    username = login_response.json()["username"]
+    job_id = str(uuid.uuid4())
+    events = [
+        {"status": "queued", "message": "报价任务已进入队列", "trace_id": "trace-events", "stage": "queued"},
+        {"status": "processing", "message": "异步报价任务已开始执行", "trace_id": "trace-events", "stage": "started"},
+        {
+            "status": "preview",
+            "message": "AI 预审数据已就绪",
+            "trace_id": "trace-events",
+            "stage": "completed",
+            "data": {"project_details": [{"project_name": "墙面刷新"}]},
+        },
+    ]
+
+    db = SessionLocal()
+    try:
+        db.add(
+            QuoteJob(
+                job_id=job_id,
+                username=username,
+                status="succeeded",
+                stage="completed",
+                trace_id="trace-events",
+                events_json=json.dumps(events, ensure_ascii=False),
+                result_json=json.dumps(events[-1]["data"], ensure_ascii=False),
+                finished_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/v1/quote/jobs/{job_id}/events", headers=headers)
+
+    assert response.status_code == 200
+    streamed = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert [event["status"] for event in streamed] == ["queued", "processing", "preview"]
+    assert streamed[-1]["data"]["project_details"][0]["project_name"] == "墙面刷新"
+
+
+def test_quote_job_events_hide_other_users_jobs(client):
+    owner_headers = _login_headers(client)
+    other_headers = _login_headers(client)
+    owner = client.get("/api/v1/auth/me", headers=owner_headers).json()["username"]
+    job_id = str(uuid.uuid4())
+
+    db = SessionLocal()
+    try:
+        db.add(
+            QuoteJob(
+                job_id=job_id,
+                username=owner,
+                status="succeeded",
+                stage="completed",
+                trace_id="trace-private",
+                events_json=json.dumps([{"status": "queued", "message": "private"}], ensure_ascii=False),
+                finished_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/v1/quote/jobs/{job_id}/events", headers=other_headers)
+
+    assert response.status_code == 200
+    assert "报价任务不存在" in response.text

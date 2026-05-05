@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user, require_admin
 from app.models.file_object import FileObject
 from app.models.user import User
@@ -96,7 +97,7 @@ async def upload_file_to_storage(
     data = _serialize_file(file_obj)
     url_data = await _build_download_url(file_obj)
     data.update(url_data)
-    return {"code": 200, "data": data}
+    return api_ok(data)
 
 
 @router.get("/files", summary="查询文件列表")
@@ -123,13 +124,12 @@ async def list_files(
         .limit(page_size)
         .all()
     )
-    return {
-        "code": 200,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "data": [_serialize_file(file_obj) for file_obj in files],
-    }
+    return api_page(
+        [_serialize_file(file_obj) for file_obj in files],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 async def _build_download_url(file_obj: FileObject, expires_seconds: Optional[int] = None) -> dict:
@@ -152,7 +152,7 @@ async def get_file_download_url(
 ):
     file_obj = _get_accessible_file(file_id, current_user, db)
     try:
-        return {"code": 200, "data": {**_serialize_file(file_obj), **await _build_download_url(file_obj, expires_seconds)}}
+        return api_ok({**_serialize_file(file_obj), **await _build_download_url(file_obj, expires_seconds)})
     except StorageDisabledError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -161,4 +161,4 @@ async def get_file_download_url(
 
 @router.get("/admin/files/storage/health", summary="查看 MinIO 文件存储状态")
 async def get_file_storage_health(current_user: User = Depends(require_admin)):
-    return {"code": 200, "data": await asyncio.to_thread(check_storage_health)}
+    return api_ok(await asyncio.to_thread(check_storage_health))

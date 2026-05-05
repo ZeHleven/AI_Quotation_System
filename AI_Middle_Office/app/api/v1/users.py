@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.responses import api_ok
 from app.dependencies import require_admin
 from app.models.user import User
 
@@ -17,10 +18,10 @@ class QuotaUpdate(BaseModel):
 @router.get("/admin/users", summary="获取所有用户列表")
 async def list_users(db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     users = db.query(User).order_by(User.id).all()
-    return {"code": 200, "data": [
+    return api_ok([
         {"id": u.id, "username": u.username, "role": u.role, "quota": u.quota, "is_active": u.is_active}
         for u in users
-    ]}
+    ])
 
 
 @router.patch("/admin/users/{user_id}/quota", summary="设置指定用户的 AI 调用额度")
@@ -37,4 +38,4 @@ async def set_user_quota(
         raise HTTPException(status_code=404, detail="用户不存在")
     user.quota = body.quota
     db.commit()
-    return {"code": 200, "message": f"已将 {user.username} 的额度设置为 {body.quota} 次"}
+    return api_ok(message=f"已将 {user.username} 的额度设置为 {body.quota} 次")

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.responses import api_ok
 from app.dependencies import require_admin
 from app.models.rag_eval_report import RagEvalReport
 from app.models.user import User
@@ -51,7 +52,7 @@ async def get_latest_rag_eval(
         .order_by(RagEvalReport.started_at.desc())
         .first()
     )
-    return {"code": 200, "data": _format_report(report) if report else None}
+    return api_ok(_format_report(report) if report else None)
 
 
 @router.get("/admin/rag_eval/history", summary="RAG 评测历史记录")
@@ -66,4 +67,4 @@ async def get_rag_eval_history(
         .limit(limit)
         .all()
     )
-    return {"code": 200, "data": [_format_report(r) for r in reports]}
+    return api_ok([_format_report(r) for r in reports])

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.core.logging import get_trace_id
+from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user, require_admin
 from app.models.file_object import FileObject
 from app.models.quote_job import QuoteJob
@@ -190,7 +191,8 @@ async def create_quote_job(
     db.refresh(job)
     _dispatch_and_store(job, db)
 
-    return _serialize_job(job)
+    data = _serialize_job(job)
+    return api_ok(data, **data)
 
 
 @router.get("/quote/jobs", summary="查询报价任务列表（本人；admin 可查全队列）")
@@ -220,13 +222,12 @@ async def list_quote_jobs(
         .limit(page_size)
         .all()
     )
-    return {
-        "code": 200,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "data": [_serialize_job(job, include_events=False, include_result=False) for job in jobs],
-    }
+    return api_page(
+        [_serialize_job(job, include_events=False, include_result=False) for job in jobs],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/quote/jobs/{job_id}", summary="查询异步报价任务状态")
@@ -235,7 +236,8 @@ async def get_quote_job(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return _serialize_job(_get_accessible_job(job_id, current_user, db))
+    data = _serialize_job(_get_accessible_job(job_id, current_user, db))
+    return api_ok(data, **data)
 
 
 @router.post("/quote/jobs/{job_id}/cancel", summary="取消报价任务")
@@ -246,7 +248,8 @@ async def cancel_quote_job(
 ):
     job = _get_accessible_job(job_id, current_user, db)
     if job.status == "canceled":
-        return _serialize_job(job)
+        data = _serialize_job(job)
+        return api_ok(data, **data)
     if job.status in TERMINAL_STATUSES:
         raise HTTPException(status_code=409, detail=f"任务已结束，当前状态为 {job.status}，无法取消")
 
@@ -258,7 +261,8 @@ async def cancel_quote_job(
     append_job_event(job, "error", "⏹️ 报价任务已取消", trace_id=job.trace_id, stage="canceled")
     db.commit()
     db.refresh(job)
-    return _serialize_job(job)
+    data = _serialize_job(job)
+    return api_ok(data, **data)
 
 
 @router.post("/quote/jobs/{job_id}/retry", status_code=status.HTTP_202_ACCEPTED, summary="重试失败/取消/超时的报价任务")
@@ -301,7 +305,8 @@ async def retry_quote_job(
     db.commit()
     db.refresh(retry_job)
     _dispatch_and_store(retry_job, db)
-    return _serialize_job(retry_job)
+    data = _serialize_job(retry_job)
+    return api_ok(data, **data)
 
 
 @router.post("/admin/quote/jobs/mark_timeouts", summary="管理员标记超时任务")
@@ -311,12 +316,8 @@ async def mark_quote_job_timeouts(
     db: Session = Depends(get_db),
 ):
     stale_jobs = mark_stale_quote_jobs(db, timeout_minutes)
-    return {
-        "code": 200,
-        "timeout_minutes": timeout_minutes,
-        "marked_count": len(stale_jobs),
-        "data": [_serialize_job(job, include_events=False, include_result=False) for job in stale_jobs],
-    }
+    data = [_serialize_job(job, include_events=False, include_result=False) for job in stale_jobs]
+    return api_ok(data, timeout_minutes=timeout_minutes, marked_count=len(stale_jobs))
 
 
 @router.get("/quote/jobs/{job_id}/events", summary="订阅异步报价任务事件")

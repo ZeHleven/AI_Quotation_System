@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.logging import get_trace_id, reset_trace_id, set_trace_id
+from app.core.responses import api_ok
 from app.dependencies import get_current_user
 from app.models.quote_history import QuoteHistory
 from app.models.user import User
@@ -194,7 +195,7 @@ async def confirm_and_push(
                 db.commit()
             except Exception:
                 pass
-            return {"message": "✅ 最终报价单已成功投递至钉钉群！"}
+            return api_ok(message="✅ 最终报价单已成功投递至钉钉群！")
         raise HTTPException(status_code=500, detail="底层推送流水线异常")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

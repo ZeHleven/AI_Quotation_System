@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
+from app.core.responses import api_ok
 from app.dependencies import require_admin
 from app.models.material import Material, MaterialSnapshot
 from app.models.user import User
@@ -242,7 +243,7 @@ async def get_materials(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    return {"code": 200, "data": load_data(db)}
+    return api_ok(load_data(db))
 
 
 @router.post("/admin/materials", summary="保存/覆盖整个物料清单")
@@ -261,7 +262,7 @@ async def save_materials(
     )
     data = [item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in items]
     save_data(data, db)
-    return {"code": 200, "message": "保存成功", "snapshot": snapshot}
+    return api_ok({"snapshot": snapshot}, message="保存成功", snapshot=snapshot)
 
 
 @router.get("/admin/materials/audit", summary="查看知识库变更快照")
@@ -271,7 +272,7 @@ async def get_material_audit(
     db: Session = Depends(get_db),
 ):
     limit = max(1, min(limit, 100))
-    return {"code": 200, "data": list_material_snapshots(limit, db)}
+    return api_ok(list_material_snapshots(limit, db))
 
 
 @router.post("/admin/materials/rollback/{snapshot_id}", summary="回滚知识库到指定快照")
@@ -288,12 +289,11 @@ async def rollback_materials(
         db=db,
     )
     save_data(snapshot["data"], db)
-    return {
-        "code": 200,
-        "message": "Rollback completed",
+    data = {
         "restored_snapshot": _snapshot_metadata(snapshot),
         "current_snapshot": current_snapshot,
     }
+    return api_ok(data, message="Rollback completed", **data)
 
 
 @router.post("/admin/upload_csv", summary="解析并提炼历史成交记录")
@@ -371,7 +371,7 @@ async def upload_csv_history(
                 "is_draft": True,
             })
 
-    return {"code": 200, "message": "解析成功", "data": new_drafts}
+    return api_ok(new_drafts, message="解析成功")
 
 
 @router.post("/admin/sync_milvus", summary="同步数据至 Milvus（委托 RAG 服务执行，零停机蓝绿切换）")
@@ -393,12 +393,15 @@ async def sync_to_milvus(
             if settings.rag_eval_enabled:
                 from app.services.rag_evaluator import trigger_eval_background
                 eval_report_id = trigger_eval_background(current_user.username, SessionLocal)
-            return {
-                "code": 200,
-                "message": response.json().get("message", "同步完成"),
+            data = {
                 "eval_triggered": settings.rag_eval_enabled,
                 "eval_report_id": eval_report_id,
             }
+            return api_ok(
+                data,
+                message=response.json().get("message", "同步完成"),
+                **data,
+            )
         detail = response.json().get("detail", f"状态码 {response.status_code}")
         raise HTTPException(status_code=500, detail=f"RAG 服务返回错误: {detail}")
     except httpx.TimeoutException:

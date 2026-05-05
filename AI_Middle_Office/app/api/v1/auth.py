@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.config import settings
+from app.core.responses import api_ok
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.core.security import get_password_hash, verify_password, create_access_token
@@ -36,7 +37,8 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return {"message": f"账号 {new_user.username} 注册成功，获得 {new_user.quota} 次查询额度！"}
+    message = f"账号 {new_user.username} 注册成功，获得 {new_user.quota} 次查询额度！"
+    return api_ok({"username": new_user.username, "quota": new_user.quota}, message=message)
 
 
 @router.post("/login", summary="账号登录获取 Token")
@@ -52,18 +54,19 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
 
     # 签发包含用户身份的 JWT
     access_token = create_access_token(data={"sub": user.username, "role": user.role})
-    return {
+    data = {
         "access_token": access_token,
         "token_type": "bearer",
         "role": user.role,
         "username": user.username,
         "must_change_password": bool(user.must_change_password),
     }
+    return api_ok(data, **data)
 
 
 @router.get("/me", summary="获取当前登录用户")
 def read_current_user(current_user: User = Depends(get_current_user)):
-    return {
+    data = {
         "id": current_user.id,
         "username": current_user.username,
         "role": current_user.role,
@@ -71,6 +74,7 @@ def read_current_user(current_user: User = Depends(get_current_user)):
         "is_active": current_user.is_active,
         "must_change_password": bool(current_user.must_change_password),
     }
+    return api_ok(data, **data)
 
 
 @router.post("/change_password", summary="修改密码")
@@ -88,4 +92,4 @@ def change_password(
     user.hashed_password = get_password_hash(req.new_password)
     user.must_change_password = False
     db.commit()
-    return {"message": "密码修改成功"}
+    return api_ok(message="密码修改成功")

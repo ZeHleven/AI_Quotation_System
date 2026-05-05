@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.responses import api_page
 from app.dependencies import get_current_user
 from app.models.quote_history import QuoteHistory
 from app.models.user import User
@@ -34,7 +35,7 @@ async def get_history(
         .all()
     )
 
-    return {"code": 200, "total": total, "data": [
+    return api_page([
         {
             "id": r.id,
             "username": r.username,
@@ -43,4 +44,4 @@ async def get_history(
             "item_count": r.item_count,
             "payload_json": r.payload_json,
         } for r in records
-    ]}
+    ], total=total, page=page, page_size=page_size)

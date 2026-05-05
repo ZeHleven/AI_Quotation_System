@@ -1,10 +1,13 @@
 import uuid
 from datetime import datetime, timezone
 
+import httpx
+
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.rag_eval_report import RagEvalReport
 from app.models.user import User
+from app.services.rag_evaluator import call_rag
 
 
 def _admin_headers(client):
@@ -111,3 +114,34 @@ def test_history_returns_list(client):
     assert body["code"] == 200
     assert isinstance(body["data"], list)
     assert len(body["data"]) >= 1
+
+
+def test_call_rag_uses_httpx_client(monkeypatch):
+    calls = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            calls.append({"client_kwargs": kwargs})
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def post(self, url, **kwargs):
+            calls[-1].update({"url": url, "post_kwargs": kwargs})
+            return httpx.Response(
+                200,
+                json={"data": [{"item_name": "直线型吊顶"}]},
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr("app.services.rag_evaluator.httpx.Client", FakeClient)
+
+    result = call_rag("http://rag.test", "吊顶", 5)
+
+    assert result == ["直线型吊顶"]
+    assert calls[0]["client_kwargs"]["timeout"] == 15
+    assert calls[0]["url"] == "http://rag.test/api/v1/retrieve"
+    assert calls[0]["post_kwargs"]["json"] == {"query": "吊顶", "top_k": 5}

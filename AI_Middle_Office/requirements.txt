@@ -4,7 +4,7 @@ sqlalchemy
 alembic
 python-dotenv
 python-multipart
-requests
+httpx
 urllib3
 PyJWT
 bcrypt

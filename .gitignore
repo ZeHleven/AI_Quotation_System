@@ -22,6 +22,7 @@ logs/
 # Runtime knowledge-base snapshots
 AI_Middle_Office/materials_audit/
 AI_Middle_Office/tests/materials_audit/
+AI_Middle_Office/tests/.test_rag_materials.json
 rag_eval_*.json
 rag_eval_reports/
 

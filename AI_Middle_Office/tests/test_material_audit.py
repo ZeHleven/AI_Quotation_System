@@ -2,6 +2,8 @@ import json
 import shutil
 import uuid
 
+import httpx
+
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
@@ -99,3 +101,40 @@ def test_material_save_creates_snapshot_and_rollback_restores_it(client):
     materials_response = client.get("/api/v1/admin/materials", headers=headers)
     assert materials_response.status_code == 200
     assert materials_response.json()["data"] == original
+
+
+def test_sync_milvus_uses_async_httpx(client, monkeypatch):
+    _reset_material_store()
+    headers = _create_admin_headers(client)
+    client.post(
+        "/api/v1/admin/materials",
+        json=[
+            {"id": "m1", "item_name": "Sync item", "unit_price": 10.0, "unit": "m2", "notes": "", "is_draft": False}
+        ],
+        headers=headers,
+    )
+    calls = []
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            calls.append({"client_kwargs": kwargs})
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, **kwargs):
+            calls[-1].update({"url": url, "post_kwargs": kwargs})
+            return httpx.Response(200, json={"message": "同步完成"})
+
+    monkeypatch.setattr("app.api.v1.materials.httpx.AsyncClient", FakeAsyncClient)
+
+    response = client.post("/api/v1/admin/sync_milvus", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["code"] == 200
+    assert calls[0]["client_kwargs"]["timeout"] == 120
+    assert calls[0]["url"].endswith("/admin/reload")
+    assert calls[0]["post_kwargs"]["json"]["materials"][0]["item_name"] == "Sync item"

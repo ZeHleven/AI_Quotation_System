@@ -1,4 +1,3 @@
-import asyncio
 import csv
 import json
 import logging
@@ -9,7 +8,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Optional
 
-import requests
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -387,12 +386,8 @@ async def sync_to_milvus(
 
     try:
         payload = {"materials": data, "secret": RELOAD_SECRET}
-        response = await asyncio.to_thread(
-            requests.post,
-            f"{RAG_SERVICE_URL}/admin/reload",
-            json=payload,
-            timeout=120,
-        )
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(f"{RAG_SERVICE_URL}/admin/reload", json=payload)
         if response.status_code == 200:
             eval_report_id = None
             if settings.rag_eval_enabled:
@@ -406,7 +401,7 @@ async def sync_to_milvus(
             }
         detail = response.json().get("detail", f"状态码 {response.status_code}")
         raise HTTPException(status_code=500, detail=f"RAG 服务返回错误: {detail}")
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="RAG 服务超时，请检查 CentOS 容器状态")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

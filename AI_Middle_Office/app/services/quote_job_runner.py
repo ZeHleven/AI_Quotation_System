@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, Optional, Tuple
 
-import requests
+import httpx
 
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -204,7 +204,7 @@ async def _iter_quote_events(
             timeout=180,
             username=username,
         )
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         logger.exception("quote_request_timeout", extra={"username": username, "event": "quote_request_timeout"})
         yield (
             "error",

@@ -5,7 +5,7 @@ import logging
 import uuid
 from typing import Optional
 
-import requests
+import httpx
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -136,7 +136,7 @@ async def process_chat(
                 logger.error("n8n_workflow_failed", extra={"username": current_user.username, "event": "n8n_workflow_failed", "status_code": response.status_code})
                 yield _sse_event("error", f"❌ [n8n Workflow] 中断: 底层算价引擎抛出异常 -> {error_detail}", trace_id=request_trace_id)
 
-        except requests.exceptions.Timeout:
+        except httpx.TimeoutException:
             logger.exception("quote_request_timeout", extra={"username": current_user.username, "event": "quote_request_timeout"})
             yield _sse_event("error", "❌ [n8n Workflow] 严重超时：请检查 Dify 模型是否拥堵挂起", trace_id=request_trace_id)
         except Exception as e:

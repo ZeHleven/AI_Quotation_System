@@ -1,9 +1,17 @@
 import uuid
+import asyncio
+
+import httpx
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.user import User
-from app.services.model_gateway import record_model_call, reset_circuit_breakers
+from app.services.model_gateway import (
+    call_glm_vision_extract,
+    post_json_via_gateway,
+    record_model_call,
+    reset_circuit_breakers,
+)
 
 
 def _admin_headers(client):
@@ -64,3 +72,81 @@ def test_model_gateway_stats_requires_admin(client):
     )
 
     assert response.status_code == 403
+
+
+def test_post_json_via_gateway_uses_async_httpx(monkeypatch):
+    reset_circuit_breakers()
+    calls = []
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            self.client_kwargs = kwargs
+            calls.append({"client_kwargs": kwargs})
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, **kwargs):
+            calls[-1].update({"url": url, "post_kwargs": kwargs})
+            return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr("app.services.model_gateway.httpx.AsyncClient", FakeAsyncClient)
+
+    response = asyncio.run(
+        post_json_via_gateway(
+            provider="n8n",
+            model="dify-deepseek",
+            endpoint_type="quote_calc",
+            url="http://example.test/webhook",
+            json_payload={"hello": "world"},
+            headers={"X-Test": "1"},
+            timeout=12,
+            username="tester",
+            trace_id="trace-httpx",
+        )
+    )
+
+    assert response.status_code == 200
+    assert calls[0]["client_kwargs"]["timeout"] == 12
+    assert calls[0]["url"] == "http://example.test/webhook"
+    assert calls[0]["post_kwargs"]["json"] == {"hello": "world"}
+    assert calls[0]["post_kwargs"]["headers"] == {"X-Test": "1"}
+
+
+def test_call_glm_vision_extract_uses_async_httpx_without_env_proxy(monkeypatch):
+    reset_circuit_breakers()
+    calls = []
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            self.client_kwargs = kwargs
+            calls.append({"client_kwargs": kwargs})
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, **kwargs):
+            calls[-1].update({"url": url, "post_kwargs": kwargs})
+            return httpx.Response(200, json={"choices": [{"message": {"content": "墙面刷新，20平米"}}]})
+
+    monkeypatch.setattr("app.services.model_gateway.httpx.AsyncClient", FakeAsyncClient)
+
+    result = asyncio.run(
+        call_glm_vision_extract(
+            "ZmFrZQ==",
+            "image/png",
+            username="tester",
+            trace_id="trace-vision",
+        )
+    )
+
+    assert result == "墙面刷新，20平米"
+    assert calls[0]["client_kwargs"]["trust_env"] is False
+    assert calls[0]["client_kwargs"]["verify"] is False
+    assert calls[0]["post_kwargs"]["headers"]["Authorization"].startswith("Bearer ")

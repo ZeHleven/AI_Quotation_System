@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
+import httpx
 
 from app.core.config import settings
 
@@ -52,15 +52,12 @@ _current_report_id: int | None = None
 
 def call_rag(url: str, query: str, top_k: int) -> list | None:
     try:
-        resp = requests.post(
-            f"{url}/api/v1/retrieve",
-            json={"query": query, "top_k": top_k},
-            timeout=15,
-        )
+        with httpx.Client(timeout=15) as client:
+            resp = client.post(f"{url}/api/v1/retrieve", json={"query": query, "top_k": top_k})
         resp.raise_for_status()
         data = resp.json().get("data", [])
         return [item.get("item_name", "") for item in data]
-    except requests.exceptions.ConnectionError:
+    except httpx.ConnectError:
         return None
     except Exception:
         return []

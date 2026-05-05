@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-import requests
+import httpx
 
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -179,15 +179,12 @@ async def call_glm_vision_extract(
     started = time.perf_counter()
     for delay in [1, 2]:
         try:
-            response = await asyncio.to_thread(
-                requests.post,
-                settings.glm_vision_url,
-                headers=headers,
-                json=payload,
+            async with httpx.AsyncClient(
                 timeout=settings.model_gateway_timeout_seconds,
-                proxies={"http": None, "https": None},
+                trust_env=False,
                 verify=False,
-            )
+            ) as client:
+                response = await client.post(settings.glm_vision_url, headers=headers, json=payload)
             latency_ms = (time.perf_counter() - started) * 1000
             if response.status_code == 200:
                 content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -239,18 +236,13 @@ async def post_json_via_gateway(
     timeout: int,
     username: Optional[str] = None,
     trace_id: Optional[str] = None,
-) -> requests.Response:
+) -> httpx.Response:
     _before_call(provider, endpoint_type)
     started = time.perf_counter()
     input_chars = len(str(json_payload))
     try:
-        response = await asyncio.to_thread(
-            requests.post,
-            url,
-            json=json_payload,
-            headers=headers,
-            timeout=timeout,
-        )
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(url, json=json_payload, headers=headers)
         latency_ms = (time.perf_counter() - started) * 1000
         output_chars = len(response.text or "")
 

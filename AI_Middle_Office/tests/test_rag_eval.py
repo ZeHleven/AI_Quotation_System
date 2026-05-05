@@ -1,5 +1,8 @@
+import shutil
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 
@@ -145,3 +148,61 @@ def test_call_rag_uses_httpx_client(monkeypatch):
     assert calls[0]["client_kwargs"]["timeout"] == 15
     assert calls[0]["url"] == "http://rag.test/api/v1/retrieve"
     assert calls[0]["post_kwargs"]["json"] == {"query": "吊顶", "top_k": 5}
+
+
+def test_eval_thread_writes_report_to_configured_dir(monkeypatch):
+    from app.services import rag_evaluator
+
+    report_dir = Path(__file__).resolve().parent / ".test_rag_eval_reports_thread"
+    if report_dir.exists():
+        shutil.rmtree(report_dir)
+
+    report_data = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "url": "http://rag.test",
+        "top_k": 5,
+        "case_count": 1,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "by_level": {1: {"hit_rate": 1.0, "mrr": 1.0}},
+        "cases": [],
+    }
+    monkeypatch.setattr(rag_evaluator, "_run_eval_core", lambda rag_url, top_k: report_data)
+    monkeypatch.setattr(
+        rag_evaluator,
+        "settings",
+        SimpleNamespace(
+            rag_service_url="http://rag.test",
+            rag_eval_top_k=5,
+            rag_eval_report_dir=report_dir,
+        ),
+    )
+
+    db = SessionLocal()
+    try:
+        report = RagEvalReport(
+            triggered_by="admin",
+            status="running",
+            started_at=datetime.now(timezone.utc),
+            top_k=5,
+        )
+        db.add(report)
+        db.commit()
+        db.refresh(report)
+        report_id = report.id
+    finally:
+        db.close()
+
+    rag_evaluator._run_eval_thread(report_id, SessionLocal)
+
+    db = SessionLocal()
+    try:
+        saved = db.query(RagEvalReport).filter(RagEvalReport.id == report_id).first()
+        assert saved.status == "completed"
+        report_path = Path(saved.report_path)
+        assert report_path.parent == report_dir
+        assert report_path.exists()
+    finally:
+        db.close()
+        if report_dir.exists():
+            shutil.rmtree(report_dir)

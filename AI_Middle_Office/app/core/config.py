@@ -115,7 +115,19 @@ class Settings:
         "192.168.88.128,192.168.0.0/16,192.168.88.0/24,localhost,127.0.0.1,127.0.0.0/8",
     )
     allowed_origins: List[str] = field(default_factory=lambda: _env_list("CORS_ALLOW_ORIGINS", "*"))
-    materials_file: Path = field(default_factory=lambda: Path(_env("MATERIALS_FILE", str(BASE_DIR / "rag_materials.json"))))
+    legacy_materials_file: Path = field(
+        default_factory=lambda: Path(
+            _env("LEGACY_MATERIALS_FILE", _env("MATERIALS_FILE", str(BASE_DIR / "rag_materials.json")))
+        )
+    )
+    rag_eval_report_dir: Path = field(
+        default_factory=lambda: Path(_env("RAG_EVAL_REPORT_DIR", str(BASE_DIR / "rag_eval_reports")))
+    )
+
+    @property
+    def materials_file(self) -> Path:
+        """Backward-compatible alias for the legacy JSON import file."""
+        return self.legacy_materials_file
 
     def __post_init__(self) -> None:
         app_env = self.app_env.lower()

@@ -20,6 +20,7 @@ os.environ["RAG_SERVICE_URL"] = "http://127.0.0.1:8001"
 os.environ["N8N_WEBHOOK_URL_CALC"] = "http://127.0.0.1:5678/webhook/budget-calc"
 os.environ["N8N_WEBHOOK_URL_PUSH"] = "http://127.0.0.1:5678/webhook/budget-push"
 os.environ["MATERIALS_FILE"] = str(TEST_DIR / ".test_rag_materials.json")
+os.environ["RAG_EVAL_REPORT_DIR"] = str(TEST_DIR / ".test_rag_eval_reports")
 os.environ["TASK_QUEUE_MODE"] = "disabled"
 os.environ["CELERY_BROKER_URL"] = "redis://127.0.0.1:6379/0"
 os.environ["CELERY_RESULT_BACKEND"] = "redis://127.0.0.1:6379/1"

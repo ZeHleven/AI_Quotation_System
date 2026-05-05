@@ -9,6 +9,7 @@ Route implementations now live in focused modules:
 
 from app.api.v1.materials import (
     DATA_FILE,
+    LEGACY_DATA_FILE,
     MATERIAL_AUDIT_DIR,
     SNAPSHOT_ID_PATTERN,
     MaterialItem,
@@ -44,6 +45,7 @@ RELOAD_SECRET = settings.reload_secret
 
 __all__ = [
     "DATA_FILE",
+    "LEGACY_DATA_FILE",
     "MATERIAL_AUDIT_DIR",
     "SNAPSHOT_ID_PATTERN",
     "MaterialItem",

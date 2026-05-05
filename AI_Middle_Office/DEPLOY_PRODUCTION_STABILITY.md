@@ -94,7 +94,7 @@ The backup includes:
 
 - MySQL dump when `MYSQL_*` variables are configured in `/opt/rag_service/.env`
 - quote-MinIO volume
-- `rag_materials.json`
+- `rag_materials.json` when retained as the legacy JSON import source
 - Milvus etcd/minio/milvus volumes
 - n8n workflow export when the n8n container is reachable
 - `SHA256SUMS` manifest
@@ -126,7 +126,9 @@ cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test
 C:\Users\12521\miniconda3\python.exe .\eval_rag.py --url http://192.168.88.128:8001 --top_k 5 --cases .\rag_regression_cases.json --min_hit_rate 0.85 --min_mrr 0.60
 ```
 
-Reports are written to:
+FastAPI background RAG eval reports are written to `RAG_EVAL_REPORT_DIR`
+(default: `AI_Middle_Office/rag_eval_reports/`). The standalone script writes
+to the current working directory unless its output path is changed.
 
 ```text
 rag_eval_reports/

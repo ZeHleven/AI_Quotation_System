@@ -24,8 +24,9 @@ from app.models.user import User
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-DATA_FILE = settings.materials_file
-MATERIAL_AUDIT_DIR = DATA_FILE.parent / "materials_audit"
+LEGACY_DATA_FILE = settings.legacy_materials_file
+DATA_FILE = LEGACY_DATA_FILE
+MATERIAL_AUDIT_DIR = LEGACY_DATA_FILE.parent / "materials_audit"
 SNAPSHOT_ID_PATTERN = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{8}$")
 RAG_SERVICE_URL = settings.rag_service_url
 RELOAD_SECRET = settings.reload_secret
@@ -41,9 +42,9 @@ class MaterialItem(BaseModel):
 
 
 def _load_legacy_file_data() -> list[dict]:
-    if not DATA_FILE.exists():
+    if not LEGACY_DATA_FILE.exists():
         return []
-    with DATA_FILE.open("r", encoding="utf-8") as f:
+    with LEGACY_DATA_FILE.open("r", encoding="utf-8") as f:
         data = json.load(f)
     return data if isinstance(data, list) else []
 
@@ -105,10 +106,10 @@ def _ensure_legacy_file_imported(db: Session) -> None:
         db.add(Material(**item))
     try:
         db.commit()
-        logger.info("materials_legacy_json_imported", extra={"count": len(legacy_data), "path": str(DATA_FILE)})
+        logger.info("materials_legacy_json_imported", extra={"count": len(legacy_data), "path": str(LEGACY_DATA_FILE)})
     except Exception:
         db.rollback()
-        logger.exception("materials_legacy_json_import_failed", extra={"path": str(DATA_FILE)})
+        logger.exception("materials_legacy_json_import_failed", extra={"path": str(LEGACY_DATA_FILE)})
         raise
 
 

@@ -94,3 +94,8 @@ cd /opt/rag_service && docker compose up -d
 - 破坏性操作、强制推送、清空数据库、删除虚拟机残留、远程 CentOS 命令必须先向用户申请许可。
 - 后续提交应排除明显外来目录，例如 `planning-with-files-master/`、`superpowers-main/`、`andrej-karpathy-skills-main/`，除非用户明确要求纳入。
 - 代码改动优先保持现有 FastAPI + SQLAlchemy + Vue CDN + Element Plus 的结构，不引入额外前端构建链。
+
+## Backend Refactor Notes
+
+- Main material storage is MySQL `materials` / `material_snapshots`; `LEGACY_MATERIALS_FILE` and the older `MATERIALS_FILE` env var are only used to import an existing `rag_materials.json` into an empty database.
+- RAG eval report output is controlled by `RAG_EVAL_REPORT_DIR` and no longer depends on the legacy material JSON file path.

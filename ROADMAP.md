@@ -135,6 +135,7 @@
 ### ~~后端重构 P1：confirm_push schema + 物料库入库~~（✅ 2026-05-06 已完成）
 - **Pydantic schema**：新增 `app/schemas/quote.py`，`confirm_push` 请求体字段类型与必填约束明确，消除裸 `dict` 传递
 - **物料库入库**：新增 `app/models/material.py`，知识库条目持久化至 MySQL `materials` 表
+- **旧 JSON 兼容**：`LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅作为旧 `rag_materials.json` 自动导入源保留，RAG 评测报告目录独立为 `RAG_EVAL_REPORT_DIR`
 
 ### ~~后端重构 P2：requests → httpx~~（✅ 2026-05-06 已完成）
 - 所有对外 HTTP 调用（`quote.py`、`materials.py`、`rag_eval.py` 等）改为 `httpx.AsyncClient`，消除异步路由中的同步阻塞

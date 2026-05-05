@@ -7,7 +7,6 @@ import json
 import threading
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
 import httpx
 
@@ -125,7 +124,7 @@ def _run_eval_thread(report_id: int, db_session_factory) -> None:
     try:
         report_data = _run_eval_core(settings.rag_service_url, settings.rag_eval_top_k)
 
-        output_dir = Path(settings.materials_file).parent / "rag_eval_reports"
+        output_dir = settings.rag_eval_report_dir
         output_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_path = output_dir / f"rag_eval_{timestamp}.json"

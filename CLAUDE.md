@@ -123,3 +123,19 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1
 - 第 20 步一键启动与自愈编排已落地：CentOS `ens33` 自动 DHCP，Docker 服务自恢复，Windows `start_watchdog.ps1` 开机后台重试，`start_all.ps1` 启动前等待 MySQL/Redis/RAG/n8n/MinIO，再启动 Celery 和 FastAPI。
 - 第 21 步运维监控与告警已落地：新增 `/api/v1/admin/ops/dashboard`，管理员页面顶部可查看基础服务探活、异常日志聚合和卡住任务提醒。
 - 第 22 步数据库迁移治理已落地：新增 Alembic 迁移体系、基线迁移、`upgrade_database.ps1` 和启动前自动迁移，后续表结构变更不再继续堆到 `main.py`。
+
+# 2026-05-02 升级补充
+
+- P2 报价一致性治理已落地：`admin.html` 报价任务队列新增"详情"弹窗，含事件流、AI 结果、完整消息三 tab，可精准定位报价差异根因。
+- P4 知识库发布流程增强已落地：热更新后自动触发 RAG 评测，结果写入 `rag_eval_reports` 表，知识库面板内嵌质量报告，质量下滑时橙色警告。
+
+# 2026-05-05 升级补充（企业基线四步 + 安全治理）
+
+- **P0 安全止血**：明文密钥全部替换，`WEBHOOK_SECRET`/`RELOAD_SECRET` 已轮换，n8n 密钥文件已解除 Git 追踪。
+- **P1 n8n 黑盒消除**：两条 workflow 脱敏后纳入 `n8n_workflows/` 版本管理。
+- **P3 主动告警**：`ops_monitor.py` 新增钉钉告警推送，去重限流，配置项 `ALERT_DINGTALK_WEBHOOK`。
+- **F1 前端步骤动态适配**：图片/文字输入显示不同进度步骤。
+- **E1 MySQL 迁移**：FastAPI 数据库从 SQLite 全面切换至 CentOS MySQL `ai_quotation`。
+- **E2 HTTPS**：Caddy 反向代理，`tls internal` 自签 CA，访问入口改为 `https://<局域网IP>/`。
+- **E3 定时备份**：`backup_all.ps1` 每日 03:00 备份，滚动保留 7 天。
+- **E4 登录限流**：`slowapi` 集成，每 IP 每 5 分钟最多 10 次登录，Redis 不可用时内存降级。

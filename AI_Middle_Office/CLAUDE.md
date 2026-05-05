@@ -1,5 +1,5 @@
 # AI 智能报价中台 — 项目上下文文档
-> 最后更新：2026-04-28
+> 最后更新：2026-05-05
 
 ---
 
@@ -128,6 +128,53 @@ CELERY_RESULT_BACKEND=redis://192.168.88.128:6380/1
 ---
 
 ## 四、已完成的所有优化项
+
+### ✅ E4. 登录接口限流（2026-05-02）
+- 新增 `app/core/rate_limit.py`，集成 `slowapi`，复用 Redis 作分布式存储
+- 登录接口限制：每 IP 每 5 分钟最多 10 次，超限返回 HTTP 429
+- Redis 不可用时自动降级为内存存储，不影响正常使用
+- 新增配置项 `LOGIN_RATE_LIMIT`，`.env.example` 已补充示例
+
+### ✅ E3. 定时自动备份（2026-05-02）
+- 新增 `AI_Middle_Office/backup_all.ps1`：备份 MySQL dump、知识库 JSON、材料审计快照，滚动保留 7 天
+- 新增 `AI_Middle_Office/backup_mysql.py`：Python 封装的 MySQL 备份工具
+- 任务计划程序 `AI_MiddleOffice_Backup` 每天 03:00 自动执行
+
+### ✅ E2. HTTPS 接入（Caddy 反向代理）（2026-05-02）
+- Windows 端部署 Caddy，`tls internal` 自签 CA，80→443 自动跳转
+- FastAPI 仍运行于 `localhost:9000`，Caddy 反向代理对外暴露 HTTPS
+- `CORS_ALLOW_ORIGINS` 已收紧为实际 HTTPS 访问来源
+- `start_all.ps1` 启动前确认 Caddy 服务已运行
+
+### ✅ E1. SQLite → MySQL 数据库迁移（2026-05-02）
+- FastAPI 用户表、报价历史、任务队列全部迁移至 CentOS MySQL（`ai_quotation` 库）
+- `.env` `DATABASE_URL` 改为 `mysql+pymysql://ai_app@192.168.88.128:5455/ai_quotation`
+- `AUTO_CREATE_TABLES=false`、`STARTUP_COMPAT_MIGRATIONS=false`，由 Alembic 全权管理表结构
+- `/health/ready` → `database: mysql, ok` 验证通过
+
+### ✅ F1. 前端进度步骤动态适配（2026-05-02）
+- `index.html` 新增 `STAGES_WITH_IMAGE` 和 `STAGES_TEXT_ONLY` 两套步骤常量
+- 上传图片时显示 `🖼 图像识别 → 📚 知识库检索 → ✏️ 生成报价`
+- 纯文字输入时显示 `📝 需求解析 → 📚 知识库检索 → ✏️ 生成报价`
+- 后端 SSE 结构和 `currentStage` 计数逻辑不变
+
+### ✅ P3. 主动运维告警（2026-05-02）
+- `ops_monitor.py` 新增告警推送逻辑，复用钉钉 Webhook 推送告警消息
+- 触发条件：Celery Worker 离线、RAG degraded、MySQL/Redis 断连、任务卡住超阈值、连续错误日志
+- 去重机制：同一问题 30 分钟内只发一次；限流：任意 5 分钟内最多 3 条
+- 新增配置项 `ALERT_DINGTALK_WEBHOOK`，`.env.example` 已补充示例
+
+### ✅ P1. n8n 工作流纳入 Git 版本管理（2026-05-01）
+- 从 n8n API 导出两条 workflow：`budget_calc.json`、`budget_push.json`
+- 脱敏处理：去除 credential ID、DingTalk 密钥、Dify API key、webhookId 等
+- 保存至 `n8n_workflows/`，附 `README.md` 含脱敏规则与凭据恢复指南
+- `n8n_import.json`、`n8n_workflows_backup.json` 已解除 Git 追踪，加入 `.gitignore`
+
+### ✅ P0. 安全止血（2026-05-01）
+- `CLAUDE.md` 和 `AI_Middle_Office/CLAUDE.md` 中所有明文密钥替换为占位符
+- `WEBHOOK_SECRET` 和 `RELOAD_SECRET` 已轮换，旧值废弃
+- CentOS `docker-compose.yml` 中 `RELOAD_SECRET` 已更新，`rag-api-service` 已用新密钥重启
+- 完整报价流程端到端测试通过（GLM-4V → N8N → RAG → Dify → 钉钉推送）
 
 ### ✅ P2 报价一致性治理（2026-05-02）
 - `admin.html`（Codex 路径）：报价任务队列管理面板新增"详情"按钮
@@ -355,7 +402,7 @@ C:\Users\12521\miniconda3\python.exe -m celery -A app.tasks.celery_app.celery_ap
 | 自动化 | N8N · Dify · 钉钉 Webhook |
 | 基础设施 | Docker · Docker Compose · CentOS 7.9 (80GB) · Miniconda · MinIO · etcd |
 | 前端 | Vue.js 3 (CDN) · Element Plus · Axios |
-| 数据库 | MySQL (N8N业务数据) · SQLite (FastAPI用户表 + 报价历史) |
+| 数据库 | MySQL (N8N业务数据 + FastAPI主数据库，E1已迁移) · SQLite 仅测试环境 |
 | 自启 | Windows 任务计划程序 (AI_MiddleOffice 任务) |
 
 ---
@@ -363,7 +410,7 @@ C:\Users\12521\miniconda3\python.exe -m celery -A app.tasks.celery_app.celery_ap
 ## 九、系统使用说明
 
 ### 9.1 访问入口
-浏览器打开：`http://localhost:9000/`
+浏览器打开：`https://<局域网IP>/`（E2 已接入 Caddy HTTPS，HTTP:9000 仍作为内部入口）
 
 ### 9.2 登录
 - 登录成功后 Token 保存在 `localStorage`，刷新不需重新登录
@@ -405,3 +452,14 @@ C:\Users\12521\miniconda3\python.exe -m celery -A app.tasks.celery_app.celery_ap
 # 2026-05-02 升级补充
 
 - 第 P4 步知识库发布流程增强已落地：热更新至 Milvus 成功后自动触发 RAG 检索评测（后台线程），结果写入 `rag_eval_reports` 表；新增接口 `GET /api/v1/admin/rag_eval/latest` 和 `/history`；`admin.html` 知识库面板内嵌评测结果展示区，质量下滑时显示橙色警告；阈值通过 `RAG_EVAL_WARN_HIT_RATE`（默认 0.70）和 `RAG_EVAL_WARN_MRR`（默认 0.50）配置。
+
+# 2026-05-05 升级补充（企业基线四步 + 安全治理）
+
+- **P0 安全止血**：明文密钥全部替换为占位符，`WEBHOOK_SECRET`/`RELOAD_SECRET` 已轮换，n8n 密钥文件解除 Git 追踪。
+- **P1 n8n 黑盒消除**：两条 workflow 脱敏后纳入 `n8n_workflows/`，完整凭据恢复指南见 `n8n_workflows/README.md`。
+- **P3 主动运维告警**：`ops_monitor.py` 新增钉钉告警推送，去重 30 分钟，限流 5 分钟 3 条，配置项 `ALERT_DINGTALK_WEBHOOK`。
+- **F1 前端进度步骤动态适配**：`index.html` 图片/文字两套步骤常量，不再误显"图像识别"步骤。
+- **E1 SQLite → MySQL 迁移**：FastAPI 数据库全面切换至 CentOS MySQL `ai_quotation`，Alembic 全权管理表结构。
+- **E2 HTTPS 接入**：Windows 端 Caddy 反向代理，`tls internal` 自签 CA，CORS 已收紧。
+- **E3 定时备份**：`backup_all.ps1` 每日 03:00 备份 MySQL + 知识库 + 审计快照，滚动保留 7 天。
+- **E4 登录限流**：`slowapi` 集成，每 IP 每 5 分钟最多 10 次登录尝试，Redis 不可用时内存降级。

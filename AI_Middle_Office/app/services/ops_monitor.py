@@ -1,4 +1,5 @@
 import logging
+import re
 import socket
 import time
 from collections import deque
@@ -30,6 +31,8 @@ ERROR_LOG_KEYWORDS = (
     "quote_job_crashed",
     "failed",
 )
+JSON_TS_RE = re.compile(r'"ts":\s*"([^"]+)"')
+CELERY_TS_RE = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+:")
 
 
 def _utcnow() -> datetime:
@@ -265,6 +268,40 @@ def _tail_lines(path: Path, max_lines: int) -> tuple[int, list[str]]:
         return 1, []
 
 
+def _to_local_naive(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone().replace(tzinfo=None)
+
+
+def _parse_log_timestamp(line: str) -> Optional[datetime]:
+    json_match = JSON_TS_RE.search(line)
+    if json_match:
+        raw = json_match.group(1).replace("Z", "+00:00")
+        if len(raw) >= 5 and raw[-5] in {"+", "-"} and raw[-3] != ":":
+            raw = f"{raw[:-2]}:{raw[-2:]}"
+        try:
+            return _to_local_naive(datetime.fromisoformat(raw))
+        except ValueError:
+            return None
+
+    celery_match = CELERY_TS_RE.search(line)
+    if celery_match:
+        try:
+            return datetime.strptime(celery_match.group(1), "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+
+    return None
+
+
+def _ops_log_cutoff() -> Optional[datetime]:
+    lookback_minutes = max(settings.ops_log_lookback_minutes, 0)
+    if not lookback_minutes:
+        return None
+    return datetime.now() - timedelta(minutes=lookback_minutes)
+
+
 def collect_error_logs(limit: int = 50) -> dict:
     if not LOG_DIR.exists():
         return {"log_dir": str(LOG_DIR), "total_matches": 0, "items": []}
@@ -276,16 +313,24 @@ def collect_error_logs(limit: int = 50) -> dict:
     )[: settings.ops_log_max_files]
 
     matches = []
+    cutoff = _ops_log_cutoff()
     for path in log_files:
         base_line_no, lines = _tail_lines(path, settings.ops_log_scan_lines)
+        last_seen_at = None
         for offset, line in enumerate(lines):
+            parsed_at = _parse_log_timestamp(line)
+            if parsed_at:
+                last_seen_at = parsed_at
             if not any(keyword in line for keyword in ERROR_LOG_KEYWORDS):
+                continue
+            if cutoff and last_seen_at and last_seen_at < cutoff:
                 continue
             matches.append(
                 {
                     "file": path.name,
                     "line": base_line_no + offset,
                     "message": line.strip()[:800],
+                    "matched_at": last_seen_at.strftime("%Y-%m-%d %H:%M:%S") if last_seen_at else None,
                     "modified_at": datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
                 }
             )

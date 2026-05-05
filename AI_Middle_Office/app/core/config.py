@@ -83,6 +83,7 @@ class Settings:
     ops_stuck_job_minutes: int = _env_int("OPS_STUCK_JOB_MINUTES", 30)
     ops_log_scan_lines: int = _env_int("OPS_LOG_SCAN_LINES", 800)
     ops_log_max_files: int = _env_int("OPS_LOG_MAX_FILES", 6)
+    ops_log_lookback_minutes: int = _env_int("OPS_LOG_LOOKBACK_MINUTES", 180)
     alert_dingtalk_webhook: str = _env("ALERT_DINGTALK_WEBHOOK", "")
     alert_dedup_minutes: int = _env_int("ALERT_DEDUP_MINUTES", 30)
     alert_rate_limit_count: int = _env_int("ALERT_RATE_LIMIT_COUNT", 3)

@@ -17,6 +17,14 @@ $ErrorActionPreference = "Stop"
 if ($PSVersionTable.PSVersion.Major -ge 7) {
     $PSNativeCommandUseErrorActionPreference = $false
 }
+$processPath = [Environment]::GetEnvironmentVariable("Path", "Process")
+if (-not $processPath) {
+    $processPath = [Environment]::GetEnvironmentVariable("PATH", "Process")
+}
+[Environment]::SetEnvironmentVariable("PATH", $null, "Process")
+if ($processPath) {
+    [Environment]::SetEnvironmentVariable("Path", $processPath, "Process")
+}
 
 $WorkDir = $PSScriptRoot
 $LogDir = Join-Path $WorkDir "logs"

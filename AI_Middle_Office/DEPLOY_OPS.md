@@ -31,6 +31,12 @@ OPS_PROBE_TIMEOUT_SECONDS=2
 OPS_STUCK_JOB_MINUTES=30
 OPS_LOG_SCAN_LINES=800
 OPS_LOG_MAX_FILES=6
+OPS_LOG_LOOKBACK_MINUTES=180
+
+# 2026-05-05 Ops Alert Cleanup
+# /health/ready and check_task_queue() currently report Redis broker and Celery worker as available.
+# OPS_LOG_LOOKBACK_MINUTES limits abnormal log aggregation to recent timestamped entries.
+# Celery worker ping retries once after an empty reply to reduce transient network false positives.
 ```
 
 ## 判断方式

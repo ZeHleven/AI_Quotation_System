@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any, Dict
 
 from app.core.config import settings
@@ -57,7 +58,21 @@ def check_task_queue() -> Dict[str, Any]:
             status.update({"ok": False, "worker": "celery_not_installed"})
             return status
 
-        replies = celery_app.control.ping(timeout=settings.queue_health_timeout_seconds)
+        replies = []
+        last_ping_error = None
+        for attempt in range(2):
+            try:
+                replies = celery_app.control.ping(timeout=settings.queue_health_timeout_seconds)
+                last_ping_error = None
+            except Exception as exc:
+                last_ping_error = exc
+                replies = []
+            if replies:
+                break
+            if attempt == 0:
+                time.sleep(min(settings.queue_health_timeout_seconds, 0.2))
+        if last_ping_error:
+            raise last_ping_error
         status["worker"] = "ok" if replies else "no_reply"
         status["worker_count"] = len(replies)
         if not replies:

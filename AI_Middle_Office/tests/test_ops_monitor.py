@@ -1,5 +1,7 @@
+import shutil
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -93,6 +95,45 @@ def test_ops_http_probe_uses_httpx_client(monkeypatch):
     assert result == {"http_status": 204}
     assert calls[0]["client_kwargs"] == {"timeout": 0.5, "follow_redirects": False}
     assert calls[0]["kwargs"]["headers"]["User-Agent"] == "ai-middle-office-ops-probe"
+
+
+def test_collect_error_logs_ignores_stale_timestamped_errors(monkeypatch):
+    log_dir = Path(__file__).resolve().parent / ".test_ops_logs"
+    if log_dir.exists():
+        shutil.rmtree(log_dir)
+    log_dir.mkdir()
+    try:
+        now = datetime.now()
+        old_at = now - timedelta(days=1)
+        recent_at = now - timedelta(minutes=5)
+        log_file = log_dir / "celery_worker_test.log"
+        log_file.write_text(
+            "\n".join(
+                [
+                    f"[{old_at:%Y-%m-%d %H:%M:%S},000: ERROR/MainProcess] Cannot connect to redis://broker:6379/0",
+                    f"[{recent_at:%Y-%m-%d %H:%M:%S},000: ERROR/MainProcess] quote_job_crashed",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(ops_monitor, "LOG_DIR", log_dir)
+        monkeypatch.setattr(
+            ops_monitor,
+            "settings",
+            SimpleNamespace(
+                ops_log_max_files=2,
+                ops_log_scan_lines=50,
+                ops_log_lookback_minutes=180,
+            ),
+        )
+
+        result = ops_monitor.collect_error_logs(limit=10)
+
+        assert result["total_matches"] == 1
+        assert "quote_job_crashed" in result["items"][0]["message"]
+        assert "Cannot connect to redis" not in result["items"][0]["message"]
+    finally:
+        shutil.rmtree(log_dir, ignore_errors=True)
 
 
 def test_dingtalk_alerts_use_httpx_client(monkeypatch):

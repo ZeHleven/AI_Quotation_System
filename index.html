@@ -147,6 +147,9 @@
       background: var(--white); border-top: 1px solid var(--steel);
     }
     .upload-preview  { margin-bottom: 8px; }
+    .upload-status {
+      margin-top: 5px; font-size: 12px; color: var(--slate);
+    }
     .input-textarea-wrap { margin-bottom: 8px; }
     .input-toolbar   { display: flex; align-items: center; gap: 8px; }
     .toolbar-left    { display: flex; align-items: center; gap: 6px; }
@@ -162,6 +165,7 @@
     }
     .summary-label { font-size: 13px; opacity: 0.7; }
     .summary-total { font-size: 24px; font-weight: 700; }
+    .push-status { margin-bottom: 12px; }
 
     .cursor {
       display: inline-block; width: 6px; height: 15px; background: var(--slate);
@@ -277,23 +281,29 @@
             <!-- 优化4：输入工具栏 -->
             <div class="input-area">
               <div v-if="selectedFile" class="upload-preview">
-                <el-tag closable @close="selectedFile = null" type="warning" effect="dark">📄 已挂载附件: {{ selectedFile.name }}</el-tag>
+                <el-tag :closable="!sending" @close="clearSelectedFile" type="warning" effect="dark">
+                  📄 已挂载附件: {{ selectedFile.name }}
+                </el-tag>
+                <div class="upload-status">{{ selectedFileSummary }}</div>
               </div>
               <div class="input-textarea-wrap">
-                <el-input v-model="inputText" type="textarea" :autosize="{minRows:1,maxRows:4}" placeholder="描述需求或上传图片清单..." resize="none" @keyup.enter.exact="sendMessage" :disabled="sending"></el-input>
+                <el-input v-model="inputText" type="textarea" :autosize="{minRows:1,maxRows:4}" placeholder="描述需求或上传图片清单..." resize="none" @keyup.enter.exact="sendMessage" :disabled="sending || pushing"></el-input>
               </div>
               <div class="input-toolbar">
                 <div class="toolbar-left">
-                  <el-upload action="#" :auto-upload="false" :show-file-list="false" :on-change="handleFileChange">
-                    <el-button circle size="small" title="上传图片附件">📎</el-button>
+                  <el-upload action="#" :auto-upload="false" :show-file-list="false" :on-change="handleFileChange" :disabled="sending || pushing">
+                    <el-button circle size="small" :disabled="sending || pushing" :title="sending ? '报价处理中，暂不能更换附件' : '上传图片附件'">📎</el-button>
                   </el-upload>
-                  <el-button circle size="small" title="历史记录" @click="openHistory">📋</el-button>
+                  <el-button circle size="small" title="历史记录" @click="openHistory" :disabled="pushing">📋</el-button>
                 </div>
                 <div class="toolbar-center">
-                  <span class="char-count" v-if="inputText.length > 0">{{ inputText.length }} 字</span>
+                  <span class="char-count" v-if="sending">{{ quoteProgressText }}</span>
+                  <span class="char-count" v-else-if="inputText.length > 0">{{ inputText.length }} 字</span>
                 </div>
                 <div class="toolbar-right">
-                  <el-button type="primary" :loading="sending" @click="sendMessage" round size="small">🚀 发送</el-button>
+                  <el-button type="primary" :loading="sending" :disabled="!canSubmit" @click="sendMessage" round size="small">
+                    {{ sending ? '处理中' : '发送' }}
+                  </el-button>
                 </div>
               </div>
             </div>
@@ -342,35 +352,37 @@
         </div>
 
         <el-alert title="请仔细核对以下 AI 提取的数据，如有遗漏或单价错误，请直接点击表格框进行修改。" type="warning" show-icon style="margin-bottom: 15px;"></el-alert>
+        <el-alert v-if="pushing" class="push-status" title="正在生成 Excel 并推送到钉钉，请勿关闭或重复提交。" type="info" show-icon></el-alert>
+        <el-alert v-if="pushError" class="push-status" :title="pushError" type="error" show-icon :closable="false"></el-alert>
 
         <el-table :data="previewData" border stripe style="width: 100%">
           <el-table-column prop="project_name" label="施工项目" min-width="160">
             <template #default="scope">
-              <el-input v-model="scope.row.project_name" size="small"></el-input>
+              <el-input v-model="scope.row.project_name" size="small" :disabled="pushing"></el-input>
             </template>
           </el-table-column>
           <el-table-column prop="unit_price" label="AI 建议单价(元)" width="130">
             <template #default="scope">
-              <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%"></el-input-number>
+              <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing"></el-input-number>
             </template>
           </el-table-column>
           <el-table-column prop="total_price" label="系统合计(元)" width="130">
             <template #default="scope">
-              <el-input-number v-model="scope.row.total_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%"></el-input-number>
+              <el-input-number v-model="scope.row.total_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing"></el-input-number>
             </template>
           </el-table-column>
           <el-table-column prop="notes" label="工艺与避坑备注" min-width="200">
             <template #default="scope">
-              <el-input v-model="scope.row.notes" type="textarea" :rows="2" size="small"></el-input>
+              <el-input v-model="scope.row.notes" type="textarea" :rows="2" size="small" :disabled="pushing"></el-input>
             </template>
           </el-table-column>
         </el-table>
 
         <template #footer>
           <span class="dialog-footer">
-            <el-button @click="cancelPreview">打回重填</el-button>
-            <el-button type="success" :loading="pushing" @click="submitFinalQuote">
-              ✅ 确认无误，下发生成 Excel 并推钉钉
+            <el-button @click="cancelPreview" :disabled="pushing">打回重填</el-button>
+            <el-button type="success" :loading="pushing" :disabled="!previewData.length" @click="submitFinalQuote">
+              {{ pushing ? '正在推送钉钉' : '确认无误，下发生成 Excel 并推钉钉' }}
             </el-button>
           </span>
         </template>
@@ -441,6 +453,7 @@
         const previewData       = ref([]);
         const globalNotes       = ref('');
         const pushing           = ref(false);
+        const pushError         = ref('');
 
         const showHistory     = ref(false);
         const historyList     = ref([]);
@@ -565,6 +578,19 @@
           return previewData.value.reduce((sum, item) => sum + (Number(item.total_price) || 0), 0).toFixed(2);
         });
 
+        const canSubmit = computed(() => {
+          return !sending.value && !pushing.value && (!!inputText.value.trim() || !!selectedFile.value);
+        });
+
+        const selectedFileSummary = computed(() => {
+          if (!selectedFile.value) return '';
+          const size = selectedFile.value.size || 0;
+          const sizeText = size >= 1024 * 1024
+            ? `${(size / 1024 / 1024).toFixed(2)} MB`
+            : `${Math.max(1, Math.round(size / 1024))} KB`;
+          return `${selectedFile.value.type || '未知类型'} · ${sizeText}`;
+        });
+
         const handleRegister = async () => { /*省略*/ };
 
         const handleLogin = async () => {
@@ -593,7 +619,22 @@
           messageHistory.value = [];
         };
 
-        const handleFileChange = (file) => { selectedFile.value = file.raw; ElMessage.info('已选中附件'); };
+        const handleFileChange = (file) => {
+          if (sending.value || pushing.value) {
+            ElMessage.warning('当前任务处理中，暂不能更换附件');
+            return;
+          }
+          selectedFile.value = file.raw;
+          ElMessage.info(`已选中附件：${file.raw?.name || file.name || '未命名文件'}`);
+        };
+
+        const clearSelectedFile = () => {
+          if (sending.value) {
+            ElMessage.warning('报价处理中，暂不能移除附件');
+            return;
+          }
+          selectedFile.value = null;
+        };
 
         const parsePreviewPayload = (rawData) => {
           rawData = rawData || {};
@@ -672,6 +713,7 @@
           if (!parsed.rows.length) return false;
           previewData.value = parsed.rows;
           globalNotes.value = parsed.notes;
+          pushError.value = '';
           setTimeout(() => { showPreviewDialog.value = true; }, 300);
           return true;
         };
@@ -798,6 +840,7 @@
         };
 
         const sendMessage = async () => {
+          if (sending.value || pushing.value) return;
           const text = inputText.value.trim();
           if (!text && !selectedFile.value) {
             ElMessage.warning('请输入报价需求或上传附件后再发送');
@@ -997,14 +1040,22 @@
         };
 
         const cancelPreview = () => {
+          if (pushing.value) return;
           showPreviewDialog.value = false;
           sending.value = false;
+          pushError.value = '';
           messageHistory.value.push({ role: 'assistant', content: '⏸️ 人工审核不通过，流程已打回。您可以修改参数后重新输入指令。' });
           scrollToBottom();
         };
 
         const submitFinalQuote = async () => {
+          if (pushing.value) return;
+          if (!previewData.value.length) {
+            ElMessage.warning('没有可推送的报价明细');
+            return;
+          }
           pushing.value = true;
+          pushError.value = '';
           try {
             const finalPayload = {
               project_details: previewData.value,
@@ -1019,7 +1070,8 @@
             messageHistory.value.push({ role: 'assistant', content: '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！' });
             scrollToBottom();
           } catch (error) {
-            ElMessage.error(apiErrorMessage(error, '推送钉钉失败，请检查推送流服务状态'));
+            pushError.value = apiErrorMessage(error, '推送钉钉失败，请检查推送流服务状态');
+            ElMessage.error(pushError.value);
           } finally {
             pushing.value = false;
           }
@@ -1045,10 +1097,11 @@
 
         return {
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
-          showPreviewDialog, previewData, pushing, finalTotalAmount,
+          showPreviewDialog, previewData, pushing, pushError, finalTotalAmount,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
-          handleRegister, handleLogin, logout, handleFileChange,
+          canSubmit, selectedFileSummary,
+          handleRegister, handleLogin, logout, handleFileChange, clearSelectedFile,
           sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
           retryMessage, refreshQuoteJob, checkingJobId, useExample,
           showHistory, historyList, historyLoading, historyTotal, historyPage,

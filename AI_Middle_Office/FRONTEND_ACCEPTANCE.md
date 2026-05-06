@@ -38,10 +38,10 @@
 |---|---|---|---|---|
 | [ ] | B1 Text quote submission | On `index.html`, enter a normal text quote request and submit. | A quote job is created; progress area appears with `创建任务 → 需求解析 → 知识库检索 → 生成报价 → 人工预审`; current status text and elapsed seconds update from SSE events; pre-review dialog opens only after line items are parsed and the table is not blank. | Verifies quote job API + SSE. |
 | [ ] | B2 Empty request validation | Submit with no text and no file. | Frontend shows a readable validation message; no assistant bubble, loading spinner, timer, or stuck progress state remains. | No backend job should be created. |
-| [ ] | B3 File upload quote | Upload a supported image/file and submit a quote request. | Upload/processing state is visible; progress uses `图像识别` instead of `需求解析`; GLM/file-load failures show a readable error state with retry available; success renders quote result. | If MinIO is enabled, also checks file reference path. |
+| [ ] | B3 File upload quote | Upload a supported image/file and submit a quote request. | Selected file name, type, and size are visible; upload/remove controls are disabled while the quote is running; progress uses `图像识别` instead of `需求解析`; GLM/file-load failures show a readable error state with retry available; success renders quote result. | If MinIO is enabled, also checks file reference path. |
 | [ ] | B4 Long-running progress | Submit a request that takes long enough to observe multiple stages. | Progress/phase labels keep updating; elapsed seconds increase; long `RAG/n8n` waits advance to `生成报价`; user can tell the task is still running; no duplicate final result is shown. | Important for user trust. |
 | [ ] | B5 Failed quote retry | Trigger or use a failed quote task, then use the recovery buttons in the failed assistant bubble. | The bubble shows task id/trace id when available; `查看任务状态` can recover a completed result into the pre-review dialog; `重新提交` reuses the failed text/file and creates a new task without the previous error blocking the run. | **writes data**: creates quote jobs. |
-| [ ] | B6 Confirm push | After a successful quote, click confirm/push. | Confirm dialog data is correct; push result is readable; successful push writes history and displays the success state. | **writes data** and may push to DingTalk/N8N. Use test channel when possible. |
+| [ ] | B6 Confirm push | After a successful quote, click confirm/push. | Confirm dialog data is correct; while pushing, table editing, cancel, and duplicate confirm are disabled; push failure keeps the dialog open with a readable retryable error; successful push writes history, closes the dialog, and displays the success state. | **writes data** and may push to DingTalk/N8N. Use test channel when possible. |
 
 ## C. History Drawer
 
@@ -127,7 +127,7 @@
 | [ ] | K2 401 response | Force a request with missing/invalid token. | User is redirected to `app.html`; a readable auth-expired message appears; no infinite request loop. | |
 | [ ] | K3 403 response | Normal user hits admin-only endpoint. | UI shows permission error or redirects; admin panel data is not partially rendered. | |
 | [ ] | K4 Network/backend error | Stop or mock one backend dependency, then refresh affected panel. | UI shows readable failure and retry/refresh option; page remains usable. | Use controlled test only. |
-| [ ] | K5 Loading state | Trigger slow endpoints or long quote job. | Buttons/inputs show loading/disabled state where appropriate; duplicate submissions are prevented. | |
+| [ ] | K5 Loading state | Trigger slow endpoints, long quote job, or slow confirm push. | Buttons/inputs show loading/disabled state where appropriate; upload/confirm duplicate submissions are prevented; failed push leaves the user in a recoverable state. | |
 
 ## L. Layout And Browser Smoke Checks
 

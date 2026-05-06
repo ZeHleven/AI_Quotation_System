@@ -30,10 +30,10 @@
   - [x] `files`: moved storage health, file list, upload, and download URL logic into `static/js/admin/files.js`.
   - Split one module at a time and run the corresponding acceptance section immediately.
 
-- [ ] **P3 High-ROI UX improvements**
+- [x] **P3 High-ROI UX improvements**
   - [x] `quote_progress`: expanded the workbench quote flow to five visible stages, added current status text, elapsed seconds, long-running generation hint, empty-request validation, and clearer error progress state.
   - [x] `retry_entry`: failed quote bubbles now expose task id/trace id, per-message retry, and task-status recovery that can reopen pre-review results.
-  - [ ] `upload_push_states`: refine upload, wait, confirm, and DingTalk push loading/disabled states.
+  - [x] `upload_push_states`: upload controls now show file metadata and lock during quote runs; confirm push locks editing/cancel/duplicate submit and keeps retryable errors in the dialog.
   - These may be pulled forward when they are safer or more valuable than structural cleanup.
 
 - [ ] **P4 Vite/Vue migration watch**

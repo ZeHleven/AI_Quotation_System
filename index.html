@@ -102,6 +102,17 @@
     .progress-meta.error   .progress-dot { background: #F56C6C; box-shadow: 0 0 0 3px rgba(245,108,108,0.14); }
     .progress-status { overflow-wrap: anywhere; }
     .progress-elapsed { color: var(--steel); white-space: nowrap; }
+    .quote-meta {
+      margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;
+      font-size: 12px; color: var(--slate);
+    }
+    .quote-meta-tag {
+      max-width: 100%; padding: 3px 6px; border: 1px solid var(--steel);
+      border-radius: 4px; background: var(--bg); overflow-wrap: anywhere;
+    }
+    .recovery-actions {
+      margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;
+    }
 
     /* ── 优化3：欢迎卡 ── */
     .welcome-wrap {
@@ -247,8 +258,17 @@
 
                   <div v-if="msg.fileUrl" class="file-preview"><img :src="msg.fileUrl" class="preview-img" /></div>
                   <div class="text-content">{{ msg.content }}<span v-if="index === messageHistory.length - 1 && isTyping" class="cursor"></span></div>
-                  <div v-if="msg.canRetry && !sending" style="margin-top:10px;">
-                    <el-button size="small" type="warning" plain @click="retryLastMessage">🔄 重试</el-button>
+                  <div v-if="msg.jobId || msg.traceId" class="quote-meta">
+                    <span v-if="msg.jobId" class="quote-meta-tag">任务 {{ msg.jobId }}</span>
+                    <span v-if="msg.traceId" class="quote-meta-tag">Trace {{ msg.traceId }}</span>
+                  </div>
+                  <div v-if="(msg.canRetry || msg.canCheckStatus) && !sending" class="recovery-actions">
+                    <el-button v-if="msg.canRetry" size="small" type="warning" plain @click="retryMessage(index)">
+                      重新提交
+                    </el-button>
+                    <el-button v-if="msg.jobId" size="small" type="primary" plain :loading="checkingJobId === msg.jobId" @click="refreshQuoteJob(msg, index)">
+                      查看任务状态
+                    </el-button>
                   </div>
                 </div>
               </div>
@@ -413,6 +433,7 @@
         const quoteProgressText = ref('准备创建报价任务');
         const quoteProgressTone = ref('running');
         const quoteElapsedSeconds = ref(0);
+        const checkingJobId = ref('');
         let quoteTimer = null;
         let delayedStageTimer = null;
 
@@ -655,6 +676,74 @@
           return true;
         };
 
+        const updateAssistantMessage = (index, updates) => {
+          const current = messageHistory.value[index];
+          if (!current) return;
+          messageHistory.value[index] = { ...current, ...updates };
+        };
+
+        const appendAssistantContent = (index, text) => {
+          const current = messageHistory.value[index];
+          if (!current || !text) return;
+          updateAssistantMessage(index, { content: `${current.content || ''}${text}` });
+          scrollToBottom();
+        };
+
+        const markRecoverable = (index, updates = {}) => {
+          updateAssistantMessage(index, {
+            canRetry: true,
+            canCheckStatus: !!updates.jobId || !!messageHistory.value[index]?.jobId,
+            ...updates,
+          });
+        };
+
+        const quoteJobStatusLabel = (status) => {
+          const labels = {
+            queued: '排队中',
+            running: '执行中',
+            succeeded: '已完成',
+            failed: '失败',
+            canceled: '已取消',
+            timed_out: '已超时',
+          };
+          return labels[status] || status || '未知状态';
+        };
+
+        const applyRecoveredJobResult = (job, msgIndex) => {
+          if (!job || typeof job !== 'object') {
+            markRecoverable(msgIndex);
+            appendAssistantContent(msgIndex, '\n任务状态返回异常，请重新提交或联系管理员。');
+            return false;
+          }
+
+          updateAssistantMessage(msgIndex, {
+            jobId: job.job_id || messageHistory.value[msgIndex]?.jobId,
+            traceId: job.trace_id || messageHistory.value[msgIndex]?.traceId,
+            canCheckStatus: !!job.job_id,
+          });
+
+          if (job.status === 'succeeded' && job.result) {
+            if (openPreviewFromPayload(job.result)) {
+              updateAssistantMessage(msgIndex, { canRetry: false, canCheckStatus: false });
+              appendAssistantContent(msgIndex, '\n✅ 已重新拉取任务结果，预审明细已恢复。');
+              return true;
+            }
+            markRecoverable(msgIndex, { jobId: job.job_id, traceId: job.trace_id });
+            appendAssistantContent(msgIndex, '\n报价任务已完成，但没有解析出可预审的明细。请重试，或把任务编号发给管理员排查。');
+            return false;
+          }
+
+          if (['failed', 'canceled', 'timed_out'].includes(job.status)) {
+            markRecoverable(msgIndex, { jobId: job.job_id, traceId: job.trace_id });
+            appendAssistantContent(msgIndex, `\n任务状态：${quoteJobStatusLabel(job.status)}。${job.error_message || '可以重新提交本次报价。'}`);
+            return false;
+          }
+
+          updateAssistantMessage(msgIndex, { canRetry: false, canCheckStatus: !!job.job_id });
+          appendAssistantContent(msgIndex, `\n任务状态：${quoteJobStatusLabel(job.status)}${job.stage ? `（${job.stage}）` : ''}。稍后可再次查看。`);
+          return false;
+        };
+
         const readSseStream = async (response, onEvent) => {
           const reader  = response.body.getReader();
           const decoder = new TextDecoder('utf-8');
@@ -676,6 +765,38 @@
           }
         };
 
+        const refreshQuoteJob = async (msg, msgIndex) => {
+          if (!msg.jobId) return;
+          checkingJobId.value = msg.jobId;
+          try {
+            const res = await fetch(`${API_BASE_URL}/quote/jobs/${msg.jobId}`, {
+              method: 'GET',
+              headers: authHeaders()
+            });
+            if (!res.ok) {
+              if (res.status === 401) handleUnauthorized();
+              const traceId = res.headers.get('X-Trace-Id') || msg.traceId;
+              const errorData = await res.json().catch(() => ({}));
+              markRecoverable(msgIndex, { jobId: msg.jobId, traceId });
+              appendAssistantContent(msgIndex, `\n任务状态查询失败：${errorData.detail || res.statusText || res.status}`);
+              return;
+            }
+            const body = await res.json();
+            const job = apiPayloadData(body, body);
+            const recovered = applyRecoveredJobResult(job, msgIndex);
+            if (recovered) {
+              ElMessage.success('已恢复报价预审明细');
+            } else if (job.status === 'running' || job.status === 'queued') {
+              ElMessage.info('任务仍在处理中');
+            }
+          } catch (error) {
+            markRecoverable(msgIndex, { jobId: msg.jobId, traceId: msg.traceId });
+            appendAssistantContent(msgIndex, `\n任务状态查询异常：${error.message}`);
+          } finally {
+            checkingJobId.value = '';
+          }
+        };
+
         const sendMessage = async () => {
           const text = inputText.value.trim();
           if (!text && !selectedFile.value) {
@@ -691,7 +812,16 @@
           if (selectedFile.value && selectedFile.value.type.startsWith('image/'))
             userMsg.fileUrl = URL.createObjectURL(selectedFile.value);
           messageHistory.value.push(userMsg);
-          messageHistory.value.push({ role: 'assistant', content: '' });
+          messageHistory.value.push({
+            role: 'assistant',
+            content: '',
+            canRetry: false,
+            canCheckStatus: false,
+            jobId: '',
+            traceId: '',
+            sourceText: text,
+            sourceFile: selectedFile.value,
+          });
           const msgIndex = messageHistory.value.length - 1;
 
           lastInputText.value = text;
@@ -709,6 +839,7 @@
 
           let charQueue  = Array.from('⏳ 正在创建异步报价任务...\n\n');
           let streamEnded = false;
+          let createdJob = null;
 
           const typeNextChar = () => {
             if (charQueue.length > 0) {
@@ -738,12 +869,18 @@
               setQuoteProgress(null, `任务创建失败：${errorData.detail || createResponse.statusText}`, 'error');
               stopQuoteTimer();
               charQueue.push(...('\n' + formatApiError(`任务创建失败 (${createResponse.status})`, errorData.detail || createResponse.statusText, traceId)).split(''));
-              messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+              markRecoverable(msgIndex, { traceId });
               streamEnded = true; sending.value = false; return;
             }
 
             const createBody = await createResponse.json();
             const job = apiPayloadData(createBody, createBody);
+            createdJob = job;
+            updateAssistantMessage(msgIndex, {
+              jobId: job.job_id || '',
+              traceId: job.trace_id || '',
+              canCheckStatus: !!job.job_id,
+            });
             charQueue.push(...(`✅ 异步报价任务已创建\n任务编号：${job.job_id}\n\n`).split(''));
 
             const eventResponse = await fetch(`${API_BASE_URL}/quote/jobs/${job.job_id}/events`, {
@@ -758,7 +895,7 @@
               setQuoteProgress(null, `任务订阅失败：${errorData.detail || eventResponse.statusText}`, 'error');
               stopQuoteTimer();
               charQueue.push(...('\n' + formatApiError(`任务订阅失败 (${eventResponse.status})`, errorData.detail || eventResponse.statusText, traceId)).split(''));
-              messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+              markRecoverable(msgIndex, { jobId: job.job_id, traceId });
               streamEnded = true; sending.value = false; return;
             }
 
@@ -792,7 +929,7 @@
                   ? `${data.message}\n追踪ID：${data.trace_id}\n您可以点击重试；若连续失败，请把追踪ID发给管理员排查。`
                   : data.message;
                 charQueue.push(...msg.split(''));
-                messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+                markRecoverable(msgIndex, { jobId: job.job_id, traceId: data.trace_id || job.trace_id });
                 sending.value = false;
               } else if (data.status === 'success') {
                 clearDelayedStageTimer();
@@ -814,21 +951,14 @@
                 clearDelayedStageTimer();
                 setQuoteProgress(null, latest.error_message, 'error');
                 stopQuoteTimer();
-                charQueue.push(...(`\n${latest.error_message}`).split(''));
-                messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+                applyRecoveredJobResult(latest, msgIndex);
                 sending.value = false;
               } else if (latest.status === 'succeeded' && latest.result) {
                 clearDelayedStageTimer();
                 stopQuoteTimer();
-                if (openPreviewFromPayload(latest.result)) {
-                  setQuoteProgress('review', '报价结果已生成，等待人工复核', 'success');
-                  sending.value = false;
-                } else {
-                  setQuoteProgress(null, '报价结果已返回，但没有解析出明细', 'error');
-                  charQueue.push(...('\n报价结果已返回，但没有解析出可预审的明细。请点击重试，或到管理员任务队列查看原始结果。').split(''));
-                  messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
-                  sending.value = false;
-                }
+                const recovered = applyRecoveredJobResult(latest, msgIndex);
+                setQuoteProgress(recovered ? 'review' : null, recovered ? '报价结果已生成，等待人工复核' : '报价结果已返回，但没有解析出明细', recovered ? 'success' : 'error');
+                sending.value = false;
               }
             }
 
@@ -836,8 +966,8 @@
               clearDelayedStageTimer();
               setQuoteProgress(null, '任务事件流已结束，但未收到完成状态', 'error');
               stopQuoteTimer();
-              charQueue.push(...('\n任务事件流已结束，但未收到完成状态。您可以点击重试，或到管理员任务队列查看任务详情。').split(''));
-              messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+              charQueue.push(...('\n任务事件流已结束，但未收到完成状态。您可以点击查看任务状态拉取结果，或重新提交。').split(''));
+              markRecoverable(msgIndex, { jobId: job.job_id, traceId: job.trace_id });
               sending.value = false;
             }
 
@@ -847,17 +977,22 @@
             setQuoteProgress(null, `网络异常：${error.message}`, 'error');
             stopQuoteTimer();
             charQueue.push(...('\n' + formatApiError('网络异常', error.message)).split(''));
-            messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+            markRecoverable(msgIndex, { jobId: createdJob?.job_id || '', traceId: createdJob?.trace_id || '' });
             streamEnded = true; sending.value = false;
           }
         };
 
-        const retryLastMessage = () => {
-          if (messageHistory.value.length >= 2) {
-            messageHistory.value.splice(messageHistory.value.length - 2, 2);
+        const retryMessage = (msgIndex = messageHistory.value.length - 1) => {
+          const failedMsg = messageHistory.value[msgIndex] || {};
+          const retryText = failedMsg.sourceText ?? lastInputText.value;
+          const retryFile = failedMsg.sourceFile ?? lastInputFile.value;
+          if (msgIndex > 0 && messageHistory.value[msgIndex - 1]?.role === 'user') {
+            messageHistory.value.splice(msgIndex - 1, 2);
+          } else if (msgIndex >= 0) {
+            messageHistory.value.splice(msgIndex, 1);
           }
-          inputText.value  = lastInputText.value;
-          selectedFile.value = lastInputFile.value;
+          inputText.value = retryText || '';
+          selectedFile.value = retryFile || null;
           sendMessage();
         };
 
@@ -915,7 +1050,7 @@
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           handleRegister, handleLogin, logout, handleFileChange,
           sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
-          retryLastMessage, useExample,
+          retryMessage, refreshQuoteJob, checkingJobId, useExample,
           showHistory, historyList, historyLoading, historyTotal, historyPage,
           showDetailDialog, detailRows, fetchHistory, openHistory, viewDetail
         };

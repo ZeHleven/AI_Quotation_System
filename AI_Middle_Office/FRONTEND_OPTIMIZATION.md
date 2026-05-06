@@ -32,7 +32,7 @@
 
 - [ ] **P3 High-ROI UX improvements**
   - [x] `quote_progress`: expanded the workbench quote flow to five visible stages, added current status text, elapsed seconds, long-running generation hint, empty-request validation, and clearer error progress state.
-  - [ ] `retry_entry`: make failed quote retry and task-detail recovery more discoverable.
+  - [x] `retry_entry`: failed quote bubbles now expose task id/trace id, per-message retry, and task-status recovery that can reopen pre-review results.
   - [ ] `upload_push_states`: refine upload, wait, confirm, and DingTalk push loading/disabled states.
   - These may be pulled forward when they are safer or more valuable than structural cleanup.
 

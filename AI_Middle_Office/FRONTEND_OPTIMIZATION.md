@@ -26,7 +26,7 @@
   - [x] `ops`: moved ops dashboard state, alert notification, refresh, and polling into `static/js/admin/ops.js`.
   - [ ] `materials`: split knowledge-base CRUD, snapshots, rollback, CSV import, sync, and RAG eval helpers.
   - [ ] `quote_jobs`: split job queue listing, filters, detail, cancel, retry, and timeout marking.
-  - [ ] `model_gateway`: split stats/circuit panel.
+  - [x] `model_gateway`: moved stats/circuit state and refresh logic into `static/js/admin/model_gateway.js`.
   - [ ] `files`: split storage health, file list, upload, and download URL logic.
   - Split one module at a time and run the corresponding acceptance section immediately.
 

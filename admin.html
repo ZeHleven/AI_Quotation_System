@@ -649,6 +649,7 @@
   <script src="/static/axios.min.js"></script>
   <script src="/static/js/shared.js"></script>
   <script src="/static/js/admin/ops.js"></script>
+  <script src="/static/js/admin/model_gateway.js"></script>
 
   <script>
     const { createApp, ref, computed, onMounted, onBeforeUnmount } = Vue;
@@ -708,12 +709,6 @@
         const userData    = ref([]);
         const userLoading = ref(false);
 
-        // 模型网关
-        const gatewayStats    = ref([]);
-        const gatewayCircuits = ref({});
-        const gatewayLoading  = ref(false);
-        const gatewayHours    = ref(24);
-
         // 报价任务队列
         const jobData           = ref([]);
         const jobLoading        = ref(false);
@@ -772,6 +767,24 @@
           stopOpsPolling
         } = opsModule;
 
+        const gatewayModule = window.AIMOAdminModelGateway.createModelGatewayModule({
+          ref,
+          axios,
+          ElMessage,
+          apiBaseUrl: API_BASE_URL,
+          authHeaders,
+          apiBody,
+          apiData,
+          apiErrorMessage
+        });
+        const {
+          gatewayStats,
+          gatewayCircuits,
+          gatewayLoading,
+          gatewayHours,
+          fetchGatewayStats
+        } = gatewayModule;
+
         const statusTagType = (status) => {
           const map = { queued: 'info', running: 'warning', succeeded: 'success', failed: 'danger', canceled: 'info', timed_out: 'danger' };
           return map[status] || 'info';
@@ -798,22 +811,6 @@
             ElMessage.success(apiMessage(res, '额度已更新'));
           } catch (e) {
             ElMessage.error(apiErrorMessage(e, '更新失败'));
-          }
-        };
-
-        const fetchGatewayStats = async () => {
-          gatewayLoading.value = true;
-          try {
-            const res = await axios.get(`${API_BASE_URL}/model_gateway/stats`, {
-              params: { hours: gatewayHours.value }, headers: authHeaders()
-            });
-            const body = apiBody(res);
-            gatewayStats.value    = apiData(res, []) || [];
-            gatewayCircuits.value = body.circuit_breakers || {};
-          } catch (e) {
-            ElMessage.error(apiErrorMessage(e, '获取模型网关统计失败'));
-          } finally {
-            gatewayLoading.value = false;
           }
         };
 

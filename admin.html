@@ -648,6 +648,7 @@
   <script src="/static/element-plus-icons.iife.min.js"></script>
   <script src="/static/axios.min.js"></script>
   <script src="/static/js/shared.js"></script>
+  <script src="/static/js/admin/ops.js"></script>
 
   <script>
     const { createApp, ref, computed, onMounted, onBeforeUnmount } = Vue;
@@ -677,7 +678,6 @@
         const API_BASE_URL      = '/api/v1/admin';
         const CORE_API_BASE_URL = '/api/v1';
         let redirectingToLogin  = false;
-        let opsTimer            = null;
 
         // ── 侧边导航 ──
         const navItems     = NAV_ITEMS;
@@ -703,17 +703,6 @@
         const saving       = ref(false);
         const syncing      = ref(false);
         const lastSyncTime = ref(localStorage.getItem('last_milvus_sync') || '未同步');
-
-        // 运维监控
-        const opsDashboard    = ref({ services: [], alerts: [], jobs: {}, logs: {} });
-        const opsLoading      = ref(false);
-        const opsLastAlertKey = ref('');
-        const opsServices  = computed(() => opsDashboard.value.services || []);
-        const opsAlerts    = computed(() => opsDashboard.value.alerts   || []);
-        const opsJobs      = computed(() => opsDashboard.value.jobs     || {});
-        const opsLogs      = computed(() => opsDashboard.value.logs     || {});
-        const opsStuckJobs = computed(() => opsJobs.value.stuck_jobs    || []);
-        const opsLogItems  = computed(() => opsLogs.value.items         || []);
 
         // 用户管理
         const userData    = ref([]);
@@ -757,42 +746,35 @@
           return buildAuthHeaders(() => redirectToLogin('请先登录后再进入管理员页面'));
         };
 
+        const opsModule = window.AIMOAdminOps.createOpsModule({
+          ref,
+          computed,
+          axios,
+          ElMessage,
+          ElNotification,
+          coreApiBaseUrl: CORE_API_BASE_URL,
+          authHeaders,
+          apiData,
+          apiErrorMessage
+        });
+        const {
+          opsDashboard,
+          opsLoading,
+          opsServices,
+          opsAlerts,
+          opsJobs,
+          opsLogs,
+          opsStuckJobs,
+          opsLogItems,
+          fetchOpsDashboard,
+          opsOverallType,
+          startOpsPolling,
+          stopOpsPolling
+        } = opsModule;
+
         const statusTagType = (status) => {
           const map = { queued: 'info', running: 'warning', succeeded: 'success', failed: 'danger', canceled: 'info', timed_out: 'danger' };
           return map[status] || 'info';
-        };
-
-        const opsOverallType = (status) => {
-          if (status === 'ready')    return 'success';
-          if (status === 'degraded') return 'warning';
-          return 'info';
-        };
-
-        const notifyOpsAlerts = (alerts) => {
-          if (!alerts || alerts.length === 0) { opsLastAlertKey.value = ''; return; }
-          const alertKey = alerts.map(item => `${item.level}:${item.title}:${item.message}`).join('|');
-          if (alertKey === opsLastAlertKey.value) return;
-          opsLastAlertKey.value = alertKey;
-          const hasCritical = alerts.some(item => item.level === 'critical');
-          ElNotification({
-            title: hasCritical ? '运维告警' : '运维提醒',
-            message: alerts.map(item => `${item.title}：${item.message}`).join('\n'),
-            type: hasCritical ? 'error' : 'warning',
-            duration: 7000
-          });
-        };
-
-        const fetchOpsDashboard = async (notify = false) => {
-          opsLoading.value = true;
-          try {
-            const res = await axios.get(`${CORE_API_BASE_URL}/admin/ops/dashboard`, { headers: authHeaders() });
-            opsDashboard.value = apiData(res, { services: [], alerts: [], jobs: {}, logs: {} }) || { services: [], alerts: [], jobs: {}, logs: {} };
-            if (notify) notifyOpsAlerts(opsDashboard.value.alerts || []);
-          } catch (e) {
-            ElMessage.error(apiErrorMessage(e, '获取运维监控状态失败'));
-          } finally {
-            opsLoading.value = false;
-          }
         };
 
         const fetchUsers = async () => {
@@ -1098,7 +1080,7 @@
         const tableRowClassName = ({ row }) => row.is_draft ? 'draft-row' : '';
 
         onMounted(() => {
-          fetchOpsDashboard(true);
+          startOpsPolling();
           fetchRagEvalResult();
           fetchData();
           fetchUsers();
@@ -1107,11 +1089,10 @@
           fetchMaterialAudit();
           fetchStorageHealth();
           fetchStorageFiles();
-          opsTimer = setInterval(() => fetchOpsDashboard(true), 60000);
         });
 
         onBeforeUnmount(() => {
-          if (opsTimer)           clearInterval(opsTimer);
+          stopOpsPolling();
           if (ragEvalPolling.value) clearInterval(ragEvalPolling.value);
         });
 

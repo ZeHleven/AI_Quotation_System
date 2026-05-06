@@ -23,7 +23,11 @@
   - Acceptance focus for future verification: A1, A3, B1, C1, D2, H1, and K1-K3.
 
 - [ ] **P2 Admin module split**
-  - Split admin-only feature areas such as ops, materials, quote jobs, model gateway, and files into isolated static JS modules without adding a build step.
+  - [x] `ops`: moved ops dashboard state, alert notification, refresh, and polling into `static/js/admin/ops.js`.
+  - [ ] `materials`: split knowledge-base CRUD, snapshots, rollback, CSV import, sync, and RAG eval helpers.
+  - [ ] `quote_jobs`: split job queue listing, filters, detail, cancel, retry, and timeout marking.
+  - [ ] `model_gateway`: split stats/circuit panel.
+  - [ ] `files`: split storage health, file list, upload, and download URL logic.
   - Split one module at a time and run the corresponding acceptance section immediately.
 
 - [ ] **P3 High-ROI UX improvements**

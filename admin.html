@@ -652,6 +652,7 @@
   <script src="/static/js/admin/model_gateway.js"></script>
   <script src="/static/js/admin/files.js"></script>
   <script src="/static/js/admin/quote_jobs.js"></script>
+  <script src="/static/js/admin/materials.js"></script>
 
   <script>
     const { createApp, ref, computed, onMounted, onBeforeUnmount } = Vue;
@@ -701,23 +702,9 @@
 
         installAxiosUnauthorizedHandler(axios, redirectToLogin);
 
-        const tableData    = ref([]);
-        const loading      = ref(false);
-        const saving       = ref(false);
-        const syncing      = ref(false);
-        const lastSyncTime = ref(localStorage.getItem('last_milvus_sync') || '未同步');
-
         // 用户管理
         const userData    = ref([]);
         const userLoading = ref(false);
-
-        // 知识库快照
-        const materialAudit = ref([]);
-        const auditLoading  = ref(false);
-
-        // RAG 评测
-        const ragEvalResult  = ref(null);
-        const ragEvalPolling = ref(null);
 
         // 文件存储
         const authHeaders = () => {
@@ -821,6 +808,40 @@
           statusTagType
         } = quoteJobsModule;
 
+        const materialsModule = window.AIMOAdminMaterials.createMaterialsModule({
+          ref,
+          axios,
+          ElMessage,
+          ElMessageBox,
+          apiBaseUrl: API_BASE_URL,
+          authHeaders,
+          apiBody,
+          apiData,
+          apiMessage,
+          apiErrorMessage
+        });
+        const {
+          tableData,
+          loading,
+          saving,
+          syncing,
+          lastSyncTime,
+          materialAudit,
+          auditLoading,
+          ragEvalResult,
+          fetchRagEvalResult,
+          stopRagEvalPolling,
+          fetchMaterialAudit,
+          rollbackMaterialSnapshot,
+          fetchData,
+          handleAdd,
+          handleDelete,
+          handleImportCSV,
+          saveData,
+          syncToMilvus,
+          tableRowClassName
+        } = materialsModule;
+
         const fetchUsers = async () => {
           userLoading.value = true;
           try {
@@ -845,143 +866,6 @@
           }
         };
 
-        const fetchRagEvalResult = async () => {
-          try {
-            const res = await axios.get(`${API_BASE_URL}/rag_eval/latest`, { headers: authHeaders() });
-            ragEvalResult.value = apiData(res, null);
-          } catch (e) { /* 静默失败 */ }
-        };
-
-        const startRagEvalPolling = () => {
-          if (ragEvalPolling.value) clearInterval(ragEvalPolling.value);
-          ragEvalPolling.value = setInterval(async () => {
-            await fetchRagEvalResult();
-            if (ragEvalResult.value && ragEvalResult.value.status !== 'running') {
-              clearInterval(ragEvalPolling.value);
-              ragEvalPolling.value = null;
-            }
-          }, 3000);
-        };
-
-        const fetchMaterialAudit = async () => {
-          auditLoading.value = true;
-          try {
-            const res = await axios.get(`${API_BASE_URL}/materials/audit`,
-              { params: { limit: 20 }, headers: authHeaders() });
-            materialAudit.value = apiData(res, []) || [];
-          } catch (e) {
-            ElMessage.error(apiErrorMessage(e, '获取知识库快照失败'));
-          } finally {
-            auditLoading.value = false;
-          }
-        };
-
-        const rollbackMaterialSnapshot = async (row) => {
-          try {
-            await ElMessageBox.confirm(
-              `确定回滚到 ${row.created_at} 的知识库快照吗？当前版本会先自动备份。`,
-              '回滚知识库快照', { type: 'warning' }
-            );
-            await axios.post(`${API_BASE_URL}/materials/rollback/${row.snapshot_id}`, {}, { headers: authHeaders() });
-            ElMessage.success('知识库已回滚，请确认后再同步到 Milvus');
-            await fetchData();
-            await fetchMaterialAudit();
-          } catch (e) {
-            if (e !== 'cancel') ElMessage.error(apiErrorMessage(e, '回滚知识库快照失败'));
-          }
-        };
-
-        const initMockData = () => [
-          { id: '1', item_name: '直线型吊顶', unit_price: 120.00, unit: '平米', notes: '使用龙牌轻钢龙骨泰山石膏板，L型抗裂及接缝处理。' }
-        ];
-
-        const fetchData = async () => {
-          loading.value = true;
-          try {
-            const res = await axios.get(`${API_BASE_URL}/materials`, { headers: authHeaders() });
-            const rows = apiData(res, []);
-            tableData.value = (rows && rows.length > 0) ? rows : initMockData();
-          } catch (error) {
-            ElMessage.warning('未能连接到后台，正使用本地模拟数据运行。');
-            tableData.value = initMockData();
-          } finally {
-            loading.value = false;
-          }
-        };
-
-        const handleAdd = () => {
-          tableData.value.push({ id: Date.now().toString(), item_name: '', unit_price: 0.00, unit: '平米', notes: '', is_draft: false });
-        };
-
-        const handleDelete = (index) => {
-          ElMessageBox.confirm('确定要删除这项基础物料吗？', '警告', { type: 'warning' })
-            .then(() => { tableData.value.splice(index, 1); ElMessage.success('条目已移除，请记得保存'); })
-            .catch(() => {});
-        };
-
-        const handleImportCSV = async (file) => {
-          const formData = new FormData();
-          formData.append('file', file.raw);
-          loading.value = true;
-          try {
-            const res = await axios.post(`${API_BASE_URL}/upload_csv`, formData, { headers: authHeaders() });
-            const newDrafts = apiData(res, []);
-            if (newDrafts && newDrafts.length > 0) {
-              tableData.value.push(...newDrafts);
-              ElMessage.success(`解析成功！智能提炼出 ${newDrafts.length} 条待审异常/新项目，已追加至末尾。`);
-              setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 500);
-            } else {
-              ElMessage.info('过滤完毕。导入的文件与现有标准库高度一致，无需新增处理项。');
-            }
-          } catch (error) {
-            ElMessage.error(apiErrorMessage(error, 'CSV 解析失败，请检查文件格式。'));
-          } finally {
-            loading.value = false;
-          }
-        };
-
-        const saveData = async () => {
-          saving.value = true;
-          try {
-            await axios.post(`${API_BASE_URL}/materials`, tableData.value, { headers: authHeaders() });
-            tableData.value.forEach(item => item.is_draft = false);
-            fetchMaterialAudit();
-            ElMessage.success('🎉 表格数据审核完毕，已安全保存到本地基础库！');
-          } catch (error) {
-            ElMessage.error(apiErrorMessage(error, '保存失败，请检查网关连接。'));
-          } finally {
-            saving.value = false;
-          }
-        };
-
-        const syncToMilvus = async () => {
-          ElMessageBox.confirm(
-            '此操作会将上方表格的数据完全覆盖灌入 Milvus 向量引擎，直接成为 AI 报价算力的唯一标准，是否继续？',
-            '🚀 发布指令',
-            { confirmButtonText: '⚡ 确认发布', cancelButtonText: '取消', type: 'warning' }
-          ).then(async () => {
-            syncing.value = true;
-            try {
-              await axios.post(`${API_BASE_URL}/materials`, tableData.value, { headers: authHeaders() });
-              fetchMaterialAudit();
-              const res = await axios.post(`${API_BASE_URL}/sync_milvus`, {}, { headers: authHeaders() });
-              const body = apiBody(res);
-              ElMessage({ message: apiMessage(res, '热更新完毕，向量引擎已满血复活！'), type: 'success', duration: 4000 });
-              if (body.eval_triggered) { ragEvalResult.value = { status: 'running' }; startRagEvalPolling(); }
-              const now = new Date().toLocaleString();
-              lastSyncTime.value = now;
-              localStorage.setItem('last_milvus_sync', now);
-              tableData.value.forEach(item => item.is_draft = false);
-            } catch (error) {
-              ElMessage.error(apiErrorMessage(error, '向量引擎同步失败，请检查底层 Milvus 状态。'));
-            } finally {
-              syncing.value = false;
-            }
-          }).catch(() => {});
-        };
-
-        const tableRowClassName = ({ row }) => row.is_draft ? 'draft-row' : '';
-
         onMounted(() => {
           startOpsPolling();
           fetchRagEvalResult();
@@ -996,7 +880,7 @@
 
         onBeforeUnmount(() => {
           stopOpsPolling();
-          if (ragEvalPolling.value) clearInterval(ragEvalPolling.value);
+          stopRagEvalPolling();
         });
 
         return {

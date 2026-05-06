@@ -22,9 +22,9 @@
   - `index.html` and `admin.html` now load the shared helper instead of carrying duplicate token/API parsing code.
   - Acceptance focus for future verification: A1, A3, B1, C1, D2, H1, and K1-K3.
 
-- [ ] **P2 Admin module split**
+- [x] **P2 Admin module split**
   - [x] `ops`: moved ops dashboard state, alert notification, refresh, and polling into `static/js/admin/ops.js`.
-  - [ ] `materials`: split knowledge-base CRUD, snapshots, rollback, CSV import, sync, and RAG eval helpers.
+  - [x] `materials`: moved knowledge-base CRUD, snapshots, rollback, CSV import, Milvus sync, and RAG eval polling into `static/js/admin/materials.js`.
   - [x] `quote_jobs`: moved job queue listing, filters, detail, cancel, retry, timeout marking, status tags, and detail formatting into `static/js/admin/quote_jobs.js`.
   - [x] `model_gateway`: moved stats/circuit state and refresh logic into `static/js/admin/model_gateway.js`.
   - [x] `files`: moved storage health, file list, upload, and download URL logic into `static/js/admin/files.js`.

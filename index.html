@@ -76,17 +76,32 @@
 
     /* ── 优化2：阶段进度条 ── */
     .stage-indicator {
-      display: flex; align-items: center;
       background: var(--bg); border-radius: 8px;
-      padding: 7px 12px; margin-bottom: 10px;
+      padding: 8px 12px; margin-bottom: 10px;
     }
+    .stage-track { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; }
     .stage-item {
       display: flex; align-items: center; gap: 4px;
-      font-size: 12px; color: var(--steel); transition: color 0.25s;
+      font-size: 12px; color: var(--steel); transition: color 0.25s; white-space: nowrap;
     }
     .stage-item.active { color: var(--dark); font-weight: 600; }
     .stage-item.done   { color: var(--green); }
     .stage-sep { margin: 0 8px; color: var(--steel); font-size: 11px; }
+    .progress-meta {
+      margin-top: 7px; padding-top: 7px; border-top: 1px solid rgba(201,214,223,0.6);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      font-size: 12px; color: var(--slate);
+    }
+    .progress-main { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+    .progress-dot {
+      width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto;
+      background: var(--slate); box-shadow: 0 0 0 3px rgba(82,97,107,0.10);
+    }
+    .progress-meta.running .progress-dot { background: #E6A23C; box-shadow: 0 0 0 3px rgba(230,162,60,0.16); }
+    .progress-meta.success .progress-dot { background: var(--green); box-shadow: 0 0 0 3px rgba(103,194,58,0.16); }
+    .progress-meta.error   .progress-dot { background: #F56C6C; box-shadow: 0 0 0 3px rgba(245,108,108,0.14); }
+    .progress-status { overflow-wrap: anywhere; }
+    .progress-elapsed { color: var(--steel); white-space: nowrap; }
 
     /* ── 优化3：欢迎卡 ── */
     .welcome-wrap {
@@ -214,10 +229,19 @@
                 <div class="bubble">
                   <!-- 优化2：阶段进度条（仅最后一条 AI 消息 & 正在处理时） -->
                   <div v-if="index === messageHistory.length - 1 && msg.role === 'assistant' && isTyping" class="stage-indicator">
-                    <div v-for="(stage, si) in stages" :key="si" :class="['stage-item', currentStage > si ? 'done' : currentStage === si ? 'active' : '']">
-                      <span>{{ currentStage > si ? '✓' : stage.icon }}</span>
-                      <span>{{ stage.label }}</span>
-                      <span v-if="si < stages.length - 1" class="stage-sep">→</span>
+                    <div class="stage-track">
+                      <div v-for="(stage, si) in stages" :key="si" :class="['stage-item', currentStage > si ? 'done' : currentStage === si ? 'active' : '']">
+                        <span>{{ currentStage > si ? '✓' : stage.icon }}</span>
+                        <span>{{ stage.label }}</span>
+                        <span v-if="si < stages.length - 1" class="stage-sep">→</span>
+                      </div>
+                    </div>
+                    <div :class="['progress-meta', quoteProgressTone]">
+                      <span class="progress-main">
+                        <span class="progress-dot"></span>
+                        <span class="progress-status">{{ quoteProgressText }}</span>
+                      </span>
+                      <span class="progress-elapsed" v-if="quoteElapsedSeconds > 0">已用 {{ quoteElapsedSeconds }} 秒</span>
                     </div>
                   </div>
 
@@ -341,18 +365,22 @@
   <script src="/static/js/shared.js"></script>
 
   <script>
-    const { createApp, ref, computed, nextTick, onMounted } = Vue;
+    const { createApp, ref, computed, nextTick, onMounted, onBeforeUnmount } = Vue;
     const { ElMessage } = ElementPlus;
 
     const STAGES_WITH_IMAGE = [
-      { icon: '🖼', label: '图像识别' },
-      { icon: '📚', label: '知识库检索' },
-      { icon: '✏️', label: '生成报价' }
+      { id: 'created', icon: '🧾', label: '创建任务' },
+      { id: 'vision', icon: '🖼', label: '图像识别' },
+      { id: 'knowledge', icon: '📚', label: '知识库检索' },
+      { id: 'quote', icon: '✏️', label: '生成报价' },
+      { id: 'review', icon: '🧐', label: '人工预审' }
     ];
     const STAGES_TEXT_ONLY = [
-      { icon: '📝', label: '需求解析' },
-      { icon: '📚', label: '知识库检索' },
-      { icon: '✏️', label: '生成报价' }
+      { id: 'created', icon: '🧾', label: '创建任务' },
+      { id: 'parse', icon: '📝', label: '需求解析' },
+      { id: 'knowledge', icon: '📚', label: '知识库检索' },
+      { id: 'quote', icon: '✏️', label: '生成报价' },
+      { id: 'review', icon: '🧐', label: '人工预审' }
     ];
 
     const {
@@ -382,6 +410,11 @@
         const lastInputFile = ref(null);
         const currentStage  = ref(-1);
         const stages        = ref(STAGES_WITH_IMAGE);
+        const quoteProgressText = ref('准备创建报价任务');
+        const quoteProgressTone = ref('running');
+        const quoteElapsedSeconds = ref(0);
+        let quoteTimer = null;
+        let delayedStageTimer = null;
 
         const showPreviewDialog = ref(false);
         const previewData       = ref([]);
@@ -437,6 +470,67 @@
           if (traceId) parts.push(`追踪ID：${traceId}`);
           parts.push('您可以点击重试；若连续失败，请把追踪ID发给管理员排查。');
           return parts.join('\n');
+        };
+
+        const getStageIndex = (stageId) => stages.value.findIndex(stage => stage.id === stageId);
+
+        const clearDelayedStageTimer = () => {
+          if (delayedStageTimer) {
+            clearTimeout(delayedStageTimer);
+            delayedStageTimer = null;
+          }
+        };
+
+        const startQuoteTimer = () => {
+          if (quoteTimer) clearInterval(quoteTimer);
+          quoteElapsedSeconds.value = 0;
+          quoteTimer = setInterval(() => { quoteElapsedSeconds.value += 1; }, 1000);
+        };
+
+        const stopQuoteTimer = () => {
+          if (!quoteTimer) return;
+          clearInterval(quoteTimer);
+          quoteTimer = null;
+        };
+
+        const setQuoteProgress = (stageId, text, tone = 'running') => {
+          if (stageId) {
+            const stageIndex = getStageIndex(stageId);
+            if (stageIndex >= 0) currentStage.value = stageIndex;
+          }
+          quoteProgressText.value = text || quoteProgressText.value;
+          quoteProgressTone.value = tone;
+        };
+
+        const scheduleQuoteGenerationHint = () => {
+          clearDelayedStageTimer();
+          delayedStageTimer = setTimeout(() => {
+            if (!sending.value || quoteProgressTone.value !== 'running') return;
+            setQuoteProgress('quote', 'AI 正在生成报价明细，完成后会自动弹出预审面板');
+          }, 8000);
+        };
+
+        const resolveQuoteStage = (data, hasImage) => {
+          const stage = String(data.stage || '').toLowerCase();
+          const message = String(data.message || '').toLowerCase();
+          if (data.status === 'queued' || stage === 'queued' || stage === 'started' || stage === 'api_gateway') return 'created';
+          if (stage === 'vision' || stage === 'file_load' || message.includes('vision') || message.includes('glm')) return hasImage ? 'vision' : 'parse';
+          if (stage === 'text' || message.includes('text module')) return 'parse';
+          if (stage === 'n8n' || message.includes('rag') || message.includes('workflow') || message.includes('知识库')) return 'knowledge';
+          if (stage === 'completed' || data.status === 'preview' || data.status === 'success') return 'review';
+          return null;
+        };
+
+        const describeQuoteProgress = (stageId) => {
+          const textByStage = {
+            created: '报价任务已创建，正在等待 Worker 接手',
+            parse: '正在解析文字需求并整理报价上下文',
+            vision: '正在识别附件内容并提取图纸/清单信息',
+            knowledge: '正在检索知识库并调用报价引擎，通常需要 15-30 秒',
+            quote: 'AI 正在生成报价明细，完成后会自动弹出预审面板',
+            review: 'AI 预审数据已就绪，等待人工复核'
+          };
+          return textByStage[stageId] || quoteProgressText.value;
         };
 
         const handleUnauthorized = () => {
@@ -541,7 +635,10 @@
 
         const sendMessage = async () => {
           const text = inputText.value.trim();
-          if (!text && !selectedFile.value) return;
+          if (!text && !selectedFile.value) {
+            ElMessage.warning('请输入报价需求或上传附件后再发送');
+            return;
+          }
 
           const formData = new FormData();
           if (text) formData.append('message', text);
@@ -562,11 +659,12 @@
           selectedFile.value = null;
           sending.value = true;
           isTyping.value = true;
-          currentStage.value = 0;
-          let processingCount = 0;
+          clearDelayedStageTimer();
+          startQuoteTimer();
+          setQuoteProgress('created', '正在创建异步报价任务，请稍候');
           scrollToBottom();
 
-          let charQueue  = Array.from('⏳ 正在唤醒网关层，创建异步报价任务...\n\n');
+          let charQueue  = Array.from('⏳ 正在创建异步报价任务...\n\n');
           let streamEnded = false;
 
           const typeNextChar = () => {
@@ -594,6 +692,8 @@
               const traceId   = createResponse.headers.get('X-Trace-Id');
               const errorData = await createResponse.json().catch(() => ({}));
               if (createResponse.status === 401) handleUnauthorized();
+              setQuoteProgress(null, `任务创建失败：${errorData.detail || createResponse.statusText}`, 'error');
+              stopQuoteTimer();
               charQueue.push(...('\n' + formatApiError(`任务创建失败 (${createResponse.status})`, errorData.detail || createResponse.statusText, traceId)).split(''));
               messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
               streamEnded = true; sending.value = false; return;
@@ -612,21 +712,27 @@
               const traceId   = eventResponse.headers.get('X-Trace-Id') || job.trace_id;
               const errorData = await eventResponse.json().catch(() => ({}));
               if (eventResponse.status === 401) handleUnauthorized();
+              setQuoteProgress(null, `任务订阅失败：${errorData.detail || eventResponse.statusText}`, 'error');
+              stopQuoteTimer();
               charQueue.push(...('\n' + formatApiError(`任务订阅失败 (${eventResponse.status})`, errorData.detail || eventResponse.statusText, traceId)).split(''));
               messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
               streamEnded = true; sending.value = false; return;
             }
 
             await readSseStream(eventResponse, (data) => {
+              const nextStage = resolveQuoteStage(data, hasImage);
+              if (nextStage) setQuoteProgress(nextStage, describeQuoteProgress(nextStage));
+              if (nextStage === 'knowledge') scheduleQuoteGenerationHint();
+              if (nextStage && nextStage !== 'knowledge') clearDelayedStageTimer();
+
               if (data.status === 'queued') {
-                currentStage.value = 0;
                 charQueue.push(...(`${data.message}\n\n`).split(''));
               } else if (data.status === 'processing') {
-                processingCount++;
-                currentStage.value = Math.min(processingCount, 2);
                 charQueue.push(...(`${data.message}\n\n`).split(''));
               } else if (data.status === 'preview') {
-                currentStage.value = 3;
+                clearDelayedStageTimer();
+                setQuoteProgress('review', 'AI 预审数据已就绪，等待人工复核', 'success');
+                stopQuoteTimer();
                 charQueue.push(...(data.message).split(''));
                 sending.value = false;
                 const parsed = parsePreviewPayload(data.data || {});
@@ -634,7 +740,9 @@
                 globalNotes.value  = parsed.notes;
                 setTimeout(() => { showPreviewDialog.value = true; }, 1000);
               } else if (data.status === 'error') {
-                currentStage.value = -1;
+                clearDelayedStageTimer();
+                setQuoteProgress(null, data.message || '报价任务失败，请重试', 'error');
+                stopQuoteTimer();
                 const msg = data.trace_id
                   ? `${data.message}\n追踪ID：${data.trace_id}\n您可以点击重试；若连续失败，请把追踪ID发给管理员排查。`
                   : data.message;
@@ -642,7 +750,9 @@
                 messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
                 sending.value = false;
               } else if (data.status === 'success') {
-                currentStage.value = 3;
+                clearDelayedStageTimer();
+                setQuoteProgress('review', '报价结果已生成', 'success');
+                stopQuoteTimer();
                 charQueue.push(...(data.message).split(''));
                 sending.value = false;
               }
@@ -656,19 +766,38 @@
               const statusBody = await statusResponse.json();
               const latest = apiPayloadData(statusBody, statusBody);
               if (latest.status === 'failed' && latest.error_message && !messageHistory.value[msgIndex].canRetry) {
+                clearDelayedStageTimer();
+                setQuoteProgress(null, latest.error_message, 'error');
+                stopQuoteTimer();
                 charQueue.push(...(`\n${latest.error_message}`).split(''));
                 messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
                 sending.value = false;
               } else if (latest.status === 'succeeded' && latest.result && !showPreviewDialog.value) {
+                clearDelayedStageTimer();
+                setQuoteProgress('review', '报价结果已生成，等待人工复核', 'success');
+                stopQuoteTimer();
                 const parsed = parsePreviewPayload(latest.result);
                 previewData.value = parsed.rows;
                 globalNotes.value = parsed.notes;
+                sending.value = false;
                 setTimeout(() => { showPreviewDialog.value = true; }, 1000);
               }
             }
 
+            if (sending.value && !messageHistory.value[msgIndex].canRetry) {
+              clearDelayedStageTimer();
+              setQuoteProgress(null, '任务事件流已结束，但未收到完成状态', 'error');
+              stopQuoteTimer();
+              charQueue.push(...('\n任务事件流已结束，但未收到完成状态。您可以点击重试，或到管理员任务队列查看任务详情。').split(''));
+              messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
+              sending.value = false;
+            }
+
             streamEnded = true;
           } catch (error) {
+            clearDelayedStageTimer();
+            setQuoteProgress(null, `网络异常：${error.message}`, 'error');
+            stopQuoteTimer();
             charQueue.push(...('\n' + formatApiError('网络异常', error.message)).split(''));
             messageHistory.value[msgIndex] = { ...messageHistory.value[msgIndex], canRetry: true };
             streamEnded = true; sending.value = false;
@@ -726,11 +855,16 @@
           }
         });
 
+        onBeforeUnmount(() => {
+          stopQuoteTimer();
+          clearDelayedStageTimer();
+        });
+
         return {
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
           showPreviewDialog, previewData, pushing, finalTotalAmount,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
-          stages, currentStage,
+          stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           handleRegister, handleLogin, logout, handleFileChange,
           sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
           retryLastMessage, useExample,

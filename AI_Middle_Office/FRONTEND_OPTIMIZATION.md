@@ -31,7 +31,9 @@
   - Split one module at a time and run the corresponding acceptance section immediately.
 
 - [ ] **P3 High-ROI UX improvements**
-  - Improve quote progress, readable errors, retry entry points, upload/wait/push states, and long-task feedback.
+  - [x] `quote_progress`: expanded the workbench quote flow to five visible stages, added current status text, elapsed seconds, long-running generation hint, empty-request validation, and clearer error progress state.
+  - [ ] `retry_entry`: make failed quote retry and task-detail recovery more discoverable.
+  - [ ] `upload_push_states`: refine upload, wait, confirm, and DingTalk push loading/disabled states.
   - These may be pulled forward when they are safer or more valuable than structural cleanup.
 
 - [ ] **P4 Vite/Vue migration watch**

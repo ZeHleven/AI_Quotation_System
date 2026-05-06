@@ -25,7 +25,7 @@
 - [ ] **P2 Admin module split**
   - [x] `ops`: moved ops dashboard state, alert notification, refresh, and polling into `static/js/admin/ops.js`.
   - [ ] `materials`: split knowledge-base CRUD, snapshots, rollback, CSV import, sync, and RAG eval helpers.
-  - [ ] `quote_jobs`: split job queue listing, filters, detail, cancel, retry, and timeout marking.
+  - [x] `quote_jobs`: moved job queue listing, filters, detail, cancel, retry, timeout marking, status tags, and detail formatting into `static/js/admin/quote_jobs.js`.
   - [x] `model_gateway`: moved stats/circuit state and refresh logic into `static/js/admin/model_gateway.js`.
   - [x] `files`: moved storage health, file list, upload, and download URL logic into `static/js/admin/files.js`.
   - Split one module at a time and run the corresponding acceptance section immediately.

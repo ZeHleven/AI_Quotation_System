@@ -27,7 +27,7 @@
   - [ ] `materials`: split knowledge-base CRUD, snapshots, rollback, CSV import, sync, and RAG eval helpers.
   - [ ] `quote_jobs`: split job queue listing, filters, detail, cancel, retry, and timeout marking.
   - [x] `model_gateway`: moved stats/circuit state and refresh logic into `static/js/admin/model_gateway.js`.
-  - [ ] `files`: split storage health, file list, upload, and download URL logic.
+  - [x] `files`: moved storage health, file list, upload, and download URL logic into `static/js/admin/files.js`.
   - Split one module at a time and run the corresponding acceptance section immediately.
 
 - [ ] **P3 High-ROI UX improvements**

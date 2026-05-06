@@ -650,6 +650,7 @@
   <script src="/static/js/shared.js"></script>
   <script src="/static/js/admin/ops.js"></script>
   <script src="/static/js/admin/model_gateway.js"></script>
+  <script src="/static/js/admin/files.js"></script>
 
   <script>
     const { createApp, ref, computed, onMounted, onBeforeUnmount } = Vue;
@@ -731,12 +732,6 @@
         const ragEvalPolling = ref(null);
 
         // 文件存储
-        const storageFiles    = ref([]);
-        const storageLoading  = ref(false);
-        const storageUploading = ref(false);
-        const storageHealth   = ref({});
-        const storagePurpose  = ref('quote_attachment');
-
         const authHeaders = () => {
           return buildAuthHeaders(() => redirectToLogin('请先登录后再进入管理员页面'));
         };
@@ -784,6 +779,27 @@
           gatewayHours,
           fetchGatewayStats
         } = gatewayModule;
+
+        const filesModule = window.AIMOAdminFiles.createFilesModule({
+          ref,
+          axios,
+          ElMessage,
+          coreApiBaseUrl: CORE_API_BASE_URL,
+          authHeaders,
+          apiData,
+          apiErrorMessage
+        });
+        const {
+          storageFiles,
+          storageLoading,
+          storageUploading,
+          storageHealth,
+          storagePurpose,
+          fetchStorageHealth,
+          fetchStorageFiles,
+          handleStorageUpload,
+          openStorageDownload
+        } = filesModule;
 
         const statusTagType = (status) => {
           const map = { queued: 'info', running: 'warning', succeeded: 'success', failed: 'danger', canceled: 'info', timed_out: 'danger' };
@@ -932,56 +948,6 @@
             await fetchMaterialAudit();
           } catch (e) {
             if (e !== 'cancel') ElMessage.error(apiErrorMessage(e, '回滚知识库快照失败'));
-          }
-        };
-
-        const fetchStorageHealth = async () => {
-          try {
-            const res = await axios.get(`${CORE_API_BASE_URL}/admin/files/storage/health`, { headers: authHeaders() });
-            storageHealth.value = apiData(res, {}) || {};
-          } catch (e) {
-            storageHealth.value = { ok: false, status: 'error' };
-            ElMessage.error(apiErrorMessage(e, '检测 MinIO 存储失败'));
-          }
-        };
-
-        const fetchStorageFiles = async () => {
-          storageLoading.value = true;
-          try {
-            const res = await axios.get(`${CORE_API_BASE_URL}/files`,
-              { params: { page: 1, page_size: 20 }, headers: authHeaders() });
-            storageFiles.value = apiData(res, []) || [];
-          } catch (e) {
-            ElMessage.error(apiErrorMessage(e, '获取文件列表失败'));
-          } finally {
-            storageLoading.value = false;
-          }
-        };
-
-        const handleStorageUpload = async (file) => {
-          const formData = new FormData();
-          formData.append('file', file.raw);
-          formData.append('purpose', storagePurpose.value || 'general');
-          storageUploading.value = true;
-          try {
-            const res = await axios.post(`${CORE_API_BASE_URL}/files`, formData, { headers: authHeaders() });
-            const uploaded = apiData(res, {});
-            ElMessage.success(`文件已上传：${uploaded.original_filename}`);
-            await fetchStorageFiles();
-            await fetchStorageHealth();
-          } catch (e) {
-            ElMessage.error(apiErrorMessage(e, '上传文件失败，请检查 MinIO 配置'));
-          } finally {
-            storageUploading.value = false;
-          }
-        };
-
-        const openStorageDownload = async (row) => {
-          try {
-            const res = await axios.get(`${CORE_API_BASE_URL}/files/${row.file_id}/download_url`, { headers: authHeaders() });
-            window.open(apiData(res, {}).download_url, '_blank');
-          } catch (e) {
-            ElMessage.error(apiErrorMessage(e, '生成临时下载链接失败'));
           }
         };
 

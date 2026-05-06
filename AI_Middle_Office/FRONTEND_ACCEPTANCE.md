@@ -36,7 +36,7 @@
 
 | Result | Scenario | Operation | Expected Result | Notes |
 |---|---|---|---|---|
-| [ ] | B1 Text quote submission | On `index.html`, enter a normal text quote request and submit. | A quote job is created; progress area appears with `创建任务 → 需求解析 → 知识库检索 → 生成报价 → 人工预审`; current status text and elapsed seconds update from SSE events; final quote or pre-review data is rendered. | Verifies quote job API + SSE. |
+| [ ] | B1 Text quote submission | On `index.html`, enter a normal text quote request and submit. | A quote job is created; progress area appears with `创建任务 → 需求解析 → 知识库检索 → 生成报价 → 人工预审`; current status text and elapsed seconds update from SSE events; pre-review dialog opens only after line items are parsed and the table is not blank. | Verifies quote job API + SSE. |
 | [ ] | B2 Empty request validation | Submit with no text and no file. | Frontend shows a readable validation message; no assistant bubble, loading spinner, timer, or stuck progress state remains. | No backend job should be created. |
 | [ ] | B3 File upload quote | Upload a supported image/file and submit a quote request. | Upload/processing state is visible; progress uses `图像识别` instead of `需求解析`; GLM/file-load failures show a readable error state with retry available; success renders quote result. | If MinIO is enabled, also checks file reference path. |
 | [ ] | B4 Long-running progress | Submit a request that takes long enough to observe multiple stages. | Progress/phase labels keep updating; elapsed seconds increase; long `RAG/n8n` waits advance to `生成报价`; user can tell the task is still running; no duplicate final result is shown. | Important for user trust. |

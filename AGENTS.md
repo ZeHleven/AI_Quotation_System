@@ -65,8 +65,11 @@ Clear_test/
 
 ## 当前完成状态
 
-- 后端重构 P0-P3 已完成并推送到 `main`，最新提交：`6e54c09 clarify legacy materials config`。
+- 后端重构 P0-P3、补充一致性优化、运维告警收敛已完成并冻结；后续仅按真实问题增量维护。
+- 前端优化 P0-P3 已完成：验收清单、共享浏览器逻辑、admin 模块拆分、报价进度/失败恢复/上传推送状态均已落地并手工验证。
+- P4 Vite/Vue SFC 迁移暂不启动；仅当页面规模、多人协作、组件复用或 TypeScript/Router/状态管理需求真实出现时再评估。
 - 当前 Alembic 版本：`20260505_0003`；物料库主存储为 MySQL `materials` / `material_snapshots`。
+- 新增数据库字段/表必须走 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` 或启动兼容迁移。
 - `LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅保留为旧 `rag_materials.json` 自动导入源；RAG 评测报告目录由 `RAG_EVAL_REPORT_DIR` 控制。
 - 最新本地验证：`python -m compileall app` 通过，`python -m pytest` 为 `55 passed`。
 

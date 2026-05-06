@@ -1,6 +1,6 @@
 # Frontend Optimization Track
 
-> Status: start after backend infrastructure freeze. Do not migrate to Vite/Vue SFC yet; first create acceptance coverage, reduce duplicated browser logic, and split the oversized admin page safely.
+> Status: P0-P3 completed and verified after backend infrastructure freeze. Do not migrate to Vite/Vue SFC unless one of the P4 triggers becomes real.
 
 ## Principles
 

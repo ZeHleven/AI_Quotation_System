@@ -21,6 +21,7 @@ from app.api.v1 import (
     auth,
     files,
     history,
+    knowledge_candidates,
     materials,
     model_gateway,
     ops,
@@ -37,6 +38,7 @@ from app.models import file_object  # noqa: F401 — 触发文件对象表建表
 from app.models import rag_eval_report  # noqa: F401 — 触发 rag_eval_reports 表建表
 from app.models import quote_feedback as quote_feedback_model  # noqa: F401 — 触发报价反馈表建表
 from app.models import prompt_regression as prompt_regression_model  # noqa: F401 — 触发 Prompt 回归表建表
+from app.models import knowledge_candidate as knowledge_candidate_model  # noqa: F401 — 触发知识候选表建表
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -161,6 +163,7 @@ app.include_router(history.router, prefix="/api/v1", tags=["History"])
 app.include_router(quote_jobs.router, prefix="/api/v1", tags=["Async Quote Jobs"])
 app.include_router(quote_feedback.router, prefix="/api/v1", tags=["Quote Feedback"])
 app.include_router(prompt_regression.router, prefix="/api/v1", tags=["Prompt Regression"])
+app.include_router(knowledge_candidates.router, prefix="/api/v1", tags=["Knowledge Candidates"])
 app.include_router(model_gateway.router, prefix="/api/v1", tags=["Model Gateway"])
 app.include_router(files.router, prefix="/api/v1", tags=["File Storage"])
 app.include_router(ops.router, prefix="/api/v1", tags=["Operations"])

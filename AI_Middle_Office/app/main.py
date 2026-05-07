@@ -17,11 +17,12 @@ from app.core.rate_limit import limiter
 
 settings.apply_proxy_env()
 
-from app.api.v1 import auth, files, history, materials, model_gateway, ops, quote, quote_jobs, rag_eval, users
+from app.api.v1 import auth, files, history, materials, model_gateway, ops, quote, quote_feedback, quote_jobs, rag_eval, users
 from app.core.database import engine, Base, get_db
 from app.models import material, user, quote_history, quote_job, model_call_log  # noqa: F401 — 触发 SQLAlchemy 建表
 from app.models import file_object  # noqa: F401 — 触发文件对象表建表
 from app.models import rag_eval_report  # noqa: F401 — 触发 rag_eval_reports 表建表
+from app.models import quote_feedback as quote_feedback_model  # noqa: F401 — 触发报价反馈表建表
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -144,6 +145,7 @@ app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
 app.include_router(users.router, prefix="/api/v1", tags=["Users"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
 app.include_router(quote_jobs.router, prefix="/api/v1", tags=["Async Quote Jobs"])
+app.include_router(quote_feedback.router, prefix="/api/v1", tags=["Quote Feedback"])
 app.include_router(model_gateway.router, prefix="/api/v1", tags=["Model Gateway"])
 app.include_router(files.router, prefix="/api/v1", tags=["File Storage"])
 app.include_router(ops.router, prefix="/api/v1", tags=["Operations"])

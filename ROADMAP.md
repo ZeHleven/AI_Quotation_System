@@ -1,16 +1,29 @@
 # 系统升级路线图
 
-> 最后更新：2026-05-06
+> 最后更新：2026-05-07
 
 ---
 
 ## 当前冻结状态（2026-05-06）
 
 - **后端基础设施优化已收束**：后端重构 P0-P3、补充一致性优化、运维告警收敛、Alembic 迁移纪律均已落地；后续不再做无触发的基础设施打磨。
-- **数据库规范**：当前 Alembic 版本为 `20260505_0003`；后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
+- **数据库规范**：当前代码迁移 head 为 `20260507_0004`；生产数据库若仍为 `20260505_0003`，需执行 Alembic 升级后启用完整报价反馈记录。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
+- **业务优化 P0 已启动**：新增报价反馈闭环迁移 `20260507_0004`，覆盖 AI 初稿、人工确认稿、字段级修正、打回记录、Dify/prompt 版本和 RAG trace 落库；目标数据库需执行 `alembic upgrade 20260507_0004` 后启用完整反馈记录。
 - **前端优化 P0-P3 已完成**：已完成 `FRONTEND_ACCEPTANCE.md`、`static/js/shared.js`、`admin.html` 模块拆分，以及报价进度、失败恢复、上传/推送状态优化。
 - **P4 暂不启动**：暂不迁移 Vite/Vue SFC；只有页面规模、多人协作、组件复用、TypeScript/Router/状态管理等触发条件真实出现时再评估。
 - **维护策略**：进入问题驱动维护阶段，优先投入报价准确率、知识库质量、RAG 评测和真实用户体验问题。
+
+## 业务优化路线（2026-05-07）
+
+- [x] **P0 报价反馈闭环 + 版本追踪**：新增 `quote_feedback`、`quote_corrections`、`quote_rag_traces`，在异步报价预审完成时记录 AI 初稿，在 `/confirm_push` 成功后记录最终人工确认稿和字段差异，在预审打回时记录 rejection；新增 `DIFY_APP_VERSION`、`DIFY_WORKFLOW_VERSION`、`DIFY_PROMPT_VERSION`、`DIFY_RELEASE_ID`、`RAG_COLLECTION_ALIAS` 配置。
+- [x] **P0 前端上下文传递**：`index.html` 在预审弹窗保存 `quote_job_id` / `trace_id`，确认推送时带回后端，打回重填时调用 `/api/v1/quote/feedback/reject` 做轻量记录。
+- [x] **P0 测试覆盖**：新增 `tests/test_quote_feedback.py`，覆盖确认推送后的反馈、修正、RAG trace 记录，以及人工打回记录。
+- [x] **P0 验证结果**：`python -m compileall app` 通过，`python -m pytest` 为 `59 passed`；仍有已知 `.pytest_cache` 权限 warning，不影响测试结果。
+- [ ] **P1 Admin 反馈分析页面**：展示最近报价通过率、人工修改率、总价偏差、高频错误类型、prompt 版本表现和高频召回知识条目。
+- [ ] **P2 Prompt 回归评测**：固定黄金案例集，记录 prompt 版本、测试集、总价偏差、明细遗漏率和格式错误率。
+- [ ] **P3 知识库质量治理**：基于真实反馈和 RAG trace 沉淀黄金案例、细化条目粒度、清理低价值知识条目。
+- [ ] **P4 真实用户体验优化**：低置信度提示、失败可操作原因、人工修改一键沉淀知识。
+- [ ] **P5 LangGraph 触发项**：仅在需要自适应多轮检索、主动澄清、多模型状态机或替换 N8N 核心编排时再评估。
 
 ## 高优先级
 

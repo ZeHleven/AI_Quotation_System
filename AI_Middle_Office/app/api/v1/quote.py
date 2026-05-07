@@ -20,6 +20,7 @@ from app.models.user import User
 from app.schemas.quote import ConfirmPushRequest
 from app.services.excel_service import build_excel_base64
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
+from app.services.quote_feedback import record_ai_preview, record_confirmed_quote
 from app.services.quote_helpers import attach_quote_filename, sign_payload
 
 
@@ -127,6 +128,20 @@ async def process_chat(
                     return
                 current_user.quota -= 1
                 db.commit()
+                try:
+                    record_ai_preview(
+                        db,
+                        username=current_user.username,
+                        ai_payload=calc_result,
+                        quote_id=request_trace_id,
+                        trace_id=request_trace_id,
+                        source="sync_chat",
+                        query_text=final_query,
+                    )
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    logger.exception("quote_feedback_preview_record_failed", extra={"event": "quote_feedback_preview_record_failed"})
                 logger.info("quote_request_finished", extra={"username": current_user.username, "event": "quote_request_finished"})
                 yield _sse_event("preview", "[n8n Workflow] ✅ AI 预审数据已就绪，请人工复核！", trace_id=request_trace_id, data=calc_result)
             else:
@@ -182,6 +197,7 @@ async def confirm_and_push(
             trace_id=get_trace_id(),
         )
         if response.status_code == 200:
+            quote_history_id = None
             try:
                 details = payload.get("project_details", [])
                 total = sum(float(item.get("total_price", 0)) for item in details)
@@ -193,8 +209,23 @@ async def confirm_and_push(
                 )
                 db.add(record)
                 db.commit()
+                db.refresh(record)
+                quote_history_id = record.id
             except Exception:
-                pass
+                db.rollback()
+                logger.exception("quote_history_record_failed", extra={"event": "quote_history_record_failed"})
+            try:
+                record_confirmed_quote(
+                    db,
+                    username=current_user.username,
+                    final_payload=payload,
+                    quote_history_id=quote_history_id,
+                    allow_cross_user=current_user.role == "admin",
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("quote_feedback_confirm_record_failed", extra={"event": "quote_feedback_confirm_record_failed"})
             return api_ok(message="✅ 最终报价单已成功投递至钉钉群！")
         raise HTTPException(status_code=500, detail="底层推送流水线异常")
     except Exception as e:

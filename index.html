@@ -454,6 +454,7 @@
         const globalNotes       = ref('');
         const pushing           = ref(false);
         const pushError         = ref('');
+        const previewContext    = ref({ quoteJobId: '', traceId: '', quoteId: '', rawPayload: null });
 
         const showHistory     = ref(false);
         const historyList     = ref([]);
@@ -708,11 +709,17 @@
           return { rows: Array.isArray(extractedArray) ? extractedArray : [], notes: extractedNotes };
         };
 
-        const openPreviewFromPayload = (rawData) => {
+        const openPreviewFromPayload = (rawData, context = {}) => {
           const parsed = parsePreviewPayload(rawData || {});
           if (!parsed.rows.length) return false;
           previewData.value = parsed.rows;
           globalNotes.value = parsed.notes;
+          previewContext.value = {
+            quoteJobId: context.quoteJobId || context.jobId || rawData?.quote_job_id || rawData?.job_id || '',
+            traceId: context.traceId || rawData?.trace_id || '',
+            quoteId: context.quoteId || rawData?.quote_id || '',
+            rawPayload: rawData || null,
+          };
           pushError.value = '';
           setTimeout(() => { showPreviewDialog.value = true; }, 300);
           return true;
@@ -765,7 +772,7 @@
           });
 
           if (job.status === 'succeeded' && job.result) {
-            if (openPreviewFromPayload(job.result)) {
+            if (openPreviewFromPayload(job.result, { quoteJobId: job.job_id, traceId: job.trace_id })) {
               updateAssistantMessage(msgIndex, { canRetry: false, canCheckStatus: false });
               appendAssistantContent(msgIndex, '\n✅ 已重新拉取任务结果，预审明细已恢复。');
               return true;
@@ -956,7 +963,7 @@
                 clearDelayedStageTimer();
                 setQuoteProgress('review', '收到 AI 预审完成信号，正在整理明细', 'success');
                 charQueue.push(...(data.message).split(''));
-                if (openPreviewFromPayload(data.data || data)) {
+                if (openPreviewFromPayload(data.data || data, { quoteJobId: job.job_id, traceId: data.trace_id || job.trace_id })) {
                   setQuoteProgress('review', 'AI 预审数据已就绪，等待人工复核', 'success');
                   stopQuoteTimer();
                   sending.value = false;
@@ -1039,11 +1046,23 @@
           sendMessage();
         };
 
-        const cancelPreview = () => {
+        const cancelPreview = async () => {
           if (pushing.value) return;
           showPreviewDialog.value = false;
           sending.value = false;
           pushError.value = '';
+          const context = previewContext.value || {};
+          if (context.quoteJobId || context.traceId) {
+            try {
+              await axios.post(`${API_BASE_URL}/quote/feedback/reject`, {
+                quote_job_id: context.quoteJobId || undefined,
+                trace_id: context.traceId || undefined,
+                reason: 'manual_review_rejected'
+              }, { headers: authHeaders() });
+            } catch (error) {
+              console.warn('quote feedback reject record failed', error);
+            }
+          }
           messageHistory.value.push({ role: 'assistant', content: '⏸️ 人工审核不通过，流程已打回。您可以修改参数后重新输入指令。' });
           scrollToBottom();
         };
@@ -1057,13 +1076,18 @@
           pushing.value = true;
           pushError.value = '';
           try {
+            const context = previewContext.value || {};
             const finalPayload = {
               project_details: previewData.value,
-              customer_questions_answered: globalNotes.value
+              customer_questions_answered: globalNotes.value,
+              quote_id: context.quoteId || undefined,
+              quote_job_id: context.quoteJobId || undefined,
+              trace_id: context.traceId || undefined
             };
             await axios.post(`${API_BASE_URL}/confirm_push`, finalPayload, {
               headers: authHeaders()
             });
+            previewContext.value = { quoteJobId: '', traceId: '', quoteId: '', rawPayload: null };
             ElMessage.success('🎉 确认成功！最终报价单已推送到钉钉！');
             showPreviewDialog.value = false;
             sending.value = false;

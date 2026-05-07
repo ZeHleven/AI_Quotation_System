@@ -16,6 +16,7 @@ from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.file_storage import get_object_bytes
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
+from app.services.quote_feedback import safe_record_ai_preview
 from app.services.quote_helpers import sign_payload
 
 
@@ -318,6 +319,14 @@ async def run_quote_job_async(job_id: str) -> None:
                 job.result_json = json.dumps(extra.get("data"), ensure_ascii=False)
                 job.finished_at = _utcnow()
                 user.quota -= 1
+                safe_record_ai_preview(
+                    db,
+                    username=job.username,
+                    ai_payload=extra.get("data"),
+                    quote_job=job,
+                    source="async_job",
+                    query_text=job.message,
+                )
             elif status_name == "error":
                 job.status = "failed"
                 job.error_message = message

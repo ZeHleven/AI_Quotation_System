@@ -166,6 +166,13 @@
     .summary-label { font-size: 13px; opacity: 0.7; }
     .summary-total { font-size: 24px; font-weight: 700; }
     .push-status { margin-bottom: 12px; }
+    .review-hints { display: grid; gap: 10px; margin-bottom: 12px; }
+    .learning-panel {
+      display: grid; gap: 8px; padding: 10px 12px;
+      border: 1px solid var(--steel); border-radius: 6px; background: var(--bg);
+    }
+    .learning-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .learning-meta { font-size: 12px; color: var(--slate); }
 
     .cursor {
       display: inline-block; width: 6px; height: 15px; background: var(--slate);
@@ -354,8 +361,29 @@
         <el-alert title="请仔细核对以下 AI 提取的数据，如有遗漏或单价错误，请直接点击表格框进行修改。" type="warning" show-icon style="margin-bottom: 15px;"></el-alert>
         <el-alert v-if="pushing" class="push-status" title="正在生成 Excel 并推送到钉钉，请勿关闭或重复提交。" type="info" show-icon></el-alert>
         <el-alert v-if="pushError" class="push-status" :title="pushError" type="error" show-icon :closable="false"></el-alert>
+        <div class="review-hints">
+          <el-alert v-if="previewRiskItems.length" :title="riskSummaryText" :type="highRiskCount > 0 ? 'error' : 'warning'" show-icon :closable="false"></el-alert>
+          <div class="learning-panel">
+            <div class="learning-row">
+              <el-checkbox v-model="knowledgeLearningEnabled" :disabled="pushing || !previewHasChanges">
+                将本次人工修改标记为知识候选证据
+              </el-checkbox>
+              <span class="learning-meta" v-if="previewHasChanges">{{ previewChangeSummary.changedRows }} 行有修改</span>
+              <span class="learning-meta" v-else>当前未检测到人工修改</span>
+            </div>
+            <el-input v-model="knowledgeLearningReason" :disabled="pushing || !knowledgeLearningEnabled || !previewHasChanges" size="small" placeholder="可选：说明修改原因，例如单价修正、漏项补充、工艺说明补全"></el-input>
+            <el-input v-model="rejectReason" :disabled="pushing" size="small" placeholder="打回重填时可填写原因，便于后续补充缺失知识"></el-input>
+          </div>
+        </div>
 
         <el-table :data="previewData" border stripe style="width: 100%">
+          <el-table-column label="风险" width="90" align="center">
+            <template #default="scope">
+              <el-tag :type="rowRisk(scope.row, scope.$index).type" size="small" effect="plain">
+                {{ rowRisk(scope.row, scope.$index).label }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="project_name" label="施工项目" min-width="160">
             <template #default="scope">
               <el-input v-model="scope.row.project_name" size="small" :disabled="pushing"></el-input>
@@ -451,9 +479,13 @@
 
         const showPreviewDialog = ref(false);
         const previewData       = ref([]);
+        const previewOriginalData = ref([]);
         const globalNotes       = ref('');
         const pushing           = ref(false);
         const pushError         = ref('');
+        const rejectReason      = ref('');
+        const knowledgeLearningEnabled = ref(true);
+        const knowledgeLearningReason = ref('');
         const previewContext    = ref({ quoteJobId: '', traceId: '', quoteId: '', rawPayload: null });
 
         const showHistory     = ref(false);
@@ -499,11 +531,39 @@
 
         const useExample = (text) => { inputText.value = text; };
 
+        const buildActionAdvice = (detail = '', status = '') => {
+          const text = `${detail || ''} ${status || ''}`.toLowerCase();
+          if (text.includes('quota') || text.includes('额度')) {
+            return { reason: '当前账号额度不足', actions: ['联系管理员补充额度', '避免重复提交同一需求'] };
+          }
+          if (text.includes('401') || text.includes('认证') || text.includes('token')) {
+            return { reason: '登录状态已失效', actions: ['返回门户重新登录', '登录后从历史或任务状态恢复结果'] };
+          }
+          if (text.includes('timeout') || text.includes('timed_out') || text.includes('超时')) {
+            return { reason: '外部模型或工作流响应超时', actions: ['先点击查看任务状态确认是否已完成', '仍失败时重新提交一次'] };
+          }
+          if (text.includes('worker') || text.includes('celery') || text.includes('redis') || text.includes('队列')) {
+            return { reason: '后台任务队列或 Worker 异常', actions: ['不要连续重复提交', '把任务编号和追踪ID发给管理员检查运维面板'] };
+          }
+          if (text.includes('rag') || text.includes('知识库') || text.includes('milvus')) {
+            return { reason: '知识库检索链路异常', actions: ['可先用更具体的项目名称重试', '通知管理员检查 RAG 服务和 Milvus'] };
+          }
+          if (text.includes('n8n') || text.includes('dify') || text.includes('workflow') || text.includes('webhook')) {
+            return { reason: '报价工作流服务异常', actions: ['稍后重试', '把追踪ID发给管理员检查 n8n/Dify 流程'] };
+          }
+          if (text.includes('file') || text.includes('minio') || text.includes('upload') || text.includes('附件')) {
+            return { reason: '附件读取或上传异常', actions: ['确认文件没有被占用后重新上传', '图片过大时先压缩或改传清晰截图'] };
+          }
+          return { reason: '报价链路未返回明确原因', actions: ['点击重试或查看任务状态', '连续失败时把任务编号和追踪ID发给管理员'] };
+        };
+
         const formatApiError = (prefix, detail, traceId) => {
           const parts = [`❌ ${prefix}`];
           if (detail)  parts.push(String(detail));
           if (traceId) parts.push(`追踪ID：${traceId}`);
-          parts.push('您可以点击重试；若连续失败，请把追踪ID发给管理员排查。');
+          const advice = buildActionAdvice(detail, prefix);
+          parts.push(`可能原因：${advice.reason}`);
+          parts.push(`建议处理：${advice.actions.join('；')}`);
           return parts.join('\n');
         };
 
@@ -577,6 +637,75 @@
         const finalTotalAmount = computed(() => {
           if (!Array.isArray(previewData.value)) return '0.00';
           return previewData.value.reduce((sum, item) => sum + (Number(item.total_price) || 0), 0).toFixed(2);
+        });
+
+        const cloneRows = (rows) => JSON.parse(JSON.stringify(Array.isArray(rows) ? rows : []));
+
+        const parseMoney = (value) => {
+          if (value === null || value === undefined || value === '') return null;
+          const normalized = Number(String(value).replace(/,/g, '').match(/-?\d+(\.\d+)?/)?.[0]);
+          return Number.isFinite(normalized) ? normalized : null;
+        };
+
+        const comparableRow = (row = {}) => ({
+          project_name: String(row.project_name || row.item_name || '').trim(),
+          unit_price: parseMoney(row.unit_price),
+          total_price: parseMoney(row.total_price),
+          notes: String(row.notes || '').trim(),
+        });
+
+        const previewChangeSummary = computed(() => {
+          const currentRows = Array.isArray(previewData.value) ? previewData.value : [];
+          const originalRows = Array.isArray(previewOriginalData.value) ? previewOriginalData.value : [];
+          let changedRows = 0;
+          let changedFields = 0;
+          const total = Math.max(currentRows.length, originalRows.length);
+          for (let index = 0; index < total; index += 1) {
+            const current = comparableRow(currentRows[index] || {});
+            const original = comparableRow(originalRows[index] || {});
+            let rowChanged = false;
+            for (const key of Object.keys(current)) {
+              if (current[key] !== original[key]) {
+                rowChanged = true;
+                changedFields += 1;
+              }
+            }
+            if (rowChanged) changedRows += 1;
+          }
+          return { changedRows, changedFields };
+        });
+
+        const previewHasChanges = computed(() => previewChangeSummary.value.changedRows > 0);
+
+        const rowRisk = (row = {}, index = 0) => {
+          const risks = [];
+          const original = comparableRow(previewOriginalData.value[index] || {});
+          const current = comparableRow(row);
+          if (!current.project_name) risks.push('缺少项目');
+          if (current.unit_price === null || current.unit_price <= 0) risks.push('单价异常');
+          if (current.total_price === null || current.total_price <= 0) risks.push('合计异常');
+          if (!current.notes) risks.push('缺少备注');
+          if (original.total_price !== null && current.total_price !== null && original.total_price > 0) {
+            const ratio = Math.abs(current.total_price - original.total_price) / original.total_price;
+            if (ratio >= 0.25) risks.push('改动较大');
+          }
+          if (!risks.length) return { label: '正常', type: 'success', reasons: [] };
+          const high = risks.some(item => ['缺少项目', '单价异常', '合计异常'].includes(item));
+          return { label: high ? '高风险' : '需复核', type: high ? 'danger' : 'warning', reasons: risks };
+        };
+
+        const previewRiskItems = computed(() => {
+          return (Array.isArray(previewData.value) ? previewData.value : [])
+            .map((row, index) => ({ index, ...rowRisk(row, index) }))
+            .filter(item => item.reasons.length > 0);
+        });
+
+        const highRiskCount = computed(() => previewRiskItems.value.filter(item => item.type === 'danger').length);
+        const riskSummaryText = computed(() => {
+          const total = previewRiskItems.value.length;
+          if (!total) return '';
+          const examples = previewRiskItems.value.slice(0, 3).map(item => `第 ${item.index + 1} 行：${item.reasons.join('、')}`);
+          return `发现 ${total} 行需要复核，其中 ${highRiskCount.value} 行高风险。${examples.join('；')}`;
         });
 
         const canSubmit = computed(() => {
@@ -712,7 +841,8 @@
         const openPreviewFromPayload = (rawData, context = {}) => {
           const parsed = parsePreviewPayload(rawData || {});
           if (!parsed.rows.length) return false;
-          previewData.value = parsed.rows;
+          previewOriginalData.value = cloneRows(parsed.rows);
+          previewData.value = cloneRows(parsed.rows);
           globalNotes.value = parsed.notes;
           previewContext.value = {
             quoteJobId: context.quoteJobId || context.jobId || rawData?.quote_job_id || rawData?.job_id || '',
@@ -720,6 +850,9 @@
             quoteId: context.quoteId || rawData?.quote_id || '',
             rawPayload: rawData || null,
           };
+          rejectReason.value = '';
+          knowledgeLearningEnabled.value = true;
+          knowledgeLearningReason.value = '';
           pushError.value = '';
           setTimeout(() => { showPreviewDialog.value = true; }, 300);
           return true;
@@ -758,6 +891,11 @@
           return labels[status] || status || '未知状态';
         };
 
+        const formatJobFailure = (job) => {
+          const statusText = quoteJobStatusLabel(job?.status);
+          return formatApiError(`报价任务${statusText}`, job?.error_message || '可以重新提交本次报价。', job?.trace_id);
+        };
+
         const applyRecoveredJobResult = (job, msgIndex) => {
           if (!job || typeof job !== 'object') {
             markRecoverable(msgIndex);
@@ -784,7 +922,7 @@
 
           if (['failed', 'canceled', 'timed_out'].includes(job.status)) {
             markRecoverable(msgIndex, { jobId: job.job_id, traceId: job.trace_id });
-            appendAssistantContent(msgIndex, `\n任务状态：${quoteJobStatusLabel(job.status)}。${job.error_message || '可以重新提交本次报价。'}`);
+            appendAssistantContent(msgIndex, `\n${formatJobFailure(job)}`);
             return false;
           }
 
@@ -975,9 +1113,7 @@
                 clearDelayedStageTimer();
                 setQuoteProgress(null, data.message || '报价任务失败，请重试', 'error');
                 stopQuoteTimer();
-                const msg = data.trace_id
-                  ? `${data.message}\n追踪ID：${data.trace_id}\n您可以点击重试；若连续失败，请把追踪ID发给管理员排查。`
-                  : data.message;
+                const msg = formatApiError('报价任务失败', data.message, data.trace_id || job.trace_id);
                 charQueue.push(...msg.split(''));
                 markRecoverable(msgIndex, { jobId: job.job_id, traceId: data.trace_id || job.trace_id });
                 sending.value = false;
@@ -1057,12 +1193,13 @@
               await axios.post(`${API_BASE_URL}/quote/feedback/reject`, {
                 quote_job_id: context.quoteJobId || undefined,
                 trace_id: context.traceId || undefined,
-                reason: 'manual_review_rejected'
+                reason: rejectReason.value.trim() || 'manual_review_rejected'
               }, { headers: authHeaders() });
             } catch (error) {
               console.warn('quote feedback reject record failed', error);
             }
           }
+          previewOriginalData.value = [];
           messageHistory.value.push({ role: 'assistant', content: '⏸️ 人工审核不通过，流程已打回。您可以修改参数后重新输入指令。' });
           scrollToBottom();
         };
@@ -1077,6 +1214,7 @@
           pushError.value = '';
           try {
             const context = previewContext.value || {};
+            const shouldRecordKnowledge = knowledgeLearningEnabled.value && previewHasChanges.value;
             const finalPayload = {
               project_details: previewData.value,
               customer_questions_answered: globalNotes.value,
@@ -1084,18 +1222,30 @@
               quote_job_id: context.quoteJobId || undefined,
               trace_id: context.traceId || undefined
             };
+            if (shouldRecordKnowledge) {
+              finalPayload.feedback_reason_category = 'user_marked_knowledge_candidate';
+              finalPayload.feedback_reason = knowledgeLearningReason.value.trim()
+                || `人工修改 ${previewChangeSummary.value.changedRows} 行，建议沉淀为知识候选`;
+            }
             await axios.post(`${API_BASE_URL}/confirm_push`, finalPayload, {
               headers: authHeaders()
             });
             previewContext.value = { quoteJobId: '', traceId: '', quoteId: '', rawPayload: null };
+            previewOriginalData.value = [];
             ElMessage.success('🎉 确认成功！最终报价单已推送到钉钉！');
             showPreviewDialog.value = false;
             sending.value = false;
-            messageHistory.value.push({ role: 'assistant', content: '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！' });
+            messageHistory.value.push({
+              role: 'assistant',
+              content: shouldRecordKnowledge
+                ? '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉。本次修改已记录为后续知识候选证据。'
+                : '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！'
+            });
             scrollToBottom();
           } catch (error) {
-            pushError.value = apiErrorMessage(error, '推送钉钉失败，请检查推送流服务状态');
-            ElMessage.error(pushError.value);
+            const detail = apiErrorMessage(error, '请检查推送流服务状态');
+            pushError.value = formatApiError('推送钉钉失败', detail);
+            ElMessage.error('推送钉钉失败，请查看预审弹窗提示');
           } finally {
             pushing.value = false;
           }
@@ -1121,7 +1271,9 @@
 
         return {
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
-          showPreviewDialog, previewData, pushing, pushError, finalTotalAmount,
+          showPreviewDialog, previewData, previewOriginalData, pushing, pushError, finalTotalAmount,
+          rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
+          previewChangeSummary, previewHasChanges, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           canSubmit, selectedFileSummary,

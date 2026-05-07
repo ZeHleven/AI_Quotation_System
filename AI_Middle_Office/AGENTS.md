@@ -31,7 +31,7 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - MinIO: `192.168.88.128:9002/9003`
 - 健康检查：`/health/live`、`/health/ready`
 - 当前任务队列模式：生产使用 `TASK_QUEUE_MODE=celery`
-- 当前后端优化状态：基础设施 P0-P3 与配置收尾已完成并冻结；业务优化 P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测和 P3 知识库候选治理已落地到代码层。
+- 当前后端优化状态：基础设施 P0-P3 与配置收尾已完成并冻结；业务优化 P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理和 P4 真实用户体验优化已落地到代码层。
 - 当前数据库迁移 head：`20260507_0006`；生产数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归和知识候选记录。
 - 最新自动化验证：`python -m compileall app` 通过，`python -m pytest` 为 `64 passed`
 

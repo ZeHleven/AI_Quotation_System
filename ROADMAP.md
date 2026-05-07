@@ -2,7 +2,7 @@
 
 > 最后更新：2026-05-07
 
-> 业务优化 P3 更新：知识库质量治理代码层已落地，新增 `20260507_0006` Alembic revision；运行态启用前需先升级数据库。
+> 业务优化 P4 更新：真实用户体验优化代码层已落地，`index.html` 新增失败原因建议、预审风险提示和人工修改沉淀知识入口；本阶段不新增 Alembic revision。
 
 ---
 
@@ -12,7 +12,7 @@
 - **数据库规范**：当前代码迁移 head 为 `20260507_0006`；生产数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归和知识候选记录。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
 - **业务优化 P0-P3 已启动**：P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理均已落地到代码层。
 - **前端优化 P0-P3 已完成**：已完成 `FRONTEND_ACCEPTANCE.md`、`static/js/shared.js`、`admin.html` 模块拆分，以及报价进度、失败恢复、上传/推送状态优化。
-- **P4 暂不启动**：暂不迁移 Vite/Vue SFC；只有页面规模、多人协作、组件复用、TypeScript/Router/状态管理等触发条件真实出现时再评估。
+- **前端架构 P4 暂不启动**：暂不迁移 Vite/Vue SFC；只有页面规模、多人协作、组件复用、TypeScript/Router/状态管理等触发条件真实出现时再评估。
 - **维护策略**：进入问题驱动维护阶段，优先投入报价准确率、知识库质量、RAG 评测和真实用户体验问题。
 
 ## 业务优化路线（2026-05-07）
@@ -27,7 +27,7 @@
 - [x] **P2 Prompt 回归评测**：新增 `prompt_regression_cases` / `prompt_regression_runs`，可从真实反馈固化黄金案例，并生成按 prompt 版本统计的总价偏差、明细遗漏率、格式错误率、打回率、人工修改率和综合分。
 - [x] **P3 知识库质量治理**：新增 `knowledge_candidates`，可从真实反馈、字段级修正和打回原因生成候选；admin approve 前自动快照，再新增或更新 `materials`；新增 RAG trace 聚合洞察接口。
 - [x] **P3 验证结果**：`python -m compileall app` 通过，`python -m alembic heads` 显示 `20260507_0006 (head)`，`python -m pytest` 为 `64 passed`。
-- [ ] **P4 真实用户体验优化**：低置信度提示、失败可操作原因、人工修改一键沉淀知识。
+- [x] **P4 真实用户体验优化**：失败可操作原因、预审高风险标记、人工修改一键沉淀知识入口。
 - [ ] **P5 LangGraph 触发项**：仅在需要自适应多轮检索、主动澄清、多模型状态机或替换 N8N 核心编排时再评估。
 
 ## 高优先级

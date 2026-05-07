@@ -68,6 +68,7 @@ Clear_test/
 - 后端重构 P0-P3、补充一致性优化、运维告警收敛已完成并冻结；后续仅按真实问题增量维护。
 - 前端优化 P0-P3 已完成：验收清单、共享浏览器逻辑、admin 模块拆分、报价进度/失败恢复/上传推送状态均已落地并手工验证。
 - 业务优化 P0-P4 已完成到代码层：报价反馈闭环、Admin 反馈分析、Prompt 回归、知识候选治理、真实用户体验优化均已落地。
+- 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P3 Admin 知识候选审核面板、P4 运行态手工验收、P5 LangGraph 触发评估、前端架构 P4 Vite/Vue SFC 迁移。
 - 前端架构 P4 Vite/Vue SFC 迁移暂不启动；仅当页面规模、多人协作、组件复用或 TypeScript/Router/状态管理需求真实出现时再评估。
 - 当前代码迁移 head：`20260507_0006`；物料库主存储为 MySQL `materials` / `material_snapshots`，报价反馈新增 `quote_feedback` / `quote_corrections` / `quote_rag_traces`，Prompt 回归评测新增 `prompt_regression_cases` / `prompt_regression_runs`，知识库治理新增 `knowledge_candidates`。
 - 生产数据库若低于 `20260507_0006`，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归和知识候选记录。

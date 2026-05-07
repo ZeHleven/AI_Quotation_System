@@ -409,6 +409,108 @@
           </el-table>
         </el-card>
 
+        <!-- 报价反馈分析面板 -->
+        <el-card id="section-feedback" class="box-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="panel-accent"></span>
+                <span>报价反馈分析</span>
+              </div>
+              <div class="panel-actions">
+                <el-input-number v-model="feedbackDays" :min="1" :max="365" :controls="false" size="small" style="width:70px;"></el-input-number>
+                <span style="font-size:12px; color:#909399;">天</span>
+                <el-input v-model="feedbackUsername" size="small" clearable placeholder="用户" style="width:120px;"></el-input>
+                <el-select v-model="feedbackStatus" size="small" clearable placeholder="状态" style="width:130px;">
+                  <el-option label="已确认" value="confirmed"></el-option>
+                  <el-option label="已打回" value="rejected"></el-option>
+                  <el-option label="待预审" value="pending_review"></el-option>
+                </el-select>
+                <el-button size="small" :loading="feedbackLoading || feedbackSummaryLoading" @click="refreshFeedback" plain>刷新</el-button>
+              </div>
+            </div>
+          </template>
+
+          <div class="ops-service-grid" v-loading="feedbackSummaryLoading">
+            <div class="ops-service-tile">
+              <div class="tile-head"><span class="tile-name">报价数</span></div>
+              <div class="tile-latency">{{ feedbackSummary.total_count || 0 }}</div>
+              <div class="tile-status">近 {{ feedbackSummary.days || feedbackDays }} 天</div>
+            </div>
+            <div class="ops-service-tile tile-ok">
+              <div class="tile-head"><span class="tile-name">确认 / 打回</span></div>
+              <div class="tile-latency">{{ feedbackSummary.confirmed_count || 0 }} / {{ feedbackSummary.rejected_count || 0 }}</div>
+              <div class="tile-status">Human-in-the-loop 结果</div>
+            </div>
+            <div class="ops-service-tile">
+              <div class="tile-head"><span class="tile-name">平均改动金额</span></div>
+              <div class="tile-latency">{{ money(feedbackSummary.avg_abs_amount_delta) }}<span class="tile-latency-unit"> 元</span></div>
+              <div class="tile-status">绝对总价偏差</div>
+            </div>
+            <div class="ops-service-tile">
+              <div class="tile-head"><span class="tile-name">修正字段 / RAG</span></div>
+              <div class="tile-latency">{{ feedbackSummary.correction_count || 0 }} / {{ feedbackSummary.rag_trace_count || 0 }}</div>
+              <div class="tile-status">字段级修正 / 召回记录</div>
+            </div>
+          </div>
+
+          <el-row :gutter="16">
+            <el-col :span="15">
+              <el-table :data="feedbackData" border stripe style="width:100%" v-loading="feedbackLoading" empty-text="暂无报价反馈记录">
+                <el-table-column prop="created_at" label="时间" width="150"></el-table-column>
+                <el-table-column prop="username" label="用户" width="100"></el-table-column>
+                <el-table-column prop="status" label="状态" width="95" align="center">
+                  <template #default="scope">
+                    <el-tag :type="feedbackStatusType(scope.row.status)" size="small">{{ scope.row.status }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="AI / 最终" width="140" align="right">
+                  <template #default="scope">{{ money(scope.row.ai_total_amount) }} / {{ money(scope.row.final_total_amount) }}</template>
+                </el-table-column>
+                <el-table-column label="差额" width="95" align="right">
+                  <template #default="scope">
+                    <span :style="Number(scope.row.amount_delta || 0) === 0 ? '' : 'color:#E6A23C;font-weight:600;'">{{ money(scope.row.amount_delta) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="correction_count" label="修正" width="70" align="right"></el-table-column>
+                <el-table-column prop="rag_trace_count" label="RAG" width="70" align="right"></el-table-column>
+                <el-table-column prop="dify_prompt_version" label="Prompt" min-width="120" show-overflow-tooltip></el-table-column>
+                <el-table-column label="操作" width="80" align="center" fixed="right">
+                  <template #default="scope">
+                    <el-button size="small" plain @click="openFeedbackDetail(scope.row)">详情</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                <el-pagination v-model:current-page="feedbackPage" :page-size="10" :total="feedbackTotal"
+                  layout="total, prev, pager, next" @current-change="fetchFeedbackList" small />
+              </div>
+            </el-col>
+            <el-col :span="9">
+              <el-tabs type="border-card" style="height:100%;">
+                <el-tab-pane label="高频修正">
+                  <el-table :data="feedbackSummary.top_correction_fields || []" border size="small" height="220" empty-text="暂无修正字段">
+                    <el-table-column prop="field_path" label="字段" min-width="170" show-overflow-tooltip></el-table-column>
+                    <el-table-column prop="count" label="次数" width="70" align="right"></el-table-column>
+                  </el-table>
+                </el-tab-pane>
+                <el-tab-pane label="RAG 召回">
+                  <el-table :data="feedbackSummary.top_rag_materials || []" border size="small" height="220" empty-text="暂无 RAG trace">
+                    <el-table-column prop="item_name" label="知识条目" min-width="160" show-overflow-tooltip></el-table-column>
+                    <el-table-column prop="count" label="次数" width="70" align="right"></el-table-column>
+                  </el-table>
+                </el-tab-pane>
+                <el-tab-pane label="Prompt">
+                  <el-table :data="feedbackSummary.by_prompt_version || []" border size="small" height="220" empty-text="暂无版本数据">
+                    <el-table-column prop="prompt_version" label="版本" min-width="160" show-overflow-tooltip></el-table-column>
+                    <el-table-column prop="count" label="次数" width="70" align="right"></el-table-column>
+                  </el-table>
+                </el-tab-pane>
+              </el-tabs>
+            </el-col>
+          </el-row>
+        </el-card>
+
         <!-- MinIO 文件存储面板 -->
         <el-card id="section-storage" class="box-card" shadow="never">
           <template #header>
@@ -597,6 +699,56 @@
       </div><!-- /main-content -->
     </div><!-- /page-body -->
 
+    <!-- 报价反馈详情弹窗 -->
+    <el-dialog v-model="showFeedbackDetail" title="报价反馈详情" width="980px" destroy-on-close top="5vh">
+      <div v-loading="feedbackDetailLoading" style="min-height:220px;">
+        <div v-if="feedbackDetail">
+          <el-descriptions :column="3" border size="small" style="margin-bottom:16px;">
+            <el-descriptions-item label="反馈 ID">{{ feedbackDetail.id }}</el-descriptions-item>
+            <el-descriptions-item label="Job ID">{{ feedbackDetail.quote_job_id || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="Trace ID">{{ feedbackDetail.trace_id || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="用户">{{ feedbackDetail.username }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag :type="feedbackStatusType(feedbackDetail.status)" size="small">{{ feedbackDetail.status }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="Prompt">{{ feedbackDetail.dify_prompt_version || 'unknown' }}</el-descriptions-item>
+            <el-descriptions-item label="AI 总价">{{ money(feedbackDetail.ai_total_amount) }}</el-descriptions-item>
+            <el-descriptions-item label="最终总价">{{ money(feedbackDetail.final_total_amount) }}</el-descriptions-item>
+            <el-descriptions-item label="差额">{{ money(feedbackDetail.amount_delta) }} / {{ percent(feedbackDetail.amount_delta_ratio) }}</el-descriptions-item>
+          </el-descriptions>
+
+          <el-tabs type="border-card">
+            <el-tab-pane label="字段修正">
+              <el-table :data="feedbackDetail.corrections || []" border size="small" height="300" empty-text="暂无字段级修正">
+                <el-table-column prop="item_index" label="#" width="50" align="right"></el-table-column>
+                <el-table-column prop="project_name" label="项目" width="150" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="field_path" label="字段" width="190" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="before_value" label="AI 初稿" min-width="180" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="after_value" label="人工确认" min-width="180" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="delta_amount" label="差额" width="80" align="right"></el-table-column>
+              </el-table>
+            </el-tab-pane>
+            <el-tab-pane label="RAG Trace">
+              <el-table :data="feedbackDetail.rag_traces || []" border size="small" height="300" empty-text="暂无 RAG trace">
+                <el-table-column prop="rank" label="Rank" width="70" align="right"></el-table-column>
+                <el-table-column prop="material_id" label="Material ID" width="120" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="item_name" label="知识条目" min-width="180" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="score" label="Score" width="90" align="right"></el-table-column>
+                <el-table-column prop="collection_alias" label="集合" width="160" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="sent_to_prompt" label="入 Prompt" width="90" align="center"></el-table-column>
+              </el-table>
+            </el-tab-pane>
+            <el-tab-pane label="AI 初稿">
+              <pre class="code-block">{{ formatJson(feedbackDetail.ai_payload) }}</pre>
+            </el-tab-pane>
+            <el-tab-pane label="最终稿">
+              <pre class="code-block">{{ formatJson(feedbackDetail.final_payload) }}</pre>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+      </div>
+    </el-dialog>
+
     <!-- 报价任务详情弹窗 -->
     <el-dialog v-model="showJobDetail" title="报价任务详情" width="860px" destroy-on-close top="5vh">
       <div v-loading="jobDetailLoading" style="min-height:200px;">
@@ -652,6 +804,7 @@
   <script src="/static/js/admin/model_gateway.js"></script>
   <script src="/static/js/admin/files.js"></script>
   <script src="/static/js/admin/quote_jobs.js"></script>
+  <script src="/static/js/admin/feedback.js"></script>
   <script src="/static/js/admin/materials.js"></script>
 
   <script>
@@ -663,6 +816,7 @@
       { id: 'users',     icon: '👥', label: '账号' },
       { id: 'gateway',   icon: '📡', label: '网关' },
       { id: 'jobs',      icon: '🧾', label: '任务' },
+      { id: 'feedback',  icon: '📈', label: '反馈' },
       { id: 'storage',   icon: '🗄',  label: '存储' },
       { id: 'knowledge', icon: '📚', label: '知识库' },
     ];
@@ -808,6 +962,38 @@
           statusTagType
         } = quoteJobsModule;
 
+        const feedbackModule = window.AIMOAdminFeedback.createFeedbackModule({
+          ref,
+          axios,
+          ElMessage,
+          apiBaseUrl: API_BASE_URL,
+          authHeaders,
+          apiBody,
+          apiData,
+          apiErrorMessage
+        });
+        const {
+          feedbackSummary,
+          feedbackData,
+          feedbackLoading,
+          feedbackSummaryLoading,
+          feedbackPage,
+          feedbackTotal,
+          feedbackDays,
+          feedbackStatus,
+          feedbackUsername,
+          showFeedbackDetail,
+          feedbackDetail,
+          feedbackDetailLoading,
+          fetchFeedbackSummary,
+          fetchFeedbackList,
+          refreshFeedback,
+          openFeedbackDetail,
+          feedbackStatusType,
+          money,
+          percent
+        } = feedbackModule;
+
         const materialsModule = window.AIMOAdminMaterials.createMaterialsModule({
           ref,
           axios,
@@ -873,6 +1059,7 @@
           fetchUsers();
           fetchGatewayStats();
           fetchJobs();
+          refreshFeedback();
           fetchMaterialAudit();
           fetchStorageHealth();
           fetchStorageFiles();
@@ -894,6 +1081,11 @@
           jobData, jobLoading, jobTotal, jobPage, jobStatusFilter, jobUsernameFilter,
           timeoutMinutes, markingTimeouts, showJobDetail, jobDetail, jobDetailLoading,
           fetchJobs, cancelJob, retryJob, markTimeouts, openJobDetail, formatJson, statusTagType,
+          feedbackSummary, feedbackData, feedbackLoading, feedbackSummaryLoading,
+          feedbackPage, feedbackTotal, feedbackDays, feedbackStatus, feedbackUsername,
+          showFeedbackDetail, feedbackDetail, feedbackDetailLoading,
+          fetchFeedbackSummary, fetchFeedbackList, refreshFeedback, openFeedbackDetail,
+          feedbackStatusType, money, percent,
           ragEvalResult, fetchRagEvalResult,
           materialAudit, auditLoading, fetchMaterialAudit, rollbackMaterialSnapshot,
           storageFiles, storageLoading, storageUploading, storageHealth, storagePurpose,

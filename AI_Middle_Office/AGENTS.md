@@ -31,9 +31,9 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - MinIO: `192.168.88.128:9002/9003`
 - 健康检查：`/health/live`、`/health/ready`
 - 当前任务队列模式：生产使用 `TASK_QUEUE_MODE=celery`
-- 当前后端优化状态：基础设施 P0-P3 与配置收尾已完成并冻结；业务优化 P0 报价反馈闭环已落地到代码层。
+- 当前后端优化状态：基础设施 P0-P3 与配置收尾已完成并冻结；业务优化 P0 报价反馈闭环和 P1 Admin 反馈分析已落地到代码层。
 - 当前数据库迁移 head：`20260507_0004`；生产数据库若仍在 `20260505_0003`，需执行 Alembic 升级后启用完整反馈记录。
-- 最新自动化验证：`python -m compileall app` 通过，`python -m pytest` 为 `59 passed`
+- 最新自动化验证：`python -m compileall app` 通过，`python -m pytest` 为 `60 passed`
 
 ## 关键模块
 
@@ -42,7 +42,7 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - `app/api/v1/auth.py`：JWT 登录、当前用户、改密。
 - `app/api/v1/chat.py`：旧兼容导出层，核心路由已拆分，保留历史 import 路径。
 - `app/api/v1/quote.py`：`/chat` SSE 报价流与 `/confirm_push`。
-- `app/api/v1/quote_feedback.py`：人工预审打回记录接口。
+- `app/api/v1/quote_feedback.py`：报价反馈闭环与 admin 反馈分析接口，包括 summary / list / detail。
 - `app/api/v1/materials.py`：物料库 CRUD、快照、回滚、CSV 导入和 RAG reload。
 - `app/api/v1/history.py`：报价历史记录。
 - `app/api/v1/users.py`：用户配额管理。

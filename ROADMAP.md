@@ -2,6 +2,8 @@
 
 > 最后更新：2026-05-07
 
+> 业务优化 P2 更新：Prompt 回归评测代码层已落地，新增 `20260507_0005` Alembic revision；运行态启用前需先升级数据库。
+
 ---
 
 ## 当前冻结状态（2026-05-06）
@@ -21,7 +23,8 @@
 - [x] **P0 验证结果**：`python -m compileall app` 通过，`python -m pytest` 为 `59 passed`；仍有已知 `.pytest_cache` 权限 warning，不影响测试结果。
 - [x] **P1 Admin 反馈分析页面**：新增 admin summary/list/detail 接口和 `admin.html` 反馈分析模块，展示最近报价数量、确认/打回、平均总价偏差、字段修正、RAG trace、prompt 版本表现和高频召回知识条目。
 - [x] **P1 验证结果**：`python -m compileall app` 通过，`python -m pytest` 为 `60 passed`；`node --check static/js/admin/feedback.js` 通过。
-- [ ] **P2 Prompt 回归评测**：固定黄金案例集，记录 prompt 版本、测试集、总价偏差、明细遗漏率和格式错误率。
+- [x] **P2 验证结果**：`python -m compileall app` 通过，`python -m alembic heads` 显示 `20260507_0005 (head)`，`python -m pytest` 为 `62 passed`。
+- [x] **P2 Prompt 回归评测**：新增 `prompt_regression_cases` / `prompt_regression_runs`，可从真实反馈固化黄金案例，并生成按 prompt 版本统计的总价偏差、明细遗漏率、格式错误率、打回率、人工修改率和综合分。
 - [ ] **P3 知识库质量治理**：基于真实反馈和 RAG trace 沉淀黄金案例、细化条目粒度、清理低价值知识条目。
 - [ ] **P4 真实用户体验优化**：低置信度提示、失败可操作原因、人工修改一键沉淀知识。
 - [ ] **P5 LangGraph 触发项**：仅在需要自适应多轮检索、主动澄清、多模型状态机或替换 N8N 核心编排时再评估。

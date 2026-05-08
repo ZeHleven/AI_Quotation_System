@@ -379,8 +379,8 @@
         <el-table :data="previewData" border stripe style="width: 100%">
           <el-table-column label="风险" width="90" align="center">
             <template #default="scope">
-              <el-tag :type="rowRisk(scope.row, scope.$index).type" size="small" effect="plain">
-                {{ rowRisk(scope.row, scope.$index).label }}
+              <el-tag :type="(previewRowRisks[scope.$index] || {type:'success'}).type" size="small" effect="plain">
+                {{ (previewRowRisks[scope.$index] || {label:'正常'}).label }}
               </el-tag>
             </template>
           </el-table-column>
@@ -694,9 +694,14 @@
           return { label: high ? '高风险' : '需复核', type: high ? 'danger' : 'warning', reasons: risks };
         };
 
-        const previewRiskItems = computed(() => {
+        const previewRowRisks = computed(() => {
           return (Array.isArray(previewData.value) ? previewData.value : [])
-            .map((row, index) => ({ index, ...rowRisk(row, index) }))
+            .map((row, index) => rowRisk(row, index));
+        });
+
+        const previewRiskItems = computed(() => {
+          return previewRowRisks.value
+            .map((risk, index) => ({ index, ...risk }))
             .filter(item => item.reasons.length > 0);
         });
 
@@ -1273,7 +1278,7 @@
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
           showPreviewDialog, previewData, previewOriginalData, pushing, pushError, finalTotalAmount,
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
-          previewChangeSummary, previewHasChanges, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
+          previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           canSubmit, selectedFileSummary,

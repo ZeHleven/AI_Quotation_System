@@ -19,7 +19,8 @@
     const candidatePage    = ref(1);
     const candidateStatusFilter = ref('pending');
     const candidateKindFilter   = ref('');
-    const building         = ref(false);
+    const building                  = ref(false);
+    const candidateIncludeRejected  = ref(true);
 
     const showApproveDialog  = ref(false);
     const showRejectDialog   = ref(false);
@@ -75,7 +76,7 @@
       building.value = true;
       try {
         const res = await axios.post(`${apiBaseUrl}/knowledge_candidates/build`,
-          { limit: 200, include_rejected: false, overwrite: false },
+          { limit: 200, include_rejected: candidateIncludeRejected.value, overwrite: false },
           { headers: authHeaders() });
         const data = apiData(res, {});
         ElMessage.success(`已生成 ${data.created ?? 0} 个候选（跳过 ${data.skipped ?? 0}）`);
@@ -166,7 +167,7 @@
     return {
       candidateList, candidateLoading, candidateTotal, candidatePage,
       candidateStatusFilter, candidateKindFilter,
-      building,
+      building, candidateIncludeRejected,
       showApproveDialog, showRejectDialog, showCandidateDetail,
       selectedCandidate, approveResult, approving, rejecting,
       approveForm, rejectForm,

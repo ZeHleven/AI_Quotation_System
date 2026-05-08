@@ -531,6 +531,7 @@
                   <el-option label="缺失知识" value="missing_knowledge"></el-option>
                 </el-select>
                 <el-button size="small" @click="fetchCandidates(1)" plain>刷新</el-button>
+                <el-checkbox v-model="candidateIncludeRejected" size="small" style="margin-right:6px;">包含打回报价</el-checkbox>
                 <el-button size="small" type="primary" :loading="building" @click="buildCandidates">从反馈生成候选</el-button>
               </div>
             </div>
@@ -1274,7 +1275,7 @@
           storageFiles, storageLoading, storageUploading, storageHealth, storagePurpose,
           fetchStorageHealth, fetchStorageFiles, handleStorageUpload, openStorageDownload,
           candidateList, candidateLoading, candidateTotal, candidatePage,
-          candidateStatusFilter, candidateKindFilter, building,
+          candidateStatusFilter, candidateKindFilter, building, candidateIncludeRejected,
           showApproveDialog, showRejectDialog, showCandidateDetail,
           selectedCandidate, approveResult, approving, rejecting,
           approveForm, rejectForm,

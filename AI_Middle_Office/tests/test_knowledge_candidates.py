@@ -169,7 +169,12 @@ def _seed_feedback_materials() -> dict:
         db.close()
 
 
-def test_build_approve_reject_and_rag_insights(client):
+def test_build_approve_reject_and_rag_insights(client, monkeypatch):
+    async def fake_sync(db, username):
+        return {"success": True, "message": "ok", "eval_triggered": False, "eval_report_id": None, "error": None}
+
+    monkeypatch.setattr("app.api.v1.knowledge_candidates.sync_materials_to_rag", fake_sync)
+
     admin_username, headers = _create_admin_headers(client)
     seeded = _seed_feedback_materials()
 
@@ -244,12 +249,81 @@ def test_build_approve_reject_and_rag_insights(client):
     finally:
         db.close()
 
-    insights_response = client.get("/api/v1/admin/knowledge_candidates/rag_insights?min_count=1", headers=headers)
+    insights_response = client.get("/api/v1/admin/knowledge_candidates/rag_insights?min_count=1&limit=100", headers=headers)
     assert insights_response.status_code == 200
     insights = insights_response.json()["data"]
     target = [item for item in insights if item["material_id"] == seeded["material_id"]]
     assert target
     assert target[0]["needs_review"] is True
+
+
+def test_approve_response_includes_sync_fields(client, monkeypatch):
+    _, headers = _create_admin_headers(client)
+    seeded = _seed_feedback_materials()
+    client.post("/api/v1/admin/knowledge_candidates/build", headers=headers, json={"limit": 50})
+
+    db = SessionLocal()
+    try:
+        candidate = (
+            db.query(KnowledgeCandidate)
+            .filter(KnowledgeCandidate.source_correction_id == seeded["correction_id"])
+            .one()
+        )
+    finally:
+        db.close()
+
+    async def fake_sync_ok(db, username):
+        return {"success": True, "message": "ok", "eval_triggered": False, "eval_report_id": None, "error": None}
+
+    monkeypatch.setattr("app.api.v1.knowledge_candidates.sync_materials_to_rag", fake_sync_ok)
+
+    response = client.post(
+        f"/api/v1/admin/knowledge_candidates/{candidate.id}/approve",
+        headers=headers,
+        json={},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["sync_triggered"] is True
+    assert data["sync_status"] == "success"
+    assert data["sync_error"] is None
+    assert data["candidate"]["status"] == "approved"
+
+
+def test_approve_sync_failure_does_not_rollback_approve(client, monkeypatch):
+    _, headers = _create_admin_headers(client)
+    seeded = _seed_feedback_materials()
+    client.post("/api/v1/admin/knowledge_candidates/build", headers=headers, json={"limit": 50})
+
+    db = SessionLocal()
+    try:
+        candidate = (
+            db.query(KnowledgeCandidate)
+            .filter(KnowledgeCandidate.source_correction_id == seeded["correction_id"])
+            .one()
+        )
+        candidate_id = candidate.id
+    finally:
+        db.close()
+
+    async def fake_sync_fail(db, username):
+        return {"success": False, "message": "err", "eval_triggered": False, "eval_report_id": None, "error": "RAG timeout"}
+
+    monkeypatch.setattr("app.api.v1.knowledge_candidates.sync_materials_to_rag", fake_sync_fail)
+
+    response = client.post(
+        f"/api/v1/admin/knowledge_candidates/{candidate_id}/approve",
+        headers=headers,
+        json={},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["sync_triggered"] is True
+    assert data["sync_status"] == "failed"
+    assert data["sync_error"] == "RAG timeout"
+    # approve and material write are not rolled back
+    assert data["candidate"]["status"] == "approved"
+    assert data["material"]["unit_price"] == 80
 
 
 def test_approving_non_pending_candidate_is_rejected(client):

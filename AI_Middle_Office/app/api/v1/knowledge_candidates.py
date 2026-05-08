@@ -21,6 +21,7 @@ from app.services.knowledge_candidates import (
     reject_candidate,
     summarize_candidates,
 )
+from app.services.material_sync import sync_materials_to_rag
 
 
 router = APIRouter()
@@ -95,7 +96,7 @@ def get_candidate(
 
 
 @router.post("/admin/knowledge_candidates/{candidate_id}/approve", summary="Approve knowledge candidate")
-def approve_knowledge_candidate(
+async def approve_knowledge_candidate(
     candidate_id: int,
     payload: Optional[KnowledgeCandidateApproveRequest] = Body(default=None),
     current_user: User = Depends(require_admin),
@@ -106,10 +107,16 @@ def approve_knowledge_candidate(
     if not candidate:
         raise HTTPException(status_code=404, detail="knowledge candidate not found")
     try:
-        return api_ok(approve_candidate(db, candidate=candidate, username=current_user.username, request=payload))
+        result = approve_candidate(db, candidate=candidate, username=current_user.username, request=payload)
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    sync = await sync_materials_to_rag(db, current_user.username)
+    result["sync_triggered"] = True
+    result["sync_status"] = "success" if sync["success"] else "failed"
+    result["sync_error"] = sync["error"]
+    return api_ok(result)
 
 
 @router.post("/admin/knowledge_candidates/{candidate_id}/reject", summary="Reject knowledge candidate")

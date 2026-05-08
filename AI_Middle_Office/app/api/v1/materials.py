@@ -8,7 +8,6 @@ from io import StringIO
 from pathlib import Path
 from typing import Optional
 
-import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -19,6 +18,7 @@ from app.core.responses import api_ok
 from app.dependencies import require_admin
 from app.models.material import Material, MaterialSnapshot
 from app.models.user import User
+from app.services.material_sync import sync_materials_to_rag
 
 
 router = APIRouter()
@@ -29,9 +29,6 @@ LEGACY_DATA_FILE = settings.legacy_materials_file
 DATA_FILE = LEGACY_DATA_FILE
 MATERIAL_AUDIT_DIR = LEGACY_DATA_FILE.parent / "materials_audit"
 SNAPSHOT_ID_PATTERN = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{8}$")
-RAG_SERVICE_URL = settings.rag_service_url
-RELOAD_SECRET = settings.reload_secret
-
 
 class MaterialItem(BaseModel):
     id: str
@@ -382,31 +379,16 @@ async def sync_to_milvus(
     db: Session = Depends(get_db),
 ):
     """将数据库物料数据 POST 至 CentOS RAG 服务的 /admin/reload，由其完成向量化和蓝绿切换。"""
-    data = load_data(db)
-    if not data:
+    if not load_data(db):
         raise HTTPException(status_code=400, detail="本地知识库为空，无法同步")
 
-    try:
-        payload = {"materials": data, "secret": RELOAD_SECRET}
-        async with httpx.AsyncClient(timeout=120) as client:
-            response = await client.post(f"{RAG_SERVICE_URL}/admin/reload", json=payload)
-        if response.status_code == 200:
-            eval_report_id = None
-            if settings.rag_eval_enabled:
-                from app.services.rag_evaluator import trigger_eval_background
-                eval_report_id = trigger_eval_background(current_user.username, SessionLocal)
-            data = {
-                "eval_triggered": settings.rag_eval_enabled,
-                "eval_report_id": eval_report_id,
-            }
-            return api_ok(
-                data,
-                message=response.json().get("message", "同步完成"),
-                **data,
-            )
-        detail = response.json().get("detail", f"状态码 {response.status_code}")
-        raise HTTPException(status_code=500, detail=f"RAG 服务返回错误: {detail}")
-    except httpx.TimeoutException:
+    result = await sync_materials_to_rag(db, current_user.username)
+    if result["success"]:
+        resp_data = {
+            "eval_triggered": result["eval_triggered"],
+            "eval_report_id": result["eval_report_id"],
+        }
+        return api_ok(resp_data, message=result["message"], **resp_data)
+    if "超时" in (result["error"] or ""):
         raise HTTPException(status_code=504, detail="RAG 服务超时，请检查 CentOS 容器状态")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    raise HTTPException(status_code=500, detail=result["error"])

@@ -200,7 +200,7 @@ def test_sync_milvus_uses_async_httpx(client, monkeypatch):
             calls[-1].update({"url": url, "post_kwargs": kwargs})
             return httpx.Response(200, json={"message": "同步完成"})
 
-    monkeypatch.setattr("app.api.v1.materials.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("app.services.material_sync.httpx.AsyncClient", FakeAsyncClient)
 
     response = client.post("/api/v1/admin/sync_milvus", headers=headers)
 

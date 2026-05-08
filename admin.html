@@ -511,6 +511,60 @@
           </el-row>
         </el-card>
 
+        <!-- 知识候选审核面板 -->
+        <el-card id="section-candidates" class="box-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="panel-accent"></span>
+                <span>知识候选审核</span>
+              </div>
+              <div class="panel-actions">
+                <el-select v-model="candidateStatusFilter" size="small" clearable placeholder="状态" style="width:120px;" @change="fetchCandidates(1)">
+                  <el-option label="待审核" value="pending"></el-option>
+                  <el-option label="已批准" value="approved"></el-option>
+                  <el-option label="已拒绝" value="rejected"></el-option>
+                </el-select>
+                <el-select v-model="candidateKindFilter" size="small" clearable placeholder="类型" style="width:130px;" @change="fetchCandidates(1)">
+                  <el-option label="价格更新" value="price_update"></el-option>
+                  <el-option label="新增物料" value="new_material"></el-option>
+                  <el-option label="缺失知识" value="missing_knowledge"></el-option>
+                </el-select>
+                <el-button size="small" @click="fetchCandidates(1)" plain>刷新</el-button>
+                <el-button size="small" type="primary" :loading="building" @click="buildCandidates">从反馈生成候选</el-button>
+              </div>
+            </div>
+          </template>
+          <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+            <el-pagination v-model:current-page="candidatePage" :page-size="15" :total="candidateTotal"
+              layout="total, prev, pager, next" @current-change="fetchCandidates" small />
+          </div>
+          <el-table :data="candidateList" border stripe style="width:100%" v-loading="candidateLoading" empty-text="暂无知识候选">
+            <el-table-column prop="id" label="ID" width="65" align="right"></el-table-column>
+            <el-table-column label="类型" width="105" align="center">
+              <template #default="scope">
+                <el-tag :type="kindTagType(scope.row.candidate_kind)" size="small">{{ kindLabel(scope.row.candidate_kind) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="item_name" label="物料名称" min-width="160" show-overflow-tooltip></el-table-column>
+            <el-table-column prop="unit_price" label="建议单价" width="105" align="right"></el-table-column>
+            <el-table-column prop="unit" label="单位" width="75" align="center"></el-table-column>
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="scope">
+                <el-tag :type="candidateStatusType(scope.row.status)" size="small">{{ scope.row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="created_at" label="生成时间" width="155"></el-table-column>
+            <el-table-column label="操作" width="200" align="center" fixed="right">
+              <template #default="scope">
+                <el-button size="small" type="success" plain :disabled="scope.row.status !== 'pending'" @click="openApproveDialog(scope.row)">批准</el-button>
+                <el-button size="small" type="danger" plain :disabled="scope.row.status !== 'pending'" @click="openRejectDialog(scope.row)">拒绝</el-button>
+                <el-button size="small" plain @click="openCandidateDetail(scope.row)">详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+
         <!-- MinIO 文件存储面板 -->
         <el-card id="section-storage" class="box-card" shadow="never">
           <template #header>
@@ -793,6 +847,109 @@
       </div>
     </el-dialog>
 
+    <!-- 知识候选批准弹窗 -->
+    <el-dialog v-model="showApproveDialog" title="批准知识候选" width="600px" destroy-on-close>
+      <div v-if="selectedCandidate">
+        <el-descriptions :column="2" border size="small" style="margin-bottom:16px;">
+          <el-descriptions-item label="物料名称">{{ selectedCandidate.item_name }}</el-descriptions-item>
+          <el-descriptions-item label="类型">
+            <el-tag :type="kindTagType(selectedCandidate.candidate_kind)" size="small">{{ kindLabel(selectedCandidate.candidate_kind) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="建议单价">{{ selectedCandidate.unit_price != null ? selectedCandidate.unit_price : '—' }}</el-descriptions-item>
+          <el-descriptions-item label="单位">{{ selectedCandidate.unit || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="依据" :span="2">{{ selectedCandidate.reason || '—' }}</el-descriptions-item>
+        </el-descriptions>
+        <div v-if="!approveResult">
+          <el-form label-width="90px" size="small">
+            <el-form-item label="审核备注">
+              <el-input v-model="approveForm.review_note" type="textarea" :rows="2" placeholder="可选，审核说明"></el-input>
+            </el-form-item>
+            <el-form-item label="存为草稿">
+              <el-checkbox v-model="approveForm.as_draft">保存为草稿（勾选后需人工在知识库中发布）</el-checkbox>
+            </el-form-item>
+            <el-divider content-position="left" style="font-size:12px;"></el-divider>
+            <el-form-item label="物料名称">
+              <el-input v-model="approveForm.item_name" placeholder="留空使用候选值"></el-input>
+            </el-form-item>
+            <el-form-item label="单价(元)">
+              <el-input-number v-model="approveForm.unit_price" :min="0" :precision="2" :controls="false" style="width:100%;"></el-input-number>
+            </el-form-item>
+            <el-form-item label="单位">
+              <el-input v-model="approveForm.unit" placeholder="如：m2、项"></el-input>
+            </el-form-item>
+            <el-form-item label="备注工艺">
+              <el-input v-model="approveForm.notes" type="textarea" :rows="2" placeholder="留空使用候选值"></el-input>
+            </el-form-item>
+          </el-form>
+        </div>
+        <div v-else>
+          <el-alert title="批准成功" type="success" :closable="false" show-icon style="margin-bottom:12px;"></el-alert>
+          <el-descriptions :column="2" border size="small" style="margin-bottom:8px;">
+            <el-descriptions-item label="物料 ID">{{ approveResult.material && approveResult.material.id || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="名称">{{ approveResult.material && approveResult.material.item_name || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="单价">{{ approveResult.material && approveResult.material.unit_price != null ? approveResult.material.unit_price : '—' }}</el-descriptions-item>
+            <el-descriptions-item label="草稿">{{ approveResult.material && approveResult.material.is_draft ? '是' : '否' }}</el-descriptions-item>
+          </el-descriptions>
+          <el-tag :type="approveResult.sync_status === 'success' ? 'success' : 'warning'" size="small">RAG 同步: {{ approveResult.sync_status }}</el-tag>
+          <span v-if="approveResult.sync_error" style="font-size:12px; color:#F56C6C; margin-left:8px;">{{ approveResult.sync_error }}</span>
+        </div>
+      </div>
+      <template #footer>
+        <div v-if="!approveResult">
+          <el-button @click="showApproveDialog = false">取消</el-button>
+          <el-button type="primary" :loading="approving" @click="submitApprove">确认批准</el-button>
+        </div>
+        <el-button v-else @click="showApproveDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 知识候选拒绝弹窗 -->
+    <el-dialog v-model="showRejectDialog" title="拒绝知识候选" width="460px" destroy-on-close>
+      <div v-if="selectedCandidate">
+        <p style="margin-top:0; color:#606266;">
+          拒绝：<strong>{{ selectedCandidate.item_name }}</strong>（{{ kindLabel(selectedCandidate.candidate_kind) }}）
+        </p>
+        <el-form label-width="80px" size="small">
+          <el-form-item label="拒绝原因">
+            <el-input v-model="rejectForm.review_note" type="textarea" :rows="3" placeholder="可选，说明拒绝原因"></el-input>
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="showRejectDialog = false">取消</el-button>
+        <el-button type="danger" :loading="rejecting" @click="submitReject">确认拒绝</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 知识候选详情弹窗 -->
+    <el-dialog v-model="showCandidateDetail" title="知识候选详情" width="620px" destroy-on-close>
+      <div v-if="selectedCandidate">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="ID">{{ selectedCandidate.id }}</el-descriptions-item>
+          <el-descriptions-item label="类型">
+            <el-tag :type="kindTagType(selectedCandidate.candidate_kind)" size="small">{{ kindLabel(selectedCandidate.candidate_kind) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="物料名称">{{ selectedCandidate.item_name || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="单价(元)">{{ selectedCandidate.unit_price != null ? selectedCandidate.unit_price : '—' }}</el-descriptions-item>
+          <el-descriptions-item label="单位">{{ selectedCandidate.unit || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="candidateStatusType(selectedCandidate.status)" size="small">{{ selectedCandidate.status }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="信心分">{{ selectedCandidate.confidence_score != null ? selectedCandidate.confidence_score : '—' }}</el-descriptions-item>
+          <el-descriptions-item label="来源">{{ selectedCandidate.source_type || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="依据" :span="2">{{ selectedCandidate.reason || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="证据" :span="2">{{ selectedCandidate.evidence || '—' }}</el-descriptions-item>
+          <el-descriptions-item v-if="selectedCandidate.existing_material_id" label="现有物料 ID" :span="2">{{ selectedCandidate.existing_material_id }}</el-descriptions-item>
+          <el-descriptions-item v-if="selectedCandidate.reviewed_by" label="审核人">{{ selectedCandidate.reviewed_by }}</el-descriptions-item>
+          <el-descriptions-item v-if="selectedCandidate.review_note" label="审核备注" :span="2">{{ selectedCandidate.review_note }}</el-descriptions-item>
+          <el-descriptions-item label="生成时间" :span="2">{{ selectedCandidate.created_at || '—' }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <template #footer>
+        <el-button @click="showCandidateDetail = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
   </div><!-- /app -->
 
   <script src="/static/vue.global.prod.min.js"></script>
@@ -806,6 +963,7 @@
   <script src="/static/js/admin/quote_jobs.js"></script>
   <script src="/static/js/admin/feedback.js"></script>
   <script src="/static/js/admin/materials.js"></script>
+  <script src="/static/js/admin/knowledge_candidates.js"></script>
 
   <script>
     const { createApp, ref, computed, onMounted, onBeforeUnmount } = Vue;
@@ -816,8 +974,9 @@
       { id: 'users',     icon: '👥', label: '账号' },
       { id: 'gateway',   icon: '📡', label: '网关' },
       { id: 'jobs',      icon: '🧾', label: '任务' },
-      { id: 'feedback',  icon: '📈', label: '反馈' },
-      { id: 'storage',   icon: '🗄',  label: '存储' },
+      { id: 'feedback',    icon: '📈', label: '反馈' },
+      { id: 'candidates', icon: '🔍', label: '候选' },
+      { id: 'storage',    icon: '🗄',  label: '存储' },
       { id: 'knowledge', icon: '📚', label: '知识库' },
     ];
 
@@ -1028,6 +1187,29 @@
           tableRowClassName
         } = materialsModule;
 
+        const candidatesModule = window.AIMOAdminKnowledgeCandidates.createKnowledgeCandidatesModule({
+          ref,
+          axios,
+          ElMessage,
+          ElMessageBox,
+          apiBaseUrl: API_BASE_URL,
+          authHeaders,
+          apiData,
+          apiErrorMessage,
+        });
+        const {
+          candidateList, candidateLoading, candidateTotal, candidatePage,
+          candidateStatusFilter, candidateKindFilter, building,
+          showApproveDialog, showRejectDialog, showCandidateDetail,
+          selectedCandidate, approveResult, approving, rejecting,
+          approveForm, rejectForm,
+          kindLabel, kindTagType, candidateStatusType,
+          fetchCandidates, buildCandidates,
+          openApproveDialog, submitApprove,
+          openRejectDialog, submitReject,
+          openCandidateDetail,
+        } = candidatesModule;
+
         const fetchUsers = async () => {
           userLoading.value = true;
           try {
@@ -1063,6 +1245,7 @@
           fetchMaterialAudit();
           fetchStorageHealth();
           fetchStorageFiles();
+          fetchCandidates();
         });
 
         onBeforeUnmount(() => {
@@ -1089,7 +1272,17 @@
           ragEvalResult, fetchRagEvalResult,
           materialAudit, auditLoading, fetchMaterialAudit, rollbackMaterialSnapshot,
           storageFiles, storageLoading, storageUploading, storageHealth, storagePurpose,
-          fetchStorageHealth, fetchStorageFiles, handleStorageUpload, openStorageDownload
+          fetchStorageHealth, fetchStorageFiles, handleStorageUpload, openStorageDownload,
+          candidateList, candidateLoading, candidateTotal, candidatePage,
+          candidateStatusFilter, candidateKindFilter, building,
+          showApproveDialog, showRejectDialog, showCandidateDetail,
+          selectedCandidate, approveResult, approving, rejecting,
+          approveForm, rejectForm,
+          kindLabel, kindTagType, candidateStatusType,
+          fetchCandidates, buildCandidates,
+          openApproveDialog, submitApprove,
+          openRejectDialog, submitReject,
+          openCandidateDetail,
         };
       }
     };

@@ -1,6 +1,6 @@
 # 旗胜 AI 平台架构升级路线
 > 创建日期：2026-05-14
-> 最后更新：2026-05-14（含 Codex 审查意见 v4）
+> 最后更新：2026-05-14（含 Codex 审查意见 v5 + 实施保障章节）
 > 状态：规划中
 > 负责人：待定
 
@@ -147,7 +147,7 @@
 - notes: 备注
 ```
 
-> SLA 阈值示例（由接口按渠道动态返回）：电话 2 小时、微信 4 小时、现场当日。超时由 `first_response_time - inquiry_time > 阈值` 实时计算，不写入数据库。
+> SLA 阈值配置：初期写入 `.env`（如 `SLA_PHONE_HOURS=2`、`SLA_WECHAT_HOURS=4`、`SLA_ONSITE_HOURS=8`），由接口读取后按渠道动态返回。如将来需要多客户/多项目差异化阈值，再迁移到 `sla_config` 数据库表；当前阶段不过度设计。超时由 `first_response_time - inquiry_time > 阈值` 实时计算，不写入数据库。
 
 ### 任务清单
 - [ ] 新增 `client_inquiries` 表 + Alembic migration
@@ -159,6 +159,7 @@
   - SLA 达标率趋势
   - 各业务员响应速度对比
   - 逾期未响应数量预警
+  - ⚠️ 面板须标注"数据起始日期（Phase 2 上线日期）"，避免管理层将历史空白误读为系统故障；历史 QuoteJob 无对应 ClientInquiry 记录，不纳入统计范围
 
 ### 为什么这么做
 独立的登记入口业务员大概率不会坚持填。嵌入报价创建流程后，登记是报价的自然副产品，数据质量有保证。预留 `first_response_time` 和自动化字段，后续可从钉钉/微信自动回填，不需要改数据模型。
@@ -205,9 +206,10 @@
 - [ ] 新增 Celery beat 定时任务：每小时扫描逾期任务
   - 条件：`due_at < now() AND completed_at IS NULL AND status NOT IN ('done','cancelled')`
   - 触发钉钉逾期提醒（同上 Webhook），限制每任务每天最多提醒 1 次，避免轰炸
-- [ ] （可选）新增 `execution_task_events` 审计表，记录创建、分配、提醒、完成等事件
-  - 字段：id、task_id、event_type、operator_id、notes、created_at
-  - 为后续追溯任务完整生命周期提供数据基础
+  - ⚠️ beat 是**独立进程**，需加入 `start_all.ps1` 启动编排，并在 `install_celery_worker_service.ps1` 注册独立任务计划程序
+- [ ] 新增 `execution_task_events` 审计表，记录创建、分配、推送、提醒、完成、取消等事件
+  - 字段：id、task_id、event_type、operator_id（NULL=系统自动）、notes、created_at
+  - 事件只追加不修改，支持审计和后续自动化
 - [ ] 驾驶舱"执行速度"面板：
   - 任务完成率（本周 / 本月）
   - 逾期任务数量（动态计算）预警
@@ -247,10 +249,12 @@ meeting_notes:
 task_drafts:
 - id, meeting_note_id（关联 meeting_notes）
 - title: AI 提取的任务标题
-- suggested_assignee: AI 建议负责人
+- suggested_assignee: AI 建议负责人（存储原始名字字符串，非 user_id）
 - suggested_due_at: AI 建议截止时间
 - status: 草稿状态（pending_review / accepted / rejected）
 - accepted_task_id: 确认后关联的 ExecutionTask.id
+
+> `suggested_assignee` 存储 AI 输出的原始文字（如"张总"、"小李"），草稿确认界面展示此字符串，由人工在确认时从下拉列表选择实际 `assignee_id`，**不做自动模糊匹配**——避免"张三"静默错配到"张三丰"，造成任务推送错误。
 ```
 
 ### 任务清单
@@ -368,6 +372,146 @@ Week 13+   钉钉会议导入（等权限）
 
 ---
 
+## 实施保障
+
+> 本章不扩展功能范围，只明确权限、接口规范、事件追踪、验收标准、回滚开关、测试要求和外部依赖，防止实施阶段跑偏。
+
+### 1. 权限矩阵
+
+系统目前只有 admin / 普通用户两个角色，无法满足新模块的访问控制需求。需在 `users` 表新增 `role` 字段（枚举：`admin` / `staff` / `manager` / `viewer`），通过 Alembic migration 将现有 `is_admin=true` 迁移为 `role='admin'`，其余迁移为 `role='staff'`。
+
+| 功能 | admin | staff（业务员） | manager（项目负责人） | viewer（管理层只读） |
+|------|:-----:|:---------------:|:---------------------:|:--------------------:|
+| 创建 / 取消报价任务 | ✅ | ✅ 自己 | ❌ | ❌ |
+| 查看报价任务 | ✅ 全部 | ✅ 自己 | ❌ | ❌ |
+| 创建 ClientInquiry | ✅ | ✅ | ❌ | ❌ |
+| 查看 ClientInquiry | ✅ 全部 | ✅ 自己 | ❌ | ❌ |
+| 手动创建 ExecutionTask | ✅ | ❌ | ❌ | ❌ |
+| 查看 ExecutionTask | ✅ 全部 | ❌ | ✅ 分配给自己的 | ❌ |
+| 更新 ExecutionTask | ✅ | ❌ | ✅ 分配给自己的 | ❌ |
+| 取消 ExecutionTask | ✅ | ❌ | ❌ | ❌ |
+| 录入会议纪要 / 确认草稿任务 | ✅ | ✅ | ✅ | ❌ |
+| 查看驾驶舱 | ✅ | ❌ | ❌ | ✅ |
+| 管理知识库 / 用户 | ✅ | ❌ | ❌ | ❌ |
+
+### 2. 用户与钉钉账号映射
+
+任务推送若只往群发消息，负责人很容易忽略。需要绑定个人钉钉账号才能 @ 到人。
+
+**新增字段**：`users.dingtalk_user_id`（VARCHAR 64, nullable），Alembic migration 新增。
+
+**推送路由策略**：
+- 有 `dingtalk_user_id`：发送 ActionCard 类型消息并 @负责人
+- 无 `dingtalk_user_id`：推送到任务专用群 Webhook（`DINGTALK_TASK_WEBHOOK`，与报价审核群的 `DINGTALK_WEBHOOK` **物理分离**，避免互相污染）
+- 推送失败：60 秒后重试一次；仍失败则写入 `execution_task_events`（event_type=push_failed）并继续，不阻断任务创建
+- 推送记录：每次推送无论成功失败均写入 `execution_task_events`
+
+> 新增配置项 `DINGTALK_TASK_WEBHOOK`，区别于现有报价推送用的 `DINGTALK_WEBHOOK`。
+
+### 3. 事件流水表
+
+`execution_task_events` 已在阶段 3 中列出。对称补充 `client_inquiry_events`：
+
+```
+client_inquiry_events:
+- id, created_at
+- inquiry_id:   外键 → client_inquiries.id
+- event_type:   created | responded | converted | abandoned | note_added | push_failed
+- operator_id:  外键 → users.id（NULL 表示系统自动触发）
+- notes:        备注
+```
+
+统一原则：事件只追加不修改，event_type 枚举固定，operator_id=NULL 表示系统自动动作。
+
+### 4. 阶段验收标准（Definition of Done）
+
+| 阶段 | 完成定义 |
+|------|---------|
+| 阶段 0 | `/login` 可正常登录；旧 `/index.html`、`/admin.html` 仍可访问；刷新 `/admin/dashboard` 不出现 FastAPI 404 |
+| 阶段 1 | `GET /api/v1/admin/dashboard/quote-speed` 有数据；管理员看到三类耗时分区趋势折线图 |
+| 阶段 2 | 创建报价任务时自动生成 ClientInquiry 记录；响应速度面板标注数据起始日期且不为空 |
+| 阶段 3 | ExecutionTask 可创建、分配、完成、取消；逾期动态计算与数据库一致；Celery beat 已纳入 `start_all.ps1`；钉钉推送在分配后可发出 |
+| 阶段 4a | 录入会议纪要后生成草稿列表；确认后 ExecutionTask 正确写入；钉钉推送给负责人成功 |
+| 阶段 4b | 上传音频后返回转写文本，自动进入草稿提取流程 |
+| 阶段 5 | 批量导入后 RAG 评测 Hit@K ≥ 导入前基线；每条来源可追溯到 source_batch_id |
+
+### 5. 功能开关与回滚策略
+
+新功能上线出问题时可快速关闭，不影响现有报价系统。在 `.env` 中新增以下开关（默认 `false`，逐阶段上线后置 `true`）：
+
+```
+FEATURE_DASHBOARD=false         # 驾驶舱面板（阶段 1-3）
+FEATURE_CLIENT_INQUIRY=false    # 响应速度追踪（阶段 2）
+FEATURE_EXECUTION=false         # 执行任务模块（阶段 3-4）
+FEATURE_MEETING_AI=false        # AI 会议纪要提取（阶段 4a）
+FEATURE_VITE_FRONTEND=false     # Vite 新前端（阶段 0，稳定后置 true）
+```
+
+开关在启动时读取，修改需重启服务。未启用的功能接口返回 `HTTP 503 Feature not enabled`，前端路由守卫同步屏蔽对应入口。
+
+### 6. 测试清单
+
+遵循现有测试规范（pytest + SQLite 测试库，不访问真实外部服务，mock Webhook）：
+
+**后端最小覆盖**：
+- `execution_tasks`：status 非法值拒绝；逾期动态计算（有 due_at 无 completed_at → overdue；有 completed_at → not overdue）
+- `client_inquiries`：创建报价任务时自动生成记录；inquiry_time 默认为创建时间；first_response_time 自动填入
+- 权限边界：staff 创建 ExecutionTask → 403；manager 更新他人任务 → 403；viewer 访问非驾驶舱接口 → 403
+- 驾驶舱聚合：有报价记录时三类耗时接口返回非空且分区数据
+- 钉钉推送：mock Webhook，验证调用时机与 payload 结构；推送失败后写入 event_type=push_failed
+
+**业务流手工验收**：
+- 创建报价 → ClientInquiry 自动生成 → 响应速度看板统计更新
+- 会议纪要录入 → AI 草稿生成 → 人工确认选择负责人 → ExecutionTask 写入 → 钉钉推送
+- 逾期场景：due_at 设为近未来 → Celery beat 触发 → 验证钉钉提醒发出且 event 记录写入
+
+### 7. 数据字典（枚举值固化）
+
+所有枚举值在后端 Pydantic schema 中定义为 `Literal` 类型，前端从同名常量文件读取，禁止字符串硬编码散落在业务代码中。
+
+```
+client_inquiries.source:
+  wechat | phone | onsite | referral | other
+
+client_inquiries.status:
+  pending | responded | converted | abandoned
+  状态转移：
+    pending     → responded:  报价任务创建时系统自动置（first_response_time 同步写入）
+    responded   → converted:  confirm_push 成功后系统自动置
+    pending/responded → abandoned: 手动 PATCH status=abandoned
+
+execution_tasks.source:
+  meeting | quote | manual
+
+execution_tasks.status:
+  pending | in_progress | done | cancelled
+
+task_drafts.status:
+  pending_review | accepted | rejected
+
+meeting_notes.source:
+  manual | audio | dingtalk
+
+knowledge_candidates.data_type:
+  material | technique | case | pricing_sample | risk_rule
+
+knowledge_candidates.target_type:
+  material | rag_doc | case | pricing_sample
+
+users.role:
+  admin | staff | manager | viewer
+```
+
+### 8. 外部依赖准备清单
+
+| 依赖 | 用于阶段 | 需准备内容 | 建议启动时间 |
+|------|---------|-----------|------------|
+| 钉钉任务通知 Webhook | 3 | 建"任务通知"专用群、创建机器人、获取 `DINGTALK_TASK_WEBHOOK` URL | Phase 3 开始前 1 周 |
+| 语音转写 API（讯飞 / 阿里云）| 4b | 注册账号、实名认证、申请 AppID/Secret、充值测试额度、确认并发限制 | Phase 4a 开始时（提前 2 周）|
+| 钉钉企业应用（会议记录权限）| 4c | 企业管理员审批、提交应用审核材料、准备测试会议样本、确认 API 调用频率限制 | Phase 4a 开始时（审批周期不可控，越早越好）|
+
+---
+
 ## 变更记录
 
 | 日期 | 变更内容 | 操作人 |
@@ -376,3 +520,4 @@ Week 13+   钉钉会议导入（等权限）
 | 2026-05-14 | v2 更新：Vite 分批迁移策略、ClientInquiry 嵌入报价流程、ExecutionTask 命名、逾期动态计算、草稿确认层、知识导入批次追踪、指标口径定义 | Codex 审查 + Claude 确认 |
 | 2026-05-14 | v3 更新：修正 QuoteJob 字段（无 started_at，使用 duration_ms）、人工确认耗时口径（confirmed_at fallback QuoteHistory）、ClientInquiry SLA 拆分动态计算、ExecutionTask 无硬删除、知识导入新增落库目标追踪字段（target_type/target_id/snapshot_id）、Vite SPA fallback 路由配置 | Codex 审查 v3 + Claude 确认 |
 | 2026-05-14 | v4 更新：ClientInquiry.first_response_time 改为报价任务创建时自动写入（创建即代表接单）；阶段 3 新增钉钉任务推送通知（复用现有 Webhook，无需企业权限）、Celery beat 逾期扫描与钉钉提醒、可选 execution_task_events 审计表 | Codex 审查 v4 + Claude 确认 |
+| 2026-05-14 | v5 更新：新增"实施保障"章节（权限矩阵、用户钉钉映射、事件流水表、验收标准、功能开关、测试清单、数据字典、外部依赖准备清单）；修正 SLA 阈值存储策略、ClientInquiry 历史数据边界标注、Celery beat 为独立进程说明、Phase 4a suggested_assignee 不做自动模糊匹配 | Codex 审查 v5 + Claude 确认 |

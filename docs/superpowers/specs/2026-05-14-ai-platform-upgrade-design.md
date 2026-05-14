@@ -1,6 +1,6 @@
 # 旗胜 AI 平台架构升级路线
 > 创建日期：2026-05-14
-> 最后更新：2026-05-14（含 Codex 审查意见 v2）
+> 最后更新：2026-05-14（含 Codex 审查意见 v3）
 > 状态：规划中
 > 负责人：待定
 
@@ -37,11 +37,12 @@
 
 | 指标名 | 计算方式 | 面向受众 |
 |--------|---------|---------|
-| AI 生成耗时 | `QuoteJob.started_at → QuoteJob.finished_at` | 工程侧（系统性能） |
-| 人工确认耗时 | `QuoteJob.finished_at → QuoteHistory.created_at` | 管理层（业务效率） |
-| 总交付耗时 | `QuoteJob.created_at → QuoteHistory.created_at` | 管理层（端到端） |
+| AI 生成耗时 | `QuoteJob.duration_ms`（已有字段），或 `created_at → finished_at` | 工程侧（系统性能） |
+| 人工确认耗时 | `QuoteJob.finished_at → QuoteFeedback.confirmed_at`；无反馈记录时 fallback 到 `QuoteHistory.created_at` | 管理层（业务效率） |
+| 总交付耗时 | `QuoteJob.created_at → QuoteFeedback.confirmed_at`（同上 fallback） | 管理层（端到端） |
 
-> 注：三个数字不要混在同一张图里，否则"系统很快但人工很慢"的真实问题会被平均数掩盖。
+> 注1：`QuoteJob` 当前无 `started_at` 字段（只有 `created_at` / `finished_at` / `duration_ms`）。如将来需要区分"排队等待"与"真正 AI 执行"时间，再新增 `started_at`。
+> 注2：三个数字不要混在同一张图里，否则"系统很快但人工很慢"的真实问题会被平均数掩盖。
 
 ### 响应耗时
 - 首次响应时长 = `ClientInquiry.first_response_time - ClientInquiry.inquiry_time`
@@ -74,6 +75,10 @@
 
 ### 任务清单
 - [ ] 初始化 Vite + Vue 3 + TypeScript 工程
+- [ ] 配置 FastAPI 托管 Vite 编译产物，设置 SPA fallback 路由：
+  - 未匹配的路径返回 Vite 的 `index.html`（交由 vue-router 处理）
+  - 例外路由：`/index.html`、`/admin.html`、`/app.html` 继续静态服务旧页面
+  - 避免 `/admin/dashboard` 刷新后出现 FastAPI 404
 - [ ] 优先迁移 `/login` 页面（原 app.html 登录部分）
 - [ ] 统一封装 `apiClient`（Axios 实例）：
   - JWT 存取（localStorage）
@@ -135,10 +140,13 @@
 - responder_id: 接单人（关联 users 表，默认为创建报价的用户）
 - client_name: 客户姓名/公司（可选）
 - client_phone: 客户电话（可选）
-- status: SLA 状态（待响应 / 已响应 / 已成单 / 已放弃）
+- status: 业务状态（pending / responded / converted / abandoned）
+  ⚠️ 不与 SLA 状态混用：sla_status 按渠道阈值动态计算返回，不持久化存储
 - quote_job_id: 关联 QuoteJob（外键）
 - notes: 备注
 ```
+
+> SLA 阈值示例（由接口按渠道动态返回）：电话 2 小时、微信 4 小时、现场当日。超时由 `first_response_time - inquiry_time > 阈值` 实时计算，不写入数据库。
 
 ### 任务清单
 - [ ] 新增 `client_inquiries` 表 + Alembic migration
@@ -185,7 +193,10 @@
 ### 任务清单
 - [ ] 新增 `execution_tasks` 表 + Alembic migration
 - [ ] 新增接口：
-  - `POST/GET/PATCH/DELETE /api/v1/execution-tasks` — 任务 CRUD
+  - `POST /api/v1/execution-tasks` — 创建任务
+  - `GET /api/v1/execution-tasks` — 列表查询
+  - `PATCH /api/v1/execution-tasks/{id}` — 更新任务（含 status=cancelled 软删除）
+  - ⚠️ 不提供硬删除接口；admin 可将 status 置为 cancelled，保留审计链
   - `GET /api/v1/admin/dashboard/execution-speed` — 聚合统计
 - [ ] 驾驶舱"执行速度"面板：
   - 任务完成率（本周 / 本月）
@@ -284,13 +295,20 @@ task_drafts:
 在现有知识候选字段基础上新增：
 
 ```
-新增字段：
-- source_batch_id: 批次标识（同一次导入共享）
+来源追踪字段：
+- source_batch_id: 批次标识（同一次导入共享，用于整批回滚）
 - source_file: 来源文件名
 - source_line: 原始行号/页码
 - data_type: 数据类型（material / technique / case / pricing_sample / risk_rule）
 - confidence: 置信度（0.0-1.0，人工标注或模型输出）
+
+落库目标追踪字段（审核通过后写入）：
+- target_type: 写入目标类型（material / rag_doc / case / pricing_sample）
+- target_id: 写入目标记录 ID
+- snapshot_id: 写入时的材料库快照 ID（关联 materials_audit）
 ```
+
+> 仅有来源（source_batch_id）而没有去向（target_type / target_id / snapshot_id），整批回滚时无法精确定位要撤销哪些记录。来源和去向必须同时记录。
 
 ### 任务清单
 - [ ] 与工程部确认数据格式（Excel / CSV / 纸质扫描）
@@ -346,3 +364,4 @@ Week 13+   钉钉会议导入（等权限）
 |------|---------|--------|
 | 2026-05-14 | 初版创建 | AI 辅助规划 |
 | 2026-05-14 | v2 更新：Vite 分批迁移策略、ClientInquiry 嵌入报价流程、ExecutionTask 命名、逾期动态计算、草稿确认层、知识导入批次追踪、指标口径定义 | Codex 审查 + Claude 确认 |
+| 2026-05-14 | v3 更新：修正 QuoteJob 字段（无 started_at，使用 duration_ms）、人工确认耗时口径（confirmed_at fallback QuoteHistory）、ClientInquiry SLA 拆分动态计算、ExecutionTask 无硬删除、知识导入新增落库目标追踪字段（target_type/target_id/snapshot_id）、Vite SPA fallback 路由配置 | Codex 审查 v3 + Claude 确认 |

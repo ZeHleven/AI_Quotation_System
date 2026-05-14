@@ -1,6 +1,6 @@
 # 旗胜 AI 平台架构升级路线
 > 创建日期：2026-05-14
-> 最后更新：2026-05-14（含 Codex 审查意见 v3）
+> 最后更新：2026-05-14（含 Codex 审查意见 v4）
 > 状态：规划中
 > 负责人：待定
 
@@ -135,8 +135,9 @@
 字段：
 - id, created_at, updated_at
 - source: 来源渠道（微信 / 电话 / 现场 / 老客户 / 其他）
-- inquiry_time: 客户咨询时间（默认为报价任务创建时间）
-- first_response_time: 首次响应时间（可选填，后续自动化后从钉钉读取）
+- inquiry_time: 客户最早咨询时间；用户可手填，不填则默认写入当前时间
+- first_response_time: 首次响应时间；报价任务创建时自动写入当前时间（创建即代表接单）；
+  后续接入钉钉/微信后可用真实首次回复时间覆盖
 - responder_id: 接单人（关联 users 表，默认为创建报价的用户）
 - client_name: 客户姓名/公司（可选）
 - client_phone: 客户电话（可选）
@@ -198,6 +199,15 @@
   - `PATCH /api/v1/execution-tasks/{id}` — 更新任务（含 status=cancelled 软删除）
   - ⚠️ 不提供硬删除接口；admin 可将 status 置为 cancelled，保留审计链
   - `GET /api/v1/admin/dashboard/execution-speed` — 聚合统计
+- [ ] 任务创建/分配后，通过现有钉钉 Webhook 推送通知给负责人
+  - 复用现有 `DINGTALK_WEBHOOK` + HMAC 签名机制，无需企业应用权限
+  - 推送内容：任务标题、截止时间、来源（会议/报价/手动）
+- [ ] 新增 Celery beat 定时任务：每小时扫描逾期任务
+  - 条件：`due_at < now() AND completed_at IS NULL AND status NOT IN ('done','cancelled')`
+  - 触发钉钉逾期提醒（同上 Webhook），限制每任务每天最多提醒 1 次，避免轰炸
+- [ ] （可选）新增 `execution_task_events` 审计表，记录创建、分配、提醒、完成等事件
+  - 字段：id、task_id、event_type、operator_id、notes、created_at
+  - 为后续追溯任务完整生命周期提供数据基础
 - [ ] 驾驶舱"执行速度"面板：
   - 任务完成率（本周 / 本月）
   - 逾期任务数量（动态计算）预警
@@ -365,3 +375,4 @@ Week 13+   钉钉会议导入（等权限）
 | 2026-05-14 | 初版创建 | AI 辅助规划 |
 | 2026-05-14 | v2 更新：Vite 分批迁移策略、ClientInquiry 嵌入报价流程、ExecutionTask 命名、逾期动态计算、草稿确认层、知识导入批次追踪、指标口径定义 | Codex 审查 + Claude 确认 |
 | 2026-05-14 | v3 更新：修正 QuoteJob 字段（无 started_at，使用 duration_ms）、人工确认耗时口径（confirmed_at fallback QuoteHistory）、ClientInquiry SLA 拆分动态计算、ExecutionTask 无硬删除、知识导入新增落库目标追踪字段（target_type/target_id/snapshot_id）、Vite SPA fallback 路由配置 | Codex 审查 v3 + Claude 确认 |
+| 2026-05-14 | v4 更新：ClientInquiry.first_response_time 改为报价任务创建时自动写入（创建即代表接单）；阶段 3 新增钉钉任务推送通知（复用现有 Webhook，无需企业权限）、Celery beat 逾期扫描与钉钉提醒、可选 execution_task_events 审计表 | Codex 审查 v4 + Claude 确认 |

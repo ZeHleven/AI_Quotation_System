@@ -16,6 +16,12 @@ from app.schemas.knowledge_candidate import KnowledgeCandidateApproveRequest, Kn
 from app.services.quote_feedback import _json_loads, _parse_amount, _project_details
 
 
+DEFAULT_UNIT = "\u9879"
+SOURCE_KNOWLEDGE_CANDIDATE = "knowledge_candidate"
+STATUS_ACTIVE = "active"
+STATUS_DRAFT = "draft"
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -146,7 +152,7 @@ def _candidate_from_final_item(
         "username": feedback.username,
         "item_name": item_name[:255],
         "unit_price": unit_price,
-        "unit": str(item.get("unit") or "项")[:64],
+        "unit": str(item.get("unit") or DEFAULT_UNIT)[:64],
         "notes": _item_notes(item, feedback),
         "suggested_material_id": f"kb_{uuid.uuid4().hex[:8]}",
         "confidence_score": 0.72,
@@ -201,7 +207,7 @@ def _candidate_from_correction(
         "username": feedback.username,
         "item_name": item_name[:255],
         "unit_price": after_amount,
-        "unit": existing.unit if existing else "项",
+        "unit": existing.unit if existing else DEFAULT_UNIT,
         "notes": "\n".join(
             part
             for part in (
@@ -259,7 +265,7 @@ def _candidate_from_rejection(
         "username": feedback.username,
         "item_name": item_name[:255],
         "unit_price": None,
-        "unit": "项",
+        "unit": DEFAULT_UNIT,
         "notes": f"Rejected quote reason: {reason}",
         "suggested_material_id": f"kb_{uuid.uuid4().hex[:8]}",
         "confidence_score": 0.58,
@@ -347,29 +353,155 @@ def build_knowledge_candidates(db: Session, request: KnowledgeCandidateBuildRequ
     }
 
 
+def _material_to_dict(item: Material) -> dict:
+    return {
+        "id": item.material_id,
+        "item_name": item.item_name,
+        "unit_price": item.unit_price or 0.0,
+        "unit": item.unit or DEFAULT_UNIT,
+        "notes": item.notes or "",
+        "category": item.category,
+        "spec": item.spec,
+        "brand": item.brand,
+        "supplier": item.supplier,
+        "region": item.region,
+        "source": item.source or "manual",
+        "status": item.status or (STATUS_DRAFT if item.is_draft else STATUS_ACTIVE),
+        "last_verified_at": _format_dt(item.last_verified_at),
+        "usage_count": int(item.usage_count or 0),
+        "last_used_at": _format_dt(item.last_used_at),
+        "is_draft": bool(item.is_draft),
+    }
+
+
 def _materials_snapshot_data(db: Session) -> list[dict]:
+    return [_material_to_dict(item) for item in db.query(Material).order_by(Material.id.asc()).all()]
+
+
+def _candidate_material_summary(
+    *,
+    material: Optional[Material],
+    candidate: KnowledgeCandidate,
+    item_name: str,
+    unit_price: float,
+    unit: str,
+    is_draft: bool,
+) -> dict:
+    return {
+        "id": material.material_id if material else (candidate.suggested_material_id or candidate.material_id),
+        "item_name": item_name,
+        "unit_price": unit_price,
+        "unit": unit,
+        "status": STATUS_DRAFT if is_draft else STATUS_ACTIVE,
+    }
+
+
+def _candidate_change_fields(
+    *,
+    material: Material,
+    item_name: str,
+    unit_price: float,
+    unit: str,
+    notes: str,
+    is_draft: bool,
+) -> list[dict]:
+    checks = [
+        ("item_name", material.item_name, item_name),
+        ("unit_price", round(float(material.unit_price or 0.0), 4), round(float(unit_price or 0.0), 4)),
+        ("unit", material.unit or DEFAULT_UNIT, unit),
+        ("notes", material.notes or "", notes or ""),
+        ("status", material.status or (STATUS_DRAFT if material.is_draft else STATUS_ACTIVE), STATUS_DRAFT if is_draft else STATUS_ACTIVE),
+        ("is_draft", bool(material.is_draft), bool(is_draft)),
+    ]
     return [
-        {
-            "id": item.material_id,
-            "item_name": item.item_name,
-            "unit_price": item.unit_price or 0.0,
-            "unit": item.unit or "项",
-            "notes": item.notes or "",
-            "is_draft": bool(item.is_draft),
-        }
-        for item in db.query(Material).order_by(Material.id.asc()).all()
+        {"field": field, "before": before, "after": after}
+        for field, before, after in checks
+        if before != after
     ]
 
 
-def _create_snapshot(db: Session, *, username: str, candidate: KnowledgeCandidate) -> MaterialSnapshot:
+def _candidate_snapshot_diff(
+    *,
+    material: Optional[Material],
+    candidate: KnowledgeCandidate,
+    item_name: str,
+    unit_price: float,
+    unit: str,
+    notes: str,
+    is_draft: bool,
+) -> dict:
+    summary = _candidate_material_summary(
+        material=material,
+        candidate=candidate,
+        item_name=item_name,
+        unit_price=unit_price,
+        unit=unit,
+        is_draft=is_draft,
+    )
+    if material:
+        return {
+            "added_count": 0,
+            "updated_count": 1,
+            "deleted_count": 0,
+            "added": [],
+            "updated": [
+                {
+                    **summary,
+                    "changed_fields": _candidate_change_fields(
+                        material=material,
+                        item_name=item_name,
+                        unit_price=unit_price,
+                        unit=unit,
+                        notes=notes,
+                        is_draft=is_draft,
+                    ),
+                }
+            ],
+            "deleted": [],
+        }
+    return {
+        "added_count": 1,
+        "updated_count": 0,
+        "deleted_count": 0,
+        "added": [summary],
+        "updated": [],
+        "deleted": [],
+    }
+
+
+def _create_snapshot(
+    db: Session,
+    *,
+    username: str,
+    candidate: KnowledgeCandidate,
+    material: Optional[Material],
+    item_name: str,
+    unit_price: float,
+    unit: str,
+    notes: str,
+    is_draft: bool,
+) -> MaterialSnapshot:
     data = _materials_snapshot_data(db)
+    diff_summary = _candidate_snapshot_diff(
+        material=material,
+        candidate=candidate,
+        item_name=item_name,
+        unit_price=unit_price,
+        unit=unit,
+        notes=notes,
+        is_draft=is_draft,
+    )
     snapshot = MaterialSnapshot(
         snapshot_id=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}",
-        created_at=datetime.now(),
+        created_at=_utcnow(),
         username=username,
         action="knowledge_candidate_approve",
         reason=f"Before approving knowledge candidate {candidate.id}",
         item_count=len(data),
+        added_count=diff_summary["added_count"],
+        updated_count=diff_summary["updated_count"],
+        deleted_count=diff_summary["deleted_count"],
+        diff_summary_json=_json_dumps(diff_summary),
         data_json=_json_dumps(data),
     )
     db.add(snapshot)
@@ -401,7 +533,7 @@ def approve_candidate(
         raise ValueError("item_name is required to approve a candidate")
 
     unit_price = request.unit_price if request.unit_price is not None else candidate.unit_price
-    unit = (request.unit or candidate.unit or "项").strip() or "项"
+    unit = (request.unit or candidate.unit or DEFAULT_UNIT).strip() or DEFAULT_UNIT
     notes = request.notes if request.notes is not None else (candidate.notes or "")
 
     material = None
@@ -412,20 +544,39 @@ def approve_candidate(
     if material is None and request.update_existing:
         material = _material_by_name(db, item_name)
 
-    snapshot = _create_snapshot(db, username=username, candidate=candidate)
+    unit_price_value = float(unit_price or 0.0)
+    status = STATUS_DRAFT if request.as_draft else STATUS_ACTIVE
+    snapshot = _create_snapshot(
+        db,
+        username=username,
+        candidate=candidate,
+        material=material,
+        item_name=item_name,
+        unit_price=unit_price_value,
+        unit=unit,
+        notes=notes,
+        is_draft=request.as_draft,
+    )
     if material:
         material.item_name = item_name
-        material.unit_price = float(unit_price or 0.0)
+        material.unit_price = unit_price_value
         material.unit = unit
         material.notes = notes
+        material.source = SOURCE_KNOWLEDGE_CANDIDATE
+        material.status = status
+        material.last_verified_at = _utcnow()
         material.is_draft = request.as_draft
     else:
         material = Material(
             material_id=_unique_material_id(db, request.material_id or candidate.suggested_material_id),
             item_name=item_name,
-            unit_price=float(unit_price or 0.0),
+            unit_price=unit_price_value,
             unit=unit,
             notes=notes,
+            source=SOURCE_KNOWLEDGE_CANDIDATE,
+            status=status,
+            last_verified_at=_utcnow(),
+            usage_count=0,
             is_draft=request.as_draft,
         )
         db.add(material)
@@ -442,18 +593,15 @@ def approve_candidate(
     db.refresh(material)
     return {
         "candidate": candidate_to_dict(candidate),
-        "material": {
-            "id": material.material_id,
-            "item_name": material.item_name,
-            "unit_price": material.unit_price or 0.0,
-            "unit": material.unit or "项",
-            "notes": material.notes or "",
-            "is_draft": bool(material.is_draft),
-        },
+        "material": _material_to_dict(material),
         "snapshot": {
             "snapshot_id": snapshot.snapshot_id,
             "item_count": snapshot.item_count,
             "action": snapshot.action,
+            "added_count": snapshot.added_count or 0,
+            "updated_count": snapshot.updated_count or 0,
+            "deleted_count": snapshot.deleted_count or 0,
+            "diff_summary": _json_load(snapshot.diff_summary_json),
         },
     }
 

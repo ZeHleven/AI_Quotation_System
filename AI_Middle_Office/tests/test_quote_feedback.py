@@ -100,6 +100,12 @@ def _create_feedback_record(username: str) -> int:
             rag_collection_alias="test_collection_alias",
             ai_payload_json=json.dumps({"project_details": [{"project_name": "paint", "total_price": 100}]}),
             final_payload_json=json.dumps({"project_details": [{"project_name": "paint", "total_price": 130}]}),
+            request_text="paint quote request",
+            source_file_name="paint.png",
+            project_summary="paint; total_items=1",
+            change_summary="1 field changes; top fields: 小计; amount delta: 30",
+            top_changed_fields="小计",
+            reviewed_by=username,
         )
         db.add(feedback)
         db.flush()
@@ -112,8 +118,12 @@ def _create_feedback_record(username: str) -> int:
                 item_index=0,
                 project_name="paint",
                 field_path="project_details[0].total_price",
+                field_label="小计",
+                change_type="updated",
                 before_value="100",
                 after_value="130",
+                before_display="100",
+                after_display="130",
                 delta_amount=30,
                 reason_category="unit_price_adjustment",
             )
@@ -124,12 +134,17 @@ def _create_feedback_record(username: str) -> int:
                 quote_id=feedback.quote_id,
                 quote_job_id=feedback.quote_job_id,
                 trace_id=feedback.trace_id,
+                item_index=0,
+                project_name="paint",
                 material_id="mat-admin-001",
                 item_name="paint base",
                 rank=1,
                 score=0.95,
                 collection_alias="test_collection_alias",
                 sent_to_prompt=True,
+                used_in_final_quote=True,
+                adopted_by_user=True,
+                match_reason="appears in final quote",
             )
         )
         db.commit()
@@ -187,6 +202,11 @@ def test_confirm_push_records_feedback_corrections_and_rag_trace(client, monkeyp
         assert feedback.amount_delta == 20
         assert feedback.was_modified is True
         assert feedback.pushed_to_dingtalk is True
+        assert feedback.request_text == "test quote request"
+        assert feedback.project_summary == "wall paint; total_items=1"
+        assert feedback.change_summary
+        assert "单价" in feedback.top_changed_fields
+        assert feedback.reviewed_by == username
         assert feedback.dify_prompt_version == settings.dify_prompt_version
         assert feedback.rag_collection_alias == settings.rag_collection_alias
 
@@ -196,11 +216,20 @@ def test_confirm_push_records_feedback_corrections_and_rag_trace(client, monkeyp
             "project_details[0].total_price",
             "project_details[0].notes",
         }
+        unit_price_correction = next(item for item in corrections if item.field_path.endswith(".unit_price"))
+        assert unit_price_correction.field_label == "单价"
+        assert unit_price_correction.change_type == "updated"
+        assert unit_price_correction.before_display == "20"
+        assert unit_price_correction.after_display == "22"
 
         trace = db.query(QuoteRagTrace).filter(QuoteRagTrace.feedback_id == feedback.id).one()
         assert trace.material_id == "mat-001"
+        assert trace.item_index == 0
+        assert trace.project_name == "wall paint"
         assert trace.rank == 1
         assert trace.sent_to_prompt is True
+        assert trace.used_in_final_quote is True
+        assert trace.adopted_by_user is True
     finally:
         db.close()
 
@@ -228,6 +257,9 @@ def test_reject_quote_feedback_records_manual_rejection(client):
         assert feedback.rejected is True
         assert feedback.rejection_reason == "missing item"
         assert feedback.pushed_to_dingtalk is False
+        assert feedback.reviewed_by == username
+        assert feedback.change_summary == "Rejected: missing item"
+        assert feedback.request_text == "test quote request"
     finally:
         db.close()
 
@@ -261,10 +293,21 @@ def test_admin_quote_feedback_summary_list_and_detail(client):
     assert items[0]["id"] == feedback_id
     assert items[0]["correction_count"] == 1
     assert items[0]["rag_trace_count"] == 1
+    assert items[0]["request_text"] == "paint quote request"
+    assert items[0]["project_summary"] == "paint; total_items=1"
+    assert items[0]["change_summary"].startswith("1 field changes")
+    assert items[0]["top_changed_fields"] == ["小计"]
 
     detail_response = client.get(f"/api/v1/admin/quote_feedback/{feedback_id}", headers=admin_headers)
     assert detail_response.status_code == 200
     detail = detail_response.json()["data"]
     assert detail["corrections"][0]["delta_amount"] == 30
+    assert detail["corrections"][0]["field_label"] == "小计"
+    assert detail["corrections"][0]["change_type"] == "updated"
+    assert detail["corrections"][0]["before_display"] == "100"
+    assert detail["corrections"][0]["after_display"] == "130"
     assert detail["rag_traces"][0]["material_id"] == "mat-admin-001"
+    assert detail["rag_traces"][0]["project_name"] == "paint"
+    assert detail["rag_traces"][0]["used_in_final_quote"] is True
+    assert detail["rag_traces"][0]["match_reason"] == "appears in final quote"
     assert detail["ai_payload"]["project_details"][0]["total_price"] == 100

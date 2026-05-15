@@ -38,6 +38,17 @@
       return map[status] || 'info';
     };
 
+    const formatDuration = (durationMs) => {
+      const ms = Number(durationMs);
+      if (!Number.isFinite(ms) || ms <= 0) return '\u2014';
+      if (ms < 1000) return `${Math.round(ms)} ms`;
+      const seconds = Math.round(ms / 1000);
+      if (seconds < 60) return `${seconds} s`;
+      const minutes = Math.floor(seconds / 60);
+      const restSeconds = seconds % 60;
+      return `${minutes}m ${restSeconds}s`;
+    };
+
     const fetchJobs = async (page = 1) => {
       jobPage.value = page;
       jobLoading.value = true;
@@ -135,6 +146,7 @@
       markTimeouts,
       openJobDetail,
       formatJson,
+      formatDuration,
       statusTagType,
     };
   }

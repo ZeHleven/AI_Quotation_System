@@ -110,6 +110,9 @@
       max-width: 100%; padding: 3px 6px; border: 1px solid var(--steel);
       border-radius: 4px; background: var(--bg); overflow-wrap: anywhere;
     }
+    .detail-meta { margin-bottom: 12px; }
+    .detail-title { font-weight: 700; color: var(--dark); margin-bottom: 6px; overflow-wrap: anywhere; }
+    .detail-summary { font-size: 12px; color: var(--slate); line-height: 1.5; overflow-wrap: anywhere; }
     .recovery-actions {
       margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;
     }
@@ -323,13 +326,28 @@
       <el-drawer v-model="showHistory" title="📋 我的报价历史" size="70%" direction="rtl">
         <el-table :data="historyList" border stripe style="width:100%" v-loading="historyLoading">
           <el-table-column prop="created_at" label="时间" width="160"></el-table-column>
+          <el-table-column label="报价内容" min-width="260" show-overflow-tooltip>
+            <template #default="scope">
+              <div class="detail-title">{{ scope.row.display_title || '报价记录' }}</div>
+              <div class="detail-summary">{{ scope.row.project_summary || scope.row.request_text || '—' }}</div>
+              <div class="quote-meta" style="margin-top:6px;">
+                <span v-if="scope.row.source_file_name" class="quote-meta-tag">{{ scope.row.source_file_name }}</span>
+                <span v-if="scope.row.quote_job_id" class="quote-meta-tag">任务 {{ scope.row.quote_job_id }}</span>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="item_count" label="项目数" width="80" align="center"></el-table-column>
           <el-table-column prop="total_amount" label="总价(元)" width="120" align="right">
-            <template #default="scope">¥ {{ scope.row.total_amount.toFixed(2) }}</template>
+            <template #default="scope">¥ {{ formatMoney(scope.row.total_amount) }}</template>
+          </el-table-column>
+          <el-table-column label="推送" width="80" align="center">
+            <template #default="scope">
+              <el-tag :type="scope.row.pushed_to_dingtalk ? 'success' : 'info'" size="small" effect="plain">{{ scope.row.pushed_to_dingtalk ? '已推送' : '未推送' }}</el-tag>
+            </template>
           </el-table-column>
           <el-table-column label="操作" width="80" align="center">
             <template #default="scope">
-              <el-button size="small" @click="viewDetail(scope.row)">详情</el-button>
+              <el-button size="small" :loading="detailLoading && historyDetail && historyDetail.id === scope.row.id" @click="viewDetail(scope.row)">详情</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -340,13 +358,34 @@
       </el-drawer>
 
       <!-- 历史详情弹窗 -->
-      <el-dialog v-model="showDetailDialog" title="报价明细" width="700px">
-        <el-table :data="detailRows" border stripe style="width:100%">
-          <el-table-column prop="project_name" label="施工项目" min-width="160"></el-table-column>
-          <el-table-column prop="unit_price" label="单价(元)" width="110" align="right"></el-table-column>
-          <el-table-column prop="total_price" label="合计(元)" width="110" align="right"></el-table-column>
-          <el-table-column prop="notes" label="备注" min-width="180"></el-table-column>
-        </el-table>
+      <el-dialog v-model="showDetailDialog" title="报价明细" width="860px">
+        <div v-loading="detailLoading" style="min-height:180px;">
+          <div v-if="historyDetail" class="detail-meta">
+            <el-descriptions :column="3" border size="small">
+              <el-descriptions-item label="报价">{{ historyDetail.display_title || '报价记录' }}</el-descriptions-item>
+              <el-descriptions-item label="总价">¥ {{ formatMoney(historyDetail.total_amount) }}</el-descriptions-item>
+              <el-descriptions-item label="项目数">{{ historyDetail.item_count || detailRows.length }}</el-descriptions-item>
+              <el-descriptions-item label="来源文件">{{ historyDetail.source_file_name || '（无附件）' }}</el-descriptions-item>
+              <el-descriptions-item label="推送">{{ historyDetail.pushed_to_dingtalk ? '已推送钉钉' : '未推送' }}</el-descriptions-item>
+              <el-descriptions-item label="确认人">{{ historyDetail.confirmed_by || currentUser }}</el-descriptions-item>
+              <el-descriptions-item label="需求" :span="3">{{ historyDetail.request_text || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="摘要" :span="3">{{ historyDetail.project_summary || '—' }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
+          <el-table :data="detailRows" border stripe style="width:100%">
+            <el-table-column prop="line_no" label="#" width="55" align="right"></el-table-column>
+            <el-table-column prop="project_name" label="施工项目" min-width="180" show-overflow-tooltip></el-table-column>
+            <el-table-column prop="quantity" label="数量" width="90" align="right"></el-table-column>
+            <el-table-column prop="unit" label="单位" width="80"></el-table-column>
+            <el-table-column prop="unit_price" label="单价(元)" width="110" align="right">
+              <template #default="scope">{{ formatMoney(scope.row.unit_price) }}</template>
+            </el-table-column>
+            <el-table-column prop="total_price" label="合计(元)" width="110" align="right">
+              <template #default="scope">{{ formatMoney(scope.row.total_price) }}</template>
+            </el-table-column>
+            <el-table-column prop="notes" label="备注" min-width="180" show-overflow-tooltip></el-table-column>
+          </el-table>
+        </div>
       </el-dialog>
 
       <!-- 人在回路预审弹窗 -->
@@ -494,6 +533,8 @@
         const historyTotal    = ref(0);
         const historyPage     = ref(1);
         const showDetailDialog = ref(false);
+        const detailLoading   = ref(false);
+        const historyDetail   = ref(null);
         const detailRows      = ref([]);
 
         const fetchHistory = async (page = 1) => {
@@ -515,12 +556,36 @@
 
         const openHistory = () => { showHistory.value = true; fetchHistory(1); };
 
-        const viewDetail = (row) => {
+        const formatMoney = (value) => {
+          const num = Number(value);
+          return Number.isFinite(num) ? num.toFixed(2) : '0.00';
+        };
+
+        const viewDetail = async (row) => {
+          historyDetail.value = row;
+          detailRows.value = [];
           try {
-            const parsed = JSON.parse(row.payload_json);
-            detailRows.value = parsed.project_details || [];
-          } catch { detailRows.value = []; }
-          showDetailDialog.value = true;
+            showDetailDialog.value = true;
+            detailLoading.value = true;
+            const res = await axios.get(`${API_BASE_URL}/history/${row.id}`, { headers: authHeaders() });
+            const detail = apiData(res, apiBody(res));
+            historyDetail.value = detail || row;
+            detailRows.value = (detail && detail.items) || [];
+            if (!detailRows.value.length && detail && detail.payload && Array.isArray(detail.payload.project_details)) {
+              detailRows.value = detail.payload.project_details;
+            }
+          } catch (e) {
+            try {
+              const parsed = JSON.parse(row.payload_json);
+              detailRows.value = parsed.project_details || [];
+            } catch {
+              detailRows.value = [];
+            }
+            if (e.response?.status === 401) handleUnauthorized();
+            ElMessage.error(apiErrorMessage(e, '获取历史详情失败'));
+          } finally {
+            detailLoading.value = false;
+          }
         };
 
         const authForm      = ref({ username: '', password: '' });
@@ -1286,7 +1351,8 @@
           sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
           retryMessage, refreshQuoteJob, checkingJobId, useExample,
           showHistory, historyList, historyLoading, historyTotal, historyPage,
-          showDetailDialog, detailRows, fetchHistory, openHistory, viewDetail
+          showDetailDialog, detailLoading, historyDetail, detailRows,
+          fetchHistory, openHistory, viewDetail, formatMoney
         };
       }
     };

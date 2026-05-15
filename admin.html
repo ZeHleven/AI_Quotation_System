@@ -86,6 +86,18 @@
     .box-card { margin-bottom: 20px; border-radius: 8px !important; box-shadow: 0 2px 12px rgba(30,32,34,0.07) !important; border: 1px solid var(--steel) !important; }
 
     .el-table .draft-row { background: #fff8f0 !important; }
+    .material-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      padding: 10px 8px 6px;
+    }
+    .material-detail-grid .el-input-group__prepend {
+      width: 70px;
+      text-align: center;
+      padding: 0 10px;
+    }
+    .material-notes-field { padding: 0 8px 10px; }
 
     /* ── 优化4：服务探活磁贴 ── */
     .ops-service-grid {
@@ -128,6 +140,13 @@
     }
     .event-item-head { display: flex; justify-content: space-between; margin-bottom: 4px; }
     .event-time { font-size: 12px; color: #909399; }
+    .readable-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .readable-muted { font-size: 12px; color: #909399; line-height: 1.45; }
+    .readable-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .diff-block { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 8px 0; }
+    .diff-panel { border: 1px solid #ebeef5; border-radius: 6px; padding: 8px; background: #fafafa; min-height: 72px; }
+    .diff-title { font-size: 12px; color: #606266; margin-bottom: 6px; font-weight: 600; }
+    .diff-item { font-size: 12px; color: #303133; line-height: 1.5; overflow-wrap: anywhere; }
 
     /* Milvus 同步按钮 */
     .milvus-btn { background: var(--dark); border: none; color: var(--white); }
@@ -396,8 +415,20 @@
                 <el-tag :type="statusTagType(scope.row.status)" size="small">{{ scope.row.status }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="stage" label="阶段" width="110"></el-table-column>
-            <el-table-column prop="message_preview" label="任务摘要" min-width="220" show-overflow-tooltip></el-table-column>
+            <el-table-column prop="stage" label="阶段" width="105"></el-table-column>
+            <el-table-column label="任务摘要" min-width="240" show-overflow-tooltip>
+              <template #default="scope">{{ scope.row.request_summary || scope.row.message_preview || '—' }}</template>
+            </el-table-column>
+            <el-table-column prop="source_file_name" label="附件" width="140" show-overflow-tooltip></el-table-column>
+            <el-table-column label="结果" width="120" align="right">
+              <template #default="scope">
+                <div>{{ scope.row.result_total_amount != null ? money(scope.row.result_total_amount) : '—' }}</div>
+                <div class="readable-muted">{{ scope.row.result_item_count || 0 }} 项</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="耗时" width="90" align="right">
+              <template #default="scope">{{ formatDuration(scope.row.duration_ms) }}</template>
+            </el-table-column>
             <el-table-column prop="error_message" label="错误" min-width="180" show-overflow-tooltip></el-table-column>
             <el-table-column label="操作" width="220" align="center" fixed="right">
               <template #default="scope">
@@ -474,7 +505,9 @@
                 </el-table-column>
                 <el-table-column prop="correction_count" label="修正" width="70" align="right"></el-table-column>
                 <el-table-column prop="rag_trace_count" label="RAG" width="70" align="right"></el-table-column>
-                <el-table-column prop="dify_prompt_version" label="Prompt" min-width="120" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="project_summary" label="项目摘要" min-width="170" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="change_summary" label="修改摘要" min-width="190" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="dify_prompt_version" label="Prompt" width="120" show-overflow-tooltip></el-table-column>
                 <el-table-column label="操作" width="80" align="center" fixed="right">
                   <template #default="scope">
                     <el-button size="small" plain @click="openFeedbackDetail(scope.row)">详情</el-button>
@@ -489,8 +522,10 @@
             <el-col :span="9">
               <el-tabs type="border-card" style="height:100%;">
                 <el-tab-pane label="高频修正">
-                  <el-table :data="feedbackSummary.top_correction_fields || []" border size="small" height="220" empty-text="暂无修正字段">
-                    <el-table-column prop="field_path" label="字段" min-width="170" show-overflow-tooltip></el-table-column>
+                  <el-table :data="feedbackSummary.top_correction_field_labels || feedbackSummary.top_correction_fields || []" border size="small" height="220" empty-text="暂无修正字段">
+                    <el-table-column label="字段" min-width="170" show-overflow-tooltip>
+                      <template #default="scope">{{ scope.row.field_label || scope.row.field_path || '—' }}</template>
+                    </el-table-column>
                     <el-table-column prop="count" label="次数" width="70" align="right"></el-table-column>
                   </el-table>
                 </el-tab-pane>
@@ -679,8 +714,47 @@
                   style="margin-bottom:12px;"
                 ></el-alert>
                 <el-table :data="materialAudit" border size="small" style="width:100%;" v-loading="auditLoading" empty-text="暂无快照">
+                  <el-table-column type="expand" width="36">
+                    <template #default="scope">
+                      <div class="diff-block">
+                        <div class="diff-panel">
+                          <div class="diff-title">新增 {{ scope.row.added_count || 0 }}</div>
+                          <div v-for="item in snapshotDiffItems(scope.row, 'added')" :key="'a-' + item.id" class="diff-item">
+                            {{ item.item_name || item.id || '—' }} · {{ money(item.unit_price) }} / {{ item.unit || '项' }}
+                          </div>
+                          <div v-if="!snapshotDiffItems(scope.row, 'added').length" class="readable-muted">无新增</div>
+                        </div>
+                        <div class="diff-panel">
+                          <div class="diff-title">修改 {{ scope.row.updated_count || 0 }}</div>
+                          <div v-for="item in snapshotDiffItems(scope.row, 'updated')" :key="'u-' + item.id" class="diff-item">
+                            {{ item.item_name || item.id || '—' }}
+                            <span class="readable-muted"> · {{ changedFieldLabels(item) }}</span>
+                          </div>
+                          <div v-if="!snapshotDiffItems(scope.row, 'updated').length" class="readable-muted">无修改</div>
+                        </div>
+                        <div class="diff-panel">
+                          <div class="diff-title">删除 {{ scope.row.deleted_count || 0 }}</div>
+                          <div v-for="item in snapshotDiffItems(scope.row, 'deleted')" :key="'d-' + item.id" class="diff-item">
+                            {{ item.item_name || item.id || '—' }} · {{ money(item.unit_price) }} / {{ item.unit || '项' }}
+                          </div>
+                          <div v-if="!snapshotDiffItems(scope.row, 'deleted').length" class="readable-muted">无删除</div>
+                        </div>
+                      </div>
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="created_at" label="时间" min-width="140"></el-table-column>
+                  <el-table-column prop="action" label="动作" width="145" show-overflow-tooltip></el-table-column>
+                  <el-table-column label="变更" width="130" align="center">
+                    <template #default="scope">
+                      <div class="readable-meta" style="justify-content:center;">
+                        <el-tag size="small" type="success">+{{ scope.row.added_count || 0 }}</el-tag>
+                        <el-tag size="small" type="warning">~{{ scope.row.updated_count || 0 }}</el-tag>
+                        <el-tag size="small" type="danger">-{{ scope.row.deleted_count || 0 }}</el-tag>
+                      </div>
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="item_count" label="条数" width="70" align="right"></el-table-column>
+                  <el-table-column prop="reason" label="说明" min-width="150" show-overflow-tooltip></el-table-column>
                   <el-table-column label="操作" width="80" align="center">
                     <template #default="scope">
                       <el-button size="small" type="warning" plain @click="rollbackMaterialSnapshot(scope.row)">回滚</el-button>
@@ -705,6 +779,7 @@
                           <el-icon style="margin-right:4px;"><DocumentAdd /></el-icon>导入 CSV 草稿
                         </el-button>
                       </el-upload>
+                      <el-button size="small" plain @click="fillSuggestedCategories">补全分类</el-button>
                       <el-button type="primary" size="small" @click="handleAdd" plain>+ 新增物料</el-button>
                       <el-button type="success" size="small" :loading="saving" @click="saveData">💾 保存核定</el-button>
                     </div>
@@ -713,32 +788,73 @@
 
                 <el-alert title="工作流：导入 CSV 提炼异动记录 → 表格中修改完善并【保存核定】→ 点击左侧【一键热更新至 Milvus】正式对 AI 生效。" type="info" show-icon style="margin-bottom:14px;"></el-alert>
 
-                <el-table :data="tableData" :row-class-name="tableRowClassName" border style="width:100%" v-loading="loading">
-                  <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
-                  <el-table-column prop="item_name" label="施工项目名称" min-width="220">
+                <el-table :data="tableData" :row-class-name="tableRowClassName" border style="width:100%" v-loading="loading" max-height="620">
+                  <el-table-column type="expand" label="详情" width="54">
                     <template #default="scope">
-                      <div style="display:flex; align-items:center; gap:8px;">
-                        <el-input v-model="scope.row.item_name" placeholder="例如：直线型吊顶"></el-input>
-                        <el-tag v-if="scope.row.is_draft" type="danger" effect="dark" size="small" disable-transitions>草稿</el-tag>
+                      <div class="material-detail-grid">
+                        <el-input v-model="scope.row.spec" placeholder="规格、工艺或型号">
+                          <template #prepend>规格</template>
+                        </el-input>
+                        <el-input v-model="scope.row.brand" placeholder="可选品牌">
+                          <template #prepend>品牌</template>
+                        </el-input>
+                        <el-input v-model="scope.row.supplier" placeholder="可选供应商">
+                          <template #prepend>供应商</template>
+                        </el-input>
+                        <el-input v-model="scope.row.region" placeholder="适用区域">
+                          <template #prepend>区域</template>
+                        </el-input>
+                      </div>
+                      <div class="material-notes-field">
+                        <el-input v-model="scope.row.notes" type="textarea" :rows="2" placeholder="标准施工工艺约束，会喂给大模型用于减少乱编"></el-input>
                       </div>
                     </template>
                   </el-table-column>
-                  <el-table-column prop="unit_price" label="底层刚性单价(元)" width="150">
+                  <el-table-column type="index" label="序号" width="52" align="center"></el-table-column>
+                  <el-table-column prop="item_name" label="施工项目名称" min-width="260">
+                    <template #default="scope">
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <el-input v-model="scope.row.item_name" placeholder="例如：直线型吊顶"></el-input>
+                        <el-tag :type="materialStatusType(scope.row.status, scope.row.is_draft)" effect="plain" size="small" disable-transitions>
+                          {{ materialStatusLabel(scope.row.status, scope.row.is_draft) }}
+                        </el-tag>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="category" label="分类" width="130">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.category" :placeholder="materialCategoryPlaceholder(scope.row)"></el-input>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="unit_price" label="底层刚性单价(元)" width="145">
                     <template #default="scope">
                       <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" style="width:100%;"></el-input-number>
                     </template>
                   </el-table-column>
-                  <el-table-column prop="unit" label="计价单位" width="100">
+                  <el-table-column prop="unit" label="计价单位" width="88">
                     <template #default="scope">
                       <el-input v-model="scope.row.unit" placeholder="平米/项"></el-input>
                     </template>
                   </el-table-column>
-                  <el-table-column prop="notes" label="标准施工工艺约束 (喂给大模型的要求)" min-width="250">
+                  <el-table-column prop="source" label="来源" width="118">
                     <template #default="scope">
-                      <el-input v-model="scope.row.notes" type="textarea" :rows="2" placeholder="填写工艺要求以防 AI 乱编"></el-input>
+                      <el-select v-model="scope.row.source" placeholder="来源">
+                        <el-option label="人工维护" value="manual"></el-option>
+                        <el-option label="CSV 导入" value="csv_import"></el-option>
+                        <el-option label="知识候选" value="knowledge_candidate"></el-option>
+                      </el-select>
                     </template>
                   </el-table-column>
-                  <el-table-column label="操作" width="70" align="center" fixed="right">
+                  <el-table-column prop="status" label="状态" width="100">
+                    <template #default="scope">
+                      <el-select v-model="scope.row.status" placeholder="状态" @change="syncMaterialStatus(scope.row)">
+                        <el-option label="生效" value="active"></el-option>
+                        <el-option label="草稿" value="draft"></el-option>
+                        <el-option label="停用" value="archived"></el-option>
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="56" align="center">
                     <template #default="scope">
                       <el-button size="small" type="danger" circle @click="handleDelete(scope.$index)">
                         <el-icon><Delete /></el-icon>
@@ -770,6 +886,18 @@
             <el-descriptions-item label="AI 总价">{{ money(feedbackDetail.ai_total_amount) }}</el-descriptions-item>
             <el-descriptions-item label="最终总价">{{ money(feedbackDetail.final_total_amount) }}</el-descriptions-item>
             <el-descriptions-item label="差额">{{ money(feedbackDetail.amount_delta) }} / {{ percent(feedbackDetail.amount_delta_ratio) }}</el-descriptions-item>
+            <el-descriptions-item label="来源文件">{{ feedbackDetail.source_file_name || '（无附件）' }}</el-descriptions-item>
+            <el-descriptions-item label="审核人">{{ feedbackDetail.reviewed_by || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="钉钉推送">{{ feedbackDetail.pushed_to_dingtalk ? '已推送' : '未推送' }}</el-descriptions-item>
+            <el-descriptions-item label="需求" :span="3">{{ feedbackDetail.request_text || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="项目摘要" :span="3">{{ feedbackDetail.project_summary || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="修改摘要" :span="3">{{ feedbackDetail.change_summary || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="主要字段" :span="3">
+              <div class="readable-tags">
+                <el-tag v-for="field in feedbackDetail.top_changed_fields || []" :key="field" size="small" type="warning" effect="plain">{{ field }}</el-tag>
+                <span v-if="!(feedbackDetail.top_changed_fields || []).length" class="readable-muted">—</span>
+              </div>
+            </el-descriptions-item>
           </el-descriptions>
 
           <el-tabs type="border-card">
@@ -777,20 +905,34 @@
               <el-table :data="feedbackDetail.corrections || []" border size="small" height="300" empty-text="暂无字段级修正">
                 <el-table-column prop="item_index" label="#" width="50" align="right"></el-table-column>
                 <el-table-column prop="project_name" label="项目" width="150" show-overflow-tooltip></el-table-column>
-                <el-table-column prop="field_path" label="字段" width="190" show-overflow-tooltip></el-table-column>
-                <el-table-column prop="before_value" label="AI 初稿" min-width="180" show-overflow-tooltip></el-table-column>
-                <el-table-column prop="after_value" label="人工确认" min-width="180" show-overflow-tooltip></el-table-column>
+                <el-table-column label="字段" width="150" show-overflow-tooltip>
+                  <template #default="scope">{{ scope.row.field_label || scope.row.field_path }}</template>
+                </el-table-column>
+                <el-table-column label="类型" width="90" align="center">
+                  <template #default="scope">
+                    <el-tag :type="changeTypeTag(scope.row.change_type)" size="small" effect="plain">{{ changeTypeLabel(scope.row.change_type) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="before_display" label="AI 初稿" min-width="180" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="after_display" label="人工确认" min-width="180" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="delta_amount" label="差额" width="80" align="right"></el-table-column>
+                <el-table-column prop="reason_text" label="原因" min-width="140" show-overflow-tooltip></el-table-column>
               </el-table>
             </el-tab-pane>
             <el-tab-pane label="RAG Trace">
               <el-table :data="feedbackDetail.rag_traces || []" border size="small" height="300" empty-text="暂无 RAG trace">
                 <el-table-column prop="rank" label="Rank" width="70" align="right"></el-table-column>
+                <el-table-column prop="project_name" label="报价项目" width="150" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="material_id" label="Material ID" width="120" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="item_name" label="知识条目" min-width="180" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="score" label="Score" width="90" align="right"></el-table-column>
-                <el-table-column prop="collection_alias" label="集合" width="160" show-overflow-tooltip></el-table-column>
-                <el-table-column prop="sent_to_prompt" label="入 Prompt" width="90" align="center"></el-table-column>
+                <el-table-column label="最终采用" width="90" align="center">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.used_in_final_quote ? 'success' : 'info'" size="small" effect="plain">{{ scope.row.used_in_final_quote ? '是' : '否' }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="match_reason" label="匹配说明" min-width="140" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="collection_alias" label="集合" width="150" show-overflow-tooltip></el-table-column>
               </el-table>
             </el-tab-pane>
             <el-tab-pane label="AI 初稿">
@@ -819,6 +961,16 @@
             <el-descriptions-item label="创建时间">{{ jobDetail.created_at || '—' }}</el-descriptions-item>
             <el-descriptions-item label="完成时间">{{ jobDetail.finished_at || '—' }}</el-descriptions-item>
             <el-descriptions-item label="文件名">{{ jobDetail.file_name || '（无附件）' }}</el-descriptions-item>
+            <el-descriptions-item label="耗时">{{ formatDuration(jobDetail.duration_ms) }}</el-descriptions-item>
+            <el-descriptions-item label="失败阶段">{{ jobDetail.failure_stage || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="结果">{{ jobDetail.result_total_amount != null ? money(jobDetail.result_total_amount) : '—' }} / {{ jobDetail.result_item_count || 0 }} 项</el-descriptions-item>
+            <el-descriptions-item label="需求摘要" :span="3">{{ jobDetail.request_summary || jobDetail.message_preview || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="预览项目" :span="3">
+              <div class="readable-tags">
+                <el-tag v-for="name in jobDetail.preview_project_names || []" :key="name" size="small" effect="plain">{{ name }}</el-tag>
+                <span v-if="!(jobDetail.preview_project_names || []).length" class="readable-muted">—</span>
+              </div>
+            </el-descriptions-item>
           </el-descriptions>
           <div v-if="jobDetail.error_message" style="margin-bottom:12px;">
             <el-alert :title="'错误：' + jobDetail.error_message" type="error" :closable="false" show-icon></el-alert>
@@ -841,7 +993,7 @@
               <el-empty v-else description="无结果数据" :image-size="60"></el-empty>
             </el-tab-pane>
             <el-tab-pane label="完整消息">
-              <pre class="code-block">{{ jobDetail.message_preview || '（无消息）' }}</pre>
+              <pre class="code-block">{{ jobDetail.request_summary || jobDetail.message_preview || '（无消息）' }}</pre>
             </el-tab-pane>
           </el-tabs>
         </div>
@@ -890,7 +1042,13 @@
             <el-descriptions-item label="名称">{{ approveResult.material && approveResult.material.item_name || '—' }}</el-descriptions-item>
             <el-descriptions-item label="单价">{{ approveResult.material && approveResult.material.unit_price != null ? approveResult.material.unit_price : '—' }}</el-descriptions-item>
             <el-descriptions-item label="草稿">{{ approveResult.material && approveResult.material.is_draft ? '是' : '否' }}</el-descriptions-item>
+            <el-descriptions-item label="来源">{{ approveResult.material && materialSourceLabel(approveResult.material.source) || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="状态">{{ approveResult.material && materialStatusLabel(approveResult.material.status, approveResult.material.is_draft) || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="审核时间" :span="2">{{ approveResult.material && approveResult.material.last_verified_at || '—' }}</el-descriptions-item>
           </el-descriptions>
+          <div v-if="approveResult.snapshot" class="readable-muted" style="margin-bottom:8px;">
+            快照变更：+{{ approveResult.snapshot.added_count || 0 }} / ~{{ approveResult.snapshot.updated_count || 0 }} / -{{ approveResult.snapshot.deleted_count || 0 }}
+          </div>
           <el-tag :type="approveResult.sync_status === 'success' ? 'success' : 'warning'" size="small">RAG 同步: {{ approveResult.sync_status }}</el-tag>
           <span v-if="approveResult.sync_error" style="font-size:12px; color:#F56C6C; margin-left:8px;">{{ approveResult.sync_error }}</span>
         </div>
@@ -963,7 +1121,7 @@
   <script src="/static/js/admin/files.js"></script>
   <script src="/static/js/admin/quote_jobs.js"></script>
   <script src="/static/js/admin/feedback.js"></script>
-  <script src="/static/js/admin/materials.js"></script>
+  <script src="/static/js/admin/materials.js?v=20260515_layout_fix"></script>
   <script src="/static/js/admin/knowledge_candidates.js"></script>
 
   <script>
@@ -1119,6 +1277,7 @@
           markTimeouts,
           openJobDetail,
           formatJson,
+          formatDuration,
           statusTagType
         } = quoteJobsModule;
 
@@ -1151,7 +1310,9 @@
           openFeedbackDetail,
           feedbackStatusType,
           money,
-          percent
+          percent,
+          changeTypeLabel,
+          changeTypeTag
         } = feedbackModule;
 
         const materialsModule = window.AIMOAdminMaterials.createMaterialsModule({
@@ -1185,7 +1346,16 @@
           handleImportCSV,
           saveData,
           syncToMilvus,
-          tableRowClassName
+          tableRowClassName,
+          materialStatusLabel,
+          materialStatusType,
+          materialSourceLabel,
+          materialFieldLabel,
+          snapshotDiffItems,
+          changedFieldLabels,
+          syncMaterialStatus,
+          materialCategoryPlaceholder,
+          fillSuggestedCategories
         } = materialsModule;
 
         const candidatesModule = window.AIMOAdminKnowledgeCandidates.createKnowledgeCandidatesModule({
@@ -1264,14 +1434,17 @@
           gatewayStats, gatewayCircuits, gatewayLoading, gatewayHours, fetchGatewayStats,
           jobData, jobLoading, jobTotal, jobPage, jobStatusFilter, jobUsernameFilter,
           timeoutMinutes, markingTimeouts, showJobDetail, jobDetail, jobDetailLoading,
-          fetchJobs, cancelJob, retryJob, markTimeouts, openJobDetail, formatJson, statusTagType,
+          fetchJobs, cancelJob, retryJob, markTimeouts, openJobDetail, formatJson, formatDuration, statusTagType,
           feedbackSummary, feedbackData, feedbackLoading, feedbackSummaryLoading,
           feedbackPage, feedbackTotal, feedbackDays, feedbackStatus, feedbackUsername,
           showFeedbackDetail, feedbackDetail, feedbackDetailLoading,
           fetchFeedbackSummary, fetchFeedbackList, refreshFeedback, openFeedbackDetail,
-          feedbackStatusType, money, percent,
+          feedbackStatusType, money, percent, changeTypeLabel, changeTypeTag,
           ragEvalResult, fetchRagEvalResult,
           materialAudit, auditLoading, fetchMaterialAudit, rollbackMaterialSnapshot,
+          materialStatusLabel, materialStatusType, materialSourceLabel, materialFieldLabel,
+          snapshotDiffItems, changedFieldLabels, syncMaterialStatus,
+          materialCategoryPlaceholder, fillSuggestedCategories,
           storageFiles, storageLoading, storageUploading, storageHealth, storagePurpose,
           fetchStorageHealth, fetchStorageFiles, handleStorageUpload, openStorageDownload,
           candidateList, candidateLoading, candidateTotal, candidatePage,

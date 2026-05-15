@@ -50,6 +50,17 @@ def _reset_material_store():
         db.close()
 
 
+def _material_core(item):
+    return {
+        "id": item["id"],
+        "item_name": item["item_name"],
+        "unit_price": item["unit_price"],
+        "unit": item["unit"],
+        "notes": item["notes"],
+        "is_draft": item["is_draft"],
+    }
+
+
 def test_materials_import_legacy_json_on_first_read(client):
     _reset_material_store()
     headers = _create_admin_headers(client)
@@ -60,7 +71,11 @@ def test_materials_import_legacy_json_on_first_read(client):
 
     response = client.get("/api/v1/admin/materials", headers=headers)
     assert response.status_code == 200
-    assert response.json()["data"] == legacy
+    material = response.json()["data"][0]
+    assert _material_core(material) == legacy[0]
+    assert material["source"] == "manual"
+    assert material["status"] == "active"
+    assert material["usage_count"] == 0
 
     db = SessionLocal()
     try:
@@ -86,6 +101,11 @@ def test_material_save_creates_snapshot_and_rollback_restores_it(client):
     snapshot = save_response.json()["snapshot"]
     assert snapshot["action"] == "save_before_overwrite"
     assert snapshot["item_count"] == 1
+    assert snapshot["added_count"] == 1
+    assert snapshot["updated_count"] == 0
+    assert snapshot["deleted_count"] == 1
+    assert snapshot["diff_summary"]["added"][0]["id"] == "m2"
+    assert snapshot["diff_summary"]["deleted"][0]["id"] == "m1"
 
     audit_response = client.get("/api/v1/admin/materials/audit", headers=headers)
     assert audit_response.status_code == 200
@@ -97,10 +117,12 @@ def test_material_save_creates_snapshot_and_rollback_restores_it(client):
     )
     assert rollback_response.status_code == 200
     assert rollback_response.json()["restored_snapshot"]["snapshot_id"] == snapshot["snapshot_id"]
+    assert rollback_response.json()["current_snapshot"]["added_count"] == 1
+    assert rollback_response.json()["current_snapshot"]["deleted_count"] == 1
 
     materials_response = client.get("/api/v1/admin/materials", headers=headers)
     assert materials_response.status_code == 200
-    assert materials_response.json()["data"] == original
+    assert [_material_core(item) for item in materials_response.json()["data"]] == original
 
 
 def test_material_rollback_rejects_unsafe_snapshot_id(client):
@@ -157,6 +179,8 @@ def test_upload_csv_extracts_new_and_changed_items(client):
     names = [item["item_name"] for item in drafts]
     assert names == ["既有项目 (历史异动待审)", "新增项目"]
     assert drafts[0]["unit_price"] == 13.0
+    assert drafts[0]["source"] == "csv_import"
+    assert drafts[0]["status"] == "draft"
     assert drafts[1]["notes"] == "新增应提炼"
 
 
@@ -209,3 +233,5 @@ def test_sync_milvus_uses_async_httpx(client, monkeypatch):
     assert calls[0]["client_kwargs"]["timeout"] == 120
     assert calls[0]["url"].endswith("/admin/reload")
     assert calls[0]["post_kwargs"]["json"]["materials"][0]["item_name"] == "Sync item"
+    assert calls[0]["post_kwargs"]["json"]["materials"][0]["source"] == "manual"
+    assert calls[0]["post_kwargs"]["json"]["materials"][0]["status"] == "active"

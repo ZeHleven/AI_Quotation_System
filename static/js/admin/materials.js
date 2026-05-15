@@ -27,15 +27,127 @@
     const ragEvalResult = ref(null);
     const ragEvalPolling = ref(null);
 
+    const normalizeMaterialRow = (row = {}) => ({
+      id: row.id || row.material_id || Date.now().toString(),
+      item_name: row.item_name || '',
+      unit_price: Number(row.unit_price || 0),
+      unit: row.unit || '\u9879',
+      notes: row.notes || '',
+      category: row.category || '',
+      spec: row.spec || '',
+      brand: row.brand || '',
+      supplier: row.supplier || '',
+      region: row.region || '',
+      source: row.source || 'manual',
+      status: row.status || (row.is_draft ? 'draft' : 'active'),
+      last_verified_at: row.last_verified_at || '',
+      usage_count: Number(row.usage_count || 0),
+      last_used_at: row.last_used_at || '',
+      is_draft: row.status ? row.status === 'draft' : Boolean(row.is_draft),
+    });
+
     const initMockData = () => [
-      {
+      normalizeMaterialRow({
         id: '1',
         item_name: '\u76f4\u7ebf\u578b\u540a\u9876',
         unit_price: 120.00,
         unit: '\u5e73\u7c73',
         notes: '\u4f7f\u7528\u9f99\u724c\u8f7b\u94a2\u9f99\u9aa8\u6cf0\u5c71\u77f3\u818f\u677f\uff0cL\u578b\u6297\u88c2\u53ca\u63a5\u7f1d\u5904\u7406\u3002',
-      },
+      }),
     ];
+
+    const categoryRules = [
+      { label: '吊顶', keywords: ['吊顶', '龙骨', '石膏板', '跌级'] },
+      { label: '防水', keywords: ['防水', '闭水', '止水'] },
+      { label: '拆改', keywords: ['拆除', '铲除', '砸墙', '清运', '开槽'] },
+      { label: '瓦工铺贴', keywords: ['地砖', '墙砖', '瓷砖', '铺贴', '找平', '美缝', '踢脚线'] },
+      { label: '墙面涂装', keywords: ['腻子', '乳胶漆', '墙面', '刷漆', '涂刷', '阴阳角'] },
+      { label: '水电', keywords: ['水路', '电路', '强电', '弱电', '开关', '插座', '线管', 'PPR'] },
+      { label: '木作地板', keywords: ['木地板', '地板', '木门', '柜体', '柜门', '木作'] },
+      { label: '厨卫洁具', keywords: ['马桶', '花洒', '浴室', '洁具', '地漏', '洗手盆', '橱柜', '厨房'] },
+      { label: '门窗安装', keywords: ['门套', '窗套', '窗台', '门窗', '断桥铝'] },
+      { label: '灯具电器', keywords: ['灯具', '筒灯', '射灯', '浴霸', '排风', '热水器'] },
+    ];
+
+    const inferMaterialCategory = (row = {}) => {
+      const text = `${row.item_name || ''} ${row.notes || ''} ${row.spec || ''}`;
+      const match = categoryRules.find(rule => rule.keywords.some(keyword => text.includes(keyword)));
+      return match ? match.label : '其他';
+    };
+
+    const materialCategoryPlaceholder = row => {
+      if (String((row && row.category) || '').trim()) return '分类';
+      return `建议：${inferMaterialCategory(row)}`;
+    };
+
+    const fillSuggestedCategories = () => {
+      let count = 0;
+      tableData.value.forEach(row => {
+        if (!String(row.category || '').trim()) {
+          row.category = inferMaterialCategory(row);
+          count += 1;
+        }
+      });
+      if (count > 0) {
+        ElMessage.success(`已补全 ${count} 条分类，请确认后保存`);
+      } else {
+        ElMessage.info('没有需要补全的空分类');
+      }
+    };
+
+    const materialStatusLabel = (status, isDraft) => {
+      const value = status || (isDraft ? 'draft' : 'active');
+      const map = { active: '\u751f\u6548', draft: '\u8349\u7a3f', archived: '\u505c\u7528' };
+      return map[value] || value || '\u2014';
+    };
+
+    const materialStatusType = (status, isDraft) => {
+      const value = status || (isDraft ? 'draft' : 'active');
+      const map = { active: 'success', draft: 'warning', archived: 'info' };
+      return map[value] || 'info';
+    };
+
+    const materialSourceLabel = (source) => {
+      const map = {
+        manual: '\u4eba\u5de5\u7ef4\u62a4',
+        csv_import: 'CSV \u5bfc\u5165',
+        knowledge_candidate: '\u77e5\u8bc6\u5019\u9009',
+      };
+      return map[source] || source || '\u2014';
+    };
+
+    const materialFieldLabel = (field) => {
+      const map = {
+        item_name: '\u540d\u79f0',
+        unit_price: '\u5355\u4ef7',
+        unit: '\u5355\u4f4d',
+        notes: '\u5907\u6ce8',
+        category: '\u5206\u7c7b',
+        spec: '\u89c4\u683c',
+        brand: '\u54c1\u724c',
+        supplier: '\u4f9b\u5e94\u5546',
+        region: '\u533a\u57df',
+        source: '\u6765\u6e90',
+        status: '\u72b6\u6001',
+        is_draft: '\u8349\u7a3f',
+      };
+      return map[field] || field || '\u5b57\u6bb5';
+    };
+
+    const snapshotDiffItems = (row, key) => {
+      const summary = row && row.diff_summary ? row.diff_summary : {};
+      return Array.isArray(summary[key]) ? summary[key] : [];
+    };
+
+    const changedFieldLabels = (item) => {
+      const changes = Array.isArray(item && item.changed_fields) ? item.changed_fields : [];
+      if (!changes.length) return '\u5b57\u6bb5\u53d8\u66f4';
+      return changes.map(change => materialFieldLabel(change.field)).join('\u3001');
+    };
+
+    const syncMaterialStatus = (row) => {
+      row.is_draft = row.status === 'draft';
+    };
 
     const fetchRagEvalResult = async () => {
       try {
@@ -82,7 +194,7 @@
       try {
         const res = await axios.get(`${apiBaseUrl}/materials`, { headers: authHeaders() });
         const rows = apiData(res, []);
-        tableData.value = rows && rows.length > 0 ? rows : initMockData();
+        tableData.value = rows && rows.length > 0 ? rows.map(normalizeMaterialRow) : initMockData();
       } catch (error) {
         ElMessage.warning('\u672a\u80fd\u8fde\u63a5\u5230\u540e\u53f0\uff0c\u6b63\u4f7f\u7528\u672c\u5730\u6a21\u62df\u6570\u636e\u8fd0\u884c\u3002');
         tableData.value = initMockData();
@@ -109,12 +221,7 @@
 
     const handleAdd = () => {
       tableData.value.push({
-        id: Date.now().toString(),
-        item_name: '',
-        unit_price: 0.00,
-        unit: '\u5e73\u7c73',
-        notes: '',
-        is_draft: false,
+        ...normalizeMaterialRow({ id: Date.now().toString(), unit: '\u5e73\u7c73' }),
       });
     };
 
@@ -135,7 +242,7 @@
         const res = await axios.post(`${apiBaseUrl}/upload_csv`, formData, { headers: authHeaders() });
         const newDrafts = apiData(res, []);
         if (newDrafts && newDrafts.length > 0) {
-          tableData.value.push(...newDrafts);
+          tableData.value.push(...newDrafts.map(normalizeMaterialRow));
           ElMessage.success(`\u89e3\u6790\u6210\u529f\uff01\u667a\u80fd\u63d0\u70bc\u51fa ${newDrafts.length} \u6761\u5f85\u5ba1\u5f02\u5e38/\u65b0\u9879\u76ee\uff0c\u5df2\u8ffd\u52a0\u81f3\u672b\u5c3e\u3002`);
           setTimeout(() => {
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
@@ -154,7 +261,6 @@
       saving.value = true;
       try {
         await axios.post(`${apiBaseUrl}/materials`, tableData.value, { headers: authHeaders() });
-        tableData.value.forEach(item => { item.is_draft = false; });
         fetchMaterialAudit();
         ElMessage.success('\ud83c\udf89 \u8868\u683c\u6570\u636e\u5ba1\u6838\u5b8c\u6bd5\uff0c\u5df2\u5b89\u5168\u4fdd\u5b58\u5230\u672c\u5730\u57fa\u7840\u5e93\uff01');
       } catch (error) {
@@ -184,7 +290,6 @@
           const now = new Date().toLocaleString();
           lastSyncTime.value = now;
           window.localStorage.setItem(localStorageKey, now);
-          tableData.value.forEach(item => { item.is_draft = false; });
         } catch (error) {
           ElMessage.error(apiErrorMessage(error, '\u5411\u91cf\u5f15\u64ce\u540c\u6b65\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u5e95\u5c42 Milvus \u72b6\u6001\u3002'));
         } finally {
@@ -193,7 +298,7 @@
       }).catch(() => {});
     };
 
-    const tableRowClassName = ({ row }) => row.is_draft ? 'draft-row' : '';
+    const tableRowClassName = ({ row }) => row.is_draft || row.status === 'draft' ? 'draft-row' : '';
 
     return {
       tableData,
@@ -216,6 +321,15 @@
       saveData,
       syncToMilvus,
       tableRowClassName,
+      materialStatusLabel,
+      materialStatusType,
+      materialSourceLabel,
+      materialFieldLabel,
+      snapshotDiffItems,
+      changedFieldLabels,
+      syncMaterialStatus,
+      materialCategoryPlaceholder,
+      fillSuggestedCategories,
     };
   }
 

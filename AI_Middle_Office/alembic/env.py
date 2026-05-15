@@ -14,8 +14,10 @@ from app.core.config import settings  # noqa: E402
 from app.core.database import Base  # noqa: E402
 from app.models import (  # noqa: F401,E402
     file_object,
+    knowledge_candidate,
     material,
     model_call_log,
+    prompt_regression,
     quote_feedback,
     quote_history,
     quote_job,

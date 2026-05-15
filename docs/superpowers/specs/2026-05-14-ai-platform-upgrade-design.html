@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>旗胜 AI 平台架构升级路线 v6</title>
+  <style>
+
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">body {
+font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+max-width: 960px;
+margin: 40px auto;
+padding: 0 24px;
+line-height: 1.9;
+color: #222;
+font-size: 15px;
+}
+h1 { font-size: 2em; color: #1a3a5c; border-bottom: 2px solid #1a3a5c; padding-bottom: 8px; margin-top: 32px; }
+h2 { font-size: 1.4em; color: #1a3a5c; border-bottom: 1px solid #ccd; padding-bottom: 6px; margin-top: 28px; }
+h3 { font-size: 1.15em; color: #2a4a7c; margin-top: 20px; }
+table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+th, td { border: 1px solid #bbb; padding: 8px 14px; text-align: left; }
+th { background: #eaf0f8; font-weight: bold; }
+tr:nth-child(even) td { background: #f8fafc; }
+code { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-family: Consolas, 'Courier New', monospace; font-size: 0.9em; }
+pre { background: #f3f4f6; padding: 14px 18px; border-radius: 6px; overflow-x: auto; font-size: 0.9em; }
+pre code { background: none; padding: 0; }
+blockquote { border-left: 4px solid #8ab; margin-left: 0; padding: 8px 20px; color: #555; background: #f5faff; border-radius: 0 4px 4px 0; }
+ul, ol { padding-left: 1.6em; }
+li { margin: 4px 0; }
+hr { border: none; border-top: 1px solid #ddd; margin: 32px 0; }
+a { color: #2a6eb5; }
+@media print {
+body { max-width: 100%; margin: 0; padding: 16px; font-size: 13px; }
+h1 { font-size: 1.6em; }
+h2 { font-size: 1.2em; }
+}
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">旗胜 AI 平台架构升级路线 v6</h1>
+</header>
+<h1 id="旗胜-ai-平台架构升级路线">旗胜 AI 平台架构升级路线</h1>
+<blockquote>
+<p>创建日期：2026-05-14 最后更新：2026-05-14（v6：指标口径修正 +
+钉钉推送矛盾修正 + Celery beat 运维三件套 + 阶段 0 拆分 + priority 字段
++ 测试清单补充） 状态：规划中 负责人：待定</p>
+</blockquote>
+<hr />
+<h2 id="背景与目标">背景与目标</h2>
+<p>基于旗胜智能装饰”AI 落地方案”战略架构图，当前报价系统（03 AI
+报价系统）已基本完整，需要在此基础上扩展完成另外三个模块：</p>
+<table>
+<colgroup>
+<col style="width: 23%" />
+<col style="width: 34%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr>
+<th>模块</th>
+<th>当前状态</th>
+<th>本路线目标</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01 AI 知识库系统</td>
+<td>🟡 基础已有，等待历史数据</td>
+<td>数据到位后批量治理导入</td>
+</tr>
+<tr>
+<td>02 AI 执行系统</td>
+<td>❌ 完全空白</td>
+<td>会议纪要 → 任务拆解 → 跟踪闭环</td>
+</tr>
+<tr>
+<td>03 AI 报价系统</td>
+<td>✅ 已完整</td>
+<td>持续优化准确率</td>
+</tr>
+<tr>
+<td>04 AI 管理驾驶舱</td>
+<td>🟡 仅有运维监控</td>
+<td>三类效率指标全覆盖</td>
+</tr>
+</tbody>
+</table>
+<p><strong>核心价值观</strong>：团队效率，“快”是最重要的衡量标准。三类”快”的定义如下：</p>
+<table>
+<thead>
+<tr>
+<th>快的类型</th>
+<th>定义</th>
+<th>数据来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>报价快</td>
+<td>客户需求到报价单交付的时长</td>
+<td>QuoteJob 时间戳</td>
+</tr>
+<tr>
+<td>响应快</td>
+<td>客户咨询到有人接单的时长</td>
+<td>ClientInquiry（新建）</td>
+</tr>
+<tr>
+<td>执行快</td>
+<td>会议决定到任务落地的时长</td>
+<td>ExecutionTask（新建）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>架构决策</strong>：所有模块在现有系统上扩展，不新建项目。共用用户体系（JWT）、数据库（MySQL）、基础设施（Redis
+/ Celery / 钉钉 Webhook）。</p>
+<hr />
+<h2 id="指标口径定义先于看板开发">指标口径定义（先于看板开发）</h2>
+<p>驾驶舱开发前必须明确每个指标的计算口径，避免管理层与业务员理解不一致。</p>
+<h3 id="报价耗时三层分区展示">报价耗时（三层，分区展示）</h3>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 34%" />
+<col style="width: 34%" />
+</colgroup>
+<thead>
+<tr>
+<th>指标名</th>
+<th>计算方式</th>
+<th>面向受众</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AI 生成耗时</td>
+<td><code>QuoteJob.duration_ms</code>（已有字段），或
+<code>created_at → finished_at</code></td>
+<td>工程侧（系统性能）</td>
+</tr>
+<tr>
+<td>人工确认耗时</td>
+<td><code>QuoteHistory.created_at - QuoteJob.finished_at</code>（confirm_push
+成功即为人工确认时间点）；无 QuoteHistory
+记录时<strong>不纳入统计</strong>，不做 fallback</td>
+<td>管理层（业务效率）</td>
+</tr>
+<tr>
+<td>总交付耗时</td>
+<td><code>QuoteHistory.created_at - QuoteJob.created_at</code>（同上，无
+QuoteHistory 则排除）</td>
+<td>管理层（端到端）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>注1：<code>QuoteJob</code> 当前无 <code>started_at</code> 字段（只有
+<code>created_at</code> / <code>finished_at</code> /
+<code>duration_ms</code>）。如将来需要区分”排队等待”与”真正 AI
+执行”时间，再新增 <code>started_at</code>。
+注2：三个数字不要混在同一张图里，否则”系统很快但人工很慢”的真实问题会被平均数掩盖。
+注3：<code>QuoteHistory.created_at</code> 即 confirm_push
+成功时间，是最准确的人工确认时间点，应作为主口径；<code>QuoteFeedback</code>
+记录的是预审弹窗交互数据，不用于耗时计算基准。</p>
+</blockquote>
+<h3 id="响应耗时">响应耗时</h3>
+<ul>
+<li>首次响应时长 =
+<code>ClientInquiry.first_response_time - ClientInquiry.inquiry_time</code></li>
+<li>SLA 状态：按渠道设定阈值（如电话 2 小时、微信 4 小时）</li>
+</ul>
+<h3 id="执行耗时">执行耗时</h3>
+<ul>
+<li>任务完成时长 =
+<code>ExecutionTask.completed_at - ExecutionTask.created_at</code></li>
+<li>逾期判断 =
+动态计算（<code>due_at &lt; now() AND completed_at IS NULL</code>），不作为持久状态存储</li>
+</ul>
+<hr />
+<h2 id="实施路径路径-c先可见再闭环最后外部集成">实施路径：路径
+C（先可见、再闭环、最后外部集成）</h2>
+<pre><code>第 1-2 周   阶段 0+1   Vite 登录鉴权统一 + 报价速度看板
+第 3-4 周   阶段 2     响应速度追踪（嵌入报价流程）
+第 5-6 周   阶段 3     ExecutionTask 模型 + 执行速度看板
+第 7-9 周   阶段 4a    手动会议纪要 + AI 任务草稿确认
+第 10-12 周 阶段 4b    语音转写接入
+第 13周+    阶段 4c    钉钉会议导入（等权限到位）
+等数据到位   阶段 5     01 知识库历史数据批量治理导入</code></pre>
+<hr />
+<h2 id="阶段-0vite-登录鉴权统一">阶段 0｜Vite 登录鉴权统一</h2>
+<p><strong>时间</strong>：第 1 周（与阶段 1 并行）
+<strong>策略</strong>：不全量迁移，新建 Vite
+壳，优先统一鉴权层，旧页面保留逐步迁移。</p>
+<h3 id="任务清单">任务清单</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"></input>初始化 Vite + Vue 3 + TypeScript
+工程</label></li>
+<li><label><input type="checkbox"></input>配置 FastAPI 托管 Vite
+编译产物，设置 SPA fallback 路由：</label>
+<ul>
+<li>未匹配的路径返回 Vite 的 <code>index.html</code>（交由 vue-router
+处理）</li>
+<li>例外路由：<code>/index.html</code>、<code>/admin.html</code>、<code>/app.html</code>
+继续静态服务旧页面</li>
+<li>避免 <code>/admin/dashboard</code> 刷新后出现 FastAPI 404</li>
+</ul></li>
+<li><label><input type="checkbox"></input>优先迁移 <code>/login</code>
+页面（原 app.html 登录部分）</label></li>
+<li><label><input type="checkbox"></input>统一封装
+<code>apiClient</code>（Axios 实例）：</label>
+<ul>
+<li>JWT 存取（localStorage）</li>
+<li>401 自动跳转登录</li>
+<li>admin 路由守卫</li>
+<li>过期处理</li>
+</ul></li>
+<li><label><input type="checkbox"></input>接入
+vue-router，规划路由结构：</label>
+<ul>
+<li><code>/login</code> — 登录页</li>
+<li><code>/quote</code> — 报价工作台（原 index.html，后续迁移）</li>
+<li><code>/admin/knowledge</code> — 知识库管理（原 admin.html
+部分，后续迁移）</li>
+<li><code>/admin/dashboard</code> — 管理驾驶舱（新，走 Vite）</li>
+<li><code>/admin/execution</code> — 执行系统（新，走 Vite）</li>
+</ul></li>
+<li><label><input type="checkbox"></input>旧的 index.html / admin.html
+暂时保留，入口逐步收拢到新壳</label></li>
+<li><label><input type="checkbox"></input>新增 <code>users.role</code>
+字段（Alembic migration）：现有 <code>is_admin=True</code> 迁移为
+<code>role=&#39;admin&#39;</code>，其余迁移为
+<code>role=&#39;staff&#39;</code>；<strong>全量替换代码中 <code>is_admin</code>
+字段引用为 <code>role</code> 检查</strong>，更新
+<code>app/dependencies.py</code> 的
+<code>require_admin</code>（此步须在阶段 0
+完成，否则新旧权限逻辑并存会产生 bug）</label></li>
+</ul>
+<h3 id="为什么这么做">为什么这么做</h3>
+<p>鉴权层如果新旧并存，会出现”旧页面能进、新页面被踢回登录”的问题，以及
+JWT 过期逻辑不一致的 bug。登录和 Axios
+拦截器优先统一，后续旧页面迁移时只需接入已有的
+apiClient，不用重写鉴权逻辑。</p>
+<h3 id="最小交付物定义week-1-结束时">最小交付物定义（Week 1
+结束时）</h3>
+<ul>
+<li><code>/login</code> 页面可正常登录并跳转</li>
+<li><code>apiClient</code>（JWT 存取、401 跳转、admin
+路由守卫）封装完毕</li>
+<li><code>vue-router</code>
+骨架配置完成（路由定义存在，页面可以是空占位）</li>
+<li>旧 <code>/index.html</code>、<code>/admin.html</code>
+仍可正常访问</li>
+<li><code>users.role</code> 迁移完成，代码中 <code>is_admin</code>
+引用全部替换</li>
+</ul>
+<p>报价速度接口与看板开发移至 Week 2，不压入 Week 1。</p>
+<h3 id="预期成果">预期成果</h3>
+<p>新驾驶舱和执行系统页面走
+Vite，鉴权行为与旧页面完全一致，用户无感知切换。</p>
+<hr />
+<h2 id="阶段-1报价速度看板">阶段 1｜报价速度看板</h2>
+<p><strong>时间</strong>：第 1-2 周</p>
+<h3 id="任务清单-1">任务清单</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"></input>新增聚合接口
+<code>GET /api/v1/admin/dashboard/quote-speed</code></label>
+<ul>
+<li>返回三层耗时指标（AI 生成 / 人工确认 / 总交付）</li>
+<li>数据来源：QuoteJob（时间戳）+ QuoteHistory（confirm 时间）+
+QuoteFeedback（修改标记）</li>
+</ul></li>
+<li><label><input type="checkbox"></input>驾驶舱前端”报价速度”面板（Vite
+新页面）：</label>
+<ul>
+<li>三张独立指标卡片（分区展示，不合并）</li>
+<li>折线图：近 30 天日均各阶段耗时趋势</li>
+<li>AI 修改率趋势（来自 QuoteFeedback.was_modified）</li>
+<li>⚠️ 冷启动处理：有效数据（含 QuoteHistory 的报价）低于 10
+条时，图表区显示”数据采集中（需至少 10
+条已确认报价）“提示，不渲染空折线图，避免管理层误判为系统故障</li>
+</ul></li>
+</ul>
+<h3 id="为什么这么做-1">为什么这么做</h3>
+<p>数据已在数据库中（QuoteJob + QuoteFeedback），无需新增采集。2
+周内让管理层看到报价环节的效率基线，有基线才能评估后续优化效果。</p>
+<h3 id="预期成果-1">预期成果</h3>
+<p>管理层一屏看到：AI
+生成平均多快、人工确认拖了多久、端到端交付时长——三个数字分开展示，哪个环节慢一目了然。</p>
+<hr />
+<h2 id="阶段-2响应速度追踪">阶段 2｜响应速度追踪</h2>
+<p><strong>时间</strong>：第 3-4 周</p>
+<h3 id="设计原则">设计原则</h3>
+<p>响应速度追踪<strong>嵌入报价流程</strong>，而非独立填报表单。业务员创建报价任务时顺手填写客户信息，系统自动生成
+ClientInquiry 记录，降低登记成本至接近零。</p>
+<h3 id="新增数据模型-client_inquiries">新增数据模型
+<code>client_inquiries</code></h3>
+<pre><code>字段：
+- id, created_at, updated_at
+- source: 来源渠道（微信 / 电话 / 现场 / 老客户 / 其他）
+- inquiry_time: 客户最早咨询时间；用户可手填，不填则默认写入当前时间
+- first_response_time: 首次响应时间；报价任务创建时自动写入当前时间（创建即代表接单）；
+  后续接入钉钉/微信后可用真实首次回复时间覆盖
+- responder_id: 接单人（关联 users 表，默认为创建报价的用户）
+- client_name: 客户姓名/公司（可选）
+- client_phone: 客户电话（可选）
+- status: 业务状态（pending / responded / converted / abandoned）
+  ⚠️ 不与 SLA 状态混用：sla_status 按渠道阈值动态计算返回，不持久化存储
+- quote_job_id: 关联 QuoteJob（外键）
+- notes: 备注</code></pre>
+<blockquote>
+<p>SLA 阈值配置：初期写入 <code>.env</code>（如
+<code>SLA_PHONE_HOURS=2</code>、<code>SLA_WECHAT_HOURS=4</code>、<code>SLA_ONSITE_HOURS=8</code>），由接口读取后按渠道动态返回。如将来需要多客户/多项目差异化阈值，再迁移到
+<code>sla_config</code> 数据库表；当前阶段不过度设计。超时由
+<code>first_response_time - inquiry_time &gt; 阈值</code>
+实时计算，不写入数据库。</p>
+</blockquote>
+<h3 id="任务清单-2">任务清单</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"></input>新增 <code>client_inquiries</code>
+表 + Alembic migration</label></li>
+<li><label><input type="checkbox"></input>修改报价任务创建流程：<code>POST /api/v1/quote/jobs</code>
+新增可选字段（来源渠道 / 客户信息），创建任务时自动生成
+ClientInquiry</label></li>
+<li><label><input type="checkbox"></input>新增接口
+<code>GET /api/v1/admin/dashboard/response-speed</code>（聚合统计）</label></li>
+<li><label><input type="checkbox"></input>报价工作台前端：发起报价时新增”来源渠道”下拉选择（不强制填写，降低阻力）</label></li>
+<li><label><input type="checkbox"></input>驾驶舱”响应速度”面板：</label>
+<ul>
+<li>平均首次响应时长（按渠道分组）</li>
+<li>SLA 达标率趋势</li>
+<li>各业务员响应速度对比</li>
+<li>逾期未响应数量预警</li>
+<li>⚠️ 面板须标注”数据起始日期（Phase 2
+上线日期）“，避免管理层将历史空白误读为系统故障；历史 QuoteJob 无对应
+ClientInquiry 记录，不纳入统计范围</li>
+</ul></li>
+</ul>
+<h3 id="为什么这么做-2">为什么这么做</h3>
+<p>独立的登记入口业务员大概率不会坚持填。嵌入报价创建流程后，登记是报价的自然副产品，数据质量有保证。预留
+<code>first_response_time</code>
+和自动化字段，后续可从钉钉/微信自动回填，不需要改数据模型。</p>
+<h3 id="预期成果-2">预期成果</h3>
+<p>每笔报价自动关联一条咨询记录，管理层看到各渠道和各业务员的响应速度对比，可以定向改进最慢的环节。</p>
+<hr />
+<h2 id="阶段-3执行速度追踪">阶段 3｜执行速度追踪</h2>
+<p><strong>时间</strong>：第 5-6 周</p>
+<h3 id="新增数据模型-execution_tasks">新增数据模型
+<code>execution_tasks</code></h3>
+<blockquote>
+<p>命名说明：不使用 <code>tasks</code>，避免与 Celery task 和
+<code>app/tasks/</code> 目录概念混淆。</p>
+</blockquote>
+<pre><code>字段：
+- id, created_at, updated_at
+- title: 任务标题
+- source: 来源类型（meeting / quote / manual）
+- source_ref_id: 来源关联 ID（如 MeetingNote.id 或 QuoteJob.id）
+- assignee_id: 负责人（关联 users 表）
+- priority: 优先级（low / normal / urgent，默认 normal）
+- due_at: 截止时间
+- completed_at: 完成时间（NULL 表示未完成）
+- status: 状态（pending / in_progress / done / cancelled）
+- notes: 备注</code></pre>
+<blockquote>
+<p>逾期状态不存储为持久字段，统一由
+<code>due_at &lt; now() AND completed_at IS NULL</code>
+动态计算，避免定时任务未跑时状态脏数据。</p>
+</blockquote>
+<h3 id="任务清单-3">任务清单</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"></input>新增 <code>execution_tasks</code> 表
++ Alembic migration</label></li>
+<li><label><input type="checkbox"></input>新增接口：</label>
+<ul>
+<li><code>POST /api/v1/execution-tasks</code> — 创建任务</li>
+<li><code>GET /api/v1/execution-tasks</code> — 列表查询</li>
+<li><code>PATCH /api/v1/execution-tasks/{id}</code> — 更新任务（含
+status=cancelled 软删除）</li>
+<li>⚠️ 不提供硬删除接口；admin 可将 status 置为
+cancelled，保留审计链</li>
+<li><code>GET /api/v1/admin/dashboard/execution-speed</code> —
+聚合统计</li>
+</ul></li>
+<li><label><input type="checkbox"></input>任务创建/分配后，通过任务专用群
+Webhook 推送通知（**阶段 3 范围：群消息，不做个人 <span class="citation" data-cites="*">@*</span>*）</label>
+<ul>
+<li>新建钉钉”任务通知”专用群，配置机器人获取
+<code>DINGTALK_TASK_WEBHOOK</code>（与报价推送群
+<code>DINGTALK_WEBHOOK</code>
+<strong>物理分离</strong>，避免互相污染）</li>
+<li>推送内容：任务标题、负责人姓名、截止时间、来源（会议/报价/手动）</li>
+<li>⚠️ 个人 @ ActionCard 需要企业应用权限，延至阶段 4c
+权限审批通过后接入</li>
+</ul></li>
+<li><label><input type="checkbox"></input>新增 Celery beat
+定时任务：每小时扫描逾期任务</label>
+<ul>
+<li>条件：<code>due_at &lt; now() AND completed_at IS NULL AND status NOT IN (&#39;done&#39;,&#39;cancelled&#39;)</code></li>
+<li>触发钉钉逾期提醒（同上
+<code>DINGTALK_TASK_WEBHOOK</code>），限制每任务每天最多提醒 1
+次，避免轰炸</li>
+<li>⚠️ beat 是<strong>独立进程</strong>，运维三件套须同步落地：
+<ol type="1">
+<li><code>start_all.ps1</code> 新增 beat 启动步骤（位于 Celery worker
+启动之后）</li>
+<li><code>install_celery_worker_service.ps1</code> 注册独立任务计划程序
+<code>AI_MiddleOffice_CeleryBeat</code></li>
+<li><code>/health/ready</code> 新增 <code>celery_beat</code>
+状态探活（检查 beat PID 文件或 Redis heartbeat key）</li>
+</ol></li>
+</ul></li>
+<li><label><input type="checkbox"></input>新增
+<code>execution_task_events</code>
+审计表，记录创建、分配、推送、提醒、完成、取消等事件</label>
+<ul>
+<li>字段：id、task_id、event_type、operator_id（NULL=系统自动）、notes、created_at</li>
+<li>事件只追加不修改，支持审计和后续自动化</li>
+</ul></li>
+<li><label><input type="checkbox"></input>驾驶舱”执行速度”面板：</label>
+<ul>
+<li>任务完成率（本周 / 本月）</li>
+<li>逾期任务数量（动态计算）预警</li>
+<li>平均任务完成时长</li>
+<li>各负责人任务量与完成率对比</li>
+</ul></li>
+</ul>
+<h3 id="为什么这么做-3">为什么这么做</h3>
+<p>先建好数据模型，阶段 4 的 AI 会议纪要功能只需往
+<code>execution_tasks</code> 自动写入，驾驶舱不用再改。这是阶段 4
+的技术铺垫。</p>
+<h3 id="预期成果-3">预期成果</h3>
+<p>驾驶舱三块面板（报价速度 / 响应速度 /
+执行速度）全部上线，管理层一屏看全三类”快”，红黄灯预警哪个环节在拖。</p>
+<hr />
+<h2 id="阶段-4aai-执行系统手动纪要-草稿确认">阶段 4a｜AI
+执行系统——手动纪要 + 草稿确认</h2>
+<p><strong>时间</strong>：第 7-9 周</p>
+<h3 id="设计原则-1">设计原则</h3>
+<p>AI 从会议纪要提取的任务<strong>不直接写入</strong>
+<code>execution_tasks</code>，必须经过草稿确认层（与报价预审弹窗逻辑一致）：</p>
+<pre><code>会议纪要录入 → AI 提取任务草稿 → 人工确认/修改 → 正式写入 execution_tasks</code></pre>
+<p>避免 AI 把”讨论事项”误判为”责任任务”。</p>
+<h3 id="新增数据模型-meeting_notes-task_drafts">新增数据模型
+<code>meeting_notes</code> + <code>task_drafts</code></h3>
+<pre><code>meeting_notes:
+- id, created_at
+- content: 原始纪要文本
+- source: 来源类型（manual / audio / dingtalk）
+- created_by: 录入人
+
+task_drafts:
+- id, meeting_note_id（关联 meeting_notes）
+- title: AI 提取的任务标题
+- suggested_assignee: AI 建议负责人（存储原始名字字符串，非 user_id）
+- suggested_due_at: AI 建议截止时间
+- status: 草稿状态（pending_review / accepted / rejected）
+- accepted_task_id: 确认后关联的 ExecutionTask.id
+
+&gt; `suggested_assignee` 存储 AI 输出的原始文字（如&quot;张总&quot;、&quot;小李&quot;），草稿确认界面展示此字符串，由人工在确认时从下拉列表选择实际 `assignee_id`，**不做自动模糊匹配**——避免&quot;张三&quot;静默错配到&quot;张三丰&quot;，造成任务推送错误。</code></pre>
+<h3 id="任务清单-4">任务清单</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"></input>新增 <code>meeting_notes</code> /
+<code>task_drafts</code> 表 + Alembic migration</label></li>
+<li><label><input type="checkbox"></input>新增接口
+<code>POST /api/v1/meetings</code>（保存纪要 + 触发 AI 提取）</label>
+<ul>
+<li>调用 DeepSeek 解析纪要，返回结构化任务草稿列表</li>
+</ul></li>
+<li><label><input type="checkbox"></input>新增接口
+<code>POST /api/v1/meetings/{id}/confirm-tasks</code>（人工确认后批量写入
+execution_tasks）</label></li>
+<li><label><input type="checkbox"></input>前端执行系统页面：</label>
+<ul>
+<li>富文本会议纪要录入框</li>
+<li>AI 提取结果草稿列表（支持逐条确认、修改、删除）</li>
+<li>一键确认写入正式任务</li>
+</ul></li>
+</ul>
+<h3 id="预期成果-4">预期成果</h3>
+<p>业务员录入一次会议纪要，AI
+自动提取任务草稿，人工二次确认后进入执行追踪，钉钉推送给负责人。</p>
+<hr />
+<h2 id="阶段-4b语音转写接入">阶段 4b｜语音转写接入</h2>
+<p><strong>时间</strong>：第 10-12 周</p>
+<h3 id="任务清单-5">任务清单</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"></input>评估并接入语音转写服务（讯飞实时语音
+API 或阿里云语音识别）</label></li>
+<li><label><input type="checkbox"></input>新增接口
+<code>POST /api/v1/meetings/transcribe</code>（上传音频 →
+返回转写文本）</label></li>
+<li><label><input type="checkbox"></input>转写结果自动进入 AI
+任务提取流程（复用阶段 4a 的逻辑）</label></li>
+<li><label><input type="checkbox"></input>前端：上传录音按钮 +
+转写进度展示</label></li>
+</ul>
+<hr />
+<h2 id="阶段-4c钉钉会议导入待权限就绪">阶段
+4c｜钉钉会议导入（待权限就绪）</h2>
+<p><strong>时间</strong>：第 13 周起，等企业应用权限审批通过后启动</p>
+<blockquote>
+<p>注意：钉钉”读取会议记录”涉及企业应用权限审批，周期不可控。不应让此项卡住主闭环。阶段
+4a 完成后主流程已完整，本阶段是增量自动化。</p>
+</blockquote>
+<h3 id="任务清单-6">任务清单</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"></input>提前申请钉钉企业应用权限（会议记录读取）</label></li>
+<li><label><input type="checkbox"></input>新增接口
+<code>POST /api/v1/meetings/import-dingtalk</code></label></li>
+<li><label><input type="checkbox"></input>拉取结果进入相同的纪要 →
+草稿确认流程</label></li>
+</ul>
+<hr />
+<h2 id="阶段-501-知识库历史数据治理导入">阶段 5｜01
+知识库历史数据治理导入</h2>
+<p><strong>时间</strong>：等工程部提供历史成交数据后启动</p>
+<h3 id="设计原则-2">设计原则</h3>
+<p>历史成交数据结构混杂（材料价格、工艺做法、项目案例、报价策略、地区差异），不能直接导入
+<code>materials</code> 表，必须经过暂存审核和分类治理。</p>
+<h3 id="扩展现有-knowledge_candidates-表支持批次追踪">扩展现有
+<code>knowledge_candidates</code> 表支持批次追踪</h3>
+<p>在现有知识候选字段基础上新增：</p>
+<pre><code>来源追踪字段：
+- source_batch_id: 批次标识（同一次导入共享，用于整批回滚）
+- source_file: 来源文件名
+- source_line: 原始行号/页码
+- data_type: 数据类型（material / technique / case / pricing_sample / risk_rule）
+- confidence: 置信度（0.0-1.0，人工标注或模型输出）
+
+落库目标追踪字段（审核通过后写入）：
+- target_type: 写入目标类型（material / rag_doc / case / pricing_sample）
+- target_id: 写入目标记录 ID
+- snapshot_id: 写入时的材料库快照 ID（关联 materials_audit）</code></pre>
+<blockquote>
+<p>仅有来源（source_batch_id）而没有去向（target_type / target_id /
+snapshot_id），整批回滚时无法精确定位要撤销哪些记录。来源和去向必须同时记录。</p>
+</blockquote>
+<h3 id="任务清单-7">任务清单</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"></input>与工程部确认数据格式（Excel / CSV /
+纸质扫描）</label></li>
+<li><label><input type="checkbox"></input>制定数据模板标准，工程部按模板整理后交付</label></li>
+<li><label><input type="checkbox"></input>如为非结构化格式：用 GLM-4V 或 OCR
+提取结构化字段</label></li>
+<li><label><input type="checkbox"></input>批量导入至
+<code>knowledge_candidates</code>（暂存，不直接入库）</label></li>
+<li><label><input type="checkbox"></input>人工审核分类：分流至 materials /
+案例库 / RAG 文档</label></li>
+<li><label><input type="checkbox"></input>审核完成后触发 RAG
+热更新（<code>/admin/reload</code>）</label></li>
+<li><label><input type="checkbox"></input>执行 RAG
+评测（eval_rag.py），对比导入前后 Hit@K 和 MRR</label></li>
+<li><label><input type="checkbox"></input>如质量下滑，按
+<code>source_batch_id</code> 整批回滚</label></li>
+</ul>
+<h3 id="为什么这么做-4">为什么这么做</h3>
+<p>直接批量写入 materials 会污染现有 70
+条精标数据，且无法追溯问题数据来源。经过暂存→审核→分类的治理流程，发现问题可按批次追溯或整批回滚，知识库质量可控。</p>
+<h3 id="预期成果-5">预期成果</h3>
+<p>知识库从 70 条扩展至数百条真实成交行情，RAG
+检索准确率显著提升，每批数据来源可查、可回滚。</p>
+<hr />
+<h2 id="整体时间线">整体时间线</h2>
+<pre><code>Week 1     Vite 壳 + 登录鉴权统一 + 报价速度接口开发
+Week 2     报价速度看板上线（可演示给管理层）
+Week 3     client_inquiries 模型 + 报价流程嵌入登记
+Week 4     响应速度面板上线
+Week 5     execution_tasks 模型 + 任务 CRUD 接口
+Week 6     执行速度面板上线（驾驶舱三类指标齐全，完整演示）
+Week 7-9   meeting_notes + task_drafts + AI 拆任务 + 草稿确认流程
+Week 10-12 语音转写接入
+Week 13+   钉钉会议导入（等权限）
+等数据到位  知识库历史数据批量治理导入</code></pre>
+<hr />
+<h2 id="技术依赖与风险">技术依赖与风险</h2>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 34%" />
+<col style="width: 34%" />
+</colgroup>
+<thead>
+<tr>
+<th>依赖项</th>
+<th>风险等级</th>
+<th>缓解措施</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vite 分批迁移</td>
+<td>低</td>
+<td>鉴权层优先统一，旧页面逐步迁移，不影响现有功能</td>
+</tr>
+<tr>
+<td>响应速度手动录入习惯</td>
+<td>中</td>
+<td>嵌入报价流程，降低录入成本至接近零</td>
+</tr>
+<tr>
+<td>DeepSeek 任务拆解质量</td>
+<td>中</td>
+<td>草稿确认层兜底，AI 误判不会直接入库</td>
+</tr>
+<tr>
+<td>讯飞/阿里云语音 API</td>
+<td>低</td>
+<td>商业 API，接入文档成熟，风险可控</td>
+</tr>
+<tr>
+<td>钉钉企业应用权限</td>
+<td>高</td>
+<td>提前申请，不等此项上线主闭环</td>
+</tr>
+<tr>
+<td>工程部历史数据质量</td>
+<td>高</td>
+<td>先定数据模板标准，交付前对齐格式，批次追踪支持整批回滚</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="实施保障">实施保障</h2>
+<blockquote>
+<p>本章不扩展功能范围，只明确权限、接口规范、事件追踪、验收标准、回滚开关、测试要求和外部依赖，防止实施阶段跑偏。</p>
+</blockquote>
+<h3 id="权限矩阵">1. 权限矩阵</h3>
+<p>系统目前只有 admin /
+普通用户两个角色，无法满足新模块的访问控制需求。需在 <code>users</code>
+表新增 <code>role</code> 字段（枚举：<code>admin</code> /
+<code>staff</code> / <code>manager</code> / <code>viewer</code>），通过
+Alembic migration 将现有 <code>is_admin=true</code> 迁移为
+<code>role=&#39;admin&#39;</code>，其余迁移为 <code>role=&#39;staff&#39;</code>。</p>
+<table>
+<colgroup>
+<col style="width: 8%" />
+<col style="width: 9%" />
+<col style="width: 22%" />
+<col style="width: 30%" />
+<col style="width: 29%" />
+</colgroup>
+<thead>
+<tr>
+<th>功能</th>
+<th style="text-align: center;">admin</th>
+<th style="text-align: center;">staff（业务员）</th>
+<th style="text-align: center;">manager（项目负责人）</th>
+<th style="text-align: center;">viewer（管理层只读）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>创建 / 取消报价任务</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅ 自己</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>查看报价任务</td>
+<td style="text-align: center;">✅ 全部</td>
+<td style="text-align: center;">✅ 自己</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>创建 ClientInquiry</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>查看 ClientInquiry</td>
+<td style="text-align: center;">✅ 全部</td>
+<td style="text-align: center;">✅ 自己</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>手动创建 ExecutionTask</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>查看 ExecutionTask</td>
+<td style="text-align: center;">✅ 全部</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅ 分配给自己的</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>更新 ExecutionTask</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅ 分配给自己的</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>取消 ExecutionTask</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>录入会议纪要 / 确认草稿任务</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>查看驾驶舱</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>管理知识库 / 用户</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+</tr>
+</tbody>
+</table>
+<h3 id="用户与钉钉账号映射">2. 用户与钉钉账号映射</h3>
+<p>任务推送若只往群发消息，负责人很容易忽略。需要绑定个人钉钉账号才能 @
+到人。</p>
+<p><strong>新增字段</strong>：<code>users.dingtalk_user_id</code>（VARCHAR
+64, nullable），Alembic migration 新增。</p>
+<p><strong>推送路由策略（分阶段演进）</strong>： - <strong>阶段
+3</strong>：统一推送到任务专用群
+Webhook（<code>DINGTALK_TASK_WEBHOOK</code>，与报价推送群
+<code>DINGTALK_WEBHOOK</code>
+物理分离），消息内含负责人姓名，但**不做个人 <span class="citation" data-cites="*">@*</span>* - <strong>阶段 4c
+后</strong>（企业应用权限到位）：有 <code>dingtalk_user_id</code>
+的用户改发 ActionCard 并 <span class="citation" data-cites="负责人">@负责人</span>；无绑定的仍走群消息 - 推送失败：60
+秒后重试一次；仍失败则写入
+<code>execution_task_events</code>（event_type=push_failed）并继续，不阻断任务创建
+- 推送记录：每次推送无论成功失败均写入
+<code>execution_task_events</code></p>
+<blockquote>
+<p>新增配置项 <code>DINGTALK_TASK_WEBHOOK</code>，区别于现有报价推送用的
+<code>DINGTALK_WEBHOOK</code>。</p>
+</blockquote>
+<h3 id="事件流水表">3. 事件流水表</h3>
+<p><code>execution_task_events</code> 已在阶段 3 中列出。对称补充
+<code>client_inquiry_events</code>：</p>
+<pre><code>client_inquiry_events:
+- id, created_at
+- inquiry_id:   外键 → client_inquiries.id
+- event_type:   created | responded | converted | abandoned | note_added | push_failed
+- operator_id:  外键 → users.id（NULL 表示系统自动触发）
+- notes:        备注</code></pre>
+<p>统一原则：事件只追加不修改，event_type 枚举固定，operator_id=NULL
+表示系统自动动作。</p>
+<h3 id="阶段验收标准definition-of-done">4. 阶段验收标准（Definition of
+Done）</h3>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>阶段</th>
+<th>完成定义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段 0</td>
+<td><code>/login</code> 可正常登录；旧
+<code>/index.html</code>、<code>/admin.html</code> 仍可访问；刷新
+<code>/admin/dashboard</code> 不出现 FastAPI 404</td>
+</tr>
+<tr>
+<td>阶段 1</td>
+<td><code>GET /api/v1/admin/dashboard/quote-speed</code>
+有数据；管理员看到三类耗时分区趋势折线图</td>
+</tr>
+<tr>
+<td>阶段 2</td>
+<td>创建报价任务时自动生成 ClientInquiry
+记录；响应速度面板标注数据起始日期且不为空</td>
+</tr>
+<tr>
+<td>阶段 3</td>
+<td>ExecutionTask
+可创建、分配、完成、取消；逾期动态计算与数据库一致；Celery beat 已纳入
+<code>start_all.ps1</code>；钉钉推送在分配后可发出</td>
+</tr>
+<tr>
+<td>阶段 4a</td>
+<td>录入会议纪要后生成草稿列表；确认后 ExecutionTask
+正确写入；钉钉推送给负责人成功</td>
+</tr>
+<tr>
+<td>阶段 4b</td>
+<td>上传音频后返回转写文本，自动进入草稿提取流程</td>
+</tr>
+<tr>
+<td>阶段 5</td>
+<td>批量导入后 RAG 评测 Hit@K ≥ 导入前基线；每条来源可追溯到
+source_batch_id</td>
+</tr>
+</tbody>
+</table>
+<h3 id="功能开关与回滚策略">5. 功能开关与回滚策略</h3>
+<p>新功能上线出问题时可快速关闭，不影响现有报价系统。在
+<code>.env</code> 中新增以下开关（默认
+<code>false</code>，逐阶段上线后置 <code>true</code>）：</p>
+<pre><code>FEATURE_DASHBOARD=false         # 驾驶舱面板（阶段 1-3）
+FEATURE_CLIENT_INQUIRY=false    # 响应速度追踪（阶段 2）
+FEATURE_EXECUTION=false         # 执行任务模块（阶段 3-4）
+FEATURE_MEETING_AI=false        # AI 会议纪要提取（阶段 4a）
+FEATURE_VITE_FRONTEND=false     # Vite 新前端（阶段 0，稳定后置 true）</code></pre>
+<p>开关在启动时读取，修改需重启服务。未启用的功能接口返回
+<code>HTTP 503 Feature not enabled</code>，前端路由守卫同步屏蔽对应入口。</p>
+<h3 id="测试清单">6. 测试清单</h3>
+<p>遵循现有测试规范（pytest + SQLite 测试库，不访问真实外部服务，mock
+Webhook）：</p>
+<p><strong>后端最小覆盖</strong>： -
+<code>execution_tasks</code>：status 非法值拒绝；逾期动态计算（有 due_at
+无 completed_at → overdue；有 completed_at → not overdue） -
+<code>client_inquiries</code>：创建报价任务时自动生成记录；inquiry_time
+默认为创建时间；first_response_time 自动填入 - 权限边界：staff 创建
+ExecutionTask → 403；manager 更新他人任务 → 403；viewer 访问非驾驶舱接口
+→ 403 - 驾驶舱聚合：有报价记录时三类耗时接口返回非空且分区数据 -
+钉钉推送：mock Webhook，验证调用时机与 payload 结构；推送失败后写入
+event_type=push_failed - <code>client_inquiries</code>
+状态自动流转：创建报价任务后 <code>status</code> 自动置为
+<code>responded</code>，<code>first_response_time</code>
+自动写入当前时间；<code>confirm_push</code> 成功后 <code>status</code>
+自动置为
+<code>converted</code>（两个流转均需自动化测试，不只做手工验收）</p>
+<p><strong>业务流手工验收</strong>： - 创建报价 → ClientInquiry 自动生成
+→ 响应速度看板统计更新 - 会议纪要录入 → AI 草稿生成 → 人工确认选择负责人
+→ ExecutionTask 写入 → 钉钉推送 - 逾期场景：due_at 设为近未来 → Celery
+beat 触发 → 验证钉钉提醒发出且 event 记录写入</p>
+<h3 id="数据字典枚举值固化">7. 数据字典（枚举值固化）</h3>
+<p>所有枚举值在后端 Pydantic schema 中定义为 <code>Literal</code>
+类型，前端从同名常量文件读取，禁止字符串硬编码散落在业务代码中。</p>
+<pre><code>client_inquiries.source:
+  wechat | phone | onsite | referral | other
+
+client_inquiries.status:
+  pending | responded | converted | abandoned
+  状态转移：
+    pending     → responded:  报价任务创建时系统自动置（first_response_time 同步写入）
+    responded   → converted:  confirm_push 成功后系统自动置
+    pending/responded → abandoned: 手动 PATCH status=abandoned
+
+execution_tasks.source:
+  meeting | quote | manual
+
+execution_tasks.status:
+  pending | in_progress | done | cancelled
+
+execution_tasks.priority:
+  low | normal | urgent
+
+task_drafts.status:
+  pending_review | accepted | rejected
+
+meeting_notes.source:
+  manual | audio | dingtalk
+
+knowledge_candidates.data_type:
+  material | technique | case | pricing_sample | risk_rule
+
+knowledge_candidates.target_type:
+  material | rag_doc | case | pricing_sample
+
+users.role:
+  admin | staff | manager | viewer</code></pre>
+<h3 id="外部依赖准备清单">8. 外部依赖准备清单</h3>
+<table>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 23%" />
+<col style="width: 28%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>依赖</th>
+<th>用于阶段</th>
+<th>需准备内容</th>
+<th>建议启动时间</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>钉钉任务通知 Webhook</td>
+<td>3</td>
+<td>建”任务通知”专用群、创建机器人、获取
+<code>DINGTALK_TASK_WEBHOOK</code> URL</td>
+<td>Phase 3 开始前 1 周</td>
+</tr>
+<tr>
+<td>语音转写 API（讯飞 / 阿里云）</td>
+<td>4b</td>
+<td>注册账号、实名认证、申请
+AppID/Secret、充值测试额度、确认并发限制</td>
+<td>Phase 4a 开始时（提前 2 周）</td>
+</tr>
+<tr>
+<td>钉钉企业应用（会议记录权限）</td>
+<td>4c</td>
+<td>企业管理员审批、提交应用审核材料、准备测试会议样本、确认 API
+调用频率限制</td>
+<td>Phase 4a 开始时（审批周期不可控，越早越好）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="变更记录">变更记录</h2>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 39%" />
+<col style="width: 34%" />
+</colgroup>
+<thead>
+<tr>
+<th>日期</th>
+<th>变更内容</th>
+<th>操作人</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-05-14</td>
+<td>初版创建</td>
+<td>AI 辅助规划</td>
+</tr>
+<tr>
+<td>2026-05-14</td>
+<td>v2 更新：Vite 分批迁移策略、ClientInquiry
+嵌入报价流程、ExecutionTask
+命名、逾期动态计算、草稿确认层、知识导入批次追踪、指标口径定义</td>
+<td>Codex 审查 + Claude 确认</td>
+</tr>
+<tr>
+<td>2026-05-14</td>
+<td>v3 更新：修正 QuoteJob 字段（无 started_at，使用
+duration_ms）、人工确认耗时口径（confirmed_at fallback
+QuoteHistory）、ClientInquiry SLA 拆分动态计算、ExecutionTask
+无硬删除、知识导入新增落库目标追踪字段（target_type/target_id/snapshot_id）、Vite
+SPA fallback 路由配置</td>
+<td>Codex 审查 v3 + Claude 确认</td>
+</tr>
+<tr>
+<td>2026-05-14</td>
+<td>v4 更新：ClientInquiry.first_response_time
+改为报价任务创建时自动写入（创建即代表接单）；阶段 3
+新增钉钉任务推送通知（复用现有 Webhook，无需企业权限）、Celery beat
+逾期扫描与钉钉提醒、可选 execution_task_events 审计表</td>
+<td>Codex 审查 v4 + Claude 确认</td>
+</tr>
+<tr>
+<td>2026-05-14</td>
+<td>v5
+更新：新增”实施保障”章节（权限矩阵、用户钉钉映射、事件流水表、验收标准、功能开关、测试清单、数据字典、外部依赖准备清单）；修正
+SLA 阈值存储策略、ClientInquiry 历史数据边界标注、Celery beat
+为独立进程说明、Phase 4a suggested_assignee 不做自动模糊匹配</td>
+<td>Codex 审查 v5 + Claude 确认</td>
+</tr>
+<tr>
+<td>2026-05-14</td>
+<td>v6 更新：① 人工确认耗时主口径改为
+<code>QuoteHistory.created_at</code>，移除 QuoteFeedback
+fallback，添加注3；② 阶段 3 钉钉推送明确为群消息，个人 @ ActionCard
+延至阶段 4c，与实施保障第 2 节对齐；③ Celery beat
+展开运维三件套（start_all.ps1 / 任务计划程序 / health 探活）；④ 阶段 0
+新增权限迁移任务，拆分 Week 1（鉴权层）/ Week
+2（看板），补充最小交付物定义；⑤ execution_tasks 新增 priority
+字段及枚举；⑥ 阶段 1 补充冷启动数据提示逻辑；⑦ 测试清单补充
+ClientInquiry 状态自动流转测试</td>
+<td>用户反馈 + Claude 审查</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

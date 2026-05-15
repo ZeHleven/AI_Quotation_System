@@ -90,6 +90,14 @@ def _feedback_row(feedback: QuoteFeedback, correction_counts: dict[int, int], ra
         "trace_id": feedback.trace_id,
         "source": feedback.source,
         "status": feedback.status,
+        "request_text": feedback.request_text,
+        "source_file_name": feedback.source_file_name,
+        "project_summary": feedback.project_summary,
+        "change_summary": feedback.change_summary,
+        "top_changed_fields": [
+            item.strip() for item in (feedback.top_changed_fields or "").split(",") if item.strip()
+        ],
+        "reviewed_by": feedback.reviewed_by,
         "ai_total_amount": _round(feedback.ai_total_amount),
         "final_total_amount": _round(feedback.final_total_amount),
         "amount_delta": _round(feedback.amount_delta),
@@ -137,8 +145,12 @@ def _feedback_detail(db: Session, feedback: QuoteFeedback) -> dict:
                     "item_index": item.item_index,
                     "project_name": item.project_name,
                     "field_path": item.field_path,
+                    "field_label": item.field_label,
+                    "change_type": item.change_type,
                     "before_value": item.before_value,
                     "after_value": item.after_value,
+                    "before_display": item.before_display,
+                    "after_display": item.after_display,
                     "delta_amount": _round(item.delta_amount),
                     "reason_category": item.reason_category,
                     "reason_text": item.reason_text,
@@ -150,6 +162,8 @@ def _feedback_detail(db: Session, feedback: QuoteFeedback) -> dict:
                 {
                     "id": item.id,
                     "query_text": item.query_text,
+                    "item_index": item.item_index,
+                    "project_name": item.project_name,
                     "material_id": item.material_id,
                     "item_name": item.item_name,
                     "rank": item.rank,
@@ -159,6 +173,8 @@ def _feedback_detail(db: Session, feedback: QuoteFeedback) -> dict:
                     "sent_to_prompt": item.sent_to_prompt,
                     "cited_by_model": item.cited_by_model,
                     "adopted_by_user": item.adopted_by_user,
+                    "used_in_final_quote": item.used_in_final_quote,
+                    "match_reason": item.match_reason,
                     "raw": _load_json(item.raw_json),
                     "created_at": _format_dt(item.created_at),
                 }
@@ -256,6 +272,7 @@ async def get_quote_feedback_summary(
         )
 
     top_correction_fields = _top_rows(db, QuoteCorrection, feedback_ids, [QuoteCorrection.field_path])
+    top_correction_field_labels = _top_rows(db, QuoteCorrection, feedback_ids, [QuoteCorrection.field_label])
     top_reason_categories = _top_rows(db, QuoteCorrection, feedback_ids, [QuoteCorrection.reason_category])
     top_rag_materials = _top_rows(
         db,
@@ -284,6 +301,9 @@ async def get_quote_feedback_summary(
             for key, count in prompt_counts.most_common(8)
         ],
         "top_correction_fields": top_correction_fields,
+        "top_correction_field_labels": [
+            item for item in top_correction_field_labels if item.get("field_label")
+        ],
         "top_reason_categories": [
             item for item in top_reason_categories if item.get("reason_category")
         ],

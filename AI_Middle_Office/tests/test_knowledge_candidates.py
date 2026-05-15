@@ -229,7 +229,13 @@ def test_build_approve_reject_and_rag_insights(client, monkeypatch):
     assert approved["candidate"]["status"] == "approved"
     assert approved["material"]["id"] == seeded["material_id"]
     assert approved["material"]["unit_price"] == 80
+    assert approved["material"]["source"] == "knowledge_candidate"
+    assert approved["material"]["status"] == "draft"
+    assert approved["material"]["last_verified_at"]
     assert approved["snapshot"]["action"] == "knowledge_candidate_approve"
+    assert approved["snapshot"]["added_count"] == 0
+    assert approved["snapshot"]["updated_count"] == 1
+    assert approved["snapshot"]["diff_summary"]["updated"][0]["id"] == seeded["material_id"]
 
     reject_response = client.post(
         f"/api/v1/admin/knowledge_candidates/{rejected_candidate.id}/reject",
@@ -245,6 +251,9 @@ def test_build_approve_reject_and_rag_insights(client, monkeypatch):
         material = db.query(Material).filter(Material.material_id == seeded["material_id"]).one()
         assert material.unit_price == 80
         assert material.is_draft is True
+        assert material.source == "knowledge_candidate"
+        assert material.status == "draft"
+        assert material.last_verified_at is not None
         assert db.query(MaterialSnapshot).filter(MaterialSnapshot.action == "knowledge_candidate_approve").count() >= 1
     finally:
         db.close()

@@ -1,22 +1,67 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.responses import api_page
+from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user
-from app.models.quote_history import QuoteHistory
+from app.models.quote_history import QuoteHistory, QuoteHistoryItem
 from app.models.user import User
+from app.services.quote_history import json_loads, serialize_history_item
 
 
 router = APIRouter()
 
 
+def _format_dt(value) -> Optional[str]:
+    if not value:
+        return None
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _first_project_name_list(value: Optional[str]) -> list[str]:
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _history_row(record: QuoteHistory, include_payload_json: bool = True) -> dict:
+    data = {
+        "id": record.id,
+        "username": record.username,
+        "quote_id": record.quote_id,
+        "quote_job_id": record.quote_job_id,
+        "trace_id": record.trace_id,
+        "request_text": record.request_text,
+        "source_file_name": record.source_file_name,
+        "display_title": record.display_title,
+        "project_summary": record.project_summary,
+        "first_project_names": _first_project_name_list(record.first_project_names),
+        "confirmed_by": record.confirmed_by,
+        "pushed_to_dingtalk": record.pushed_to_dingtalk,
+        "created_at": _format_dt(record.created_at),
+        "total_amount": record.total_amount,
+        "item_count": record.item_count,
+    }
+    if include_payload_json:
+        data["payload_json"] = record.payload_json
+    return data
+
+
+def _get_accessible_history(history_id: int, current_user: User, db: Session) -> QuoteHistory:
+    record = db.query(QuoteHistory).filter(QuoteHistory.id == history_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="quote history not found")
+    if current_user.role != "admin" and record.username != current_user.username:
+        raise HTTPException(status_code=404, detail="quote history not found")
+    return record
+
+
 @router.get("/history", summary="查询报价历史（本人；admin 可查全部）")
 async def get_history(
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     username: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -29,19 +74,34 @@ async def get_history(
 
     total = query.count()
     records = (
-        query.order_by(QuoteHistory.created_at.desc())
+        query.order_by(QuoteHistory.created_at.desc(), QuoteHistory.id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
 
-    return api_page([
-        {
-            "id": r.id,
-            "username": r.username,
-            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "",
-            "total_amount": r.total_amount,
-            "item_count": r.item_count,
-            "payload_json": r.payload_json,
-        } for r in records
-    ], total=total, page=page, page_size=page_size)
+    return api_page(
+        [_history_row(record) for record in records],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/history/{history_id}", summary="查询报价历史详情")
+async def get_history_detail(
+    history_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    record = _get_accessible_history(history_id, current_user, db)
+    items = (
+        db.query(QuoteHistoryItem)
+        .filter(QuoteHistoryItem.quote_history_id == record.id)
+        .order_by(QuoteHistoryItem.line_no.asc(), QuoteHistoryItem.id.asc())
+        .all()
+    )
+    data = _history_row(record)
+    data["payload"] = json_loads(record.payload_json)
+    data["items"] = [serialize_history_item(item) for item in items]
+    return api_ok(data)

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
-from app.models.quote_job import QuoteJob
+from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
 
 
@@ -52,11 +52,23 @@ def test_create_quote_job_returns_queued_status(client):
     assert body["status"] == "queued"
     assert body["stage"] == "queued"
     assert body["trace_id"]
+    assert body["request_summary"] == "客厅地砖10平米"
+    assert body["result_item_count"] == 0
     assert body["events"][0]["status"] == "queued"
 
     status_response = client.get(f"/api/v1/quote/jobs/{body['job_id']}", headers=headers)
     assert status_response.status_code == 200
-    assert _response_data(status_response)["job_id"] == body["job_id"]
+    detail = _response_data(status_response)
+    assert detail["job_id"] == body["job_id"]
+    assert detail["events"][0]["event_type"] == "queued"
+
+    db = SessionLocal()
+    try:
+        event = db.query(QuoteJobEvent).filter(QuoteJobEvent.quote_job_id == body["job_id"]).one()
+        assert event.event_type == "queued"
+        assert event.stage == "queued"
+    finally:
+        db.close()
 
 
 def test_quote_job_requires_auth(client):
@@ -80,6 +92,8 @@ def test_list_and_cancel_quote_job(client):
     body = _response_data(cancel_response)
     assert body["status"] == "canceled"
     assert body["stage"] == "canceled"
+    assert body["failure_stage"] == "canceled"
+    assert body["duration_ms"] is not None
     assert body["error_message"] == "任务已取消"
 
 
@@ -118,7 +132,9 @@ def test_admin_can_list_all_jobs_and_mark_timeouts(client):
     assert mark_response.status_code == 200
     body = mark_response.json()
     assert body["marked_count"] >= 1
-    assert any(item["job_id"] == job_id for item in body["data"])
+    marked = next(item for item in body["data"] if item["job_id"] == job_id)
+    assert marked["failure_stage"] == "timeout"
+    assert marked["duration_ms"] is not None
 
     list_response = client.get("/api/v1/quote/jobs?status=timed_out", headers=admin_headers)
     assert list_response.status_code == 200
@@ -170,6 +186,68 @@ def test_quote_job_events_stream_replays_terminal_events(client):
     ]
     assert [event["status"] for event in streamed] == ["queued", "processing", "preview"]
     assert streamed[-1]["data"]["project_details"][0]["project_name"] == "墙面刷新"
+
+
+def test_quote_job_detail_reads_structured_events_and_result_summary(client):
+    headers = _login_headers(client)
+    username = client.get("/api/v1/auth/me", headers=headers).json()["username"]
+    job_id = str(uuid.uuid4())
+
+    db = SessionLocal()
+    try:
+        job = QuoteJob(
+            job_id=job_id,
+            username=username,
+            status="succeeded",
+            stage="completed",
+            message="living room renovation",
+            file_name="plan.png",
+            trace_id="trace-structured",
+            result_json=json.dumps(
+                {
+                    "project_details": [
+                        {"project_name": "wall paint", "total_price": 220},
+                        {"project_name": "floor tile", "total_price": 110},
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            request_summary="living room renovation",
+            source_file_name="plan.png",
+            result_total_amount=330,
+            result_item_count=2,
+            preview_project_names="wall paint, floor tile",
+            duration_ms=1234,
+            finished_at=datetime.now(timezone.utc),
+        )
+        db.add(job)
+        db.flush()
+        db.add(
+            QuoteJobEvent(
+                quote_job_id=job_id,
+                event_index=1,
+                event_type="preview",
+                stage="completed",
+                message="AI preview ready",
+                trace_id="trace-structured",
+                payload_json=json.dumps({"data": {"ok": True}}, ensure_ascii=False),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/v1/quote/jobs/{job_id}", headers=headers)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["request_summary"] == "living room renovation"
+    assert data["source_file_name"] == "plan.png"
+    assert data["result_total_amount"] == 330
+    assert data["result_item_count"] == 2
+    assert data["preview_project_names"] == ["wall paint", "floor tile"]
+    assert data["duration_ms"] == 1234
+    assert data["events"][0]["event_type"] == "preview"
+    assert data["events"][0]["payload"]["data"]["ok"] is True
 
 
 def test_quote_job_events_hide_other_users_jobs(client):

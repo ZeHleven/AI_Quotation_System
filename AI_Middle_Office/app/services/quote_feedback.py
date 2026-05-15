@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
@@ -26,6 +27,19 @@ DETAIL_FIELDS = {
     "spec",
     "material",
     "craft",
+}
+FIELD_LABELS = {
+    "project_name": "项目名称",
+    "unit": "单位",
+    "quantity": "数量",
+    "unit_price": "单价",
+    "total_price": "小计",
+    "notes": "备注",
+    "space": "空间",
+    "spec": "规格",
+    "material": "材料",
+    "craft": "工艺",
+    "row": "整行",
 }
 TRACE_KEYS = {
     "rag_trace",
@@ -138,6 +152,101 @@ def _value_text(value: Any) -> str:
     return str(value)
 
 
+def _text_or_none(value: Any, max_length: Optional[int] = None) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text[:max_length] if max_length is not None else text
+
+
+def _display_text(value: Any, max_length: int = 255) -> str:
+    text = _value_text(value).strip()
+    if len(text) > max_length:
+        return f"{text[: max_length - 3]}..."
+    return text
+
+
+def _project_name_from_item(item: dict[str, Any]) -> Optional[str]:
+    return _text_or_none(item.get("project_name") or item.get("name") or item.get("item_name"), 255)
+
+
+def _project_names(payload: Any, limit: int = 5) -> list[str]:
+    names: list[str] = []
+    for item in _project_details(payload):
+        name = _project_name_from_item(item)
+        if name and name not in names:
+            names.append(name)
+        if len(names) >= limit:
+            break
+    return names
+
+
+def _project_summary(payload: Any) -> str:
+    details = _project_details(payload)
+    if not details:
+        return ""
+    names = _project_names(payload, limit=3)
+    if not names:
+        return f"{len(details)} items"
+    suffix = f"; +{len(details) - len(names)} more" if len(details) > len(names) else ""
+    return f"{', '.join(names)}; total_items={len(details)}{suffix}"
+
+
+def _field_key(field_path: str) -> str:
+    return (field_path or "").rsplit(".", 1)[-1] or field_path
+
+
+def _field_label(field_key: str) -> str:
+    return FIELD_LABELS.get(field_key, field_key)
+
+
+def _change_type(before_row: dict[str, Any], after_row: dict[str, Any], key: str) -> str:
+    if key == "row":
+        if before_row and not after_row:
+            return "removed"
+        if after_row and not before_row:
+            return "added"
+    before_empty = before_row == {} or before_row.get(key) in (None, "")
+    after_empty = after_row == {} or after_row.get(key) in (None, "")
+    if before_empty and not after_empty:
+        return "added"
+    if after_empty and not before_empty:
+        return "removed"
+    return "updated"
+
+
+def _build_change_summary(corrections: list[QuoteCorrection], amount_delta: Optional[float]) -> tuple[str, str]:
+    if not corrections and not amount_delta:
+        return "No manual changes", ""
+    field_counts = Counter(item.field_label or _field_label(_field_key(item.field_path)) for item in corrections)
+    top_labels = [label for label, _ in field_counts.most_common(5)]
+    parts = [f"{len(corrections)} field changes"] if corrections else []
+    if top_labels:
+        parts.append("top fields: " + ", ".join(top_labels[:3]))
+    if amount_delta:
+        parts.append(f"amount delta: {round(amount_delta, 2)}")
+    return "; ".join(parts), ", ".join(top_labels)
+
+
+def _apply_feedback_context(
+    feedback: QuoteFeedback,
+    *,
+    job: Optional[QuoteJob] = None,
+    request_text: Optional[str] = None,
+    source_file_name: Optional[str] = None,
+    payload: Any = None,
+) -> None:
+    if request_text or (job and job.message):
+        feedback.request_text = _text_or_none(request_text or job.message)
+    if source_file_name or (job and job.file_name):
+        feedback.source_file_name = _text_or_none(source_file_name or job.file_name, 255)
+    summary = _project_summary(payload) if payload is not None else ""
+    if summary:
+        feedback.project_summary = summary
+
+
 def _normalized_value(value: Any) -> Any:
     amount = _parse_amount(value)
     if amount is not None:
@@ -235,6 +344,84 @@ def _bool_or_none(value: Any) -> Optional[bool]:
     return None
 
 
+def _trace_item_index(raw_item: dict[str, Any], details: list[dict[str, Any]]) -> Optional[int]:
+    for key in ("item_index", "project_index", "detail_index", "line_no"):
+        value = raw_item.get(key)
+        if value is None:
+            continue
+        try:
+            index = int(value)
+            return index - 1 if key == "line_no" and index > 0 else index
+        except (TypeError, ValueError):
+            continue
+
+    project_name = raw_item.get("project_name") or raw_item.get("quote_project_name") or raw_item.get("matched_project_name")
+    if project_name:
+        normalized = str(project_name).strip().lower()
+        for index, detail in enumerate(details):
+            if (_project_name_from_item(detail) or "").lower() == normalized:
+                return index
+
+    needle_values = [
+        raw_item.get("item_name"),
+        raw_item.get("name"),
+        raw_item.get("title"),
+        raw_item.get("material_id"),
+        raw_item.get("id"),
+    ]
+    needles = [str(value).strip().lower() for value in needle_values if value not in (None, "")]
+    for index, detail in enumerate(details):
+        haystack = " ".join(
+            str(detail.get(key) or "")
+            for key in ("project_name", "item_name", "material", "notes", "spec", "craft")
+        ).lower()
+        if haystack and any(needle and needle in haystack for needle in needles):
+            return index
+
+    if len(details) == 1:
+        return 0
+    return None
+
+
+def _trace_context(raw_item: dict[str, Any], source_payload: Any) -> tuple[Optional[int], Optional[str], Optional[str]]:
+    details = _project_details(source_payload)
+    item_index = _trace_item_index(raw_item, details)
+    raw_project_name = raw_item.get("project_name") or raw_item.get("quote_project_name") or raw_item.get("matched_project_name")
+    if item_index is not None and 0 <= item_index < len(details):
+        return item_index, _project_name_from_item(details[item_index]) or _text_or_none(raw_project_name, 255), "matched quote item"
+    if raw_project_name:
+        return None, _text_or_none(raw_project_name, 255), "provided by trace"
+    return None, None, None
+
+
+def _trace_used_in_payload(trace: QuoteRagTrace, final_payload: Any) -> bool:
+    needles = [
+        trace.project_name,
+        trace.item_name,
+        trace.material_id,
+    ]
+    normalized_needles = [str(value).strip().lower() for value in needles if value not in (None, "")]
+    if not normalized_needles:
+        return False
+    if trace.item_index is not None:
+        details = _project_details(final_payload)
+        if 0 <= trace.item_index < len(details):
+            haystack = _json_dumps(details[trace.item_index]).lower()
+            return any(needle in haystack for needle in normalized_needles)
+    final_text = _json_dumps(_project_details(final_payload)).lower()
+    return any(needle in final_text for needle in normalized_needles)
+
+
+def _mark_rag_trace_usage(db: Session, *, feedback: QuoteFeedback, final_payload: Any) -> None:
+    traces = db.query(QuoteRagTrace).filter(QuoteRagTrace.feedback_id == feedback.id).all()
+    for trace in traces:
+        used = _trace_used_in_payload(trace, final_payload)
+        trace.used_in_final_quote = used
+        trace.adopted_by_user = used
+        if used and not trace.match_reason:
+            trace.match_reason = "appears in final quote"
+
+
 def _replace_rag_traces(
     db: Session,
     *,
@@ -257,6 +444,7 @@ def _replace_rag_traces(
                 rank_value = int(rank) if rank is not None else index + 1
             except (TypeError, ValueError):
                 rank_value = index + 1
+            item_index, project_name, match_reason = _trace_context(raw_item, source_payload)
             trace_rows.append(
                 QuoteRagTrace(
                     feedback_id=feedback.id,
@@ -264,6 +452,8 @@ def _replace_rag_traces(
                     quote_job_id=feedback.quote_job_id,
                     trace_id=feedback.trace_id,
                     query_text=query_text,
+                    item_index=item_index,
+                    project_name=project_name,
                     material_id=str(material_id)[:64] if material_id is not None else None,
                     item_name=str(item_name)[:255] if item_name is not None else None,
                     rank=rank_value,
@@ -273,6 +463,8 @@ def _replace_rag_traces(
                     sent_to_prompt=_bool_or_none(raw_item.get("sent_to_prompt")) is not False,
                     cited_by_model=_bool_or_none(raw_item.get("cited_by_model")),
                     adopted_by_user=_bool_or_none(raw_item.get("adopted_by_user")),
+                    used_in_final_quote=_bool_or_none(raw_item.get("used_in_final_quote")),
+                    match_reason=raw_item.get("match_reason") or match_reason,
                     raw_json=_json_dumps(raw_item),
                 )
             )
@@ -314,6 +506,8 @@ def _build_corrections(
                 before_amount = _parse_amount(before_value) or 0.0
                 after_amount = _parse_amount(after_value) or 0.0
                 delta_amount = round(after_amount - before_amount, 2)
+            before_text = _value_text(before_value)
+            after_text = _value_text(after_value)
             corrections.append(
                 QuoteCorrection(
                     feedback_id=feedback.id,
@@ -323,8 +517,12 @@ def _build_corrections(
                     item_index=index,
                     project_name=str(project_name)[:255] if project_name else None,
                     field_path=f"project_details[{index}].{key}",
-                    before_value=_value_text(before_value),
-                    after_value=_value_text(after_value),
+                    field_label=_field_label(key),
+                    change_type=_change_type(before, after, key),
+                    before_value=before_text,
+                    after_value=after_text,
+                    before_display=_display_text(before_value),
+                    after_display=_display_text(after_value),
                     delta_amount=delta_amount,
                     reason_category=reason_category,
                     reason_text=reason_text,
@@ -366,6 +564,7 @@ def record_ai_preview(
     feedback.ai_total_amount = _total_amount(ai_payload)
     feedback.ai_item_count = len(details)
     feedback.ai_payload_json = _json_dumps(ai_payload)
+    _apply_feedback_context(feedback, job=quote_job, request_text=query_text, payload=ai_payload)
     _apply_runtime_metadata(feedback, db, ai_payload)
     db.flush()
     _replace_rag_traces(db, feedback=feedback, source_payload=ai_payload, query_text=query_text)
@@ -434,7 +633,9 @@ def record_confirmed_quote(
     feedback.pushed_to_dingtalk = True
     feedback.rejected = False
     feedback.final_payload_json = _json_dumps(clean_final_payload)
+    feedback.reviewed_by = username
     feedback.confirmed_at = _utcnow()
+    _apply_feedback_context(feedback, job=job, payload=clean_final_payload)
     _apply_runtime_metadata(feedback, db, clean_final_payload)
     db.flush()
 
@@ -451,13 +652,17 @@ def record_confirmed_quote(
     for correction in corrections:
         db.add(correction)
     feedback.was_modified = bool(corrections or feedback.amount_delta)
+    feedback.change_summary, feedback.top_changed_fields = _build_change_summary(corrections, feedback.amount_delta)
     feedback.correction_summary_json = _json_dumps(
         {
             "correction_count": len(corrections),
             "reason_category": reason_category,
             "reason": reason_text,
+            "change_summary": feedback.change_summary,
+            "top_changed_fields": feedback.top_changed_fields,
         }
     )
+    _mark_rag_trace_usage(db, feedback=feedback, final_payload=clean_final_payload)
     return feedback
 
 
@@ -505,6 +710,9 @@ def record_rejected_quote(
     feedback.rejected = True
     feedback.pushed_to_dingtalk = False
     feedback.rejection_reason = reason
+    feedback.reviewed_by = username
+    feedback.change_summary = f"Rejected: {reason}" if reason else "Rejected by reviewer"
+    _apply_feedback_context(feedback, job=job)
     feedback.rejected_at = _utcnow()
     _apply_runtime_metadata(feedback, db)
     return feedback

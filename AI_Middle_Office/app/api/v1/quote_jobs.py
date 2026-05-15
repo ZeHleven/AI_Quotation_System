@@ -16,10 +16,17 @@ from app.core.logging import get_trace_id
 from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user, require_admin
 from app.models.file_object import FileObject
-from app.models.quote_job import QuoteJob
+from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
 from app.services.file_storage import StorageDisabledError, store_file_bytes
 from app.services.quote_dispatcher import dispatch_quote_job
+from app.services.quote_job_readability import (
+    apply_job_duration,
+    apply_job_failure,
+    apply_job_request_summary,
+    event_rows_from_json,
+    serialize_event_row,
+)
 from app.services.quote_job_runner import (
     RETRYABLE_STATUSES,
     TERMINAL_STATUSES,
@@ -56,15 +63,24 @@ def _serialize_job(job: QuoteJob, include_events: bool = True, include_result: b
         "trace_id": job.trace_id,
         "celery_task_id": job.celery_task_id,
         "message_preview": (job.message or "")[:120],
+        "request_summary": job.request_summary or (job.message or "")[:180],
         "file_name": job.file_name,
+        "source_file_name": job.source_file_name or job.file_name,
         "file_object_id": job.file_object_id,
+        "result_total_amount": job.result_total_amount,
+        "result_item_count": job.result_item_count,
+        "preview_project_names": [
+            item.strip() for item in (job.preview_project_names or "").split(",") if item.strip()
+        ],
+        "duration_ms": job.duration_ms,
+        "failure_stage": job.failure_stage,
         "created_at": _format_dt(job.created_at),
         "updated_at": _format_dt(job.updated_at),
         "finished_at": _format_dt(job.finished_at),
         "error_message": job.error_message,
     }
     if include_events:
-        data["events"] = _decode_json(job.events_json, [])
+        data["events"] = [serialize_event_row(item) for item in job.events] or event_rows_from_json(job.events_json)
     if include_result:
         data["result"] = _decode_json(job.result_json, None)
     return data
@@ -92,6 +108,8 @@ def _dispatch_and_store(job: QuoteJob, db: Session) -> None:
         job.stage = "dispatch"
         job.error_message = str(exc)
         job.finished_at = datetime.now(timezone.utc)
+        apply_job_failure(job, "dispatch")
+        apply_job_duration(job)
         append_job_event(job, "error", f"❌ 异步报价任务派发失败: {str(exc)}", trace_id=job.trace_id, stage="dispatch")
         db.commit()
         db.refresh(job)
@@ -185,6 +203,7 @@ async def create_quote_job(
         file_base64=file_base64,
         trace_id=get_trace_id() or uuid.uuid4().hex,
     )
+    apply_job_request_summary(job)
     append_job_event(job, "queued", "报价任务已进入队列", trace_id=job.trace_id, stage="queued")
     db.add(job)
     db.commit()
@@ -258,6 +277,8 @@ async def cancel_quote_job(
     job.stage = "canceled"
     job.error_message = "任务已取消"
     job.finished_at = datetime.now(timezone.utc)
+    apply_job_failure(job, "canceled")
+    apply_job_duration(job)
     append_job_event(job, "error", "⏹️ 报价任务已取消", trace_id=job.trace_id, stage="canceled")
     db.commit()
     db.refresh(job)
@@ -293,6 +314,7 @@ async def retry_quote_job(
         file_base64=source_job.file_base64,
         trace_id=get_trace_id() or uuid.uuid4().hex,
     )
+    apply_job_request_summary(retry_job)
     append_job_event(
         retry_job,
         "queued",

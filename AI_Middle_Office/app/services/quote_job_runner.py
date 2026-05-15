@@ -17,6 +17,12 @@ from app.models.user import User
 from app.services.file_storage import get_object_bytes
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
 from app.services.quote_feedback import safe_record_ai_preview
+from app.services.quote_job_readability import (
+    apply_job_duration,
+    apply_job_failure,
+    apply_job_result_summary,
+    create_job_event_from_payload,
+)
 from app.services.quote_helpers import sign_payload
 
 
@@ -61,6 +67,7 @@ def append_job_event(
     event.update(extra)
     events.append(event)
     job.events_json = json.dumps(events, ensure_ascii=False)
+    job.events.append(create_job_event_from_payload(job, len(events), event))
     job.updated_at = _utcnow()
 
 
@@ -86,6 +93,8 @@ def mark_stale_quote_jobs(db, timeout_minutes: int) -> list[QuoteJob]:
         job.stage = "timeout"
         job.error_message = f"任务超过 {timeout_minutes} 分钟未完成，已标记超时"
         job.finished_at = _utcnow()
+        apply_job_failure(job, "timeout")
+        apply_job_duration(job)
         append_job_event(job, "error", f"❌ {job.error_message}", trace_id=job.trace_id, stage="timeout")
         stale_jobs.append(job)
 
@@ -270,6 +279,8 @@ async def run_quote_job_async(job_id: str) -> None:
             job.stage = "auth"
             job.error_message = "用户不存在或已禁用"
             job.finished_at = _utcnow()
+            apply_job_failure(job, "auth")
+            apply_job_duration(job)
             append_job_event(job, "error", "❌ 登录状态已失效，请重新登录", trace_id=job.trace_id, stage="auth")
             db.commit()
             return
@@ -279,6 +290,8 @@ async def run_quote_job_async(job_id: str) -> None:
             job.stage = "quota"
             job.error_message = "AI 调用额度已耗尽"
             job.finished_at = _utcnow()
+            apply_job_failure(job, "quota")
+            apply_job_duration(job)
             append_job_event(job, "error", "❌ 您的 AI 调用额度已耗尽，请联系管理员充值", trace_id=job.trace_id, stage="quota")
             db.commit()
             return
@@ -296,6 +309,8 @@ async def run_quote_job_async(job_id: str) -> None:
             job.stage = "file_load"
             job.error_message = f"报价附件读取失败: {str(exc)}"
             job.finished_at = _utcnow()
+            apply_job_failure(job, "file_load")
+            apply_job_duration(job)
             append_job_event(job, "error", f"❌ {job.error_message}", trace_id=job.trace_id, stage="file_load")
             db.commit()
             return
@@ -316,8 +331,11 @@ async def run_quote_job_async(job_id: str) -> None:
 
             if status_name == "preview":
                 job.status = "succeeded"
-                job.result_json = json.dumps(extra.get("data"), ensure_ascii=False)
+                result_payload = extra.get("data")
+                job.result_json = json.dumps(result_payload, ensure_ascii=False)
                 job.finished_at = _utcnow()
+                apply_job_result_summary(job, result_payload)
+                apply_job_duration(job)
                 user.quota -= 1
                 safe_record_ai_preview(
                     db,
@@ -331,6 +349,8 @@ async def run_quote_job_async(job_id: str) -> None:
                 job.status = "failed"
                 job.error_message = message
                 job.finished_at = _utcnow()
+                apply_job_failure(job, extra.get("stage"))
+                apply_job_duration(job)
 
             db.commit()
             if job.status in TERMINAL_STATUSES:
@@ -344,6 +364,8 @@ async def run_quote_job_async(job_id: str) -> None:
                 job.stage = "crashed"
                 job.error_message = str(exc)
                 job.finished_at = _utcnow()
+                apply_job_failure(job, "crashed")
+                apply_job_duration(job)
                 append_job_event(job, "error", f"❌ [API Gateway] 异步任务崩溃: {str(exc)}", trace_id=job.trace_id, stage="crashed")
                 db.commit()
         except Exception:

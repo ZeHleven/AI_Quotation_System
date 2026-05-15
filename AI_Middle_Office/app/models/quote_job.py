@@ -1,5 +1,6 @@
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -22,6 +23,13 @@ class QuoteJob(Base):
     file_mime_type = Column(String(128), nullable=True)
     file_object_id = Column(String(36), nullable=True)
     file_base64 = Column(_long_text(), nullable=True)
+    request_summary = Column(String(255), nullable=True)
+    source_file_name = Column(String(255), nullable=True)
+    result_total_amount = Column(Float, nullable=True)
+    result_item_count = Column(Integer, default=0, nullable=False)
+    preview_project_names = Column(Text, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    failure_stage = Column(String(64), index=True, nullable=True)
     result_json = Column(_long_text(), nullable=True)
     error_message = Column(_long_text(), nullable=True)
     events_json = Column(_long_text(), default="[]")
@@ -30,3 +38,26 @@ class QuoteJob(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     finished_at = Column(DateTime(timezone=True), nullable=True)
+
+    events = relationship(
+        "QuoteJobEvent",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="QuoteJobEvent.event_index",
+    )
+
+
+class QuoteJobEvent(Base):
+    __tablename__ = "quote_job_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    quote_job_id = Column(String(36), ForeignKey("quote_jobs.job_id"), index=True, nullable=False)
+    event_index = Column(Integer, nullable=False)
+    event_type = Column(String(32), index=True, nullable=False)
+    stage = Column(String(64), index=True, nullable=True)
+    message = Column(_long_text(), nullable=True)
+    trace_id = Column(String(64), index=True, nullable=True)
+    payload_json = Column(_long_text(), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    job = relationship("QuoteJob", back_populates="events")

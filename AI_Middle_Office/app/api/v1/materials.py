@@ -3,10 +3,10 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -29,6 +29,24 @@ LEGACY_DATA_FILE = settings.legacy_materials_file
 DATA_FILE = LEGACY_DATA_FILE
 MATERIAL_AUDIT_DIR = LEGACY_DATA_FILE.parent / "materials_audit"
 SNAPSHOT_ID_PATTERN = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{8}$")
+DEFAULT_UNIT = "\u9879"
+DEFAULT_SOURCE = "manual"
+STATUS_ACTIVE = "active"
+STATUS_DRAFT = "draft"
+MATERIAL_DIFF_FIELDS = [
+    "item_name",
+    "unit_price",
+    "unit",
+    "notes",
+    "category",
+    "spec",
+    "brand",
+    "supplier",
+    "region",
+    "source",
+    "status",
+    "is_draft",
+]
 
 class MaterialItem(BaseModel):
     id: str
@@ -37,6 +55,16 @@ class MaterialItem(BaseModel):
     unit: str
     notes: str
     is_draft: Optional[bool] = False
+    category: Optional[str] = None
+    spec: Optional[str] = None
+    brand: Optional[str] = None
+    supplier: Optional[str] = None
+    region: Optional[str] = None
+    source: Optional[str] = None
+    status: Optional[str] = None
+    last_verified_at: Optional[str] = None
+    usage_count: Optional[int] = 0
+    last_used_at: Optional[str] = None
 
 
 def _load_legacy_file_data() -> list[dict]:
@@ -45,6 +73,63 @@ def _load_legacy_file_data() -> list[dict]:
     with LEGACY_DATA_FILE.open("r", encoding="utf-8") as f:
         data = json.load(f)
     return data if isinstance(data, list) else []
+
+
+def _optional_text(value: Any, max_length: int | None = None) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return text[:max_length] if max_length else text
+
+
+def _bool_from_raw(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _int_from_raw(value: Any, default: int = 0) -> int:
+    try:
+        return max(0, int(value or default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    text = _optional_text(value)
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    for parser in (
+        datetime.fromisoformat,
+        lambda raw: datetime.strptime(raw, "%Y-%m-%d %H:%M:%S"),
+        lambda raw: datetime.strptime(raw, "%Y-%m-%d"),
+    ):
+        try:
+            return parser(text)
+        except ValueError:
+            continue
+    return None
+
+
+def _format_datetime(value: Any) -> str | None:
+    if not value:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="seconds")
+    return str(value)
 
 
 def _normalize_material(raw: dict, used_ids: set[str] | None = None) -> dict:
@@ -61,13 +146,29 @@ def _normalize_material(raw: dict, used_ids: set[str] | None = None) -> dict:
     except (TypeError, ValueError):
         unit_price = 0.0
 
+    is_draft = _bool_from_raw(raw.get("is_draft"), False)
+    raw_status = _optional_text(raw.get("status"), 24)
+    status = (raw_status or (STATUS_DRAFT if is_draft else STATUS_ACTIVE)).lower()
+    if status == STATUS_DRAFT:
+        is_draft = True
+
     return {
         "material_id": material_id,
         "item_name": str(raw.get("item_name") or "").strip(),
         "unit_price": unit_price,
-        "unit": str(raw.get("unit") or "项").strip() or "项",
+        "unit": str(raw.get("unit") or DEFAULT_UNIT).strip() or DEFAULT_UNIT,
         "notes": str(raw.get("notes") or ""),
-        "is_draft": bool(raw.get("is_draft", False)),
+        "category": _optional_text(raw.get("category"), 128),
+        "spec": _optional_text(raw.get("spec") or raw.get("specification"), 255),
+        "brand": _optional_text(raw.get("brand"), 128),
+        "supplier": _optional_text(raw.get("supplier"), 128),
+        "region": _optional_text(raw.get("region"), 128),
+        "source": _optional_text(raw.get("source"), 64) or DEFAULT_SOURCE,
+        "status": status,
+        "last_verified_at": _parse_datetime(raw.get("last_verified_at")),
+        "usage_count": _int_from_raw(raw.get("usage_count"), 0),
+        "last_used_at": _parse_datetime(raw.get("last_used_at")),
+        "is_draft": is_draft,
     }
 
 
@@ -86,8 +187,18 @@ def _serialize_material(material: Material) -> dict:
         "id": material.material_id,
         "item_name": material.item_name,
         "unit_price": material.unit_price or 0.0,
-        "unit": material.unit or "项",
+        "unit": material.unit or DEFAULT_UNIT,
         "notes": material.notes or "",
+        "category": material.category,
+        "spec": material.spec,
+        "brand": material.brand,
+        "supplier": material.supplier,
+        "region": material.region,
+        "source": material.source or DEFAULT_SOURCE,
+        "status": material.status or (STATUS_DRAFT if material.is_draft else STATUS_ACTIVE),
+        "last_verified_at": _format_datetime(material.last_verified_at),
+        "usage_count": int(material.usage_count or 0),
+        "last_used_at": _format_datetime(material.last_used_at),
         "is_draft": bool(material.is_draft),
     }
 
@@ -139,8 +250,93 @@ def save_data(data: list[dict], db: Session | None = None) -> None:
             db.close()
 
 
+def _empty_material_diff() -> dict:
+    return {
+        "added_count": 0,
+        "updated_count": 0,
+        "deleted_count": 0,
+        "added": [],
+        "updated": [],
+        "deleted": [],
+    }
+
+
+def _diff_item_summary(item: dict) -> dict:
+    return {
+        "id": item.get("material_id") or item.get("id"),
+        "item_name": item.get("item_name"),
+        "unit_price": item.get("unit_price", 0.0),
+        "unit": item.get("unit") or DEFAULT_UNIT,
+        "status": item.get("status") or (STATUS_DRAFT if item.get("is_draft") else STATUS_ACTIVE),
+    }
+
+
+def _compare_value(item: dict, field: str) -> Any:
+    value = item.get(field)
+    if field == "unit_price":
+        try:
+            return round(float(value or 0.0), 4)
+        except (TypeError, ValueError):
+            return 0.0
+    if field == "is_draft":
+        return _bool_from_raw(value, False)
+    if value is None:
+        return None
+    return str(value).strip()
+
+
+def _diff_changes(before: dict, after: dict) -> list[dict]:
+    changes = []
+    for field in MATERIAL_DIFF_FIELDS:
+        before_value = _compare_value(before, field)
+        after_value = _compare_value(after, field)
+        if before_value != after_value:
+            changes.append({"field": field, "before": before_value, "after": after_value})
+    return changes
+
+
+def build_material_diff(before: list[dict] | None, after: list[dict] | None) -> dict:
+    before_items = _normalize_materials(before or [])
+    after_items = _normalize_materials(after or [])
+    before_map = {item["material_id"]: item for item in before_items}
+    after_map = {item["material_id"]: item for item in after_items}
+
+    added = [_diff_item_summary(after_map[key]) for key in sorted(after_map.keys() - before_map.keys())]
+    deleted = [_diff_item_summary(before_map[key]) for key in sorted(before_map.keys() - after_map.keys())]
+    updated = []
+    for key in sorted(before_map.keys() & after_map.keys()):
+        changes = _diff_changes(before_map[key], after_map[key])
+        if changes:
+            updated.append({**_diff_item_summary(after_map[key]), "changed_fields": changes})
+
+    return {
+        "added_count": len(added),
+        "updated_count": len(updated),
+        "deleted_count": len(deleted),
+        "added": added,
+        "updated": updated,
+        "deleted": deleted,
+    }
+
+
+def _parse_diff_summary(raw: Any) -> dict:
+    if isinstance(raw, dict):
+        diff = raw
+    elif raw:
+        try:
+            diff = json.loads(raw)
+        except Exception:
+            diff = {}
+    else:
+        diff = {}
+    result = _empty_material_diff()
+    result.update({key: diff.get(key, result[key]) for key in result})
+    return result
+
+
 def _snapshot_metadata(snapshot: MaterialSnapshot | dict) -> dict:
     if isinstance(snapshot, dict):
+        diff_summary = _parse_diff_summary(snapshot.get("diff_summary") or snapshot.get("diff_summary_json"))
         return {
             "snapshot_id": snapshot.get("snapshot_id"),
             "created_at": snapshot.get("created_at"),
@@ -148,8 +344,13 @@ def _snapshot_metadata(snapshot: MaterialSnapshot | dict) -> dict:
             "action": snapshot.get("action"),
             "reason": snapshot.get("reason"),
             "item_count": snapshot.get("item_count", 0),
+            "added_count": snapshot.get("added_count", diff_summary["added_count"]),
+            "updated_count": snapshot.get("updated_count", diff_summary["updated_count"]),
+            "deleted_count": snapshot.get("deleted_count", diff_summary["deleted_count"]),
+            "diff_summary": diff_summary,
         }
 
+    diff_summary = _parse_diff_summary(snapshot.diff_summary_json)
     return {
         "snapshot_id": snapshot.snapshot_id,
         "created_at": snapshot.created_at.isoformat(timespec="seconds") if snapshot.created_at else None,
@@ -157,6 +358,10 @@ def _snapshot_metadata(snapshot: MaterialSnapshot | dict) -> dict:
         "action": snapshot.action,
         "reason": snapshot.reason,
         "item_count": snapshot.item_count,
+        "added_count": snapshot.added_count or 0,
+        "updated_count": snapshot.updated_count or 0,
+        "deleted_count": snapshot.deleted_count or 0,
+        "diff_summary": diff_summary,
     }
 
 
@@ -171,19 +376,25 @@ def create_material_snapshot(
     action: str,
     reason: str = "",
     data: Optional[list] = None,
+    compare_to: Optional[list] = None,
     db: Session | None = None,
 ) -> dict:
     owns_session = db is None
     db = db or SessionLocal()
     try:
         snapshot_data = load_data(db) if data is None else data
+        diff_summary = build_material_diff(snapshot_data, compare_to) if compare_to is not None else _empty_material_diff()
         snapshot = MaterialSnapshot(
             snapshot_id=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}",
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             username=username,
             action=action,
             reason=reason,
             item_count=len(snapshot_data),
+            added_count=diff_summary["added_count"],
+            updated_count=diff_summary["updated_count"],
+            deleted_count=diff_summary["deleted_count"],
+            diff_summary_json=json.dumps(diff_summary, ensure_ascii=False),
             data_json=json.dumps(snapshot_data, ensure_ascii=False),
         )
         db.add(snapshot)
@@ -252,14 +463,15 @@ async def save_materials(
     db: Session = Depends(get_db),
 ):
     before_data = load_data(db)
+    data = [item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in items]
     snapshot = create_material_snapshot(
         username=current_user.username,
         action="save_before_overwrite",
         reason="Auto snapshot before saving materials",
         data=before_data,
+        compare_to=data,
         db=db,
     )
-    data = [item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in items]
     save_data(data, db)
     return api_ok({"snapshot": snapshot}, message="保存成功", snapshot=snapshot)
 
@@ -285,6 +497,7 @@ async def rollback_materials(
         username=current_user.username,
         action="rollback_before_restore",
         reason=f"Auto snapshot before rollback to {snapshot_id}",
+        compare_to=snapshot["data"],
         db=db,
     )
     save_data(snapshot["data"], db)
@@ -339,7 +552,7 @@ async def upload_csv_history(
         item_name = row.get("施工项目") or row.get("项目名称") or row.get("item_name") or ""
         unit_price_str = row.get("AI核准单价(元)") or row.get("综合单价(元)") or row.get("单价") or row.get(
             "unit_price") or "0"
-        unit = row.get("单位") or row.get("unit") or "项"
+        unit = row.get("单位") or row.get("unit") or DEFAULT_UNIT
         notes = row.get("规格/工艺/材料说明") or row.get("备注说明") or row.get("备注") or row.get("notes") or ""
 
         item_name = str(item_name).strip()
@@ -367,6 +580,8 @@ async def upload_csv_history(
                 "unit_price": price_val,
                 "unit": unit,
                 "notes": notes,
+                "source": "csv_import",
+                "status": STATUS_DRAFT,
                 "is_draft": True,
             })
 

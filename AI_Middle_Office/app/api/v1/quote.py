@@ -15,12 +15,12 @@ from app.core.database import get_db
 from app.core.logging import get_trace_id, reset_trace_id, set_trace_id
 from app.core.responses import api_ok
 from app.dependencies import get_current_user
-from app.models.quote_history import QuoteHistory
 from app.models.user import User
 from app.schemas.quote import ConfirmPushRequest
 from app.services.excel_service import build_excel_base64
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
 from app.services.quote_feedback import record_ai_preview, record_confirmed_quote
+from app.services.quote_history import create_quote_history_record
 from app.services.quote_helpers import attach_quote_filename, sign_payload
 
 
@@ -199,15 +199,12 @@ async def confirm_and_push(
         if response.status_code == 200:
             quote_history_id = None
             try:
-                details = payload.get("project_details", [])
-                total = sum(float(item.get("total_price", 0)) for item in details)
-                record = QuoteHistory(
+                record = create_quote_history_record(
+                    db,
                     username=current_user.username,
-                    total_amount=round(total, 2),
-                    item_count=len(details),
-                    payload_json=json.dumps(payload, ensure_ascii=False),
+                    payload=payload,
+                    confirmed_by=current_user.username,
                 )
-                db.add(record)
                 db.commit()
                 db.refresh(record)
                 quote_history_id = record.id

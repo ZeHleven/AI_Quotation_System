@@ -47,6 +47,16 @@
       return `${(num * 100).toFixed(1)}%`;
     };
 
+    const changeTypeLabel = (type) => {
+      const map = { added: '\u65b0\u589e', removed: '\u5220\u9664', updated: '\u4fee\u6539' };
+      return map[type] || type || '\u2014';
+    };
+
+    const changeTypeTag = (type) => {
+      const map = { added: 'success', removed: 'danger', updated: 'warning' };
+      return map[type] || 'info';
+    };
+
     const filterParams = () => {
       const params = { days: feedbackDays.value };
       if (feedbackStatus.value) params.status = feedbackStatus.value;
@@ -128,6 +138,8 @@
       feedbackStatusType,
       money,
       percent,
+      changeTypeLabel,
+      changeTypeTag,
     };
   }
 

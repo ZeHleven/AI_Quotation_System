@@ -8,6 +8,15 @@ from app.core.config import settings
 from app.models.material import Material
 
 logger = logging.getLogger(__name__)
+DEFAULT_UNIT = "\u9879"
+
+
+def _format_datetime(value) -> Optional[str]:
+    if not value:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat(timespec="seconds")
+    return str(value)
 
 
 async def sync_materials_to_rag(db: Session, username: str) -> dict:
@@ -19,8 +28,18 @@ async def sync_materials_to_rag(db: Session, username: str) -> dict:
                 "id": m.material_id,
                 "item_name": m.item_name,
                 "unit_price": m.unit_price or 0.0,
-                "unit": m.unit or "项",
+                "unit": m.unit or DEFAULT_UNIT,
                 "notes": m.notes or "",
+                "category": m.category,
+                "spec": m.spec,
+                "brand": m.brand,
+                "supplier": m.supplier,
+                "region": m.region,
+                "source": m.source or "manual",
+                "status": m.status or ("draft" if m.is_draft else "active"),
+                "last_verified_at": _format_datetime(m.last_verified_at),
+                "usage_count": int(m.usage_count or 0),
+                "last_used_at": _format_datetime(m.last_used_at),
                 "is_draft": bool(m.is_draft),
             }
             for m in items

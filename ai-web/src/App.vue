@@ -99,17 +99,17 @@
         <div v-else-if="state.error === 'feature_disabled'" class="center-state">
           <el-icon><DataAnalysis /></el-icon>
           <h2>功能未开启</h2>
-          <p>报价速度看板开关尚未打开。</p>
+          <p>驾驶舱看板开关尚未打开。</p>
         </div>
 
         <template v-else-if="routeName === 'dashboard'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">Phase 1</p>
-              <h2>报价速度看板</h2>
+              <p class="eyebrow">Phase 1-2</p>
+              <h2>效率驾驶舱</h2>
             </div>
             <div class="heading-actions">
-              <el-radio-group v-model="dashboardRange" size="small" @change="loadQuoteDashboard">
+              <el-radio-group v-model="dashboardRange" size="small" @change="loadDashboards">
                 <el-radio-button
                   v-for="option in rangeOptions"
                   :key="option.value"
@@ -118,100 +118,213 @@
                   {{ option.label }}
                 </el-radio-button>
               </el-radio-group>
-              <el-button :icon="Refresh" plain @click="loadQuoteDashboard">刷新</el-button>
+              <el-button :icon="Refresh" plain @click="loadDashboards">刷新</el-button>
             </div>
           </div>
 
-          <el-alert
-            v-if="dashboard?.empty_state"
-            class="dashboard-alert"
-            type="info"
-            show-icon
-            :closable="false"
-            title="暂无数据，数据从当前环境验证后开始统计"
-          />
-          <el-alert
-            v-else-if="dashboard?.low_sample_warning"
-            class="dashboard-alert"
-            type="warning"
-            show-icon
-            :closable="false"
-            title="样本量较少，仅供参考"
-          />
+          <el-tabs v-model="dashboardTab" class="dashboard-tabs">
+            <el-tab-pane label="报价速度" name="quote" :disabled="dashboardFeature.quoteDisabled">
+              <el-alert
+                v-if="dashboardFeature.quoteDisabled"
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="报价速度看板开关尚未打开"
+              />
+              <template v-else>
+                <el-alert
+                  v-if="quoteDashboard?.empty_state"
+                  class="dashboard-alert"
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  title="暂无数据，数据从当前环境验证后开始统计"
+                />
+                <el-alert
+                  v-else-if="quoteDashboard?.low_sample_warning"
+                  class="dashboard-alert"
+                  type="warning"
+                  show-icon
+                  :closable="false"
+                  title="样本量较少，仅供参考"
+                />
 
-          <div class="metric-grid">
-            <div class="metric-card">
-              <span>报价任务</span>
-              <strong>{{ dashboard?.sample_count ?? 0 }}</strong>
-              <small>已完成 {{ dashboard?.completed_count ?? 0 }} · 已确认 {{ dashboard?.confirmed_count ?? 0 }}</small>
-            </div>
-            <div class="metric-card">
-              <span>AI 生成耗时</span>
-              <strong>{{ formatMs(dashboard?.ai_duration_avg_ms) }}</strong>
-              <small>来自成功任务 duration_ms</small>
-            </div>
-            <div class="metric-card">
-              <span>人工确认耗时</span>
-              <strong>{{ formatMs(dashboard?.manual_confirm_duration_avg_ms) }}</strong>
-              <small>AI 完成到确认推送</small>
-            </div>
-            <div class="metric-card">
-              <span>总交付耗时</span>
-              <strong>{{ formatMs(dashboard?.total_delivery_duration_avg_ms) }}</strong>
-              <small>任务创建到确认推送</small>
-            </div>
-            <div class="metric-card">
-              <span>AI 修改率</span>
-              <strong>{{ formatRate(dashboard?.modified_rate) }}</strong>
-              <small>{{ dashboard?.modified_count ?? 0 }} / {{ dashboard?.feedback_sample_count ?? 0 }} 条反馈</small>
-            </div>
-          </div>
-
-          <div class="dashboard-split">
-            <section class="dashboard-section">
-              <div class="section-title">
-                <el-icon><TrendCharts /></el-icon>
-                <span>每日趋势</span>
-              </div>
-              <el-table
-                :data="visibleDailyTrends"
-                row-key="date"
-                class="users-table"
-                empty-text="暂无趋势数据"
-              >
-                <el-table-column prop="date" label="日期" min-width="120" />
-                <el-table-column prop="sample_count" label="任务" width="90" />
-                <el-table-column prop="confirmed_count" label="确认" width="90" />
-                <el-table-column label="AI 耗时" min-width="120">
-                  <template #default="{ row }">{{ formatMs(row.ai_duration_avg_ms) }}</template>
-                </el-table-column>
-                <el-table-column label="总交付" min-width="120">
-                  <template #default="{ row }">{{ formatMs(row.total_delivery_duration_avg_ms) }}</template>
-                </el-table-column>
-                <el-table-column label="修改率" width="100">
-                  <template #default="{ row }">{{ formatRate(row.modified_rate) }}</template>
-                </el-table-column>
-              </el-table>
-            </section>
-
-            <section class="dashboard-section">
-              <div class="section-title">
-                <el-icon><Histogram /></el-icon>
-                <span>状态分布</span>
-              </div>
-              <div class="status-list">
-                <div
-                  v-for="item in dashboard?.status_distribution || []"
-                  :key="item.status"
-                  class="status-row"
-                >
-                  <span>{{ statusLabel(item.status) }}</span>
-                  <strong>{{ item.count }}</strong>
+                <div class="metric-grid">
+                  <div class="metric-card">
+                    <span>报价任务</span>
+                    <strong>{{ quoteDashboard?.sample_count ?? 0 }}</strong>
+                    <small>已完成 {{ quoteDashboard?.completed_count ?? 0 }} · 已确认 {{ quoteDashboard?.confirmed_count ?? 0 }}</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>AI 生成耗时</span>
+                    <strong>{{ formatMs(quoteDashboard?.ai_duration_avg_ms) }}</strong>
+                    <small>来自成功任务 duration_ms</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>人工确认耗时</span>
+                    <strong>{{ formatMs(quoteDashboard?.manual_confirm_duration_avg_ms) }}</strong>
+                    <small>AI 完成到确认推送</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>总交付耗时</span>
+                    <strong>{{ formatMs(quoteDashboard?.total_delivery_duration_avg_ms) }}</strong>
+                    <small>任务创建到确认推送</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>AI 修改率</span>
+                    <strong>{{ formatRate(quoteDashboard?.modified_rate) }}</strong>
+                    <small>{{ quoteDashboard?.modified_count ?? 0 }} / {{ quoteDashboard?.feedback_sample_count ?? 0 }} 条反馈</small>
+                  </div>
                 </div>
-                <el-empty v-if="!dashboard?.status_distribution?.length" description="暂无状态数据" />
-              </div>
-            </section>
-          </div>
+
+                <div class="dashboard-split">
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><TrendCharts /></el-icon>
+                      <span>每日趋势</span>
+                    </div>
+                    <el-table
+                      :data="visibleDailyTrends"
+                      row-key="date"
+                      class="users-table"
+                      empty-text="暂无趋势数据"
+                    >
+                      <el-table-column prop="date" label="日期" min-width="120" />
+                      <el-table-column prop="sample_count" label="任务" width="90" />
+                      <el-table-column prop="confirmed_count" label="确认" width="90" />
+                      <el-table-column label="AI 耗时" min-width="120">
+                        <template #default="{ row }">{{ formatMs(row.ai_duration_avg_ms) }}</template>
+                      </el-table-column>
+                      <el-table-column label="总交付" min-width="120">
+                        <template #default="{ row }">{{ formatMs(row.total_delivery_duration_avg_ms) }}</template>
+                      </el-table-column>
+                      <el-table-column label="修改率" width="100">
+                        <template #default="{ row }">{{ formatRate(row.modified_rate) }}</template>
+                      </el-table-column>
+                    </el-table>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><Histogram /></el-icon>
+                      <span>状态分布</span>
+                    </div>
+                    <div class="status-list">
+                      <div
+                        v-for="item in quoteDashboard?.status_distribution || []"
+                        :key="item.status"
+                        class="status-row"
+                      >
+                        <span>{{ statusLabel(item.status) }}</span>
+                        <strong>{{ item.count }}</strong>
+                      </div>
+                      <el-empty v-if="!quoteDashboard?.status_distribution?.length" description="暂无状态数据" />
+                    </div>
+                  </section>
+                </div>
+              </template>
+            </el-tab-pane>
+
+            <el-tab-pane label="响应速度" name="response" :disabled="dashboardFeature.responseDisabled">
+              <el-alert
+                v-if="dashboardFeature.responseDisabled"
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="响应速度看板开关尚未打开"
+              />
+              <template v-else>
+                <el-alert
+                  v-if="responseDashboard?.empty_state"
+                  class="dashboard-alert"
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  title="暂无数据，数据从当前环境验证后开始统计"
+                />
+                <el-alert
+                  v-else-if="responseDashboard?.low_sample_warning"
+                  class="dashboard-alert"
+                  type="warning"
+                  show-icon
+                  :closable="false"
+                  title="样本量较少，仅供参考"
+                />
+
+                <div class="metric-grid response-grid">
+                  <div class="metric-card">
+                    <span>咨询样本</span>
+                    <strong>{{ responseDashboard?.sample_count_total ?? 0 }}</strong>
+                    <small>纳入均值 {{ responseDashboard?.sample_count_in_avg ?? 0 }}</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>平均首次响应</span>
+                    <strong>{{ formatMinutes(responseDashboard?.avg_first_response_minutes) }}</strong>
+                    <small>默认时间样本不纳入均值</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>SLA 达标率</span>
+                    <strong>{{ formatRate(responseDashboard?.sla_pass_rate) }}</strong>
+                    <small>阈值 {{ responseDashboard?.sla_minutes ?? '-' }} 分钟</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>排除默认时间</span>
+                    <strong>{{ responseDashboard?.sample_count_excluded_default_time ?? 0 }}</strong>
+                    <small>仅计数量，不计平均响应</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>超过 SLA</span>
+                    <strong>{{ responseDashboard?.overdue_count ?? 0 }}</strong>
+                    <small>仅统计可信时间样本</small>
+                  </div>
+                </div>
+
+                <div class="dashboard-split">
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><TrendCharts /></el-icon>
+                      <span>来源分布</span>
+                    </div>
+                    <el-table
+                      :data="visibleResponseSources"
+                      row-key="source"
+                      class="users-table"
+                      empty-text="暂无来源数据"
+                    >
+                      <el-table-column prop="source" label="来源" min-width="120" />
+                      <el-table-column prop="sample_count_total" label="咨询" width="90" />
+                      <el-table-column prop="sample_count_in_avg" label="入均值" width="90" />
+                      <el-table-column prop="sample_count_excluded_default_time" label="排除" width="90" />
+                      <el-table-column label="平均响应" min-width="120">
+                        <template #default="{ row }">{{ formatMinutes(row.avg_first_response_minutes) }}</template>
+                      </el-table-column>
+                    </el-table>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><Histogram /></el-icon>
+                      <span>响应人员</span>
+                    </div>
+                    <div class="status-list">
+                      <div
+                        v-for="item in visibleResponseResponders"
+                        :key="item.username"
+                        class="status-row stacked"
+                      >
+                        <span>{{ item.username }}</span>
+                        <strong>{{ formatMinutes(item.avg_first_response_minutes) }}</strong>
+                        <small>{{ item.sample_count_in_avg }} / {{ item.sample_count_total }} 条可信样本</small>
+                      </div>
+                      <el-empty v-if="!visibleResponseResponders.length" description="暂无人员数据" />
+                    </div>
+                  </section>
+                </div>
+              </template>
+            </el-tab-pane>
+          </el-tabs>
         </template>
 
         <template v-else>
@@ -427,8 +540,11 @@ const loginForm = reactive({ username: '', password: '' })
 const session = reactive({ user: null })
 const users = ref([])
 const roleEvents = ref([])
-const dashboard = ref(null)
+const quoteDashboard = ref(null)
+const responseDashboard = ref(null)
 const dashboardRange = ref('last_30_days')
+const dashboardTab = ref('quote')
+const dashboardFeature = reactive({ quoteDisabled: false, responseDisabled: false })
 const state = reactive({ loading: false, submitting: false, error: '' })
 const routeName = ref(routeFromPath(window.location.pathname))
 
@@ -452,7 +568,9 @@ const canAccessPermissions = computed(() => roles.value.includes('system_admin')
 const canViewDashboard = computed(() => canAccessPermissions.value || roles.value.includes('viewer'))
 const canOpenLegacyQuote = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
-const visibleDailyTrends = computed(() => (dashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
+const visibleDailyTrends = computed(() => (quoteDashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
+const visibleResponseSources = computed(() => (responseDashboard.value?.by_source || []).slice(0, 12))
+const visibleResponseResponders = computed(() => (responseDashboard.value?.by_responder || []).slice(0, 12))
 
 function routeFromPath(path) {
   if (path === '/login') return 'login'
@@ -509,6 +627,12 @@ function formatMs(value) {
 function formatRate(value) {
   if (value === null || value === undefined) return '-'
   return `${(value * 100).toFixed(1)}%`
+}
+
+function formatMinutes(value) {
+  if (value === null || value === undefined) return '-'
+  if (value < 60) return `${value.toFixed(1)} 分钟`
+  return `${(value / 60).toFixed(1)} 小时`
 }
 
 function statusLabel(status) {
@@ -575,18 +699,54 @@ async function loadUsers() {
   }
 }
 
-async function loadQuoteDashboard() {
+function isFeatureDisabled(error) {
+  return error.response?.data?.detail === 'FEATURE_DISABLED'
+}
+
+async function loadDashboards() {
   state.loading = true
   state.error = ''
+  dashboardFeature.quoteDisabled = false
+  dashboardFeature.responseDisabled = false
+  let loadedCount = 0
   try {
-    const response = await api.get('/admin/dashboard/quote-speed', {
-      params: { range: dashboardRange.value },
-    })
-    dashboard.value = responseData(response)
+    try {
+      const response = await api.get('/admin/dashboard/quote-speed', {
+        params: { range: dashboardRange.value },
+      })
+      quoteDashboard.value = responseData(response)
+      loadedCount += 1
+    } catch (error) {
+      quoteDashboard.value = null
+      if (isFeatureDisabled(error)) dashboardFeature.quoteDisabled = true
+      else throw error
+    }
+
+    try {
+      const response = await api.get('/admin/dashboard/response-speed', {
+        params: { range: dashboardRange.value },
+      })
+      responseDashboard.value = responseData(response)
+      loadedCount += 1
+    } catch (error) {
+      responseDashboard.value = null
+      if (isFeatureDisabled(error)) dashboardFeature.responseDisabled = true
+      else throw error
+    }
+
+    if (loadedCount === 0) {
+      state.error = 'feature_disabled'
+      return
+    }
+    if (dashboardTab.value === 'quote' && dashboardFeature.quoteDisabled) {
+      dashboardTab.value = 'response'
+    } else if (dashboardTab.value === 'response' && dashboardFeature.responseDisabled) {
+      dashboardTab.value = 'quote'
+    }
   } catch (error) {
-    dashboard.value = null
+    quoteDashboard.value = null
+    responseDashboard.value = null
     if (error.response?.status === 401) state.error = 'unauthorized'
-    else if (error.response?.data?.detail === 'FEATURE_DISABLED') state.error = 'feature_disabled'
     else if (error.response?.status === 403) state.error = 'forbidden'
     else ElMessage.error(apiErrorMessage(error, '看板加载失败'))
   } finally {
@@ -605,7 +765,7 @@ async function bootstrap() {
         state.error = 'forbidden'
         return
       }
-      await loadQuoteDashboard()
+      await loadDashboards()
       return
     }
     if (!canAccessPermissions.value) {

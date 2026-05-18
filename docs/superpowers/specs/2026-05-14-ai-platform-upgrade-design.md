@@ -1,7 +1,7 @@
 # 旗胜 AI 平台架构升级路线
 > 创建日期：2026-05-14
-> 最后更新：2026-05-18（Phase 0 开发与当前环境验证完成；Phase 1 当前环境运行态验收完成）
-> 状态：Phase 0 当前环境验证完成，正式生产上线待单独 Runbook；Phase 1 报价速度看板当前环境运行态验收已完成，历史成功任务耗时已备份后回填
+> 最后更新：2026-05-18（Phase 0 开发与当前环境验证完成；Phase 1 当前环境运行态验收完成；Phase 2 当前环境运行态验收完成）
+> 状态：Phase 0 当前环境验证完成；Phase 1 报价速度看板当前环境运行态验收已完成；Phase 2 响应速度追踪当前环境运行态验收已完成。系统完善前不正式投入生产使用，正式生产 Runbook 推迟到平台能力完整后统一准备。
 > 负责人：待定
 
 ---
@@ -27,7 +27,7 @@
 | 响应快 | 客户咨询到有人接单的时长 | ClientInquiry |
 | 执行快 | 会议决定到任务落地的时长 | ExecutionTask |
 
-部署边界：当前只服务旗胜一家企业，暂不引入 `tenant_id`。但公司名称、钉钉 Webhook、模型开关、SLA 阈值、经营数据模板等不得硬编码，应放入 `.env` 或后续配置表。
+部署边界：当前只服务旗胜一家企业，暂不引入 `tenant_id`。但公司名称、钉钉 Webhook、模型开关、SLA 阈值、经营数据模板等不得硬编码，应放入 `.env` 或后续配置表。系统完善前只按内网开发/验证推进，不正式投入生产使用；正式生产准备在 Phase 0-6 主要能力完成后统一 Runbook 化。
 
 公网边界：系统未来可能公网访问。公网入口启用前必须通过安全门槛，详见 [ADR-RBAC.md](ADR-RBAC.md)。
 
@@ -180,7 +180,7 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 - `/login`、`/admin/permissions`、`/admin/dashboard`、`/index.html`、`/admin.html`、`/app.html` 当前环境冒烟均返回 200。
 - 当前环境 `FEATURE_VITE_FRONTEND=true` 已打开，`PUBLIC_ACCESS_ENABLED=false` 保持关闭。
 - 正式生产上线尚未发生，未来需要单独 Runbook。
-- Phase 1 报价速度看板未在 Phase 0 启动，已在后续 Phase 1 完成代码层交付；Phase 2+ 的响应追踪、执行任务、经营驾驶舱仍未启动。
+- Phase 1 报价速度看板未在 Phase 0 启动，已在后续 Phase 1 完成运行态验收；Phase 2 响应追踪已在后续完成代码层交付；Phase 3+ 的执行任务、经营驾驶舱仍未启动。
 
 ### 阶段 1｜报价速度看板（✅ 当前环境运行态验收完成）
 
@@ -204,11 +204,11 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 - `quote_job_runner` 已改为基于 `time.perf_counter()` 写入单次报价运行实测 `duration_ms`，避免成功任务显示 0 秒。
 - 已新增 `scripts/diagnose_quote_job_durations.py`，支持只读诊断和显式 `--apply` 回填；历史 121 条成功任务的 `duration_ms=0` 已在 `C:\AI_Backups\20260517_205242\db\ai_quotation.sql` 备份后完成回填。
 - 报价速度聚合层已对旧数据中 `finished_at` 比 `created_at` 早 8 小时的记录做只读展示校正，避免人工确认耗时被系统时区差放大。
-- 自动化验证已通过：`python -m compileall app scripts`、`python -m pytest`（80 passed）和 `npm.cmd run build`。
+- 自动化验证已通过：`python -m compileall app scripts`、`python -m pytest`（85 passed）和 `npm.cmd run build`。
 - 当前环境运行态验收已通过：`/admin/dashboard` 页面无 404 / 403 / 控制台接口错误，三类耗时显示正常，新增真实报价任务已进入统计且 AI 生成耗时大于 0。
-- 未迁移旧 `index.html` / `admin.html` 业务功能，未开始 Phase 2+。
+- 未迁移旧 `index.html` / `admin.html` 业务功能；Phase 2 已在后续完成代码层交付，Phase 3+ 未启动。
 
-### 阶段 2｜响应速度追踪
+### 阶段 2｜响应速度追踪（✅ 当前环境运行态验收完成）
 
 新增 `client_inquiries`，但不建设独立线索系统。报价任务创建时可填写来源渠道 / 客户信息，并自动生成 ClientInquiry。
 
@@ -225,6 +225,19 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 - `integration`：未来由钉钉 / 微信等集成回填
 
 报价重试必须继承原 `client_inquiry_id`、`inquiry_time` 和 `time_source`，不得重置响应耗时。
+
+完成记录（当前环境运行态验收，非正式生产上线）：
+
+- 已新增 Alembic `20260514_0012`，创建 `client_inquiries` 并为 `quote_jobs` 增加 `client_inquiry_id`。
+- 已新增 `FEATURE_CLIENT_INQUIRY`、`FEATURE_DASHBOARD_RESPONSE` 和 `RESPONSE_SLA_MINUTES`，默认关闭。
+- 已在 `POST /api/v1/quote/jobs` 接入可选咨询字段；开关关闭时保持旧行为，不写咨询记录。
+- 已新增 `GET /api/v1/client-inquiries` 和 `PATCH /api/v1/client-inquiries/{id}`；staff / manager 仅能查看和修正自己的咨询记录，admin / system_admin 可查看全部。
+- 已新增 `GET /api/v1/admin/dashboard/response-speed`，默认时间样本只计数量、不计入平均首次响应耗时。
+- 已在 `/admin/dashboard` 接入“响应速度”标签页，与报价速度共用时间范围控件；所有看板开关关闭时仍显示“功能未开启”。
+- 自动化验证已通过：`python -m alembic heads` 显示 `20260514_0012 (head)`，`python -m compileall app scripts`、`python -m pytest`（更新后 86 passed）和 `npm.cmd run build` 均通过。
+- 当前环境 Alembic 已升级到 `20260514_0012 (head)`，`FEATURE_CLIENT_INQUIRY=true`、`FEATURE_DASHBOARD_RESPONSE=true`、`PUBLIC_ACCESS_ENABLED=false`；内网 smoke 已创建带 `inquiry_time` 的报价任务并在响应速度看板展示 1 条样本，平均首次响应 15 分钟、SLA 达标率 100%。
+- 已修复 Celery worker 单独启动时未加载 `client_inquiries` 元数据导致 Phase 2 报价任务停留 `queued` 的问题；`scripts/phase2_response_smoke.ps1` 使用 Windows `China Standard Time` 生成测试询价时间，避免本机时区造成响应耗时偏差。
+- 系统完善前不正式投入生产使用，正式生产启用待统一 Runbook。
 
 ### 阶段 3｜执行速度追踪
 
@@ -352,6 +365,7 @@ FEATURE_DASHBOARD_RESPONSE=false
 FEATURE_DASHBOARD_EXECUTION=false
 FEATURE_DASHBOARD_BUSINESS=false
 FEATURE_CLIENT_INQUIRY=false
+RESPONSE_SLA_MINUTES=30
 FEATURE_EXECUTION=false
 FEATURE_MEETING_AI=false
 FEATURE_AUDIO_TRANSCRIPTION=false
@@ -414,9 +428,9 @@ AI_RAW_LOG_MAX_RETENTION_DAYS=30
 
 | 阶段 | 完成定义 |
 |------|---------|
-| 阶段 0 | 已完成当前环境验证：登录、Vite fallback、RBAC、`role_version`、权限管理页面、公网安全门槛清单可验收；正式生产上线待单独 Runbook |
-| 阶段 1 | 已完成当前环境运行态验收：报价速度接口有数据，三类耗时分区展示，新增真实报价任务可进入统计；正式生产启用待单独 Runbook |
-| 阶段 2 | 创建报价自动生成 ClientInquiry，响应看板标注统计边界、起始日期、样本量和低可信数据排除规则 |
+| 阶段 0 | 已完成当前环境验证：登录、Vite fallback、RBAC、`role_version`、权限管理页面、公网安全门槛清单可验收；正式生产准备推迟到系统整体完善后统一处理 |
+| 阶段 1 | 已完成当前环境运行态验收：报价速度接口有数据，三类耗时分区展示，新增真实报价任务可进入统计；正式生产准备推迟到系统整体完善后统一处理 |
+| 阶段 2 | 已完成当前环境运行态验收：创建报价可自动生成 ClientInquiry，响应看板标注统计边界、样本量和低可信数据排除规则，内网 smoke 可展示 15 分钟响应样本；正式生产准备推迟到系统整体完善后统一处理 |
 | 阶段 3 | ExecutionTask 可创建、分配、完成、取消；逾期动态计算；Celery beat 开机自启和健康检查可用 |
 | 阶段 4a | 纪要生成草稿，人工确认后写入 ExecutionTask，AI 失败可降级手动添加 |
 | 阶段 4b | 上传音频后返回转写文本，并自动进入任务草稿流程；精度评测达标 |
@@ -516,3 +530,5 @@ AI_RAW_LOG_MAX_RETENTION_DAYS=30
 | 2026-05-18 | v38：完成 Phase 1 报价速度看板代码层交付，新增 `FEATURE_DASHBOARD_QUOTE`、`/api/v1/admin/dashboard/quote-speed`、`/admin/dashboard` 看板视图与自动化测试；`compileall`、全量 `pytest` 和 Vite build 通过；正式生产启用仍待单独 Runbook | Codex |
 | 2026-05-18 | v39：修复 Phase 1 报价耗时口径，worker 改为写入实测 `duration_ms`，历史 121 条成功任务 0 耗时已在当前数据库备份后回填，聚合层只读校正旧 `finished_at` 时区偏移；全量 `pytest` 更新为 80 passed | Codex |
 | 2026-05-18 | v40：记录 Phase 1 当前环境运行态验收通过，`/admin/dashboard` 页面、看板数据和新增真实报价统计均正常；正式生产启用仍待单独 Runbook，Phase 2+ 未启动 | Codex |
+| 2026-05-18 | v41：记录系统完善前不正式投入生产使用；完成 Phase 2 响应速度追踪代码层，新增 `client_inquiries`、`quote_jobs.client_inquiry_id`、咨询查询/修正接口、响应速度聚合接口、`FEATURE_CLIENT_INQUIRY` / `FEATURE_DASHBOARD_RESPONSE` 和 Vite 响应速度标签页；当前环境 Alembic 已升级到 `20260514_0012 (head)`，`pytest` 更新为 85 passed，Phase 3+ 未启动 | Codex |
+| 2026-05-18 | v42：完成 Phase 2 当前环境运行态验收，功能开关已在内网环境打开且 `PUBLIC_ACCESS_ENABLED=false`；修复 Celery worker 缺少 `ClientInquiry` 元数据导入导致测试任务卡在 `queued` 的问题；新增 `scripts/phase2_response_smoke.ps1`，按中国时区生成验收样本，响应速度看板已显示 1 条样本、平均首次响应 15 分钟；`pytest` 更新为 86 passed，Phase 3+ 未启动 | Codex |

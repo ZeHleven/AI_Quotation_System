@@ -34,9 +34,11 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - 当前后端优化状态：基础设施 P0-P3 与配置收尾已完成并冻结；业务优化 P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理和 P4 真实用户体验优化已落地到代码层。
 - AI 平台架构升级 Phase 0 已完成开发与当前环境验证（2026-05-18）：RBAC、`role_version`、Vite 壳、`/login`、`/admin/permissions`、SPA fallback 已通过；旧 `index.html` / `admin.html` / `app.html` 保留。正式生产上线尚未发生，未来需单独 Runbook。
 - AI 平台架构升级 Phase 1 报价速度看板已完成当前环境运行态验收（2026-05-18）：新增 `FEATURE_DASHBOARD_QUOTE`、`/api/v1/admin/dashboard/quote-speed` 和 `/admin/dashboard` 看板视图；已修复新报价任务 `duration_ms` 实测写入，并在备份后回填历史 121 条成功任务的 0 耗时记录；页面、看板数据和新增真实报价统计均已确认正常，正式生产启用待单独 Runbook。
+- AI 平台架构升级 Phase 2 响应速度追踪已完成当前环境运行态验收（2026-05-18）：新增 `FEATURE_CLIENT_INQUIRY`、`FEATURE_DASHBOARD_RESPONSE`、`client_inquiries`、报价任务咨询关联、咨询查询/修正接口和 `/admin/dashboard` 响应速度标签页；当前环境 Alembic 已升级到 `20260514_0012 (head)`，功能开关已打开且 `PUBLIC_ACCESS_ENABLED=false`；内网 smoke 已展示 1 条可信响应样本，平均首次响应 15 分钟，Celery worker Phase 2 元数据加载问题已修复。
+- 产品边界：系统完善前不正式投入生产使用；后续阶段先按内网开发/验证推进，最后统一准备正式生产 Runbook。
 - 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
-- 当前数据库迁移 head：`20260514_0011`；生产数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归、知识候选记录和 Phase 0 RBAC。
-- 最新验证（2026-05-18，Phase 1 当前环境运行态）：`/health/ready`、`/login`、`/admin/permissions`、`/admin/dashboard`、`/index.html`、`/admin.html`、`/app.html` 当前环境冒烟通过；`/admin/dashboard` 页面、看板数据和新增真实报价统计均已手工确认正常；`python -m compileall app scripts` 通过；`python -m pytest` 为 `80 passed`；`npm.cmd run build` 通过。
+- 当前数据库迁移 head：`20260514_0012`；内网验证数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归、知识候选记录、Phase 0 RBAC 和 Phase 2 响应速度追踪。
+- 最新验证（2026-05-18，Phase 2 当前环境运行态）：当前环境 Alembic 已升级到 `20260514_0012 (head)`；`FEATURE_CLIENT_INQUIRY=true`、`FEATURE_DASHBOARD_RESPONSE=true`、`PUBLIC_ACCESS_ENABLED=false`；响应速度看板已展示 1 条可信样本，平均首次响应 15 分钟、SLA 达标率 100%；`scripts/phase2_response_smoke.ps1` 已固化中国时区测试造数；`python -m alembic heads` 显示 `20260514_0012 (head)`；`python -m compileall app scripts` 通过；`python -m pytest` 为 `86 passed`；`npm.cmd run build` 通过。
 
 ## 关键模块
 

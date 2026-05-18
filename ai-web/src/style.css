@@ -235,11 +235,19 @@ textarea {
   margin-bottom: 16px;
 }
 
+.dashboard-tabs {
+  min-width: 0;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.response-grid {
+  margin-top: 4px;
 }
 
 .metric-card {
@@ -306,6 +314,18 @@ textarea {
   background: #ffffff;
   border: 1px solid #d9e0ea;
   border-radius: 8px;
+}
+
+.status-row.stacked {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.status-row.stacked small {
+  grid-column: 1 / -1;
+  color: #667085;
+  line-height: 1.4;
 }
 
 .status-row span {

@@ -75,6 +75,9 @@ class Settings:
     system_admin_username: str = _env("SYSTEM_ADMIN_USERNAME", "admin")
     feature_vite_frontend: bool = _env_bool("FEATURE_VITE_FRONTEND", False)
     feature_dashboard_quote: bool = _env_bool("FEATURE_DASHBOARD_QUOTE", False)
+    feature_client_inquiry: bool = _env_bool("FEATURE_CLIENT_INQUIRY", False)
+    feature_dashboard_response: bool = _env_bool("FEATURE_DASHBOARD_RESPONSE", False)
+    response_sla_minutes: int = _env_int("RESPONSE_SLA_MINUTES", 30)
     public_access_enabled: bool = _env_bool("PUBLIC_ACCESS_ENABLED", False)
 
     zhipu_api_key: str = _env("ZHIPU_API_KEY")

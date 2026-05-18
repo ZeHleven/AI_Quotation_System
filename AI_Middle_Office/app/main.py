@@ -19,6 +19,7 @@ settings.apply_proxy_env()
 
 from app.api.v1 import (
     auth,
+    client_inquiries,
     dashboard,
     files,
     history,
@@ -40,6 +41,7 @@ from app.models import rag_eval_report  # noqa: F401 — 触发 rag_eval_reports
 from app.models import quote_feedback as quote_feedback_model  # noqa: F401 — 触发报价反馈表建表
 from app.models import prompt_regression as prompt_regression_model  # noqa: F401 — 触发 Prompt 回归表建表
 from app.models import knowledge_candidate as knowledge_candidate_model  # noqa: F401 — 触发知识候选表建表
+from app.models import client_inquiry as client_inquiry_model  # noqa: F401 — 触发客户咨询表建表
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -157,6 +159,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
+app.include_router(client_inquiries.router, prefix="/api/v1", tags=["Client Inquiries"])
 app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
 app.include_router(users.router, prefix="/api/v1", tags=["Users"])

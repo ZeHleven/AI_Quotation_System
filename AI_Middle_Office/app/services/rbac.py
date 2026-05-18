@@ -123,12 +123,16 @@ def get_available_modules(user: User) -> list[dict]:
             }
         )
     if {"system_admin", "admin", "viewer"} & roles:
+        dashboard_enabled = (
+            settings.feature_dashboard_quote
+            or settings.feature_dashboard_response
+        )
         modules.append(
             {
                 "key": "dashboards",
                 "name": "效率与经营驾驶舱",
                 "path": "/admin/dashboard",
-                "status": "available" if settings.feature_dashboard_quote else "pending",
+                "status": "available" if dashboard_enabled else "pending",
             }
         )
     return modules

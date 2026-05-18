@@ -19,6 +19,7 @@ from app.models.file_object import FileObject
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
 from app.services.file_storage import StorageDisabledError, store_file_bytes
+from app.services.client_inquiries import create_or_reuse_client_inquiry
 from app.services.quote_dispatcher import dispatch_quote_job
 from app.services.rbac import has_admin_role
 from app.services.quote_job_readability import (
@@ -75,6 +76,7 @@ def _serialize_job(job: QuoteJob, include_events: bool = True, include_result: b
         ],
         "duration_ms": job.duration_ms,
         "failure_stage": job.failure_stage,
+        "client_inquiry_id": job.client_inquiry_id,
         "created_at": _format_dt(job.created_at),
         "updated_at": _format_dt(job.updated_at),
         "finished_at": _format_dt(job.finished_at),
@@ -175,6 +177,13 @@ async def _persist_quote_attachment(
 async def create_quote_job(
     message: str = Form(None),
     file: UploadFile = File(None),
+    client_inquiry_id: Optional[str] = Form(None),
+    source: Optional[str] = Form(None),
+    client_name: Optional[str] = Form(None),
+    client_phone: Optional[str] = Form(None),
+    inquiry_time: Optional[str] = Form(None),
+    time_source: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -192,6 +201,20 @@ async def create_quote_job(
             db=db,
         )
 
+    inquiry = None
+    if settings.feature_client_inquiry:
+        inquiry = create_or_reuse_client_inquiry(
+            db,
+            current_user=current_user,
+            client_inquiry_id=client_inquiry_id,
+            source=source,
+            client_name=client_name,
+            client_phone=client_phone,
+            inquiry_time=inquiry_time,
+            time_source=time_source,
+            notes=notes,
+        )
+
     job = QuoteJob(
         job_id=str(uuid.uuid4()),
         username=current_user.username,
@@ -202,8 +225,11 @@ async def create_quote_job(
         file_mime_type=file.content_type if file else None,
         file_object_id=file_object_id,
         file_base64=file_base64,
+        client_inquiry_id=inquiry.inquiry_id if inquiry else None,
         trace_id=get_trace_id() or uuid.uuid4().hex,
     )
+    if inquiry and not inquiry.first_quote_job_id:
+        inquiry.first_quote_job_id = job.job_id
     apply_job_request_summary(job)
     append_job_event(job, "queued", "报价任务已进入队列", trace_id=job.trace_id, stage="queued")
     db.add(job)
@@ -313,6 +339,7 @@ async def retry_quote_job(
         file_mime_type=source_job.file_mime_type,
         file_object_id=source_job.file_object_id,
         file_base64=source_job.file_base64,
+        client_inquiry_id=source_job.client_inquiry_id,
         trace_id=get_trace_id() or uuid.uuid4().hex,
     )
     apply_job_request_summary(retry_job)

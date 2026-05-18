@@ -12,6 +12,7 @@ import httpx
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.logging import reset_trace_id, set_trace_id
+from app.models.client_inquiry import ClientInquiry  # noqa: F401 - load FK metadata for Celery workers
 from app.models.file_object import FileObject
 from app.models.quote_job import QuoteJob
 from app.models.user import User

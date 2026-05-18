@@ -1,6 +1,6 @@
 # API-CONTRACTS｜升级路线新增接口契约骨架
 > 创建日期：2026-05-15
-> 状态：Phase 0 接口已完成当前环境验证；Phase 1 报价速度看板代码层已完成，正式生产上线待单独 Runbook
+> 状态：Phase 0 接口已完成当前环境验证；Phase 1 报价速度看板已完成当前环境运行态验收；Phase 2 响应速度接口已完成当前环境运行态验收。系统完善前不正式投入生产使用。
 > 关联主文档：[2026-05-14-ai-platform-upgrade-design.md](2026-05-14-ai-platform-upgrade-design.md)
 
 ## 目标
@@ -140,7 +140,7 @@ Phase 1 已补齐 `quote-speed` 响应 Schema：
 - `empty_state`
 - `low_sample_warning`
 
-## 阶段 2：响应速度
+## 阶段 2：响应速度（✅ 当前环境运行态验收通过）
 
 | 接口 | 方法 | 权限 | 功能开关 | 说明 |
 |------|------|------|----------|------|
@@ -153,7 +153,7 @@ Phase 1 已补齐 `quote-speed` 响应 Schema：
 
 `QuoteJob` 重试时继承原 `client_inquiry_id`、`inquiry_time`、`time_source` 和来源字段，不创建新的 `ClientInquiry`。
 
-Phase 2 开工前必须补齐字段级 Schema：
+Phase 2 字段级 Schema 已补齐到代码层：
 
 `POST /api/v1/quote/jobs` 可选咨询字段：
 
@@ -199,6 +199,16 @@ Phase 2 开工前必须补齐字段级 Schema：
 - `overdue_count`
 - `empty_state`
 - `low_sample_warning`
+
+当前实现说明：
+
+- `time_source='default'` 的样本只计入 `sample_count_total` 和 `sample_count_excluded_default_time`，不计入 `avg_first_response_minutes`。
+- `RESPONSE_SLA_MINUTES` 控制 SLA 阈值，默认 30 分钟。
+- `POST /api/v1/quote/jobs` 在 `FEATURE_CLIENT_INQUIRY=false` 时保持旧行为，不写 `ClientInquiry`。
+- `QuoteJob` 重试继承原 `client_inquiry_id`。
+- 内网 smoke 脚本：`scripts/phase2_response_smoke.ps1` 使用 Windows `China Standard Time` 生成 `inquiry_time`，避免本机时区导致响应耗时偏差。
+- 当前环境运行态验证：`FEATURE_CLIENT_INQUIRY=true`、`FEATURE_DASHBOARD_RESPONSE=true`、`PUBLIC_ACCESS_ENABLED=false`；响应速度看板已展示 1 条可信样本，平均首次响应 15 分钟，SLA 达标率 100%。
+- 自动化验证：`python -m pytest` 为 `86 passed`，`npm.cmd run build` 通过。
 
 ## 阶段 3：执行任务
 

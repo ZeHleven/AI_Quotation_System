@@ -293,7 +293,7 @@
                       class="users-table"
                       empty-text="暂无来源数据"
                     >
-                      <el-table-column prop="source" label="客户来源" min-width="120" />
+                      <el-table-column prop="source" label="需求来源" min-width="120" />
                       <el-table-column prop="sample_count_total" label="咨询" width="90" />
                       <el-table-column prop="sample_count_in_avg" label="计入均值" width="100" />
                       <el-table-column prop="sample_count_excluded_default_time" label="默认时间排除" width="130" />

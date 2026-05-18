@@ -1043,6 +1043,11 @@
           }
         };
 
+        const getDefaultClientName = () => {
+          const sysUser = getUserInfo();
+          return currentUser.value || sysUser?.username || 'admin';
+        };
+
         const refreshQuoteJob = async (msg, msgIndex) => {
           if (!msg.jobId) return;
           checkingJobId.value = msg.jobId;
@@ -1087,6 +1092,7 @@
           if (text) formData.append('message', text);
           if (selectedFile.value) formData.append('file', selectedFile.value);
           formData.append('source', '系统提交');
+          formData.append('client_name', getDefaultClientName());
           formData.append('inquiry_time', formatShanghaiNow());
           formData.append('time_source', 'manual');
 

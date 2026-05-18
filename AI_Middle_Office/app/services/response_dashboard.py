@@ -80,7 +80,7 @@ def _rate(numerator: int, denominator: int) -> float:
 
 
 def _source_label(value: str | None) -> str:
-    return value or "未填写"
+    return value or "未标注来源"
 
 
 def _group_summary(items: list[ClientInquiry], durations: dict[str, float], *, key_fn) -> list[dict]:

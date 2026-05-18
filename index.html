@@ -1022,6 +1022,27 @@
           }
         };
 
+        const formatShanghaiNow = () => {
+          try {
+            const parts = new Intl.DateTimeFormat('en-US', {
+              timeZone: 'Asia/Shanghai',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hourCycle: 'h23'
+            }).formatToParts(new Date()).reduce((acc, part) => {
+              acc[part.type] = part.value;
+              return acc;
+            }, {});
+            return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+          } catch (error) {
+            return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19);
+          }
+        };
+
         const refreshQuoteJob = async (msg, msgIndex) => {
           if (!msg.jobId) return;
           checkingJobId.value = msg.jobId;
@@ -1065,6 +1086,9 @@
           const formData = new FormData();
           if (text) formData.append('message', text);
           if (selectedFile.value) formData.append('file', selectedFile.value);
+          formData.append('source', '系统提交');
+          formData.append('inquiry_time', formatShanghaiNow());
+          formData.append('time_source', 'manual');
 
           const userMsg = { role: 'user', content: text || '发起多模态文件解析请求' };
           if (selectedFile.value && selectedFile.value.type.startsWith('image/'))

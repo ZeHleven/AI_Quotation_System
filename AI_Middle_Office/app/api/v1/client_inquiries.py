@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -57,6 +58,8 @@ async def list_client_inquiries(
     responder_id: Optional[int] = None,
     time_source: Optional[str] = None,
     has_quote_job: Optional[bool] = None,
+    has_client_info: Optional[bool] = None,
+    sort: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
@@ -85,14 +88,27 @@ async def list_client_inquiries(
     if has_quote_job is not None:
         job_inquiries = db.query(QuoteJob.client_inquiry_id).filter(QuoteJob.client_inquiry_id.isnot(None))
         query = query.filter(ClientInquiry.inquiry_id.in_(job_inquiries) if has_quote_job else ~ClientInquiry.inquiry_id.in_(job_inquiries))
+    if has_client_info is True:
+        query = query.filter(
+            or_(
+                ClientInquiry.source.isnot(None),
+                ClientInquiry.client_name.isnot(None),
+                ClientInquiry.client_phone.isnot(None),
+            )
+        )
+    elif has_client_info is False:
+        query = query.filter(
+            ClientInquiry.source.is_(None),
+            ClientInquiry.client_name.is_(None),
+            ClientInquiry.client_phone.is_(None),
+        )
 
     total = query.count()
-    inquiries = (
-        query.order_by(ClientInquiry.inquiry_time.desc(), ClientInquiry.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    if sort == "created_at_desc":
+        query = query.order_by(ClientInquiry.created_at.desc(), ClientInquiry.id.desc())
+    else:
+        query = query.order_by(ClientInquiry.inquiry_time.desc(), ClientInquiry.id.desc())
+    inquiries = query.offset((page - 1) * page_size).limit(page_size).all()
     counts = count_quote_jobs_by_inquiry(db, [item.inquiry_id for item in inquiries])
     return api_page(
         [serialize_client_inquiry(item, counts.get(item.inquiry_id, 0)) for item in inquiries],

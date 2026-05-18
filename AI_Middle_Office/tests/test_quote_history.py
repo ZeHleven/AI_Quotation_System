@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
+from app.models.client_inquiry import ClientInquiry
 from app.models.quote_history import QuoteHistory, QuoteHistoryItem
 from app.models.quote_job import QuoteJob
 from app.models.user import User
@@ -65,6 +66,28 @@ def _create_job(username: str) -> QuoteJob:
 def test_confirm_push_writes_readable_history_and_items(client, monkeypatch):
     username, headers = _create_user_headers(client)
     job = _create_job(username)
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).one()
+        inquiry = ClientInquiry(
+            inquiry_id=str(uuid.uuid4()),
+            source="系统提交",
+            client_name="admin",
+            client_phone="13800000000",
+            inquiry_time=datetime.now(timezone.utc),
+            first_response_time=datetime.now(timezone.utc),
+            time_source="manual",
+            responder_id=user.id,
+            first_quote_job_id=job.job_id,
+        )
+        db.add(inquiry)
+        db.flush()
+        stored_job = db.query(QuoteJob).filter(QuoteJob.job_id == job.job_id).one()
+        stored_job.client_inquiry_id = inquiry.inquiry_id
+        db.commit()
+    finally:
+        db.close()
 
     class FakeResponse:
         status_code = 200
@@ -150,10 +173,14 @@ def test_confirm_push_writes_readable_history_and_items(client, monkeypatch):
     assert row["source_file_name"] == "living-room-plan.png"
     assert row["first_project_names"] == ["wall paint", "floor tile"]
     assert row["project_summary"] == "wall paint, floor tile; total_items=2"
+    assert row["client_inquiry"]["source"] == "系统提交"
+    assert row["client_inquiry"]["client_name"] == "admin"
+    assert row["client_inquiry"]["client_phone"] == "13800000000"
 
     detail_response = client.get(f"/api/v1/history/{history_id}", headers=headers)
     assert detail_response.status_code == 200
     detail = detail_response.json()["data"]
+    assert detail["client_inquiry"]["client_name"] == "admin"
     assert detail["items"][0]["project_name"] == "wall paint"
     assert detail["items"][0]["space"] == "living room"
     assert detail["payload"]["project_details"][1]["project_name"] == "floor tile"

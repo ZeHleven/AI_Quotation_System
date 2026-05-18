@@ -193,6 +193,56 @@ def test_client_inquiry_list_and_patch_scope(client):
     assert patch_a.json()["data"]["source"] == "walk_in"
 
 
+def test_client_inquiry_list_filters_blank_client_info(client):
+    username = f"phase2_info_{uuid.uuid4().hex[:8]}"
+    password = "secret123"
+    user = _create_user(username, password, roles=["staff"])
+    headers = _login(client, username, password)
+    visible_id = str(uuid.uuid4())
+    blank_id = str(uuid.uuid4())
+
+    db = SessionLocal()
+    try:
+        db.add(
+            ClientInquiry(
+                inquiry_id=visible_id,
+                source="微信",
+                client_name="admin",
+                client_phone="13800000000",
+                inquiry_time=datetime.now() - timedelta(minutes=5),
+                first_response_time=datetime.now(),
+                time_source="manual",
+                responder_id=user.id,
+            )
+        )
+        db.add(
+            ClientInquiry(
+                inquiry_id=blank_id,
+                inquiry_time=datetime.now() - timedelta(minutes=4),
+                first_response_time=datetime.now(),
+                time_source="default",
+                responder_id=user.id,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    old_flag = _set_flag("feature_client_inquiry", True)
+    try:
+        visible_response = client.get("/api/v1/client-inquiries?has_client_info=true", headers=headers)
+        blank_response = client.get("/api/v1/client-inquiries?has_client_info=false", headers=headers)
+    finally:
+        _set_flag("feature_client_inquiry", old_flag)
+
+    assert visible_response.status_code == 200
+    assert visible_response.json()["total"] == 1
+    assert visible_response.json()["data"][0]["inquiry_id"] == visible_id
+    assert blank_response.status_code == 200
+    assert blank_response.json()["total"] == 1
+    assert blank_response.json()["data"][0]["inquiry_id"] == blank_id
+
+
 def test_response_speed_dashboard_excludes_default_time(client, monkeypatch):
     from app.services import response_dashboard
 

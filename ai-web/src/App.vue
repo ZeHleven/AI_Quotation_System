@@ -223,6 +223,7 @@
                     </div>
                   </section>
                 </div>
+
               </template>
             </el-tab-pane>
 
@@ -322,6 +323,39 @@
                     </div>
                   </section>
                 </div>
+
+                <section class="dashboard-section">
+                  <div class="section-title">
+                    <el-icon><Tickets /></el-icon>
+                    <span>咨询记录</span>
+                    <small>近 {{ clientInquiryTotal }} 条</small>
+                  </div>
+                  <el-table
+                    :data="clientInquiries"
+                    row-key="inquiry_id"
+                    class="users-table"
+                    empty-text="暂无咨询记录"
+                  >
+                    <el-table-column prop="inquiry_time" label="咨询时间" min-width="150">
+                      <template #default="{ row }">{{ formatDate(row.inquiry_time) }}</template>
+                    </el-table-column>
+                    <el-table-column prop="source" label="需求来源" width="110" />
+                    <el-table-column prop="client_name" label="客户姓名" min-width="120" />
+                    <el-table-column prop="client_phone" label="联系电话" min-width="130" />
+                    <el-table-column prop="quote_job_count" label="报价" width="80" align="right" />
+                    <el-table-column prop="time_source" label="时间来源" width="110" />
+                    <el-table-column prop="notes" label="备注" min-width="160" show-overflow-tooltip />
+                  </el-table>
+                  <el-pagination
+                    v-if="clientInquiryTotal > clientInquiryPageSize"
+                    v-model:current-page="clientInquiryPage"
+                    :page-size="clientInquiryPageSize"
+                    :total="clientInquiryTotal"
+                    layout="total, prev, pager, next"
+                    small
+                    @current-change="loadClientInquiries"
+                  />
+                </section>
               </template>
             </el-tab-pane>
           </el-tabs>
@@ -542,6 +576,10 @@ const users = ref([])
 const roleEvents = ref([])
 const quoteDashboard = ref(null)
 const responseDashboard = ref(null)
+const clientInquiries = ref([])
+const clientInquiryTotal = ref(0)
+const clientInquiryPage = ref(1)
+const clientInquiryPageSize = 20
 const dashboardRange = ref('last_30_days')
 const dashboardTab = ref('quote')
 const dashboardFeature = reactive({ quoteDisabled: false, responseDisabled: false })
@@ -703,11 +741,36 @@ function isFeatureDisabled(error) {
   return error.response?.data?.detail === 'FEATURE_DISABLED'
 }
 
+async function loadClientInquiries() {
+  clientInquiries.value = []
+  clientInquiryTotal.value = 0
+  if (!responseDashboard.value) return
+  const params = {
+    page: clientInquiryPage.value,
+    page_size: clientInquiryPageSize,
+    has_quote_job: true,
+    has_client_info: true,
+    sort: 'created_at_desc',
+  }
+  if (responseDashboard.value.range_start) params.date_from = responseDashboard.value.range_start
+  if (responseDashboard.value.range_end) params.date_to = responseDashboard.value.range_end
+
+  try {
+    const response = await api.get('/client-inquiries', { params })
+    clientInquiries.value = responseData(response) || []
+    clientInquiryTotal.value = response.data?.total ?? clientInquiries.value.length
+  } catch (error) {
+    if (isFeatureDisabled(error) || error.response?.status === 403) return
+    throw error
+  }
+}
+
 async function loadDashboards() {
   state.loading = true
   state.error = ''
   dashboardFeature.quoteDisabled = false
   dashboardFeature.responseDisabled = false
+  clientInquiryPage.value = 1
   let loadedCount = 0
   try {
     try {
@@ -727,9 +790,12 @@ async function loadDashboards() {
         params: { range: dashboardRange.value },
       })
       responseDashboard.value = responseData(response)
+      await loadClientInquiries()
       loadedCount += 1
     } catch (error) {
       responseDashboard.value = null
+      clientInquiries.value = []
+      clientInquiryTotal.value = 0
       if (isFeatureDisabled(error)) dashboardFeature.responseDisabled = true
       else throw error
     }
@@ -746,6 +812,8 @@ async function loadDashboards() {
   } catch (error) {
     quoteDashboard.value = null
     responseDashboard.value = null
+    clientInquiries.value = []
+    clientInquiryTotal.value = 0
     if (error.response?.status === 401) state.error = 'unauthorized'
     else if (error.response?.status === 403) state.error = 'forbidden'
     else ElMessage.error(apiErrorMessage(error, '看板加载失败'))

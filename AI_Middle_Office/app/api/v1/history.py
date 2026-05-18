@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user
+from app.models.client_inquiry import ClientInquiry
 from app.models.quote_history import QuoteHistory, QuoteHistoryItem
+from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.rbac import has_admin_role
 from app.services.quote_history import json_loads, serialize_history_item
@@ -27,7 +29,39 @@ def _first_project_name_list(value: Optional[str]) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def _history_row(record: QuoteHistory, include_payload_json: bool = True) -> dict:
+def _client_inquiry_row(inquiry: Optional[ClientInquiry]) -> Optional[dict]:
+    if not inquiry:
+        return None
+    return {
+        "inquiry_id": inquiry.inquiry_id,
+        "source": inquiry.source,
+        "client_name": inquiry.client_name,
+        "client_phone": inquiry.client_phone,
+        "inquiry_time": _format_dt(inquiry.inquiry_time),
+        "first_response_time": _format_dt(inquiry.first_response_time),
+        "time_source": inquiry.time_source,
+        "notes": inquiry.notes,
+    }
+
+
+def _client_inquiry_map(db: Session, records: list[QuoteHistory]) -> dict[str, ClientInquiry]:
+    job_ids = [record.quote_job_id for record in records if record.quote_job_id]
+    if not job_ids:
+        return {}
+    rows = (
+        db.query(QuoteJob.job_id, ClientInquiry)
+        .join(ClientInquiry, QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id)
+        .filter(QuoteJob.job_id.in_(job_ids))
+        .all()
+    )
+    return {job_id: inquiry for job_id, inquiry in rows}
+
+
+def _history_row(
+    record: QuoteHistory,
+    include_payload_json: bool = True,
+    client_inquiry: Optional[ClientInquiry] = None,
+) -> dict:
     data = {
         "id": record.id,
         "username": record.username,
@@ -44,6 +78,7 @@ def _history_row(record: QuoteHistory, include_payload_json: bool = True) -> dic
         "created_at": _format_dt(record.created_at),
         "total_amount": record.total_amount,
         "item_count": record.item_count,
+        "client_inquiry": _client_inquiry_row(client_inquiry),
     }
     if include_payload_json:
         data["payload_json"] = record.payload_json
@@ -80,9 +115,10 @@ async def get_history(
         .limit(page_size)
         .all()
     )
+    inquiries_by_job_id = _client_inquiry_map(db, records)
 
     return api_page(
-        [_history_row(record) for record in records],
+        [_history_row(record, client_inquiry=inquiries_by_job_id.get(record.quote_job_id)) for record in records],
         total=total,
         page=page,
         page_size=page_size,
@@ -102,7 +138,8 @@ async def get_history_detail(
         .order_by(QuoteHistoryItem.line_no.asc(), QuoteHistoryItem.id.asc())
         .all()
     )
-    data = _history_row(record)
+    inquiries_by_job_id = _client_inquiry_map(db, [record])
+    data = _history_row(record, client_inquiry=inquiries_by_job_id.get(record.quote_job_id))
     data["payload"] = json_loads(record.payload_json)
     data["items"] = [serialize_history_item(item) for item in items]
     return api_ok(data)

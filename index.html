@@ -159,6 +159,39 @@
     .toolbar-center  { flex: 1; text-align: center; }
     .char-count      { font-size: 11px; color: var(--steel); }
     .toolbar-right   { display: flex; align-items: center; }
+    .client-info-panel {
+      margin-bottom: 8px; padding: 8px 10px;
+      border: 1px solid rgba(201,214,223,0.75); border-radius: 6px;
+      background: #F8FBFD;
+    }
+    .client-info-summary {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .client-info-toggle {
+      min-width: 0; flex: 1; padding: 0; border: 0; background: transparent;
+      display: flex; align-items: center; gap: 8px;
+      color: var(--dark); font: inherit; cursor: pointer; text-align: left;
+    }
+    .client-info-toggle:disabled { cursor: not-allowed; opacity: 0.65; }
+    .client-info-title { font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .client-info-value {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--slate); font-size: 12px;
+    }
+    .client-info-fields {
+      margin-top: 8px;
+      display: grid; grid-template-columns: 130px minmax(130px, 1fr) minmax(130px, 1fr) 190px;
+      gap: 8px;
+    }
+    .client-info-fields .el-input,
+    .client-info-fields .el-select,
+    .client-info-fields .el-date-editor { width: 100%; }
+    @media (max-width: 760px) {
+      .client-info-fields { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 520px) {
+      .client-info-fields { grid-template-columns: 1fr; }
+    }
 
     /* ── 优化5：预审弹窗摘要栏 ── */
     .preview-summary-bar {
@@ -296,6 +329,32 @@
                 </el-tag>
                 <div class="upload-status">{{ selectedFileSummary }}</div>
               </div>
+              <div class="client-info-panel">
+                <div class="client-info-summary">
+                  <button type="button" class="client-info-toggle" :disabled="sending || pushing" @click="toggleClientInfo">
+                    <span class="client-info-title">{{ showClientInfo ? '收起客户信息' : '客户信息' }}</span>
+                    <span class="client-info-value">{{ clientInfoSummary }}</span>
+                  </button>
+                  <el-button size="small" text :disabled="sending || pushing" @click="resetClientInfoDefaults">默认</el-button>
+                </div>
+                <div v-if="showClientInfo" class="client-info-fields">
+                  <el-select v-model="clientForm.source" size="small" :disabled="sending || pushing" placeholder="需求来源">
+                    <el-option v-for="source in clientSourceOptions" :key="source" :label="source" :value="source"></el-option>
+                  </el-select>
+                  <el-input v-model="clientForm.clientName" size="small" :disabled="sending || pushing" placeholder="客户姓名"></el-input>
+                  <el-input v-model="clientForm.clientPhone" size="small" :disabled="sending || pushing" placeholder="联系电话"></el-input>
+                  <el-date-picker
+                    v-model="clientForm.inquiryTime"
+                    type="datetime"
+                    size="small"
+                    value-format="YYYY-MM-DDTHH:mm:ss"
+                    format="YYYY-MM-DD HH:mm"
+                    placeholder="咨询时间"
+                    :disabled="sending || pushing"
+                    @change="markClientTimeManual"
+                  ></el-date-picker>
+                </div>
+              </div>
               <div class="input-textarea-wrap">
                 <el-input v-model="inputText" type="textarea" :autosize="{minRows:1,maxRows:4}" placeholder="描述需求或上传图片清单..." resize="none" @keyup.enter.exact="sendMessage" :disabled="sending || pushing"></el-input>
               </div>
@@ -333,6 +392,9 @@
               <div class="quote-meta" style="margin-top:6px;">
                 <span v-if="scope.row.source_file_name" class="quote-meta-tag">{{ scope.row.source_file_name }}</span>
                 <span v-if="scope.row.quote_job_id" class="quote-meta-tag">任务 {{ scope.row.quote_job_id }}</span>
+                <span v-if="scope.row.client_inquiry?.source" class="quote-meta-tag">来源 {{ scope.row.client_inquiry.source }}</span>
+                <span v-if="scope.row.client_inquiry?.client_name" class="quote-meta-tag">客户 {{ scope.row.client_inquiry.client_name }}</span>
+                <span v-if="scope.row.client_inquiry?.client_phone" class="quote-meta-tag">电话 {{ scope.row.client_inquiry.client_phone }}</span>
               </div>
             </template>
           </el-table-column>
@@ -368,6 +430,10 @@
               <el-descriptions-item label="来源文件">{{ historyDetail.source_file_name || '（无附件）' }}</el-descriptions-item>
               <el-descriptions-item label="推送">{{ historyDetail.pushed_to_dingtalk ? '已推送钉钉' : '未推送' }}</el-descriptions-item>
               <el-descriptions-item label="确认人">{{ historyDetail.confirmed_by || currentUser }}</el-descriptions-item>
+              <el-descriptions-item label="需求来源">{{ historyDetail.client_inquiry?.source || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="客户姓名">{{ historyDetail.client_inquiry?.client_name || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="联系电话">{{ historyDetail.client_inquiry?.client_phone || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="咨询时间">{{ historyDetail.client_inquiry?.inquiry_time || '—' }}</el-descriptions-item>
               <el-descriptions-item label="需求" :span="3">{{ historyDetail.request_text || '—' }}</el-descriptions-item>
               <el-descriptions-item label="摘要" :span="3">{{ historyDetail.project_summary || '—' }}</el-descriptions-item>
             </el-descriptions>
@@ -593,6 +659,15 @@
         const selectedFile  = ref(null);
         const messageHistory = ref([]);
         const scrollbarRef  = ref(null);
+        const clientSourceOptions = ['系统提交', '微信', '电话', '钉钉', '门店', '其他'];
+        const showClientInfo = ref(false);
+        const clientTimeManual = ref(false);
+        const clientForm = ref({
+          source: '系统提交',
+          clientName: '',
+          clientPhone: '',
+          inquiryTime: '',
+        });
 
         const useExample = (text) => { inputText.value = text; };
 
@@ -806,6 +881,7 @@
             setToken(authData.access_token);
             setUserInfo({ username: authData.username || authForm.value.username, role: authData.role });
             currentUser.value = authData.username || authForm.value.username;
+            resetClientInfoDefaults();
             isLoggedIn.value = true;
           } catch (error) {
             ElMessage.error(apiErrorMessage(error, '获取底层 Token 失败，请检查密码'));
@@ -1048,6 +1124,40 @@
           return currentUser.value || sysUser?.username || 'admin';
         };
 
+        const applyClientInfoDefaults = ({ refreshTime = false } = {}) => {
+          if (!clientForm.value.source) clientForm.value.source = '系统提交';
+          if (!clientForm.value.clientName) clientForm.value.clientName = getDefaultClientName();
+          if (refreshTime || !clientForm.value.inquiryTime) {
+            clientForm.value.inquiryTime = formatShanghaiNow();
+          }
+        };
+
+        const resetClientInfoDefaults = () => {
+          clientTimeManual.value = false;
+          clientForm.value = {
+            source: '系统提交',
+            clientName: getDefaultClientName(),
+            clientPhone: '',
+            inquiryTime: formatShanghaiNow(),
+          };
+        };
+
+        const toggleClientInfo = () => {
+          applyClientInfoDefaults({ refreshTime: !clientTimeManual.value });
+          showClientInfo.value = !showClientInfo.value;
+        };
+
+        const markClientTimeManual = () => {
+          clientTimeManual.value = !!clientForm.value.inquiryTime;
+        };
+
+        const clientInfoSummary = computed(() => {
+          const source = clientForm.value.source || '系统提交';
+          const name = clientForm.value.clientName || getDefaultClientName();
+          const timeText = (clientForm.value.inquiryTime || formatShanghaiNow()).replace('T', ' ').slice(5, 16);
+          return `${source} · ${name} · ${timeText}`;
+        });
+
         const refreshQuoteJob = async (msg, msgIndex) => {
           if (!msg.jobId) return;
           checkingJobId.value = msg.jobId;
@@ -1091,9 +1201,11 @@
           const formData = new FormData();
           if (text) formData.append('message', text);
           if (selectedFile.value) formData.append('file', selectedFile.value);
-          formData.append('source', '系统提交');
-          formData.append('client_name', getDefaultClientName());
-          formData.append('inquiry_time', formatShanghaiNow());
+          applyClientInfoDefaults({ refreshTime: !clientTimeManual.value });
+          formData.append('source', clientForm.value.source || '系统提交');
+          formData.append('client_name', clientForm.value.clientName || getDefaultClientName());
+          if (clientForm.value.clientPhone) formData.append('client_phone', clientForm.value.clientPhone.trim());
+          formData.append('inquiry_time', clientForm.value.inquiryTime || formatShanghaiNow());
           formData.append('time_source', 'manual');
 
           const userMsg = { role: 'user', content: text || '发起多模态文件解析请求' };
@@ -1361,6 +1473,7 @@
             isLoggedIn.value = true;
             const sysUser = getUserInfo();
             currentUser.value = sysUser ? sysUser.username : '已授权用户';
+            resetClientInfoDefaults();
           }
         });
 
@@ -1377,6 +1490,8 @@
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           canSubmit, selectedFileSummary,
+          clientSourceOptions, showClientInfo, clientForm, clientInfoSummary,
+          toggleClientInfo, resetClientInfoDefaults, markClientTimeManual,
           handleRegister, handleLogin, logout, handleFileChange, clearSelectedFile,
           sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
           retryMessage, refreshQuoteJob, checkingJobId, useExample,

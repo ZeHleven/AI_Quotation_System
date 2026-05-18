@@ -232,6 +232,8 @@ def test_client_inquiry_list_filters_blank_client_info(client):
     try:
         visible_response = client.get("/api/v1/client-inquiries?has_client_info=true", headers=headers)
         blank_response = client.get("/api/v1/client-inquiries?has_client_info=false", headers=headers)
+        source_response = client.get("/api/v1/client-inquiries", params={"source": "微信"}, headers=headers)
+        keyword_response = client.get("/api/v1/client-inquiries", params={"keyword": "1380000"}, headers=headers)
     finally:
         _set_flag("feature_client_inquiry", old_flag)
 
@@ -241,6 +243,12 @@ def test_client_inquiry_list_filters_blank_client_info(client):
     assert blank_response.status_code == 200
     assert blank_response.json()["total"] == 1
     assert blank_response.json()["data"][0]["inquiry_id"] == blank_id
+    assert source_response.status_code == 200
+    assert source_response.json()["total"] == 1
+    assert source_response.json()["data"][0]["inquiry_id"] == visible_id
+    assert keyword_response.status_code == 200
+    assert keyword_response.json()["total"] == 1
+    assert keyword_response.json()["data"][0]["inquiry_id"] == visible_id
 
 
 def test_response_speed_dashboard_excludes_default_time(client, monkeypatch):

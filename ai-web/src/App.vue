@@ -330,6 +330,37 @@
                     <span>咨询记录</span>
                     <small>近 {{ clientInquiryTotal }} 条</small>
                   </div>
+                  <div class="inquiry-filters">
+                    <el-select
+                      v-model="clientInquiryFilters.source"
+                      size="small"
+                      placeholder="需求来源"
+                      @change="applyClientInquiryFilters"
+                    >
+                      <el-option
+                        v-for="option in clientInquirySourceOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                    <el-input
+                      v-model="clientInquiryFilters.keyword"
+                      size="small"
+                      clearable
+                      placeholder="客户姓名或电话"
+                      @keyup.enter="applyClientInquiryFilters"
+                      @clear="applyClientInquiryFilters"
+                    />
+                    <el-checkbox
+                      v-model="clientInquiryFilters.hasQuoteJob"
+                      @change="applyClientInquiryFilters"
+                    >
+                      只看有报价
+                    </el-checkbox>
+                    <el-button size="small" type="primary" plain @click="applyClientInquiryFilters">查询</el-button>
+                    <el-button size="small" :icon="Refresh" plain @click="loadClientInquiries">刷新</el-button>
+                  </div>
                   <el-table
                     :data="clientInquiries"
                     row-key="inquiry_id"
@@ -570,6 +601,16 @@ const rangeOptions = [
   { value: 'last_30_days', label: '近 30 天' },
 ]
 
+const clientInquirySourceOptions = [
+  { value: '', label: '全部来源' },
+  { value: '系统提交', label: '系统提交' },
+  { value: '微信', label: '微信' },
+  { value: '电话', label: '电话' },
+  { value: '钉钉', label: '钉钉' },
+  { value: '门店', label: '门店' },
+  { value: '其他', label: '其他' },
+]
+
 const loginForm = reactive({ username: '', password: '' })
 const session = reactive({ user: null })
 const users = ref([])
@@ -580,6 +621,11 @@ const clientInquiries = ref([])
 const clientInquiryTotal = ref(0)
 const clientInquiryPage = ref(1)
 const clientInquiryPageSize = 20
+const clientInquiryFilters = reactive({
+  source: '',
+  keyword: '',
+  hasQuoteJob: true,
+})
 const dashboardRange = ref('last_30_days')
 const dashboardTab = ref('quote')
 const dashboardFeature = reactive({ quoteDisabled: false, responseDisabled: false })
@@ -748,10 +794,13 @@ async function loadClientInquiries() {
   const params = {
     page: clientInquiryPage.value,
     page_size: clientInquiryPageSize,
-    has_quote_job: true,
     has_client_info: true,
     sort: 'created_at_desc',
   }
+  if (clientInquiryFilters.hasQuoteJob) params.has_quote_job = true
+  if (clientInquiryFilters.source) params.source = clientInquiryFilters.source
+  const keyword = clientInquiryFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
   if (responseDashboard.value.range_start) params.date_from = responseDashboard.value.range_start
   if (responseDashboard.value.range_end) params.date_to = responseDashboard.value.range_end
 
@@ -763,6 +812,11 @@ async function loadClientInquiries() {
     if (isFeatureDisabled(error) || error.response?.status === 403) return
     throw error
   }
+}
+
+function applyClientInquiryFilters() {
+  clientInquiryPage.value = 1
+  loadClientInquiries()
 }
 
 async function loadDashboards() {

@@ -55,6 +55,7 @@ async def list_client_inquiries(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     source: Optional[str] = None,
+    keyword: Optional[str] = None,
     responder_id: Optional[int] = None,
     time_source: Optional[str] = None,
     has_quote_job: Optional[bool] = None,
@@ -82,6 +83,17 @@ async def list_client_inquiries(
         query = query.filter(ClientInquiry.inquiry_time <= end)
     if source:
         query = query.filter(ClientInquiry.source == source.strip())
+    if keyword:
+        keyword_value = keyword.strip()
+        if keyword_value:
+            pattern = f"%{keyword_value}%"
+            query = query.filter(
+                or_(
+                    ClientInquiry.source.like(pattern),
+                    ClientInquiry.client_name.like(pattern),
+                    ClientInquiry.client_phone.like(pattern),
+                )
+            )
     if time_source:
         normalized_source = normalize_time_source(time_source, has_manual_time=False)
         query = query.filter(ClientInquiry.time_source == normalized_source)

@@ -292,6 +292,19 @@ textarea {
   min-width: 0;
 }
 
+.inquiry-filters {
+  display: grid;
+  grid-template-columns: 150px minmax(180px, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.inquiry-filters .el-select,
+.inquiry-filters .el-input {
+  width: 100%;
+}
+
 .section-title {
   gap: 8px;
   margin-bottom: 10px;
@@ -416,6 +429,10 @@ textarea {
   .dashboard-split {
     grid-template-columns: 1fr;
   }
+
+  .inquiry-filters {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -449,6 +466,10 @@ textarea {
   }
 
   .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inquiry-filters {
     grid-template-columns: 1fr;
   }
 }

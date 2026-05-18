@@ -68,13 +68,15 @@ Clear_test/
 - 后端重构 P0-P3、补充一致性优化、运维告警收敛已完成并冻结；后续仅按真实问题增量维护。
 - 前端优化 P0-P3 已完成：验收清单、共享浏览器逻辑、admin 模块拆分、报价进度/失败恢复/上传推送状态均已落地并手工验证。
 - 业务优化 P0-P4 已完成到代码层：报价反馈闭环、Admin 反馈分析、Prompt 回归、知识候选治理、真实用户体验优化均已落地。
-- 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估、前端架构 P4 Vite/Vue SFC 迁移。
-- 前端架构 P4 Vite/Vue SFC 迁移暂不启动；仅当页面规模、多人协作、组件复用或 TypeScript/Router/状态管理需求真实出现时再评估。
-- 当前代码迁移 head：`20260507_0006`；物料库主存储为 MySQL `materials` / `material_snapshots`，报价反馈新增 `quote_feedback` / `quote_corrections` / `quote_rag_traces`，Prompt 回归评测新增 `prompt_regression_cases` / `prompt_regression_runs`，知识库治理新增 `knowledge_candidates`。
-- 生产数据库若低于 `20260507_0006`，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归和知识候选记录。
+- AI 平台架构升级 Phase 0 已完成开发与当前环境验证（2026-05-18）：Vite 壳、`/login`、`/admin/permissions`、RBAC、`role_version`、SPA fallback 已通过；旧 `index.html` / `admin.html` / `app.html` 保留。正式生产上线尚未发生，未来需单独 Runbook。
+- AI 平台架构升级 Phase 1 报价速度看板已完成当前环境运行态验收（2026-05-18）：新增 `FEATURE_DASHBOARD_QUOTE`、报价速度聚合接口和 `/admin/dashboard` 看板视图；已修复新报价任务 `duration_ms` 实测写入，并在备份后回填历史 121 条成功任务的 0 耗时记录；页面、看板数据和新增真实报价统计均已确认正常，正式生产启用待单独 Runbook。
+- 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
+- 架构升级路线按 `docs/superpowers/specs/2026-05-14-ai-platform-upgrade-design.md` 分阶段执行；当前只完成到 Phase 1 报价速度看板当前环境运行态验收，不启动 Phase 2+ 的响应追踪、执行任务或经营驾驶舱。
+- 当前代码迁移 head：`20260514_0011`；物料库主存储为 MySQL `materials` / `material_snapshots`，报价反馈新增 `quote_feedback` / `quote_corrections` / `quote_rag_traces`，Prompt 回归评测新增 `prompt_regression_cases` / `prompt_regression_runs`，知识库治理新增 `knowledge_candidates`，Phase 0 RBAC 新增 `users.role_version` / `dingtalk_user_id` / `dingtalk_bound_at`、`user_roles`、`user_role_events`。
+- 生产数据库若低于 `20260514_0011`，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录和 Phase 0 RBAC。
 - 新增数据库字段/表必须走 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` 或启动兼容迁移。
 - `LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅保留为旧 `rag_materials.json` 自动导入源；RAG 评测报告目录由 `RAG_EVAL_REPORT_DIR` 控制。
-- 最新本地验证：`index.html` 内联脚本语法检查通过，`python -m compileall app` 通过，`python -m pytest` 为 `64 passed`。
+- 最新验证（2026-05-18，Phase 1 当前环境运行态）：`/health/ready`、`/login`、`/admin/permissions`、`/admin/dashboard`、`/index.html`、`/admin.html`、`/app.html` 当前环境冒烟通过；`/admin/dashboard` 页面、看板数据和新增真实报价统计均已手工确认正常；`python -m compileall app scripts` 通过；`python -m pytest` 为 `80 passed`；`npm.cmd run build` 通过。
 
 ## 账号
 

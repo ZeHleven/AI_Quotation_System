@@ -5,7 +5,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +19,7 @@ settings.apply_proxy_env()
 
 from app.api.v1 import (
     auth,
+    dashboard,
     files,
     history,
     knowledge_candidates,
@@ -159,6 +160,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
 app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
 app.include_router(users.router, prefix="/api/v1", tags=["Users"])
+app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
 app.include_router(quote_jobs.router, prefix="/api/v1", tags=["Async Quote Jobs"])
 app.include_router(quote_feedback.router, prefix="/api/v1", tags=["Quote Feedback"])
@@ -173,6 +175,7 @@ app.include_router(rag_eval.router, prefix="/api/v1", tags=["RAG Eval"])
 @app.middleware("http")
 async def trace_request(request: Request, call_next):
     trace_id = request.headers.get("X-Trace-Id") or uuid.uuid4().hex
+    request.state.trace_id = trace_id
     trace_token = set_trace_id(trace_id)
     started = time.perf_counter()
     try:
@@ -230,13 +233,20 @@ def health_ready():
 # 前端 HTML 文件所在目录（Clear_test/）
 _FRONTEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _STATIC_DIR = os.path.join(_FRONTEND_DIR, "static")
+_VITE_DIST_DIR = os.path.join(_FRONTEND_DIR, "ai-web", "dist")
+_VITE_ASSETS_DIR = os.path.join(_VITE_DIST_DIR, "assets")
+_VITE_PUBLIC_DIR = os.path.join(_FRONTEND_DIR, "ai-web", "public")
 if os.path.isdir(_STATIC_DIR):
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 else:
     logger.warning("frontend_static_dir_missing", extra={"path": _STATIC_DIR})
+if os.path.isdir(_VITE_ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=_VITE_ASSETS_DIR), name="vite-assets")
 
 @app.get("/", include_in_schema=False)
 def serve_root():
+    if settings.feature_vite_frontend and os.path.isfile(os.path.join(_VITE_DIST_DIR, "index.html")):
+        return RedirectResponse("/login")
     return FileResponse(os.path.join(_FRONTEND_DIR, "app.html"))
 
 @app.get("/app.html", include_in_schema=False)
@@ -250,3 +260,64 @@ def serve_index():
 @app.get("/admin.html", include_in_schema=False)
 def serve_admin():
     return FileResponse(os.path.join(_FRONTEND_DIR, "admin.html"))
+
+
+def _serve_vite_index():
+    vite_index = os.path.join(_VITE_DIST_DIR, "index.html")
+    if os.path.isfile(vite_index):
+        return FileResponse(vite_index)
+    return RedirectResponse("/app.html")
+
+
+@app.get("/login", include_in_schema=False)
+def serve_login():
+    return _serve_vite_index()
+
+
+@app.get("/admin/permissions", include_in_schema=False)
+def serve_permissions():
+    return _serve_vite_index()
+
+
+@app.get("/admin/users", include_in_schema=False)
+def serve_vite_users():
+    return _serve_vite_index()
+
+
+@app.get("/admin/dashboard", include_in_schema=False)
+def serve_vite_dashboard():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/execution", include_in_schema=False)
+def serve_vite_execution():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/business", include_in_schema=False)
+def serve_vite_business():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/favicon.svg", include_in_schema=False)
+def serve_vite_favicon():
+    for base_dir in (_VITE_DIST_DIR, _VITE_PUBLIC_DIR):
+        path = os.path.join(base_dir, "favicon.svg")
+        if os.path.isfile(path):
+            return FileResponse(path)
+    raise HTTPException(status_code=404, detail="Not Found")
+
+
+@app.get("/icons.svg", include_in_schema=False)
+def serve_vite_icons():
+    for base_dir in (_VITE_DIST_DIR, _VITE_PUBLIC_DIR):
+        path = os.path.join(base_dir, "icons.svg")
+        if os.path.isfile(path):
+            return FileResponse(path)
+    raise HTTPException(status_code=404, detail="Not Found")

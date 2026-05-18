@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, Optional, Tuple
@@ -34,6 +35,14 @@ TERMINAL_STATUSES = {"succeeded", "failed", "canceled", "timed_out"}
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return max(1, int(round((time.perf_counter() - started_at) * 1000)))
+
+
+def _apply_runtime_duration(job: QuoteJob, started_at: float) -> None:
+    job.duration_ms = _elapsed_ms(started_at)
 
 
 def _event_timestamp() -> str:
@@ -267,6 +276,7 @@ async def _iter_quote_events(
 async def run_quote_job_async(job_id: str) -> None:
     db = SessionLocal()
     trace_token = None
+    run_started_at = time.perf_counter()
     try:
         job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).first()
         if not job or job.status in TERMINAL_STATUSES:
@@ -280,7 +290,7 @@ async def run_quote_job_async(job_id: str) -> None:
             job.error_message = "用户不存在或已禁用"
             job.finished_at = _utcnow()
             apply_job_failure(job, "auth")
-            apply_job_duration(job)
+            _apply_runtime_duration(job, run_started_at)
             append_job_event(job, "error", "❌ 登录状态已失效，请重新登录", trace_id=job.trace_id, stage="auth")
             db.commit()
             return
@@ -291,7 +301,7 @@ async def run_quote_job_async(job_id: str) -> None:
             job.error_message = "AI 调用额度已耗尽"
             job.finished_at = _utcnow()
             apply_job_failure(job, "quota")
-            apply_job_duration(job)
+            _apply_runtime_duration(job, run_started_at)
             append_job_event(job, "error", "❌ 您的 AI 调用额度已耗尽，请联系管理员充值", trace_id=job.trace_id, stage="quota")
             db.commit()
             return
@@ -310,7 +320,7 @@ async def run_quote_job_async(job_id: str) -> None:
             job.error_message = f"报价附件读取失败: {str(exc)}"
             job.finished_at = _utcnow()
             apply_job_failure(job, "file_load")
-            apply_job_duration(job)
+            _apply_runtime_duration(job, run_started_at)
             append_job_event(job, "error", f"❌ {job.error_message}", trace_id=job.trace_id, stage="file_load")
             db.commit()
             return
@@ -335,7 +345,7 @@ async def run_quote_job_async(job_id: str) -> None:
                 job.result_json = json.dumps(result_payload, ensure_ascii=False)
                 job.finished_at = _utcnow()
                 apply_job_result_summary(job, result_payload)
-                apply_job_duration(job)
+                _apply_runtime_duration(job, run_started_at)
                 user.quota -= 1
                 safe_record_ai_preview(
                     db,
@@ -350,7 +360,7 @@ async def run_quote_job_async(job_id: str) -> None:
                 job.error_message = message
                 job.finished_at = _utcnow()
                 apply_job_failure(job, extra.get("stage"))
-                apply_job_duration(job)
+                _apply_runtime_duration(job, run_started_at)
 
             db.commit()
             if job.status in TERMINAL_STATUSES:
@@ -365,7 +375,7 @@ async def run_quote_job_async(job_id: str) -> None:
                 job.error_message = str(exc)
                 job.finished_at = _utcnow()
                 apply_job_failure(job, "crashed")
-                apply_job_duration(job)
+                _apply_runtime_duration(job, run_started_at)
                 append_job_event(job, "error", f"❌ [API Gateway] 异步任务崩溃: {str(exc)}", trace_id=job.trace_id, stage="crashed")
                 db.commit()
         except Exception:

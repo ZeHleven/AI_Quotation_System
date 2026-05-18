@@ -1,448 +1,703 @@
 <template>
-  <div class="app-container">
-    <el-container>
-      <el-header class="header">
-        <div class="logo">🚀 内部 AI 智能体业务中台</div>
-        <div class="user-info" v-if="isLoggedIn">
-          <el-tag type="success" effect="dark" round>当前登录：{{ currentUser }}</el-tag>
-          <el-button type="danger" size="small" plain v-on:click="logout" style="margin-left: 15px">退出</el-button>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">旗胜智能装饰</p>
+        <h1>AI 平台中台</h1>
+      </div>
+      <div class="topbar-actions" v-if="session.user">
+        <el-tag effect="plain">{{ session.user.username }}</el-tag>
+        <el-button :icon="SwitchButton" plain @click="logout">退出</el-button>
+      </div>
+    </header>
+
+    <main v-if="routeName === 'login'" class="login-layout">
+      <section class="login-panel">
+        <div class="panel-heading">
+          <el-icon><Lock /></el-icon>
+          <span>账号登录</span>
         </div>
-      </el-header>
+        <el-form label-position="top" :model="loginForm" @submit.prevent="login">
+          <el-form-item label="用户名">
+            <el-input
+              v-model="loginForm.username"
+              :prefix-icon="User"
+              autocomplete="username"
+              placeholder="请输入用户名"
+              @keyup.enter="login"
+            />
+          </el-form-item>
+          <el-form-item label="密码">
+            <el-input
+              v-model="loginForm.password"
+              :prefix-icon="Lock"
+              type="password"
+              autocomplete="current-password"
+              placeholder="请输入密码"
+              show-password
+              @keyup.enter="login"
+            />
+          </el-form-item>
+          <el-button
+            class="primary-action"
+            type="primary"
+            :loading="state.loading"
+            @click="login"
+          >
+            登录
+          </el-button>
+        </el-form>
+      </section>
+    </main>
 
-      <el-main class="main-content">
-        <div v-if="!isLoggedIn" class="auth-panel">
-          <el-card class="box-card" shadow="hover">
-            <el-tabs v-model="activeTab">
-              <el-tab-pane label="安全登录" name="login">
-                <el-form :model="authForm" label-width="70px" v-on:submit.prevent="handleLogin">
-                  <el-form-item label="账号">
-                    <el-input v-model="authForm.username" placeholder="请输入员工账号"></el-input>
-                  </el-form-item>
-                  <el-form-item label="密码">
-                    <el-input v-model="authForm.password" type="password" placeholder="请输入密码" show-password></el-input>
-                  </el-form-item>
-                  <el-button type="primary" class="full-btn" :loading="loading" v-on:click="handleLogin">登录系统中台</el-button>
-                </el-form>
-              </el-tab-pane>
+    <main v-else class="workspace">
+      <aside class="sidebar">
+        <button
+          v-if="canAccessPermissions"
+          :class="['nav-item', { active: routeName === 'permissions' }]"
+          type="button"
+          @click="navigate('/admin/permissions')"
+        >
+          <el-icon><Tickets /></el-icon>
+          <span>权限管理</span>
+        </button>
+        <button
+          v-if="canViewDashboard"
+          :class="['nav-item', { active: routeName === 'dashboard' }]"
+          type="button"
+          @click="navigate('/admin/dashboard')"
+        >
+          <el-icon><DataAnalysis /></el-icon>
+          <span>报价速度</span>
+        </button>
+        <button v-if="canOpenLegacyQuote" class="nav-item" type="button" @click="openLegacy('/index.html')">
+          <el-icon><Document /></el-icon>
+          <span>旧报价工作台</span>
+        </button>
+        <button v-if="canOpenLegacyAdmin" class="nav-item" type="button" @click="openLegacy('/admin.html')">
+          <el-icon><Setting /></el-icon>
+          <span>旧知识库管理</span>
+        </button>
+      </aside>
 
-              <el-tab-pane label="新员工注册" name="register">
-                <el-form :model="authForm" label-width="70px" v-on:submit.prevent="handleRegister">
-                  <el-form-item label="账号">
-                    <el-input v-model="authForm.username" placeholder="设置员工账号"></el-input>
-                  </el-form-item>
-                  <el-form-item label="密码">
-                    <el-input v-model="authForm.password" type="password" placeholder="设置登录密码" show-password></el-input>
-                  </el-form-item>
-                  <el-button type="success" class="full-btn" :loading="loading" v-on:click="handleRegister">注册并领取额度</el-button>
-                </el-form>
-              </el-tab-pane>
-            </el-tabs>
-          </el-card>
+      <section class="content-panel">
+        <div v-if="state.loading" class="center-state">
+          <el-icon class="spin"><Refresh /></el-icon>
+          <span>加载中</span>
         </div>
 
-        <div v-else class="chat-panel">
-          <el-card class="chat-card" shadow="never">
-            <el-scrollbar class="message-list" ref="scrollbarRef">
-              <div v-for="(msg, index) in messageHistory" :key="index" :class="['message-item', msg.role]">
-                <div class="avatar">{{ msg.role === 'user' ? '🧑‍💻' : '🤖' }}</div>
-                <div class="bubble">
-                  <div v-if="msg.fileUrl" class="file-preview">
-                    <el-image :src="msg.fileUrl" fit="cover" class="preview-img" :preview-src-list="[msg.fileUrl]" />
-                  </div>
-                  <div class="text-content">
-                    {{ msg.content }}<span v-if="index === messageHistory.length - 1 && isTyping" class="cursor"></span>
-                  </div>
-                </div>
-              </div>
-            </el-scrollbar>
+        <div v-else-if="state.error === 'unauthorized'" class="center-state">
+          <h2>未登录</h2>
+          <el-button type="primary" @click="navigate('/login')">返回登录</el-button>
+        </div>
 
-            <div class="input-area">
-              <div v-if="previewData" class="confirm-bar">
-                <span class="confirm-tip">📋 报价单已生成，确认无误后推送至钉钉</span>
-                <el-button type="success" size="small" v-on:click="confirmPush">确认推送钉钉</el-button>
-                <el-button size="small" plain v-on:click="previewData = null">取消</el-button>
-              </div>
-              <div v-if="selectedFile" class="upload-preview">
-                <el-tag closable v-on:close="selectedFile = null">📄 {{ selectedFile.name }}</el-tag>
-              </div>
+        <div v-else-if="state.error === 'forbidden'" class="center-state">
+          <h2>403</h2>
+          <p>无权限访问</p>
+        </div>
 
-              <div class="input-container">
-                <el-upload
-                  class="upload-trigger"
-                  action="#"
-                  :auto-upload="false"
-                  :show-file-list="false"
-                  :on-change="handleFileChange"
-                >
-                  <el-button circle><el-icon><Paperclip /></el-icon></el-button>
-                </el-upload>
+        <div v-else-if="state.error === 'feature_disabled'" class="center-state">
+          <el-icon><DataAnalysis /></el-icon>
+          <h2>功能未开启</h2>
+          <p>报价速度看板开关尚未打开。</p>
+        </div>
 
-                <el-input
-                  v-model="inputText"
-                  type="textarea"
-                  :rows="2"
-                  placeholder="描述需求或上传图片/PDF清单..."
-                  resize="none"
-                  v-on:keyup.enter.exact="sendMessage"
-                ></el-input>
-              </div>
-
-              <div class="action-bar">
-                <span class="tip-text">支持识别手写清单、图片和 PDF 户型图</span>
-                <el-button type="primary" :loading="sending" v-on:click="sendMessage">发送业务指令</el-button>
-              </div>
+        <template v-else-if="routeName === 'dashboard'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">Phase 1</p>
+              <h2>报价速度看板</h2>
             </div>
-          </el-card>
+            <div class="heading-actions">
+              <el-radio-group v-model="dashboardRange" size="small" @change="loadQuoteDashboard">
+                <el-radio-button
+                  v-for="option in rangeOptions"
+                  :key="option.value"
+                  :label="option.value"
+                >
+                  {{ option.label }}
+                </el-radio-button>
+              </el-radio-group>
+              <el-button :icon="Refresh" plain @click="loadQuoteDashboard">刷新</el-button>
+            </div>
+          </div>
+
+          <el-alert
+            v-if="dashboard?.empty_state"
+            class="dashboard-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="暂无数据，数据从当前环境验证后开始统计"
+          />
+          <el-alert
+            v-else-if="dashboard?.low_sample_warning"
+            class="dashboard-alert"
+            type="warning"
+            show-icon
+            :closable="false"
+            title="样本量较少，仅供参考"
+          />
+
+          <div class="metric-grid">
+            <div class="metric-card">
+              <span>报价任务</span>
+              <strong>{{ dashboard?.sample_count ?? 0 }}</strong>
+              <small>已完成 {{ dashboard?.completed_count ?? 0 }} · 已确认 {{ dashboard?.confirmed_count ?? 0 }}</small>
+            </div>
+            <div class="metric-card">
+              <span>AI 生成耗时</span>
+              <strong>{{ formatMs(dashboard?.ai_duration_avg_ms) }}</strong>
+              <small>来自成功任务 duration_ms</small>
+            </div>
+            <div class="metric-card">
+              <span>人工确认耗时</span>
+              <strong>{{ formatMs(dashboard?.manual_confirm_duration_avg_ms) }}</strong>
+              <small>AI 完成到确认推送</small>
+            </div>
+            <div class="metric-card">
+              <span>总交付耗时</span>
+              <strong>{{ formatMs(dashboard?.total_delivery_duration_avg_ms) }}</strong>
+              <small>任务创建到确认推送</small>
+            </div>
+            <div class="metric-card">
+              <span>AI 修改率</span>
+              <strong>{{ formatRate(dashboard?.modified_rate) }}</strong>
+              <small>{{ dashboard?.modified_count ?? 0 }} / {{ dashboard?.feedback_sample_count ?? 0 }} 条反馈</small>
+            </div>
+          </div>
+
+          <div class="dashboard-split">
+            <section class="dashboard-section">
+              <div class="section-title">
+                <el-icon><TrendCharts /></el-icon>
+                <span>每日趋势</span>
+              </div>
+              <el-table
+                :data="visibleDailyTrends"
+                row-key="date"
+                class="users-table"
+                empty-text="暂无趋势数据"
+              >
+                <el-table-column prop="date" label="日期" min-width="120" />
+                <el-table-column prop="sample_count" label="任务" width="90" />
+                <el-table-column prop="confirmed_count" label="确认" width="90" />
+                <el-table-column label="AI 耗时" min-width="120">
+                  <template #default="{ row }">{{ formatMs(row.ai_duration_avg_ms) }}</template>
+                </el-table-column>
+                <el-table-column label="总交付" min-width="120">
+                  <template #default="{ row }">{{ formatMs(row.total_delivery_duration_avg_ms) }}</template>
+                </el-table-column>
+                <el-table-column label="修改率" width="100">
+                  <template #default="{ row }">{{ formatRate(row.modified_rate) }}</template>
+                </el-table-column>
+              </el-table>
+            </section>
+
+            <section class="dashboard-section">
+              <div class="section-title">
+                <el-icon><Histogram /></el-icon>
+                <span>状态分布</span>
+              </div>
+              <div class="status-list">
+                <div
+                  v-for="item in dashboard?.status_distribution || []"
+                  :key="item.status"
+                  class="status-row"
+                >
+                  <span>{{ statusLabel(item.status) }}</span>
+                  <strong>{{ item.count }}</strong>
+                </div>
+                <el-empty v-if="!dashboard?.status_distribution?.length" description="暂无状态数据" />
+              </div>
+            </section>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">Phase 0</p>
+              <h2>用户角色</h2>
+            </div>
+            <el-button :icon="Refresh" plain @click="loadUsers">刷新</el-button>
+          </div>
+
+          <div class="role-hints">
+            <div v-for="role in roleOptions" :key="role.value" class="role-hint">
+              <strong>{{ role.label }}</strong>
+              <span>{{ role.hint }}</span>
+            </div>
+          </div>
+
+          <el-table
+            :data="users"
+            row-key="id"
+            class="users-table"
+            empty-text="暂无用户"
+          >
+            <el-table-column prop="username" label="用户" min-width="150" />
+            <el-table-column label="角色" min-width="240">
+              <template #default="{ row }">
+                <div class="role-tags">
+                  <el-tag
+                    v-for="role in row.roles"
+                    :key="role"
+                    :type="roleTagType(role)"
+                    effect="light"
+                  >
+                    {{ role }}
+                  </el-tag>
+                  <el-tag v-if="!row.roles?.length" type="info" effect="plain">未分配</el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="role_version" label="版本" width="90" />
+            <el-table-column label="钉钉" width="90">
+              <template #default="{ row }">
+                <el-tag :type="row.dingtalk_bound ? 'success' : 'info'" effect="plain">
+                  {{ row.dingtalk_bound ? '已绑定' : '未绑定' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="当前模块" min-width="220">
+              <template #default="{ row }">
+                <div class="module-list">
+                  <span
+                    v-for="module in row.available_modules"
+                    :key="module.key"
+                    :class="['module-pill', module.status]"
+                  >
+                    {{ module.name }}
+                  </span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="260" fixed="right">
+              <template #default="{ row }">
+                <div class="row-actions">
+                  <el-button :icon="Plus" plain @click="openGrant(row)" :disabled="!canMutateRoles">
+                    授权
+                  </el-button>
+                  <el-button :icon="Clock" plain @click="openEvents(row)">历史</el-button>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </section>
+    </main>
+
+    <el-dialog v-model="grantDialog.visible" title="授予角色" width="420px">
+      <el-form label-position="top" :model="grantDialog">
+        <el-form-item label="用户">
+          <el-input :model-value="grantDialog.user?.username" disabled />
+        </el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="grantDialog.role" class="full-width">
+            <el-option
+              v-for="role in roleOptions"
+              :key="role.value"
+              :label="role.label"
+              :value="role.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="grantDialog.note" type="textarea" :rows="3" maxlength="120" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="grantDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="grantSelectedRole">确认授权</el-button>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="eventsDrawer.visible" size="520px" title="授权历史">
+      <div v-if="eventsDrawer.user" class="drawer-user">
+        {{ eventsDrawer.user.username }}
+      </div>
+      <el-timeline>
+        <el-timeline-item
+          v-for="event in roleEvents"
+          :key="event.id"
+          :timestamp="formatDate(event.created_at)"
+          placement="top"
+        >
+          <div class="event-row">
+            <strong>{{ event.action }}</strong>
+            <el-tag size="small" effect="plain">{{ event.role }}</el-tag>
+          </div>
+          <p>{{ event.note || '无备注' }}</p>
+          <small>{{ event.ip_address || '-' }} · {{ event.trace_id || '-' }}</small>
+        </el-timeline-item>
+      </el-timeline>
+      <el-empty v-if="!roleEvents.length" description="暂无历史" />
+
+      <template v-if="eventsDrawer.user && canMutateRoles">
+        <div class="revoke-panel">
+          <el-select v-model="eventsDrawer.revokeRole" placeholder="选择要撤销的角色" class="full-width">
+            <el-option
+              v-for="role in eventsDrawer.user.roles"
+              :key="role"
+              :label="role"
+              :value="role"
+            />
+          </el-select>
+          <el-input
+            v-model="eventsDrawer.revokeNote"
+            type="textarea"
+            :rows="2"
+            maxlength="120"
+            show-word-limit
+            placeholder="撤权备注"
+          />
+          <el-button
+            :icon="Delete"
+            type="danger"
+            plain
+            :loading="state.submitting"
+            @click="revokeSelectedRole"
+          >
+            撤销角色
+          </el-button>
         </div>
-      </el-main>
-    </el-container>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Paperclip } from '@element-plus/icons-vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
+import {
+  Clock,
+  DataAnalysis,
+  Delete,
+  Document,
+  Histogram,
+  Lock,
+  Plus,
+  Refresh,
+  Setting,
+  SwitchButton,
+  Tickets,
+  TrendCharts,
+  User,
+} from '@element-plus/icons-vue'
 
-const API_BASE_URL = 'http://127.0.0.1:9000/api/v1'
+const TOKEN_KEY = 'ai_token'
+const api = axios.create({ baseURL: '/api/v1' })
 
-const isLoggedIn = ref(false)
-const currentUser = ref('')
-const activeTab = ref('login')
-const loading = ref(false)
-const sending = ref(false)
-const isTyping = ref(false)
-const previewData = ref(null)
-
-const authForm = ref({ username: '', password: '' })
-const inputText = ref('')
-const selectedFile = ref(null)
-const messageHistory = ref([
-  { role: 'assistant', content: '您好，多模态业务中台 V2.0 已连接。您可以直接输入测算指令，或者上传施工清单图片。' }
-])
-const scrollbarRef = ref(null)
-
-const handleRegister = async () => {
-  if (!authForm.value.username || !authForm.value.password) {
-    return ElMessage.warning('账号和密码不能为空！')
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
   }
-  loading.value = true
-  try {
-    const res = await axios.post(`${API_BASE_URL}/auth/register`, {
-      username: authForm.value.username,
-      password: authForm.value.password
-    })
-    ElMessage.success(res.data.message || '注册成功！')
-    activeTab.value = 'login'
-  } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '注册失败')
-  } finally {
-    loading.value = false
+  return config
+})
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem(TOKEN_KEY)
+    }
+    return Promise.reject(error)
+  },
+)
+
+const roleOptions = [
+  { value: 'system_admin', label: 'system_admin', hint: '权限与系统配置' },
+  { value: 'admin', label: 'admin', hint: '报价与知识库管理' },
+  { value: 'staff', label: 'staff', hint: '旧报价工作台' },
+  { value: 'manager', label: 'manager', hint: '执行任务上线后生效' },
+  { value: 'viewer', label: 'viewer', hint: '看板开启后生效' },
+]
+
+const rangeOptions = [
+  { value: 'today', label: '今日' },
+  { value: 'week', label: '本周' },
+  { value: 'month', label: '本月' },
+  { value: 'last_30_days', label: '近 30 天' },
+]
+
+const loginForm = reactive({ username: '', password: '' })
+const session = reactive({ user: null })
+const users = ref([])
+const roleEvents = ref([])
+const dashboard = ref(null)
+const dashboardRange = ref('last_30_days')
+const state = reactive({ loading: false, submitting: false, error: '' })
+const routeName = ref(routeFromPath(window.location.pathname))
+
+const grantDialog = reactive({
+  visible: false,
+  user: null,
+  role: 'staff',
+  note: '',
+})
+
+const eventsDrawer = reactive({
+  visible: false,
+  user: null,
+  revokeRole: '',
+  revokeNote: '',
+})
+
+const roles = computed(() => session.user?.roles || [])
+const canMutateRoles = computed(() => roles.value.includes('system_admin'))
+const canAccessPermissions = computed(() => roles.value.includes('system_admin') || roles.value.includes('admin'))
+const canViewDashboard = computed(() => canAccessPermissions.value || roles.value.includes('viewer'))
+const canOpenLegacyQuote = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
+const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
+const visibleDailyTrends = computed(() => (dashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
+
+function routeFromPath(path) {
+  if (path === '/login') return 'login'
+  if (path === '/admin/dashboard') return 'dashboard'
+  return 'permissions'
+}
+
+function responseData(response) {
+  return response.data?.data ?? response.data
+}
+
+function apiErrorMessage(error, fallback = '请求失败') {
+  const detail = error.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (detail?.message) return detail.message
+  if (error.response?.data?.message) return error.response.data.message
+  return fallback
+}
+
+function navigate(path) {
+  window.history.pushState({}, '', path)
+  routeName.value = routeFromPath(path)
+  if (path !== '/login') {
+    bootstrap()
   }
 }
 
-const handleLogin = async () => {
-  if (!authForm.value.username || !authForm.value.password) {
-    return ElMessage.warning('账号和密码不能为空！')
+function openLegacy(path) {
+  window.location.href = path
+}
+
+function roleTagType(role) {
+  if (role === 'system_admin') return 'danger'
+  if (role === 'admin') return 'warning'
+  if (role === 'staff') return 'success'
+  if (role === 'manager') return 'primary'
+  return 'info'
+}
+
+function formatDate(value) {
+  if (!value) return '-'
+  return value.replace('T', ' ').slice(0, 19)
+}
+
+function formatMs(value) {
+  if (value === null || value === undefined) return '-'
+  const seconds = value / 1000
+  if (seconds < 60) return `${seconds.toFixed(1)} 秒`
+  const minutes = seconds / 60
+  if (minutes < 60) return `${minutes.toFixed(1)} 分钟`
+  return `${(minutes / 60).toFixed(1)} 小时`
+}
+
+function formatRate(value) {
+  if (value === null || value === undefined) return '-'
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function statusLabel(status) {
+  const labels = {
+    queued: '排队中',
+    running: '处理中',
+    succeeded: '已完成',
+    failed: '失败',
+    canceled: '已取消',
+    timed_out: '已超时',
   }
-  loading.value = true
+  return labels[status] || status
+}
+
+function landingPath(user) {
+  const redirect = new URLSearchParams(window.location.search).get('redirect')
+  if (redirect?.startsWith('/')) return redirect
+  if (user.roles?.includes('system_admin') || user.roles?.includes('admin')) return '/admin/permissions'
+  if (user.roles?.includes('staff')) return '/index.html'
+  const firstModule = user.available_modules?.find((item) => item.status === 'available')
+  return firstModule?.path || '/admin/permissions'
+}
+
+async function login() {
+  if (!loginForm.username || !loginForm.password) {
+    ElMessage.warning('请输入用户名和密码')
+    return
+  }
+  state.loading = true
   try {
     const params = new URLSearchParams()
-    params.append('username', authForm.value.username)
-    params.append('password', authForm.value.password)
-
-    const res = await axios.post(`${API_BASE_URL}/auth/login`, params)
-    localStorage.setItem('ai_token', res.data.access_token)
-    currentUser.value = authForm.value.username
-    isLoggedIn.value = true
-    ElMessage.success(`欢迎回来，${currentUser.value}！`)
+    params.append('username', loginForm.username)
+    params.append('password', loginForm.password)
+    const response = await api.post('/auth/login', params)
+    const data = responseData(response)
+    localStorage.setItem(TOKEN_KEY, data.access_token)
+    const me = await loadMe()
+    window.location.href = landingPath(me)
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '登录失败')
+    ElMessage.error(apiErrorMessage(error, '登录失败'))
   } finally {
-    loading.value = false
+    state.loading = false
   }
 }
 
-const logout = () => {
-  localStorage.removeItem('ai_token')
-  isLoggedIn.value = false
-  authForm.value.password = ''
-  messageHistory.value = [{ role: 'assistant', content: '您好，多模态业务中台已连接。' }]
+async function loadMe() {
+  const response = await api.get('/auth/me')
+  session.user = responseData(response)
+  return session.user
 }
 
-const handleFileChange = (file) => {
-  selectedFile.value = file.raw
-  ElMessage.info(`已选中文件: ${file.name}`)
-}
-
-const sendMessage = async () => {
-  const text = inputText.value.trim()
-  if (!text && !selectedFile.value) return
-
-  const formData = new FormData()
-  if (text) formData.append('message', text)
-  if (selectedFile.value) formData.append('file', selectedFile.value)
-
-  const userMsg = { role: 'user', content: text || '发起多模态文件解析请求' }
-  if (selectedFile.value && selectedFile.value.type.startsWith('image/')) {
-    userMsg.fileUrl = URL.createObjectURL(selectedFile.value)
-  }
-  messageHistory.value.push(userMsg)
-
-  // 🚀 核心修复1：Vue3响应式陷阱。必须获取 push 后产生的 Proxy 代理对象
-  messageHistory.value.push({ role: 'assistant', content: '' })
-  const currentAssistantMsg = messageHistory.value[messageHistory.value.length - 1]
-
-  inputText.value = ''
-  selectedFile.value = null
-  sending.value = true
-  isTyping.value = true
-  scrollToBottom()
-
-  let charQueue = Array.from('⏳ 正在唤醒网关层，建立长连接...\n\n')
-  let streamEnded = false
-
-  // 自适应打字机循环
-  const typeNextChar = () => {
-    if (charQueue.length > 0) {
-      const charsToProcess = charQueue.length > 60 ? 4 : (charQueue.length > 20 ? 2 : 1)
-      for(let i = 0; i < charsToProcess; i++) {
-          if(charQueue.length > 0) {
-              // 修改 Proxy 对象才会触发 Vue DOM 实时更新！
-              currentAssistantMsg.content += charQueue.shift()
-          }
-      }
-      scrollToBottom()
-      setTimeout(typeNextChar, 25)
-    } else {
-      if (streamEnded) {
-        isTyping.value = false
-        sending.value = false
-      } else {
-        setTimeout(typeNextChar, 50)
-      }
-    }
-  }
-
-  typeNextChar()
-
+async function loadUsers() {
+  state.loading = true
+  state.error = ''
   try {
-    const token = localStorage.getItem('ai_token')
-    const response = await fetch(`${API_BASE_URL}/chat`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData
-    })
+    const response = await api.get('/admin/users')
+    users.value = responseData(response)
+  } catch (error) {
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error))
+  } finally {
+    state.loading = false
+  }
+}
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      charQueue.push(...(`\n❌ [网关级拦截] ${errorData.detail || '网络连接异常'}`).split(''))
-      streamEnded = true
+async function loadQuoteDashboard() {
+  state.loading = true
+  state.error = ''
+  try {
+    const response = await api.get('/admin/dashboard/quote-speed', {
+      params: { range: dashboardRange.value },
+    })
+    dashboard.value = responseData(response)
+  } catch (error) {
+    dashboard.value = null
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.data?.detail === 'FEATURE_DISABLED') state.error = 'feature_disabled'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '看板加载失败'))
+  } finally {
+    state.loading = false
+  }
+}
+
+async function bootstrap() {
+  if (routeName.value === 'login') return
+  state.loading = true
+  state.error = ''
+  try {
+    await loadMe()
+    if (routeName.value === 'dashboard') {
+      if (!canViewDashboard.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadQuoteDashboard()
       return
     }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder('utf-8')
-    let done = false
-
-    while (!done) {
-      const { value, done: readerDone } = await reader.read()
-      done = readerDone
-      if (value) {
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n')
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.substring(6))
-              if (data.status === 'processing') {
-                charQueue.push(...(data.message + '\n\n').split(''))
-              } else if (data.status === 'preview') {
-                charQueue.push(...(data.message + '\n\n').split(''))
-                previewData.value = data.data
-              } else if (data.status === 'success' || data.status === 'error') {
-                charQueue.push(...(data.message).split(''))
-              }
-            } catch(e) { console.error("流式数据解析出错:", e) }
-          }
-        }
-      }
+    if (!canAccessPermissions.value) {
+      state.error = 'forbidden'
+      return
     }
-    streamEnded = true
+    await loadUsers()
   } catch (error) {
-    charQueue.push(...(`\n❌ 严重异常: ${error.message}`).split(''))
-    streamEnded = true
-    if (error.response?.status === 401) logout()
+    state.error = error.response?.status === 403 ? 'forbidden' : 'unauthorized'
+  } finally {
+    state.loading = false
   }
 }
 
-const confirmPush = async () => {
-  if (!previewData.value) return
+function openGrant(user) {
+  grantDialog.user = user
+  grantDialog.role = 'staff'
+  grantDialog.note = ''
+  grantDialog.visible = true
+}
+
+async function grantSelectedRole() {
+  if (!grantDialog.user || !grantDialog.note.trim()) {
+    ElMessage.warning('请填写授权备注')
+    return
+  }
+  state.submitting = true
   try {
-    const token = localStorage.getItem('ai_token')
-    const res = await axios.post(`${API_BASE_URL}/confirm_push`, previewData.value, {
-      headers: { Authorization: `Bearer ${token}` }
+    await api.post(`/admin/users/${grantDialog.user.id}/roles`, {
+      role: grantDialog.role,
+      note: grantDialog.note,
     })
-    messageHistory.value.push({ role: 'assistant', content: res.data.message || '✅ 已推送至钉钉' })
-    previewData.value = null
+    grantDialog.visible = false
+    await loadUsers()
+    ElMessage.success('已授权')
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '推送失败')
+    ElMessage.error(apiErrorMessage(error, '授权失败'))
+  } finally {
+    state.submitting = false
   }
 }
 
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (scrollbarRef.value) {
-      const wrap = scrollbarRef.value.wrapRef
-      wrap.scrollTop = wrap.scrollHeight
+async function openEvents(user) {
+  eventsDrawer.visible = true
+  eventsDrawer.user = user
+  eventsDrawer.revokeRole = user.roles?.[0] || ''
+  eventsDrawer.revokeNote = ''
+  roleEvents.value = []
+  try {
+    const response = await api.get(`/admin/users/${user.id}/role-events`)
+    roleEvents.value = responseData(response)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '授权历史加载失败'))
+  }
+}
+
+async function revokeSelectedRole() {
+  if (!eventsDrawer.user || !eventsDrawer.revokeRole || !eventsDrawer.revokeNote.trim()) {
+    ElMessage.warning('请选择角色并填写撤权备注')
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/admin/users/${eventsDrawer.user.id}/roles/${eventsDrawer.revokeRole}/revoke`, {
+      note: eventsDrawer.revokeNote,
+      trace_id: crypto.randomUUID?.() || String(Date.now()),
+    })
+    await loadUsers()
+    const refreshedUser = users.value.find((item) => item.id === eventsDrawer.user.id)
+    if (refreshedUser) {
+      await openEvents(refreshedUser)
     }
-  })
+    ElMessage.success('已撤销')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '撤权失败'))
+  } finally {
+    state.submitting = false
+  }
 }
+
+function logout() {
+  localStorage.removeItem(TOKEN_KEY)
+  session.user = null
+  window.location.href = '/login'
+}
+
+window.addEventListener('popstate', () => {
+  routeName.value = routeFromPath(window.location.pathname)
+  bootstrap()
+})
+
+onMounted(() => {
+  bootstrap()
+})
 </script>
-
-<style scoped>
-.app-container {
-  height: 100vh;
-  background-color: #f5f7fa;
-}
-.header {
-  background-color: #1e1e2f;
-  color: #fff;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 20px;
-}
-.logo {
-  font-size: 18px;
-  font-weight: bold;
-}
-.main-content {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: calc(100vh - 60px);
-}
-.auth-panel {
-  width: 400px;
-}
-.full-btn {
-  width: 100%;
-  margin-top: 10px;
-}
-.chat-panel {
-  width: 100%;
-  max-width: 900px;
-  height: 100%;
-  padding: 20px 0;
-}
-.chat-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  border-radius: 12px;
-}
-:deep(.el-card__body) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  overflow: hidden;
-}
-.message-list {
-  flex: 1;
-  padding: 20px;
-  background-color: #fafafa;
-}
-.message-item {
-  display: flex;
-  margin-bottom: 20px;
-  align-items: flex-start;
-}
-.message-item.user {
-  flex-direction: row-reverse;
-}
-.avatar {
-  font-size: 24px;
-  margin: 0 10px;
-}
-.bubble {
-  max-width: 75%;
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-.message-item.assistant .bubble {
-  background-color: #fff;
-  border: 1px solid #ebeef5;
-}
-.message-item.user .bubble {
-  background-color: #409eff;
-  color: #fff;
-}
-.file-preview {
-  margin-bottom: 8px;
-}
-.preview-img {
-  width: 150px;
-  height: 150px;
-  border-radius: 4px;
-}
-.input-area {
-  padding: 15px;
-  background-color: #fff;
-  border-top: 1px solid #ebeef5;
-}
-.confirm-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  margin-bottom: 10px;
-  background-color: #f0f9eb;
-  border: 1px solid #b3e19d;
-  border-radius: 6px;
-}
-.confirm-tip {
-  flex: 1;
-  font-size: 13px;
-  color: #529b2e;
-}
-.input-container {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-}
-.upload-preview {
-  margin-bottom: 10px;
-}
-.action-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 12px;
-}
-.tip-text {
-  font-size: 12px;
-  color: #909399;
-}
-
-/* 🚀 核心架构升级：ChatGPT 式闪烁光标特效 */
-.cursor {
-    display: inline-block;
-    width: 7px;
-    height: 16px;
-    background-color: #409eff;
-    vertical-align: text-bottom;
-    margin-left: 4px;
-    animation: blink 1s step-end infinite;
-    border-radius: 2px;
-}
-@keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-}
-</style>

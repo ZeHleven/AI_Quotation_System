@@ -3,19 +3,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 ENV_FILE = BASE_DIR / ".env"
+_RAW_ENV_VALUES = dotenv_values(ENV_FILE) if ENV_FILE.exists() else {}
+ENV_VALUES = {str(key).lstrip("\ufeff"): value for key, value in _RAW_ENV_VALUES.items()}
 load_dotenv(ENV_FILE, override=False)
 
 
 def _env(name: str, default: str = "") -> str:
     value = os.environ.get(name)
-    if value is None or not value.strip():
-        return default
-    return value.strip()
+    if value is not None and value.strip():
+        return value.strip()
+    file_value = ENV_VALUES.get(name)
+    if file_value is not None and str(file_value).strip():
+        return str(file_value).strip()
+    return default
 
 
 def _env_int(name: str, default: int) -> int:
@@ -67,6 +72,10 @@ class Settings:
     jwt_secret_key: str = _env("JWT_SECRET_KEY", "your_super_secret_key_for_ai_middle_office")
     jwt_algorithm: str = _env("JWT_ALGORITHM", "HS256")
     access_token_expire_minutes: int = _env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24)
+    system_admin_username: str = _env("SYSTEM_ADMIN_USERNAME", "admin")
+    feature_vite_frontend: bool = _env_bool("FEATURE_VITE_FRONTEND", False)
+    feature_dashboard_quote: bool = _env_bool("FEATURE_DASHBOARD_QUOTE", False)
+    public_access_enabled: bool = _env_bool("PUBLIC_ACCESS_ENABLED", False)
 
     zhipu_api_key: str = _env("ZHIPU_API_KEY")
     webhook_secret: str = _env("WEBHOOK_SECRET")

@@ -3,6 +3,8 @@
 > 生成时间：2026-05-02
 > 项目：AI 智能报价中台（Clear_test / AI_Middle_Office）
 
+> 历史方案说明：本文保留作为 P4 早期设计记录，仅供追溯参考。RAG reload / eval 的最新状态机、接口和任务调度口径，以 `2026-05-14-ai-platform-upgrade-design.md`、`STATE-MACHINES.md`、`API-CONTRACTS.md` 和 `ADR-AsyncJob.md` 为准。
+
 ---
 
 ## 一、目标

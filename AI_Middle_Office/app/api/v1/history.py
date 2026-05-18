@@ -8,6 +8,7 @@ from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user
 from app.models.quote_history import QuoteHistory, QuoteHistoryItem
 from app.models.user import User
+from app.services.rbac import has_admin_role
 from app.services.quote_history import json_loads, serialize_history_item
 
 
@@ -53,7 +54,7 @@ def _get_accessible_history(history_id: int, current_user: User, db: Session) ->
     record = db.query(QuoteHistory).filter(QuoteHistory.id == history_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="quote history not found")
-    if current_user.role != "admin" and record.username != current_user.username:
+    if not has_admin_role(current_user) and record.username != current_user.username:
         raise HTTPException(status_code=404, detail="quote history not found")
     return record
 
@@ -67,7 +68,7 @@ async def get_history(
     db: Session = Depends(get_db),
 ):
     query = db.query(QuoteHistory)
-    if current_user.role != "admin":
+    if not has_admin_role(current_user):
         query = query.filter(QuoteHistory.username == current_user.username)
     elif username:
         query = query.filter(QuoteHistory.username == username)

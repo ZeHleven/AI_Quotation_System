@@ -1,11 +1,13 @@
 import json
 import uuid
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
+from app.services import quote_job_runner
 
 
 def _login_headers(client):
@@ -277,3 +279,57 @@ def test_quote_job_events_hide_other_users_jobs(client):
 
     assert response.status_code == 200
     assert "报价任务不存在" in response.text
+
+
+def test_quote_job_runner_records_runtime_duration(monkeypatch):
+    username = f"runner_user_{uuid.uuid4().hex[:10]}"
+    job_id = str(uuid.uuid4())
+
+    async def fake_load_file_content(job, db):
+        return None
+
+    async def fake_quote_events(**kwargs):
+        yield (
+            "preview",
+            "AI preview ready",
+            {
+                "stage": "completed",
+                "data": {"project_details": [{"project_name": "墙面刷新", "total_price": 100}]},
+            },
+        )
+
+    perf_values = iter([100.0, 102.345])
+    monkeypatch.setattr(quote_job_runner.time, "perf_counter", lambda: next(perf_values))
+    monkeypatch.setattr(quote_job_runner, "_load_job_file_content", fake_load_file_content)
+    monkeypatch.setattr(quote_job_runner, "_iter_quote_events", fake_quote_events)
+    monkeypatch.setattr(quote_job_runner, "safe_record_ai_preview", lambda *args, **kwargs: None)
+
+    db = SessionLocal()
+    try:
+        db.add(User(username=username, hashed_password=get_password_hash("secret123"), role="user", quota=5))
+        db.add(
+            QuoteJob(
+                job_id=job_id,
+                username=username,
+                status="queued",
+                stage="queued",
+                message="客厅墙面刷新",
+                trace_id="trace-runtime-duration",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    asyncio.run(quote_job_runner.run_quote_job_async(job_id))
+
+    db = SessionLocal()
+    try:
+        job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).one()
+        user = db.query(User).filter(User.username == username).one()
+        assert job.status == "succeeded"
+        assert job.duration_ms == 2345
+        assert job.result_item_count == 1
+        assert user.quota == 4
+    finally:
+        db.close()

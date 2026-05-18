@@ -1,19 +1,22 @@
 # 系统升级路线图
 
-> 最后更新：2026-05-08
+> 最后更新：2026-05-18
 
 > 业务优化 P4 更新：真实用户体验优化代码层已落地，`index.html` 新增失败原因建议、预审风险提示和人工修改沉淀知识入口；本阶段不新增 Alembic revision。
 > P4 运行态手工验收已完成（2026-05-08）：22/22 项全部通过，详见 `AI_Middle_Office/P4_ACCEPTANCE.md`。
+> AI 平台架构升级 Phase 0 已完成开发与当前环境验证（2026-05-18）：RBAC、`role_version`、Vite 壳、`/login`、`/admin/permissions`、SPA fallback 已通过；旧页面保留。正式生产上线尚未发生，未来需单独 Runbook。总控文档见 `docs/superpowers/specs/2026-05-14-ai-platform-upgrade-design.md`。
+> AI 平台架构升级 Phase 1 报价速度看板已完成当前环境运行态验收（2026-05-18）：新增报价速度聚合接口、`FEATURE_DASHBOARD_QUOTE` 和 `/admin/dashboard` 看板视图；已修复 AI 生成耗时写入与历史成功任务耗时回填；页面、看板数据和新增真实报价统计均已确认正常。正式生产启用仍需单独 Runbook。
 
 ---
 
-## 当前冻结状态（2026-05-06）
+## 当前冻结状态（2026-05-18）
 
 - **后端基础设施优化已收束**：后端重构 P0-P3、补充一致性优化、运维告警收敛、Alembic 迁移纪律均已落地；后续不再做无触发的基础设施打磨。
-- **数据库规范**：当前代码迁移 head 为 `20260507_0006`；生产数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归和知识候选记录。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
+- **数据库规范**：当前代码迁移 head 为 `20260514_0011`；生产数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录和 Phase 0 RBAC。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
 - **业务优化 P0-P4 已完成到代码层**：P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理、P4 真实用户体验优化均已落地。
 - **前端优化 P0-P3 已完成**：已完成 `FRONTEND_ACCEPTANCE.md`、`static/js/shared.js`、`admin.html` 模块拆分，以及报价进度、失败恢复、上传/推送状态优化。
-- **前端架构 P4 暂不启动**：暂不迁移 Vite/Vue SFC；只有页面规模、多人协作、组件复用、TypeScript/Router/状态管理等触发条件真实出现时再评估。
+- **AI 平台升级 Phase 0 已完成开发与当前环境验证**：Vite 壳、登录鉴权统一、RBAC 与 SPA fallback 已通过；旧 `index.html` / `admin.html` / `app.html` 继续保留，后续按设计文档逐步收拢入口。正式生产上线待单独 Runbook。
+- **AI 平台升级 Phase 1 报价速度看板已完成当前环境运行态验收**：已新增报价速度聚合接口和 Vite 看板入口，功能开关已在当前环境打开；已修复新报价任务 `duration_ms` 实测写入，并在备份后回填历史 121 条成功任务的 0 耗时记录；页面、看板数据和新增真实报价统计均已确认正常；未迁移旧业务页面，正式生产启用待单独 Runbook。
 - **维护策略**：进入问题驱动维护阶段，优先投入报价准确率、知识库质量、RAG 评测和真实用户体验问题。
 
 ## 业务优化路线（2026-05-07）
@@ -29,7 +32,8 @@
 | 已完成 | P3 Admin 知识候选审核面板 | 已接入 admin.html 并完成手工验收（2026-05-08）。 |
 | 已完成 | P4 真实用户体验运行态手工验收 | 2026-05-08 手工验收通过，22/22 项全部通过，详见 `AI_Middle_Office/P4_ACCEPTANCE.md`。 |
 | 暂不启动 | P5 LangGraph | 达到触发条件后再评估。 |
-| 暂不启动 | 前端架构 P4 Vite/Vue SFC 迁移 | 页面规模、多人协作、组件复用或 TS/Router/状态管理需求真实出现后再评估。 |
+| 已完成 | AI 平台升级 Phase 0：Vite 壳 + 登录鉴权统一 + RBAC | 2026-05-18 开发与当前环境验证完成；旧页面保留，正式生产上线待单独 Runbook。 |
+| 已完成当前环境运行态验收 | AI 平台升级 Phase 1：报价速度看板 | 已新增报价速度聚合接口、功能开关和 Vite 看板视图；已修复 AI 生成耗时口径并回填历史成功任务；页面、看板数据和新增真实报价统计均正常；正式生产启用待单独 Runbook。 |
 
 - [x] **P0 报价反馈闭环 + 版本追踪**：新增 `quote_feedback`、`quote_corrections`、`quote_rag_traces`，在异步报价预审完成时记录 AI 初稿，在 `/confirm_push` 成功后记录最终人工确认稿和字段差异，在预审打回时记录 rejection；新增 `DIFY_APP_VERSION`、`DIFY_WORKFLOW_VERSION`、`DIFY_PROMPT_VERSION`、`DIFY_RELEASE_ID`、`RAG_COLLECTION_ALIAS` 配置。
 - [x] **P0 前端上下文传递**：`index.html` 在预审弹窗保存 `quote_job_id` / `trace_id`，确认推送时带回后端，打回重填时调用 `/api/v1/quote/feedback/reject` 做轻量记录。
@@ -44,6 +48,8 @@
 - [x] **P4 真实用户体验优化**：失败可操作原因、预审高风险标记、人工修改一键沉淀知识入口。
 - [x] **P4 验收清单**：新增 `AI_Middle_Office/P4_ACCEPTANCE.md`，包含前置确认、金路径、打回路径、失败提示、trace_id 一致性 5 个章节共 22 项检查点。
 - [x] **P4 运行态手工验收**：2026-05-08 完成，22/22 项全部通过，见 `AI_Middle_Office/P4_ACCEPTANCE.md` 验收记录。
+- [x] **AI 平台升级 Phase 0 开发与当前环境验证**：2026-05-18 完成，Alembic `20260514_0011 (head)`，当前环境 `FEATURE_VITE_FRONTEND=true`，`PUBLIC_ACCESS_ENABLED=false`；`/login`、`/admin/permissions`、`/admin/dashboard`、旧 HTML 入口均冒烟通过。正式生产上线尚未发生。
+- [x] **AI 平台升级 Phase 1 报价速度看板当前环境运行态验收完成**：2026-05-18 完成，新增 `FEATURE_DASHBOARD_QUOTE`、`GET /api/v1/admin/dashboard/quote-speed`、`/admin/dashboard` 报价速度视图和自动化测试；`quote_job_runner` 已改为记录单次运行实测耗时，历史 121 条成功任务的 `duration_ms=0` 已在 `C:\AI_Backups\20260517_205242\db\ai_quotation.sql` 备份后完成回填；`python -m compileall app scripts`、`python -m pytest`（80 passed）和 `npm.cmd run build` 均通过；用户手工确认 `/admin/dashboard` 页面无 404 / 403 / 控制台接口错误，三类耗时显示正常，新增真实报价任务已进入统计且 AI 生成耗时大于 0；旧 `index.html` / `admin.html` 业务功能未迁移，正式生产启用待单独 Runbook。
 - [ ] **P5 LangGraph 触发项**：仅在需要自适应多轮检索、主动澄清、多模型状态机或替换 N8N 核心编排时再评估。
 
 ## 高优先级

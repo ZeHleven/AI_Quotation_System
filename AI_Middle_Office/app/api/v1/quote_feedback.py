@@ -15,6 +15,7 @@ from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.schemas.quote_feedback import QuoteFeedbackRejectRequest
 from app.services.quote_feedback import record_rejected_quote
+from app.services.rbac import has_admin_role
 
 
 router = APIRouter()
@@ -217,7 +218,7 @@ async def reject_quote_feedback(
         raise HTTPException(status_code=400, detail="quote_job_id or trace_id is required")
     if payload.quote_job_id:
         job = db.query(QuoteJob).filter(QuoteJob.job_id == payload.quote_job_id).first()
-        if not job or (current_user.role != "admin" and job.username != current_user.username):
+        if not job or (not has_admin_role(current_user) and job.username != current_user.username):
             raise HTTPException(status_code=404, detail="quote job not found")
     feedback = record_rejected_quote(
         db,
@@ -225,7 +226,7 @@ async def reject_quote_feedback(
         quote_job_id=payload.quote_job_id,
         trace_id=payload.trace_id,
         reason=payload.reason,
-        allow_cross_user=current_user.role == "admin",
+        allow_cross_user=has_admin_role(current_user),
     )
     db.commit()
     return api_ok(

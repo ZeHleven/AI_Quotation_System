@@ -12,6 +12,7 @@ from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user, require_admin
 from app.models.file_object import FileObject
 from app.models.user import User
+from app.services.rbac import has_admin_role
 from app.services.file_storage import (
     StorageDisabledError,
     check_storage_health,
@@ -34,7 +35,7 @@ def _get_accessible_file(file_id: str, current_user: User, db: Session) -> FileO
     file_obj = db.query(FileObject).filter(FileObject.file_id == file_id).first()
     if not file_obj:
         raise HTTPException(status_code=404, detail="文件不存在")
-    if current_user.role != "admin" and file_obj.username != current_user.username:
+    if not has_admin_role(current_user) and file_obj.username != current_user.username:
         raise HTTPException(status_code=404, detail="文件不存在")
     return file_obj
 
@@ -110,7 +111,7 @@ async def list_files(
     db: Session = Depends(get_db),
 ):
     query = db.query(FileObject)
-    if current_user.role != "admin":
+    if not has_admin_role(current_user):
         query = query.filter(FileObject.username == current_user.username)
     elif username:
         query = query.filter(FileObject.username == username)

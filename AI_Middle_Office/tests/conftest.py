@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 TEST_DIR = Path(__file__).resolve().parent
 TEST_DB = TEST_DIR / ".test_sql_app.db"
+if TEST_DB.exists():
+    TEST_DB.unlink()
 
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
 os.environ["AUTO_CREATE_TABLES"] = "true"

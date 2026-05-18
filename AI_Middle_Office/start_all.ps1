@@ -46,6 +46,23 @@ function Get-DotEnvValue {
     return $value.Trim('"').Trim("'")
 }
 
+function Import-DotEnvToProcess {
+    if (-not (Test-Path $EnvFile)) { return }
+    Get-Content -Path $EnvFile -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            $line = $_
+            if (-not $line) { return }
+            $trimmed = $line.Trim()
+            if (-not $trimmed -or $trimmed.StartsWith("#")) { return }
+            $parts = $trimmed.Split("=", 2)
+            if ($parts.Count -ne 2) { return }
+            $name = $parts[0].Trim().TrimStart([char]0xFEFF)
+            if (-not $name) { return }
+            $value = $parts[1].Trim().Trim('"').Trim("'")
+            [Environment]::SetEnvironmentVariable($name, $value, "Process")
+        }
+}
+
 function Find-Python {
     $candidates = @(
         "C:\Users\12521\miniconda3\python.exe",
@@ -219,6 +236,7 @@ if (-not $CentosHost) {
 }
 
 $PythonPath = Find-Python
+Import-DotEnvToProcess
 $minioEnabled = (Get-DotEnvValue -Name "MINIO_ENABLED" -Default "false").ToLowerInvariant()
 
 Write-Host "========================================" -ForegroundColor Cyan

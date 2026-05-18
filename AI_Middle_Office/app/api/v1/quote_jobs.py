@@ -20,6 +20,7 @@ from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
 from app.services.file_storage import StorageDisabledError, store_file_bytes
 from app.services.quote_dispatcher import dispatch_quote_job
+from app.services.rbac import has_admin_role
 from app.services.quote_job_readability import (
     apply_job_duration,
     apply_job_failure,
@@ -90,7 +91,7 @@ def _get_accessible_job(job_id: str, current_user: User, db: Session) -> QuoteJo
     job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="报价任务不存在")
-    if current_user.role != "admin" and job.username != current_user.username:
+    if not has_admin_role(current_user) and job.username != current_user.username:
         raise HTTPException(status_code=404, detail="报价任务不存在")
     return job
 
@@ -224,7 +225,7 @@ async def list_quote_jobs(
     db: Session = Depends(get_db),
 ):
     query = db.query(QuoteJob)
-    if current_user.role != "admin":
+    if not has_admin_role(current_user):
         query = query.filter(QuoteJob.username == current_user.username)
     elif username:
         query = query.filter(QuoteJob.username == username)
@@ -348,7 +349,7 @@ async def stream_quote_job_events(
     current_user: User = Depends(get_current_user),
 ):
     username = current_user.username
-    is_admin = current_user.role == "admin"
+    is_admin = has_admin_role(current_user)
 
     async def event_generator():
         sent_count = 0

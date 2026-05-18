@@ -22,6 +22,7 @@ from app.services.model_gateway import call_glm_vision_extract, post_json_via_ga
 from app.services.quote_feedback import record_ai_preview, record_confirmed_quote
 from app.services.quote_history import create_quote_history_record
 from app.services.quote_helpers import attach_quote_filename, sign_payload
+from app.services.rbac import has_admin_role
 
 
 router = APIRouter()
@@ -217,7 +218,7 @@ async def confirm_and_push(
                     username=current_user.username,
                     final_payload=payload,
                     quote_history_id=quote_history_id,
-                    allow_cross_user=current_user.role == "admin",
+                    allow_cross_user=has_admin_role(current_user),
                 )
                 db.commit()
             except Exception:

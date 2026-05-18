@@ -32,15 +32,17 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - 健康检查：`/health/live`、`/health/ready`
 - 当前任务队列模式：生产使用 `TASK_QUEUE_MODE=celery`
 - 当前后端优化状态：基础设施 P0-P3 与配置收尾已完成并冻结；业务优化 P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理和 P4 真实用户体验优化已落地到代码层。
+- AI 平台架构升级 Phase 0 已完成开发与当前环境验证（2026-05-18）：RBAC、`role_version`、Vite 壳、`/login`、`/admin/permissions`、SPA fallback 已通过；旧 `index.html` / `admin.html` / `app.html` 保留。正式生产上线尚未发生，未来需单独 Runbook。
+- AI 平台架构升级 Phase 1 报价速度看板已完成当前环境运行态验收（2026-05-18）：新增 `FEATURE_DASHBOARD_QUOTE`、`/api/v1/admin/dashboard/quote-speed` 和 `/admin/dashboard` 看板视图；已修复新报价任务 `duration_ms` 实测写入，并在备份后回填历史 121 条成功任务的 0 耗时记录；页面、看板数据和新增真实报价统计均已确认正常，正式生产启用待单独 Runbook。
 - 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
-- 当前数据库迁移 head：`20260507_0006`；生产数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归和知识候选记录。
-- 最新自动化验证：`python -m compileall app` 通过，`python -m pytest` 为 `64 passed`
+- 当前数据库迁移 head：`20260514_0011`；生产数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归、知识候选记录和 Phase 0 RBAC。
+- 最新验证（2026-05-18，Phase 1 当前环境运行态）：`/health/ready`、`/login`、`/admin/permissions`、`/admin/dashboard`、`/index.html`、`/admin.html`、`/app.html` 当前环境冒烟通过；`/admin/dashboard` 页面、看板数据和新增真实报价统计均已手工确认正常；`python -m compileall app scripts` 通过；`python -m pytest` 为 `80 passed`；`npm.cmd run build` 通过。
 
 ## 关键模块
 
 - `app/main.py`：FastAPI 入口、HTML 托管、路由注册、健康检查、启动期数据库兼容迁移。
 - `app/core/config.py`：集中读取 `.env` 配置，包含 n8n、RAG、Celery、MinIO、代理、数据库和模型网关参数。
-- `app/api/v1/auth.py`：JWT 登录、当前用户、改密。
+- `app/api/v1/auth.py`：JWT 登录、当前用户、改密；Phase 0 token 包含 `roles` / `role_version`。
 - `app/api/v1/chat.py`：旧兼容导出层，核心路由已拆分，保留历史 import 路径。
 - `app/api/v1/quote.py`：`/chat` SSE 报价流与 `/confirm_push`。
 - `app/api/v1/quote_feedback.py`：报价反馈闭环与 admin 反馈分析接口，包括 summary / list / detail。
@@ -48,7 +50,7 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - `app/api/v1/knowledge_candidates.py`：知识库治理接口，包括候选 build/list/summary、RAG trace 洞察、approve/reject。
 - `app/api/v1/materials.py`：物料库 CRUD、快照、回滚、CSV 导入和 RAG reload。
 - `app/api/v1/history.py`：报价历史记录。
-- `app/api/v1/users.py`：用户配额管理。
+- `app/api/v1/users.py`：用户配额管理、Phase 0 角色授权/撤销和权限历史。
 - `app/api/v1/quote_jobs.py`：新版异步报价任务 API，创建、查询、事件流、取消、重试、超时标记。
 - `app/services/quote_job_runner.py`：后台任务执行链路，负责文件读取、GLM-4V、n8n 调用、结果落库和额度扣减。
 - `app/services/quote_feedback.py`：报价反馈闭环服务，记录 AI 初稿、人工确认稿、字段级修正、Dify/prompt 版本和 RAG trace。
@@ -57,6 +59,7 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - `app/services/quote_dispatcher.py`：按 `TASK_QUEUE_MODE` 分发到 Celery/local/inline/disabled。
 - `app/services/model_gateway.py`：统一模型与 n8n 调用日志、耗时、错误、熔断。
 - `app/services/file_storage.py`：MinIO 文件上传、读取、临时下载链接和健康检查。
+- `app/services/rbac.py`：Phase 0 多角色权限、`users.role` 兼容同步、`role_version` 递增和可用模块序列化。
 - `app/api/v1/ops.py` + `app/services/ops_monitor.py`：管理员运维面板，聚合基础服务、日志和卡住任务。
 - `app/tasks/`：Celery app 与 worker task 入口。
 - `alembic/`：数据库迁移基线。

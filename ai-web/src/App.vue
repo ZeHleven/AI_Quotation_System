@@ -70,6 +70,15 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>效率驾驶舱</span>
         </button>
+        <button
+          v-if="canViewExecution"
+          :class="['nav-item', { active: routeName === 'execution' }]"
+          type="button"
+          @click="navigate('/admin/execution')"
+        >
+          <el-icon><Clock /></el-icon>
+          <span>执行任务</span>
+        </button>
         <button v-if="canOpenLegacyQuote" class="nav-item" type="button" @click="openLegacy('/index.html')">
           <el-icon><Document /></el-icon>
           <span>旧报价工作台</span>
@@ -529,7 +538,244 @@
                 />
               </section>
             </el-tab-pane>
+
+            <el-tab-pane label="执行速度" name="execution" :disabled="dashboardFeature.executionDisabled">
+              <el-alert
+                v-if="dashboardFeature.executionDisabled"
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="执行速度看板开关尚未打开"
+              />
+              <template v-else>
+                <el-alert
+                  v-if="executionDashboard?.empty_state"
+                  class="dashboard-alert"
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  title="暂无执行任务数据"
+                />
+                <el-alert
+                  v-else-if="executionDashboard?.low_sample_warning"
+                  class="dashboard-alert"
+                  type="warning"
+                  show-icon
+                  :closable="false"
+                  title="样本量较少，仅供参考"
+                />
+                <div class="metric-grid response-grid">
+                  <div class="metric-card">
+                    <span>执行任务</span>
+                    <strong>{{ executionDashboard?.task_count ?? 0 }}</strong>
+                    <small>未完成 {{ executionDashboard?.open_count ?? 0 }}</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>已完成</span>
+                    <strong>{{ executionDashboard?.done_count ?? 0 }}</strong>
+                    <small>状态 done</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>逾期任务</span>
+                    <strong>{{ executionDashboard?.overdue_count ?? 0 }}</strong>
+                    <small>动态按截止时间计算</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>平均完成耗时</span>
+                    <strong>{{ formatMs(executionDashboard?.avg_completion_duration_ms) }}</strong>
+                    <small>创建到完成</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>已取消</span>
+                    <strong>{{ executionDashboard?.cancelled_count ?? 0 }}</strong>
+                    <small>终态任务</small>
+                  </div>
+                </div>
+
+                <div class="dashboard-split">
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><TrendCharts /></el-icon>
+                      <span>执行趋势</span>
+                    </div>
+                    <el-table
+                      :data="visibleExecutionTrends"
+                      row-key="date"
+                      class="users-table"
+                      empty-text="暂无趋势数据"
+                    >
+                      <el-table-column prop="date" label="日期" min-width="120" />
+                      <el-table-column prop="task_count" label="任务" width="90" />
+                      <el-table-column prop="done_count" label="完成" width="90" />
+                      <el-table-column prop="cancelled_count" label="取消" width="90" />
+                      <el-table-column prop="overdue_count" label="逾期" width="90" />
+                      <el-table-column label="平均完成" min-width="120">
+                        <template #default="{ row }">{{ formatMs(row.avg_completion_duration_ms) }}</template>
+                      </el-table-column>
+                    </el-table>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><Histogram /></el-icon>
+                      <span>负责人</span>
+                    </div>
+                    <div class="status-list">
+                      <div
+                        v-for="item in visibleExecutionAssignees"
+                        :key="item.assignee_id"
+                        class="status-row stacked"
+                      >
+                        <span>{{ item.username }}</span>
+                        <strong>{{ item.done_count }} / {{ item.task_count }}</strong>
+                        <small>逾期 {{ item.overdue_count }} · 平均 {{ formatMs(item.avg_completion_duration_ms) }}</small>
+                      </div>
+                      <el-empty v-if="!visibleExecutionAssignees.length" description="暂无负责人数据" />
+                    </div>
+                  </section>
+                </div>
+              </template>
+            </el-tab-pane>
           </el-tabs>
+        </template>
+
+        <template v-else-if="routeName === 'execution'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">Phase 3</p>
+              <h2>执行任务</h2>
+            </div>
+            <div class="heading-actions">
+              <el-button v-if="canCreateExecutionTask" :icon="Plus" type="primary" @click="openExecutionCreate">
+                新建任务
+              </el-button>
+              <el-button :icon="Refresh" plain @click="loadExecutionTasks">刷新</el-button>
+            </div>
+          </div>
+          <el-alert
+            v-if="executionFeatureDisabled"
+            class="dashboard-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="执行任务功能尚未开启"
+          />
+          <template v-else>
+            <div class="operation-filters">
+              <el-select
+                v-model="executionTaskFilters.status"
+                size="small"
+                clearable
+                placeholder="任务状态"
+                @change="applyExecutionTaskFilters"
+              >
+                <el-option
+                  v-for="option in executionStatusOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+              <el-select
+                v-model="executionTaskFilters.source"
+                size="small"
+                clearable
+                placeholder="任务来源"
+                @change="applyExecutionTaskFilters"
+              >
+                <el-option
+                  v-for="option in executionSourceOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+              <el-input
+                v-model="executionTaskFilters.keyword"
+                size="small"
+                clearable
+                placeholder="任务标题/备注"
+                @keyup.enter="applyExecutionTaskFilters"
+                @clear="applyExecutionTaskFilters"
+              />
+              <el-button size="small" type="primary" plain @click="applyExecutionTaskFilters">查询</el-button>
+            </div>
+            <el-table
+              :data="executionTasks"
+              row-key="id"
+              class="users-table"
+              empty-text="暂无执行任务"
+            >
+              <el-table-column label="任务" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <strong>{{ row.title }}</strong>
+                    <small>{{ executionSourceLabel(row.source) }} · {{ row.source_ref_id || '无来源编号' }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="assignee_username" label="负责人" width="120" />
+              <el-table-column label="截止时间" min-width="150">
+                <template #default="{ row }">{{ formatDate(row.due_at) }}</template>
+              </el-table-column>
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }">
+                  <el-tag :type="executionStatusTag(row.status)" effect="plain">{{ executionStatusLabel(row.status) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="逾期" width="90">
+                <template #default="{ row }">
+                  <el-tag :type="row.is_overdue ? 'danger' : 'info'" effect="plain">
+                    {{ row.is_overdue ? '逾期' : '正常' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="notes" label="备注" min-width="180" show-overflow-tooltip />
+              <el-table-column label="操作" width="270" fixed="right">
+                <template #default="{ row }">
+                  <div class="row-actions">
+                    <el-button size="small" :icon="Document" plain @click="openExecutionDetail(row)">详情</el-button>
+                    <el-button
+                      size="small"
+                      plain
+                      :disabled="row.status !== 'pending'"
+                      @click="updateExecutionTaskStatus(row, 'in_progress')"
+                    >
+                      开始
+                    </el-button>
+                    <el-button
+                      size="small"
+                      plain
+                      :disabled="!['pending', 'in_progress'].includes(row.status)"
+                      @click="updateExecutionTaskStatus(row, 'done')"
+                    >
+                      完成
+                    </el-button>
+                    <el-button
+                      v-if="canCreateExecutionTask"
+                      size="small"
+                      type="danger"
+                      plain
+                      :disabled="!['pending', 'in_progress'].includes(row.status)"
+                      @click="cancelExecutionTask(row)"
+                    >
+                      取消
+                    </el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-pagination
+              v-if="executionTaskTotal > executionTaskPageSize"
+              v-model:current-page="executionTaskPage"
+              :page-size="executionTaskPageSize"
+              :total="executionTaskTotal"
+              layout="total, prev, pager, next"
+              small
+              @current-change="loadExecutionTasks"
+            />
+          </template>
         </template>
 
         <template v-else>
@@ -760,6 +1006,116 @@
         </section>
       </template>
     </el-drawer>
+
+    <el-dialog v-model="executionDialog.visible" title="新建执行任务" width="520px">
+      <el-form label-position="top" :model="executionDialog.form">
+        <el-form-item label="任务标题">
+          <el-input v-model="executionDialog.form.title" maxlength="120" show-word-limit />
+        </el-form-item>
+        <el-form-item label="负责人">
+          <el-select v-model="executionDialog.form.assignee_id" class="full-width" filterable>
+            <el-option
+              v-for="user in executionAssigneeOptions"
+              :key="user.id"
+              :label="user.username"
+              :value="user.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="截止时间">
+          <el-date-picker
+            v-model="executionDialog.form.due_at"
+            class="full-width"
+            type="datetime"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            format="YYYY-MM-DD HH:mm"
+          />
+        </el-form-item>
+        <el-form-item label="来源">
+          <el-select v-model="executionDialog.form.source" class="full-width">
+            <el-option
+              v-for="option in executionSourceOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="来源编号">
+          <el-input v-model="executionDialog.form.source_ref_id" maxlength="64" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="executionDialog.form.notes" type="textarea" :rows="3" maxlength="500" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="executionDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="createExecutionTask">创建任务</el-button>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="executionDrawer.visible" size="620px" title="执行任务详情">
+      <div v-if="executionDrawer.loading" class="center-state">
+        <el-icon class="spin"><Refresh /></el-icon>
+        <span>加载中</span>
+      </div>
+      <template v-else-if="executionDrawer.task">
+        <div class="detail-grid">
+          <div>
+            <small>任务</small>
+            <strong>{{ executionDrawer.task.title }}</strong>
+          </div>
+          <div>
+            <small>状态</small>
+            <strong>{{ executionStatusLabel(executionDrawer.task.status) }}</strong>
+          </div>
+          <div>
+            <small>负责人</small>
+            <strong>{{ executionDrawer.task.assignee_username || '-' }}</strong>
+          </div>
+          <div>
+            <small>截止时间</small>
+            <strong>{{ formatDate(executionDrawer.task.due_at) }}</strong>
+          </div>
+          <div>
+            <small>完成时间</small>
+            <strong>{{ formatDate(executionDrawer.task.completed_at) }}</strong>
+          </div>
+          <div>
+            <small>来源</small>
+            <strong>{{ executionSourceLabel(executionDrawer.task.source) }}</strong>
+          </div>
+        </div>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Document /></el-icon>
+            <span>备注</span>
+          </div>
+          <p class="detail-text">{{ executionDrawer.task.notes || '-' }}</p>
+        </section>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Clock /></el-icon>
+            <span>事件记录</span>
+          </div>
+          <el-timeline>
+            <el-timeline-item
+              v-for="event in executionDrawer.task.events || []"
+              :key="event.id"
+              :timestamp="formatDate(event.created_at)"
+              placement="top"
+            >
+              <div class="event-row">
+                <strong>{{ event.event_type }}</strong>
+                <el-tag size="small" effect="plain">{{ event.from_status || '-' }} -> {{ event.to_status || '-' }}</el-tag>
+              </div>
+              <p>{{ event.reason || '无备注' }}</p>
+            </el-timeline-item>
+          </el-timeline>
+          <el-empty v-if="!executionDrawer.task.events?.length" description="暂无事件" />
+        </section>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -840,12 +1196,27 @@ const quoteJobStatusOptions = [
   { value: 'failed,canceled,timed_out', label: '异常状态' },
 ]
 
+const executionStatusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'pending', label: '待处理' },
+  { value: 'in_progress', label: '进行中' },
+  { value: 'done', label: '已完成' },
+  { value: 'cancelled', label: '已取消' },
+]
+
+const executionSourceOptions = [
+  { value: 'manual', label: '手动创建' },
+  { value: 'quote', label: '报价跟进' },
+  { value: 'meeting', label: '会议纪要' },
+]
+
 const loginForm = reactive({ username: '', password: '' })
 const session = reactive({ user: null })
 const users = ref([])
 const roleEvents = ref([])
 const quoteDashboard = ref(null)
 const responseDashboard = ref(null)
+const executionDashboard = ref(null)
 const clientInquiries = ref([])
 const clientInquiryTotal = ref(0)
 const clientInquiryPage = ref(1)
@@ -854,6 +1225,10 @@ const quoteJobs = ref([])
 const quoteJobTotal = ref(0)
 const quoteJobPage = ref(1)
 const quoteJobPageSize = 15
+const executionTasks = ref([])
+const executionTaskTotal = ref(0)
+const executionTaskPage = ref(1)
+const executionTaskPageSize = 20
 const clientInquiryFilters = reactive({
   source: '',
   keyword: '',
@@ -865,9 +1240,15 @@ const quoteJobFilters = reactive({
   keyword: '',
   username: '',
 })
+const executionTaskFilters = reactive({
+  status: '',
+  source: '',
+  keyword: '',
+})
 const dashboardRange = ref('last_30_days')
 const dashboardTab = ref('quote')
-const dashboardFeature = reactive({ quoteDisabled: false, responseDisabled: false })
+const dashboardFeature = reactive({ quoteDisabled: false, responseDisabled: false, executionDisabled: false })
+const executionFeatureDisabled = ref(false)
 const state = reactive({ loading: false, submitting: false, error: '' })
 const routeName = ref(routeFromPath(window.location.pathname))
 
@@ -891,20 +1272,46 @@ const quoteJobDrawer = reactive({
   job: null,
 })
 
+const executionDialog = reactive({
+  visible: false,
+  form: {
+    title: '',
+    assignee_id: null,
+    due_at: '',
+    source: 'manual',
+    source_ref_id: '',
+    notes: '',
+  },
+})
+
+const executionDrawer = reactive({
+  visible: false,
+  loading: false,
+  task: null,
+})
+
 const roles = computed(() => session.user?.roles || [])
 const canMutateRoles = computed(() => roles.value.includes('system_admin'))
 const canAccessPermissions = computed(() => roles.value.includes('system_admin') || roles.value.includes('admin'))
 const canViewDashboard = computed(() => canAccessPermissions.value || roles.value.includes('viewer'))
 const canViewQuoteOperations = computed(() => canAccessPermissions.value)
+const canViewExecution = computed(() => canAccessPermissions.value || roles.value.includes('staff') || roles.value.includes('manager'))
+const canCreateExecutionTask = computed(() => canAccessPermissions.value)
 const canOpenLegacyQuote = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
 const visibleDailyTrends = computed(() => (quoteDashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
 const visibleResponseSources = computed(() => (responseDashboard.value?.by_source || []).slice(0, 12))
 const visibleResponseResponders = computed(() => (responseDashboard.value?.by_responder || []).slice(0, 12))
+const visibleExecutionTrends = computed(() => (executionDashboard.value?.daily_trends || []).filter((item) => item.task_count > 0).slice(-12))
+const visibleExecutionAssignees = computed(() => (executionDashboard.value?.by_assignee || []).slice(0, 12))
+const executionAssigneeOptions = computed(() =>
+  users.value.filter((user) => user.is_active !== false && user.roles?.some((role) => ['system_admin', 'admin', 'staff', 'manager'].includes(role))),
+)
 
 function routeFromPath(path) {
   if (path === '/login') return 'login'
   if (path === '/admin/dashboard') return 'dashboard'
+  if (path === '/admin/execution') return 'execution'
   return 'permissions'
 }
 
@@ -982,6 +1389,28 @@ function jobStatusTag(status) {
   if (status === 'failed' || status === 'timed_out') return 'danger'
   if (status === 'canceled') return 'info'
   if (status === 'running') return 'warning'
+  return 'primary'
+}
+
+function executionStatusLabel(status) {
+  const labels = {
+    pending: '待处理',
+    in_progress: '进行中',
+    done: '已完成',
+    cancelled: '已取消',
+  }
+  return labels[status] || status
+}
+
+function executionSourceLabel(source) {
+  const option = executionSourceOptions.find((item) => item.value === source)
+  return option?.label || source || '-'
+}
+
+function executionStatusTag(status) {
+  if (status === 'done') return 'success'
+  if (status === 'cancelled') return 'info'
+  if (status === 'in_progress') return 'warning'
   return 'primary'
 }
 
@@ -1196,11 +1625,146 @@ async function markQuoteTimeouts() {
   }
 }
 
+async function loadExecutionUsers() {
+  if (!canCreateExecutionTask.value || users.value.length) return
+  try {
+    const response = await api.get('/admin/users')
+    users.value = responseData(response)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '负责人加载失败'))
+  }
+}
+
+async function loadExecutionTasks() {
+  executionFeatureDisabled.value = false
+  const params = {
+    page: executionTaskPage.value,
+    page_size: executionTaskPageSize,
+  }
+  if (executionTaskFilters.status) params.status = executionTaskFilters.status
+  if (executionTaskFilters.source) params.source = executionTaskFilters.source
+  const keyword = executionTaskFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
+  try {
+    const response = await api.get('/execution-tasks', { params })
+    executionTasks.value = responseData(response) || []
+    executionTaskTotal.value = response.data?.total ?? executionTasks.value.length
+  } catch (error) {
+    executionTasks.value = []
+    executionTaskTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      executionFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '执行任务加载失败'))
+  }
+}
+
+function applyExecutionTaskFilters() {
+  executionTaskPage.value = 1
+  loadExecutionTasks()
+}
+
+async function openExecutionCreate() {
+  await loadExecutionUsers()
+  executionDialog.form.title = ''
+  executionDialog.form.assignee_id = executionAssigneeOptions.value[0]?.id ?? null
+  executionDialog.form.due_at = ''
+  executionDialog.form.source = 'manual'
+  executionDialog.form.source_ref_id = ''
+  executionDialog.form.notes = ''
+  executionDialog.visible = true
+}
+
+async function createExecutionTask() {
+  if (!executionDialog.form.title.trim() || !executionDialog.form.assignee_id || !executionDialog.form.due_at) {
+    ElMessage.warning('请填写任务标题、负责人和截止时间')
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post('/execution-tasks', {
+      title: executionDialog.form.title,
+      assignee_id: executionDialog.form.assignee_id,
+      due_at: executionDialog.form.due_at,
+      source: executionDialog.form.source,
+      source_ref_id: executionDialog.form.source_ref_id,
+      notes: executionDialog.form.notes,
+    })
+    executionDialog.visible = false
+    ElMessage.success('已创建执行任务')
+    await loadExecutionTasks()
+    if (routeName.value === 'dashboard') await loadDashboards()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '创建任务失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function updateExecutionTaskStatus(row, nextStatus) {
+  state.submitting = true
+  try {
+    await api.patch(`/execution-tasks/${row.id}`, { status: nextStatus })
+    ElMessage.success(nextStatus === 'done' ? '任务已完成' : '任务已更新')
+    await loadExecutionTasks()
+    if (routeName.value === 'dashboard') await loadDashboards()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '更新任务失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function cancelExecutionTask(row) {
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt('请输入取消原因', '取消执行任务', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '取消原因不能为空',
+      confirmButtonText: '确认取消',
+      cancelButtonText: '返回',
+      type: 'warning',
+    })
+    reason = result.value
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/execution-tasks/${row.id}/cancel`, { reason })
+    ElMessage.success('已取消执行任务')
+    await loadExecutionTasks()
+    if (routeName.value === 'dashboard') await loadDashboards()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '取消任务失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function openExecutionDetail(row) {
+  executionDrawer.visible = true
+  executionDrawer.loading = true
+  executionDrawer.task = null
+  try {
+    const response = await api.get(`/execution-tasks/${row.id}`)
+    executionDrawer.task = responseData(response)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '任务详情加载失败'))
+  } finally {
+    executionDrawer.loading = false
+  }
+}
+
 async function loadDashboards() {
   state.loading = true
   state.error = ''
   dashboardFeature.quoteDisabled = false
   dashboardFeature.responseDisabled = false
+  dashboardFeature.executionDisabled = false
   clientInquiryPage.value = 1
   quoteJobPage.value = 1
   let loadedCount = 0
@@ -1232,6 +1796,18 @@ async function loadDashboards() {
       else throw error
     }
 
+    try {
+      const response = await api.get('/admin/dashboard/execution-speed', {
+        params: { range: dashboardRange.value },
+      })
+      executionDashboard.value = responseData(response)
+      loadedCount += 1
+    } catch (error) {
+      executionDashboard.value = null
+      if (isFeatureDisabled(error)) dashboardFeature.executionDisabled = true
+      else throw error
+    }
+
     if (canViewQuoteOperations.value) {
       await loadQuoteJobs()
       loadedCount += 1
@@ -1240,14 +1816,18 @@ async function loadDashboards() {
       state.error = 'feature_disabled'
       return
     }
-    if (dashboardTab.value === 'quote' && dashboardFeature.quoteDisabled) {
-      dashboardTab.value = dashboardFeature.responseDisabled ? 'operations' : 'response'
-    } else if (dashboardTab.value === 'response' && dashboardFeature.responseDisabled) {
-      dashboardTab.value = dashboardFeature.quoteDisabled ? 'operations' : 'quote'
+    const availableTabs = []
+    if (!dashboardFeature.quoteDisabled) availableTabs.push('quote')
+    if (!dashboardFeature.responseDisabled) availableTabs.push('response')
+    if (canViewQuoteOperations.value) availableTabs.push('operations')
+    if (!dashboardFeature.executionDisabled) availableTabs.push('execution')
+    if (!availableTabs.includes(dashboardTab.value)) {
+      dashboardTab.value = availableTabs[0] || 'quote'
     }
   } catch (error) {
     quoteDashboard.value = null
     responseDashboard.value = null
+    executionDashboard.value = null
     clientInquiries.value = []
     clientInquiryTotal.value = 0
     quoteJobs.value = []
@@ -1272,6 +1852,15 @@ async function bootstrap() {
         return
       }
       await loadDashboards()
+      return
+    }
+    if (routeName.value === 'execution') {
+      if (!canViewExecution.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadExecutionTasks()
+      await loadExecutionUsers()
       return
     }
     if (!canAccessPermissions.value) {

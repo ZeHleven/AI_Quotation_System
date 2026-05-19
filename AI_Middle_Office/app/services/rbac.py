@@ -113,19 +113,20 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available",
             }
         )
-    if "manager" in roles:
+    if {"system_admin", "admin", "staff", "manager"} & roles:
         modules.append(
             {
                 "key": "execution",
                 "name": "执行任务",
                 "path": "/admin/execution",
-                "status": "pending",
+                "status": "available" if settings.feature_execution else "pending",
             }
         )
     if {"system_admin", "admin", "viewer"} & roles:
         dashboard_enabled = (
             settings.feature_dashboard_quote
             or settings.feature_dashboard_response
+            or settings.feature_dashboard_execution
         )
         modules.append(
             {

@@ -21,6 +21,7 @@ from app.api.v1 import (
     auth,
     client_inquiries,
     dashboard,
+    execution_tasks,
     files,
     history,
     knowledge_candidates,
@@ -42,6 +43,7 @@ from app.models import quote_feedback as quote_feedback_model  # noqa: F401 — 
 from app.models import prompt_regression as prompt_regression_model  # noqa: F401 — 触发 Prompt 回归表建表
 from app.models import knowledge_candidate as knowledge_candidate_model  # noqa: F401 — 触发知识候选表建表
 from app.models import client_inquiry as client_inquiry_model  # noqa: F401 — 触发客户咨询表建表
+from app.models import execution_task as execution_task_model  # noqa: F401 — 触发执行任务表建表
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -164,6 +166,7 @@ app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
 app.include_router(users.router, prefix="/api/v1", tags=["Users"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
+app.include_router(execution_tasks.router, prefix="/api/v1", tags=["Execution Tasks"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
 app.include_router(quote_jobs.router, prefix="/api/v1", tags=["Async Quote Jobs"])
 app.include_router(quote_feedback.router, prefix="/api/v1", tags=["Quote Feedback"])

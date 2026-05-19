@@ -1,6 +1,6 @@
 # 系统升级路线图
 
-> 最后更新：2026-05-18
+> 最后更新：2026-05-19
 
 > 业务优化 P4 更新：真实用户体验优化代码层已落地，`index.html` 新增失败原因建议、预审风险提示和人工修改沉淀知识入口；本阶段不新增 Alembic revision。
 > P4 运行态手工验收已完成（2026-05-08）：22/22 项全部通过，详见 `AI_Middle_Office/P4_ACCEPTANCE.md`。
@@ -8,6 +8,7 @@
 > AI 平台架构升级 Phase 1 报价速度看板已完成当前环境运行态验收（2026-05-18）：新增报价速度聚合接口、`FEATURE_DASHBOARD_QUOTE` 和 `/admin/dashboard` 看板视图；已修复 AI 生成耗时写入与历史成功任务耗时回填；页面、看板数据和新增真实报价统计均已确认正常。正式生产启用仍需单独 Runbook。
 > AI 平台架构升级 Phase 2 响应速度追踪已完成当前环境运行态验收（2026-05-18）：`FEATURE_CLIENT_INQUIRY` 与 `FEATURE_DASHBOARD_RESPONSE` 已在内网环境打开，响应速度看板展示 1 条可信样本，平均首次响应 15 分钟；已修复 Celery worker Phase 2 元数据加载问题。正式生产启用仍待系统整体完善后统一 Runbook。
 > AI 平台架构升级 Phase 2.5 管理员报价运营闭环已完成当前环境验证（2026-05-18）：复用现有报价任务、咨询记录和报价历史数据，在 `/admin/dashboard` 增加“报价运营”视图；支持状态/来源/客户关键词/提交人筛选、提交人独立列、任务详情、重试、取消和超时标记。该阶段为后台体验补强，不启动 Phase 3 的执行任务模型。
+> AI 平台架构升级 Phase 3 执行速度追踪已完成当前环境验证（2026-05-19）：新增 `execution_tasks` / `execution_task_events`、`FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION`、执行任务 CRUD/取消接口、执行速度聚合接口、`/admin/execution` 任务页和 `/admin/dashboard` 执行速度标签页；当前环境已打开开关并验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已显示取消数量。
 > 产品边界：系统完善前不正式投入生产使用；后续各阶段先按内网开发/验证推进，等平台能力完整后再统一准备正式生产 Runbook。
 
 ---
@@ -15,12 +16,13 @@
 ## 当前冻结状态（2026-05-18）
 
 - **后端基础设施优化已收束**：后端重构 P0-P3、补充一致性优化、运维告警收敛、Alembic 迁移纪律均已落地；后续不再做无触发的基础设施打磨。
-- **数据库规范**：当前代码迁移 head 为 `20260514_0012`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC 和 Phase 2 响应速度追踪。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
+- **数据库规范**：当前代码迁移 head 为 `20260514_0013`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪和 Phase 3 执行速度追踪。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
 - **业务优化 P0-P4 已完成到代码层**：P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理、P4 真实用户体验优化均已落地。
 - **前端优化 P0-P3 已完成**：已完成 `FRONTEND_ACCEPTANCE.md`、`static/js/shared.js`、`admin.html` 模块拆分，以及报价进度、失败恢复、上传/推送状态优化。
 - **AI 平台升级 Phase 0 已完成开发与当前环境验证**：Vite 壳、登录鉴权统一、RBAC 与 SPA fallback 已通过；旧 `index.html` / `admin.html` / `app.html` 继续保留，后续按设计文档逐步收拢入口。正式生产上线待单独 Runbook。
 - **AI 平台升级 Phase 1 报价速度看板已完成当前环境运行态验收**：已新增报价速度聚合接口和 Vite 看板入口，功能开关已在当前环境打开；已修复新报价任务 `duration_ms` 实测写入，并在备份后回填历史 121 条成功任务的 0 耗时记录；页面、看板数据和新增真实报价统计均已确认正常；未迁移旧业务页面，正式生产启用待单独 Runbook。
 - **AI 平台升级 Phase 2 响应速度追踪已完成当前环境运行态验收**：已新增 `client_inquiries`、`quote_jobs.client_inquiry_id`、咨询查询/修正接口、响应速度聚合接口和 Vite 响应速度视图；当前环境 Alembic 已升级到 `20260514_0012 (head)`，`FEATURE_CLIENT_INQUIRY=true`、`FEATURE_DASHBOARD_RESPONSE=true`、`PUBLIC_ACCESS_ENABLED=false`；内网 smoke 已展示 1 条可信样本，平均首次响应 15 分钟，SLA 达标率 100%，并修复 Celery worker Phase 2 元数据加载问题。
+- **AI 平台升级 Phase 3 执行速度追踪已完成当前环境验证**：已新增执行任务 schema、任务接口、事件记录、执行速度聚合和 Vite 执行任务页面；当前环境已打开 `FEATURE_EXECUTION=true`、`FEATURE_DASHBOARD_EXECUTION=true` 且 `PUBLIC_ACCESS_ENABLED=false`，已验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已补充取消数量。
 - **正式生产策略**：系统整体完善前不正式投入生产使用；不再为单一阶段单独做正式生产上线闭环。
 - **维护策略**：进入问题驱动维护阶段，优先投入报价准确率、知识库质量、RAG 评测和真实用户体验问题。
 
@@ -41,6 +43,7 @@
 | 已完成当前环境运行态验收 | AI 平台升级 Phase 1：报价速度看板 | 已新增报价速度聚合接口、功能开关和 Vite 看板视图；已修复 AI 生成耗时口径并回填历史成功任务；页面、看板数据和新增真实报价统计均正常；正式生产准备推迟到系统整体完善后统一处理。 |
 | 已完成当前环境运行态验收 | AI 平台升级 Phase 2：响应速度追踪 | 已新增咨询记录模型、报价任务关联、咨询查询/修正接口、响应速度聚合和 Vite 响应速度视图；当前环境 Alembic 已升级到 `20260514_0012 (head)`，内网 smoke 样本已进入响应看板，平均首次响应 15 分钟，Celery worker 元数据加载问题已修复；正式生产准备推迟到系统整体完善后统一处理。 |
 | 已完成当前环境验证 | AI 平台升级 Phase 2.5：管理员报价运营闭环 | 已在 Vite 管理台新增“报价运营”标签页，串联报价任务、客户咨询、确认报价和钉钉推送状态；后端报价任务列表补充客户/历史摘要和筛选能力；提交人独立列、筛选和任务详情已验证；不新增数据库结构，不启动 Phase 3。 |
+| 已完成当前环境验证 | AI 平台升级 Phase 3：执行速度追踪 | 已新增执行任务 schema、任务接口、事件记录、执行速度聚合和 Vite 执行任务页面；当前环境已打开 `FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION` 并完成任务创建、开始、完成、取消、详情事件和执行速度看板验证，执行趋势已显示取消数量。 |
 
 - [x] **P0 报价反馈闭环 + 版本追踪**：新增 `quote_feedback`、`quote_corrections`、`quote_rag_traces`，在异步报价预审完成时记录 AI 初稿，在 `/confirm_push` 成功后记录最终人工确认稿和字段差异，在预审打回时记录 rejection；新增 `DIFY_APP_VERSION`、`DIFY_WORKFLOW_VERSION`、`DIFY_PROMPT_VERSION`、`DIFY_RELEASE_ID`、`RAG_COLLECTION_ALIAS` 配置。
 - [x] **P0 前端上下文传递**：`index.html` 在预审弹窗保存 `quote_job_id` / `trace_id`，确认推送时带回后端，打回重填时调用 `/api/v1/quote/feedback/reject` 做轻量记录。
@@ -59,6 +62,7 @@
 - [x] **AI 平台升级 Phase 1 报价速度看板当前环境运行态验收完成**：2026-05-18 完成，新增 `FEATURE_DASHBOARD_QUOTE`、`GET /api/v1/admin/dashboard/quote-speed`、`/admin/dashboard` 报价速度视图和自动化测试；`quote_job_runner` 已改为记录单次运行实测耗时，历史 121 条成功任务的 `duration_ms=0` 已在 `C:\AI_Backups\20260517_205242\db\ai_quotation.sql` 备份后完成回填；`python -m compileall app scripts`、`python -m pytest`（85 passed）和 `npm.cmd run build` 均通过；用户手工确认 `/admin/dashboard` 页面无 404 / 403 / 控制台接口错误，三类耗时显示正常，新增真实报价任务已进入统计且 AI 生成耗时大于 0；旧 `index.html` / `admin.html` 业务功能未迁移，正式生产准备推迟到系统整体完善后统一处理。
 - [x] **AI 平台升级 Phase 2 响应速度追踪当前环境运行态验收完成**：2026-05-18 完成，新增 Alembic `20260514_0012`、`client_inquiries`、`quote_jobs.client_inquiry_id`、`FEATURE_CLIENT_INQUIRY`、`FEATURE_DASHBOARD_RESPONSE`、`GET/PATCH /api/v1/client-inquiries`、`GET /api/v1/admin/dashboard/response-speed` 和 Vite 驾驶舱“响应速度”标签页；默认时间样本仅计数量不计平均响应耗时；当前环境 Alembic 已升级到 `20260514_0012 (head)`，功能开关已打开且 `PUBLIC_ACCESS_ENABLED=false`；内网 smoke 已创建带 `inquiry_time` 的报价任务并在看板展示 1 条可信样本，平均首次响应 15 分钟、SLA 达标率 100%；已修复 Celery worker 单独运行时未加载 `client_inquiries` 元数据导致任务卡在 `queued` 的问题，并新增 `scripts/phase2_response_smoke.ps1` 固化中国时区造数方式；`python -m alembic heads` 显示 `20260514_0012 (head)`，`python -m compileall app scripts`、`python -m pytest`（86 passed）和 `npm.cmd run build` 均通过。
 - [x] **AI 平台升级 Phase 2.5 管理员报价运营闭环当前环境验证完成**：2026-05-18 完成，复用现有 `quote_jobs`、`client_inquiries`、`quote_history`，在 `/admin/dashboard` 新增“报价运营”标签页；当前环境已验证提交人列、筛选、任务详情和页面显示正常；该阶段已封板，不新增数据库结构，不启动 Phase 3。
+- [x] **AI 平台升级 Phase 3 执行速度追踪当前环境验证完成**：2026-05-19 完成，新增 Alembic `20260514_0013`、`execution_tasks`、`execution_task_events`、`FEATURE_EXECUTION`、`FEATURE_DASHBOARD_EXECUTION`、执行任务 CRUD/取消接口、执行速度聚合接口、`/admin/execution` 和 `/admin/dashboard` 执行速度标签页；当前环境已打开开关并验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已显示取消数量；`python -m compileall app`、`python -m pytest`（92 passed）、`python -m pytest tests\test_execution_tasks_phase3.py` 和 `npm.cmd run build` 均通过。
 - [ ] **P5 LangGraph 触发项**：仅在需要自适应多轮检索、主动澄清、多模型状态机或替换 N8N 核心编排时再评估。
 
 ## 高优先级

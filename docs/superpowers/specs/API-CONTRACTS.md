@@ -210,7 +210,7 @@ Phase 2 字段级 Schema 已补齐到代码层：
 - 当前环境运行态验证：`FEATURE_CLIENT_INQUIRY=true`、`FEATURE_DASHBOARD_RESPONSE=true`、`PUBLIC_ACCESS_ENABLED=false`；响应速度看板已展示 1 条可信样本，平均首次响应 15 分钟，SLA 达标率 100%。
 - 自动化验证：`python -m pytest` 为 `86 passed`，`npm.cmd run build` 通过。
 
-## 阶段 3：执行任务
+## 阶段 3：执行任务（✅ 当前环境验证通过）
 
 | 接口 | 方法 | 权限 | 功能开关 | 说明 |
 |------|------|------|----------|------|
@@ -223,6 +223,17 @@ Phase 2 字段级 Schema 已补齐到代码层：
 `staff` / `manager` 更新自己任务时，仅允许修改进度白名单字段：`status`、`completed_at`、`notes`。其中 `status` 只允许 `pending -> in_progress`、`in_progress -> done`、`pending -> done`；`completed_at` 只允许在进入 `done` 时写入，推荐由后端自动填充。修改负责人、截止时间、来源字段必须由 `admin` / `system_admin` 完成。
 
 `POST /api/v1/execution-tasks/{id}/cancel` 必须写入 `execution_task_events`，并记录 `reason`、`operator_id`、`trace_id`。
+
+当前实现说明：
+
+- `FEATURE_EXECUTION=false` 时，`/api/v1/execution-tasks*` 返回 `403 FEATURE_DISABLED`。
+- `FEATURE_DASHBOARD_EXECUTION=false` 时，`/api/v1/admin/dashboard/execution-speed` 返回 `403 FEATURE_DISABLED`。
+- `execution_tasks.completed_at` 由后端在任务进入 `done` 时自动写入；取消任务保持 `completed_at=NULL`。
+- `is_overdue` 不落库，由接口按 `due_at < now() AND completed_at IS NULL AND status NOT IN ('done','cancelled')` 动态返回。
+- `staff` / `manager` 只能更新分配给自己的 `status`、`completed_at`、`notes`，不得修改负责人、截止时间、来源字段。
+- `admin` / `system_admin` 取消任务必须提交 `reason`，写入 `execution_task_events.reason`。
+- `GET /api/v1/admin/dashboard/execution-speed` 返回 `task_count`、`open_count`、`done_count`、`cancelled_count`、`overdue_count`、`avg_completion_duration_ms`、`daily_trends`、`by_assignee` 和 `status_distribution`。
+- `daily_trends` 每日项包含 `task_count`、`done_count`、`cancelled_count`、`overdue_count` 和 `avg_completion_duration_ms`，前端执行速度面板必须展示取消数量。
 
 ## 阶段 4：会议与转写
 

@@ -77,6 +77,8 @@ class Settings:
     feature_dashboard_quote: bool = _env_bool("FEATURE_DASHBOARD_QUOTE", False)
     feature_client_inquiry: bool = _env_bool("FEATURE_CLIENT_INQUIRY", False)
     feature_dashboard_response: bool = _env_bool("FEATURE_DASHBOARD_RESPONSE", False)
+    feature_execution: bool = _env_bool("FEATURE_EXECUTION", False)
+    feature_dashboard_execution: bool = _env_bool("FEATURE_DASHBOARD_EXECUTION", False)
     response_sla_minutes: int = _env_int("RESPONSE_SLA_MINUTES", 30)
     public_access_enabled: bool = _env_bool("PUBLIC_ACCESS_ENABLED", False)
 

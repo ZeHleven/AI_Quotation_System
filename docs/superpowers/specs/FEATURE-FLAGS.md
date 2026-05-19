@@ -1,19 +1,20 @@
 # FEATURE-FLAGS｜功能开关与阶段依赖矩阵
 > 创建日期：2026-05-15
-> 状态：Phase 0 开关已完成当前环境验证；Phase 1 报价速度看板已完成当前环境运行态验收；Phase 2 响应速度开关代码层已完成。系统完善前不正式投入生产使用。
+> 状态：Phase 0/1/2/2.5/3 已完成当前环境验证；系统完善前不正式投入生产使用。
 > 关联主文档：[2026-05-14-ai-platform-upgrade-design.md](2026-05-14-ai-platform-upgrade-design.md)
 
 ## 目标
 
 本文件固定功能开关、Schema 依赖、运行前置条件和 Vite 路由开放阶段。功能开关控制入口和行为，不得替代数据库迁移顺序。
 
-当前环境状态（2026-05-18，非正式生产上线）：
+当前环境状态（2026-05-19，非正式生产上线）：
 
 - `FEATURE_VITE_FRONTEND=true` 已打开。
 - `PUBLIC_ACCESS_ENABLED=false` 保持关闭。
 - `FEATURE_DASHBOARD_QUOTE` 代码路径已完成，当前环境已完成运行态验收。
-- `FEATURE_CLIENT_INQUIRY` / `FEATURE_DASHBOARD_RESPONSE` 代码路径已完成，默认仍保持关闭；当前环境 Alembic 已升级到 `20260514_0012 (head)`，开关打开和运行态验收待执行。
-- Phase 3+ 相关执行、经营功能开关未启动。
+- `FEATURE_CLIENT_INQUIRY` / `FEATURE_DASHBOARD_RESPONSE` 已完成当前环境验证。
+- `FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION` 已完成当前环境验证；正式生产启用仍待系统整体完善后统一 Runbook。
+- Phase 4+ 相关会议、转写、经营功能开关未启动。
 
 ## 功能开关矩阵
 
@@ -23,8 +24,8 @@
 | `FEATURE_DASHBOARD_QUOTE` | 1（代码层已完成） | `quote_jobs` / `quote_feedback` / `quote_history` | 报价速度接口验证通过，且有基线数据 | 看板显示功能未开启 |
 | `FEATURE_CLIENT_INQUIRY` | 2（代码层已完成） | `client_inquiries`、`quote_jobs.client_inquiry_id` | 报价创建流程已接入咨询字段，当前环境需先执行 Alembic `20260514_0012` | 创建报价不写咨询记录，响应看板不可用 |
 | `FEATURE_DASHBOARD_RESPONSE` | 2（代码层已完成） | `client_inquiries` | 有响应统计数据，且默认时间排除口径已验证 | 响应速度看板显示功能未开启 |
-| `FEATURE_EXECUTION` | 3 | `execution_tasks` / `execution_task_events` | 任务 CRUD 和权限测试通过 | 隐藏任务管理 UI |
-| `FEATURE_DASHBOARD_EXECUTION` | 3 | `execution_tasks` | 执行速度聚合接口可用 | 执行速度看板显示功能未开启 |
+| `FEATURE_EXECUTION` | 3（当前环境已验证） | `execution_tasks` / `execution_task_events` | Alembic `20260514_0013` 已执行，任务 CRUD、取消和权限测试通过 | 隐藏任务管理 UI，接口返回 `FEATURE_DISABLED` |
+| `FEATURE_DASHBOARD_EXECUTION` | 3（当前环境已验证） | `execution_tasks` | Alembic `20260514_0013` 已执行，执行速度聚合接口可用，取消数量展示已验证 | 执行速度看板显示功能未开启 |
 | `FEATURE_MEETING_AI` | 4a | `execution_tasks`、`meeting_notes`、`task_drafts` | AI JSON Schema、草稿确认流程可用 | 会议 AI 页面显示功能未开启 |
 | `FEATURE_AUDIO_TRANSCRIPTION` | 4b | `FEATURE_MEETING_AI`、`quote_jobs.job_type`、`quote_jobs.timeout_at`、对象存储 | 转写服务账号、额度、回调/轮询可用 | 上传录音入口隐藏 |
 | `FEATURE_DASHBOARD_BUSINESS` | 6 | 经营数据表、导入审计表 | 导入模板、权限脱敏、导出水印通过 | 经营驾驶舱显示功能未开启 |
@@ -77,8 +78,8 @@ Schema 层强依赖，Feature Flag 层解耦：
 | `/login` | Phase 0（当前环境已验证） | 无 | 新登录页 |
 | `/admin/permissions` | Phase 0（当前环境已验证） | `FEATURE_VITE_FRONTEND` | 权限管理页；Phase 0 管理员默认落地页 |
 | `/admin/users` | Phase 0（当前环境已验证） | `FEATURE_VITE_FRONTEND` | 用户列表和角色分配 |
-| `/admin/dashboard` | Phase 1-2（Phase 2 代码层已完成） | `FEATURE_DASHBOARD_QUOTE` / `FEATURE_DASHBOARD_RESPONSE` / `FEATURE_DASHBOARD_EXECUTION` | 所有看板开关均关闭时显示“功能未开启”，不得作为 Phase 0 默认落地页 |
-| `/admin/execution` | Phase 3 / 4 | `FEATURE_EXECUTION` / `FEATURE_MEETING_AI` | 任务管理和会议执行系统 |
+| `/admin/dashboard` | Phase 1-3（Phase 3 当前环境已验证） | `FEATURE_DASHBOARD_QUOTE` / `FEATURE_DASHBOARD_RESPONSE` / `FEATURE_DASHBOARD_EXECUTION` | 所有看板开关均关闭时显示“功能未开启”，不得作为 Phase 0 默认落地页 |
+| `/admin/execution` | Phase 3 / 4 | `FEATURE_EXECUTION` / `FEATURE_MEETING_AI` | Phase 3 为任务管理；Phase 4 再接入会议执行系统 |
 | `/admin/business` | Phase 6 | `FEATURE_DASHBOARD_BUSINESS` | 经营驾驶舱 |
 | `/quote` | 后续迁移 | 待定 | 旧 `/index.html` 保留到迁移完成 |
 | `/admin/knowledge` | 后续迁移 | 待定 | 旧 `/admin.html` 保留到迁移完成 |

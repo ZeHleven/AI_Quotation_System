@@ -1,7 +1,7 @@
 # 旗胜 AI 平台架构升级路线
 > 创建日期：2026-05-14
-> 最后更新：2026-05-18（Phase 0 开发与当前环境验证完成；Phase 1 当前环境运行态验收完成；Phase 2 当前环境运行态验收完成）
-> 状态：Phase 0 当前环境验证完成；Phase 1 报价速度看板当前环境运行态验收已完成；Phase 2 响应速度追踪当前环境运行态验收已完成。系统完善前不正式投入生产使用，正式生产 Runbook 推迟到平台能力完整后统一准备。
+> 最后更新：2026-05-19（Phase 0-3 已完成当前环境验证；Phase 2.5 管理员报价运营闭环已完成当前环境验证）
+> 状态：Phase 0 当前环境验证完成；Phase 1 报价速度看板当前环境运行态验收已完成；Phase 2 响应速度追踪当前环境运行态验收已完成；Phase 2.5 管理员报价运营闭环已完成当前环境验证；Phase 3 执行速度追踪已完成当前环境验证。系统完善前不正式投入生产使用，正式生产 Runbook 推迟到平台能力完整后统一准备。
 > 负责人：待定
 
 ---
@@ -180,7 +180,7 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 - `/login`、`/admin/permissions`、`/admin/dashboard`、`/index.html`、`/admin.html`、`/app.html` 当前环境冒烟均返回 200。
 - 当前环境 `FEATURE_VITE_FRONTEND=true` 已打开，`PUBLIC_ACCESS_ENABLED=false` 保持关闭。
 - 正式生产上线尚未发生，未来需要单独 Runbook。
-- Phase 1 报价速度看板未在 Phase 0 启动，已在后续 Phase 1 完成运行态验收；Phase 2 响应追踪已在后续完成代码层交付；Phase 3+ 的执行任务、经营驾驶舱仍未启动。
+- Phase 1 报价速度看板、Phase 2 响应追踪、Phase 2.5 报价运营闭环和 Phase 3 执行速度追踪已在后续完成当前环境验证；经营驾驶舱仍未启动。
 
 ### 阶段 1｜报价速度看板（✅ 当前环境运行态验收完成）
 
@@ -206,7 +206,7 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 - 报价速度聚合层已对旧数据中 `finished_at` 比 `created_at` 早 8 小时的记录做只读展示校正，避免人工确认耗时被系统时区差放大。
 - 自动化验证已通过：`python -m compileall app scripts`、`python -m pytest`（85 passed）和 `npm.cmd run build`。
 - 当前环境运行态验收已通过：`/admin/dashboard` 页面无 404 / 403 / 控制台接口错误，三类耗时显示正常，新增真实报价任务已进入统计且 AI 生成耗时大于 0。
-- 未迁移旧 `index.html` / `admin.html` 业务功能；Phase 2 已在后续完成代码层交付，Phase 3+ 未启动。
+- 未迁移旧 `index.html` / `admin.html` 业务功能；Phase 2、Phase 2.5 和 Phase 3 已在后续完成当前环境验证。
 
 ### 阶段 2｜响应速度追踪（✅ 当前环境运行态验收完成）
 
@@ -259,7 +259,7 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 - 当前环境已验证提交人列、筛选、任务详情和页面显示正常。
 - 该阶段已封板，后续若进入任务执行体系，按 Phase 3 的 `execution_tasks` 路线单独推进。
 
-### 阶段 3｜执行速度追踪
+### 阶段 3｜执行速度追踪（✅ 当前环境验证完成）
 
 新增 `execution_tasks` 与 `execution_task_events`。
 
@@ -282,6 +282,18 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 逾期状态不持久化，接口动态返回 `is_overdue`。
 
 钉钉提醒先走任务通知群 Webhook，个人 @ 等企业应用权限到位后再做。
+
+完成记录（当前环境验证完成，非正式生产上线）：
+
+- 已新增 Alembic `20260514_0013`，创建 `execution_tasks` 与 `execution_task_events`。
+- 已新增 `FEATURE_EXECUTION` 与 `FEATURE_DASHBOARD_EXECUTION`，默认关闭。
+- 已新增 `POST/GET/PATCH /api/v1/execution-tasks`、`POST /api/v1/execution-tasks/{id}/cancel` 和 `GET /api/v1/admin/dashboard/execution-speed`。
+- 已按状态机限制负责人只能更新本人任务进度和备注；管理员可创建、分配、修改和取消任务，取消原因写入 `execution_task_events.reason`。
+- 已在 Vite 管理台新增 `/admin/execution` 执行任务页，并在 `/admin/dashboard` 增加“执行速度”标签页。
+- 当前环境已打开 `FEATURE_EXECUTION=true`、`FEATURE_DASHBOARD_EXECUTION=true` 且 `PUBLIC_ACCESS_ENABLED=false`，用户已验证任务创建、开始、完成、取消、详情事件和执行速度看板正常。
+- 执行速度看板已补充取消数量：总览展示 `cancelled_count`，每日趋势展示 `cancelled_count`。
+- 自动化验证已通过：`python -m alembic heads` 显示 `20260514_0013 (head)`；`python -m compileall app`、`python -m pytest`（92 passed）、`python -m pytest tests\test_execution_tasks_phase3.py` 和 `npm.cmd run build` 均通过。
+- 不包含会议纪要 AI、语音转写、钉钉会议导入和经营驾驶舱；这些仍归后续 Phase 4+ / Phase 6。
 
 ### 阶段 4a｜AI 执行系统：手动纪要 + 草稿确认
 
@@ -451,7 +463,7 @@ AI_RAW_LOG_MAX_RETENTION_DAYS=30
 | 阶段 0 | 已完成当前环境验证：登录、Vite fallback、RBAC、`role_version`、权限管理页面、公网安全门槛清单可验收；正式生产准备推迟到系统整体完善后统一处理 |
 | 阶段 1 | 已完成当前环境运行态验收：报价速度接口有数据，三类耗时分区展示，新增真实报价任务可进入统计；正式生产准备推迟到系统整体完善后统一处理 |
 | 阶段 2 | 已完成当前环境运行态验收：创建报价可自动生成 ClientInquiry，响应看板标注统计边界、样本量和低可信数据排除规则，内网 smoke 可展示 15 分钟响应样本；正式生产准备推迟到系统整体完善后统一处理 |
-| 阶段 3 | ExecutionTask 可创建、分配、完成、取消；逾期动态计算；Celery beat 开机自启和健康检查可用 |
+| 阶段 3 | 当前环境已验证 ExecutionTask 可创建、分配、开始、完成、取消；逾期动态计算；执行速度看板可展示任务、完成、取消、逾期和平均完成耗时 |
 | 阶段 4a | 纪要生成草稿，人工确认后写入 ExecutionTask，AI 失败可降级手动添加 |
 | 阶段 4b | 上传音频后返回转写文本，并自动进入任务草稿流程；精度评测达标 |
 | 阶段 4c | 钉钉会议导入进入同一纪要 -> 草稿 -> 任务流程 |
@@ -552,3 +564,4 @@ AI_RAW_LOG_MAX_RETENTION_DAYS=30
 | 2026-05-18 | v40：记录 Phase 1 当前环境运行态验收通过，`/admin/dashboard` 页面、看板数据和新增真实报价统计均正常；正式生产启用仍待单独 Runbook，Phase 2+ 未启动 | Codex |
 | 2026-05-18 | v41：记录系统完善前不正式投入生产使用；完成 Phase 2 响应速度追踪代码层，新增 `client_inquiries`、`quote_jobs.client_inquiry_id`、咨询查询/修正接口、响应速度聚合接口、`FEATURE_CLIENT_INQUIRY` / `FEATURE_DASHBOARD_RESPONSE` 和 Vite 响应速度标签页；当前环境 Alembic 已升级到 `20260514_0012 (head)`，`pytest` 更新为 85 passed，Phase 3+ 未启动 | Codex |
 | 2026-05-18 | v42：完成 Phase 2 当前环境运行态验收，功能开关已在内网环境打开且 `PUBLIC_ACCESS_ENABLED=false`；修复 Celery worker 缺少 `ClientInquiry` 元数据导入导致测试任务卡在 `queued` 的问题；新增 `scripts/phase2_response_smoke.ps1`，按中国时区生成验收样本，响应速度看板已显示 1 条样本、平均首次响应 15 分钟；`pytest` 更新为 86 passed，Phase 3+ 未启动 | Codex |
+| 2026-05-19 | v43：完成 Phase 3 执行速度追踪当前环境验证，新增 `execution_tasks` / `execution_task_events`、执行任务 CRUD/取消接口、执行速度聚合接口、`FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION`、`/admin/execution` 和执行速度标签页；当前环境已验证任务创建、开始、完成、取消、详情事件和看板展示，执行趋势已补充取消数量；`pytest` 更新为 92 passed | Codex |

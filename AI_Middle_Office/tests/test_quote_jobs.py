@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
+from app.models.client_inquiry import ClientInquiry
+from app.models.quote_history import QuoteHistory
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
 from app.services import quote_job_runner
@@ -141,6 +143,73 @@ def test_admin_can_list_all_jobs_and_mark_timeouts(client):
     list_response = client.get("/api/v1/quote/jobs?status=timed_out", headers=admin_headers)
     assert list_response.status_code == 200
     assert any(item["job_id"] == job_id for item in list_response.json()["data"])
+
+
+def test_admin_quote_job_list_includes_operational_context_and_filters(client):
+    user_headers = _login_headers(client)
+    admin_headers = _admin_headers(client)
+    username = client.get("/api/v1/auth/me", headers=user_headers).json()["username"]
+    job_id = str(uuid.uuid4())
+    inquiry_id = str(uuid.uuid4())
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).one()
+        inquiry = ClientInquiry(
+            inquiry_id=inquiry_id,
+            source="微信",
+            client_name="张三",
+            client_phone="13800001111",
+            inquiry_time=datetime.now(timezone.utc) - timedelta(minutes=20),
+            first_response_time=datetime.now(timezone.utc),
+            time_source="manual",
+            responder_id=user.id,
+            notes="需要局部翻新",
+            first_quote_job_id=job_id,
+        )
+        job = QuoteJob(
+            job_id=job_id,
+            username=username,
+            status="succeeded",
+            stage="completed",
+            message="厨房局部翻新",
+            request_summary="厨房局部翻新",
+            source_file_name="kitchen.png",
+            result_total_amount=1200,
+            result_item_count=3,
+            client_inquiry_id=inquiry_id,
+            duration_ms=1500,
+            finished_at=datetime.now(timezone.utc),
+        )
+        history = QuoteHistory(
+            username=username,
+            quote_id=job_id,
+            quote_job_id=job_id,
+            confirmed_by=username,
+            pushed_to_dingtalk=True,
+            total_amount=1200,
+            item_count=3,
+            display_title="厨房局部翻新",
+            project_summary="3 items",
+            payload_json="{}",
+        )
+        db.add_all([inquiry, job, history])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/api/v1/quote/jobs?source=微信&keyword=13800001111&page_size=5",
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    row = next(item for item in data if item["job_id"] == job_id)
+    assert row["client_inquiry"]["client_name"] == "张三"
+    assert row["client_inquiry"]["source"] == "微信"
+    assert row["history"]["pushed_to_dingtalk"] is True
+    assert row["history"]["total_amount"] == 1200
 
 
 def test_quote_job_events_stream_replays_terminal_events(client):

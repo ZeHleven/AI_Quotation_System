@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -15,11 +16,13 @@ from app.core.database import SessionLocal, get_db
 from app.core.logging import get_trace_id
 from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user, require_admin
+from app.models.client_inquiry import ClientInquiry
 from app.models.file_object import FileObject
+from app.models.quote_history import QuoteHistory
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
 from app.services.file_storage import StorageDisabledError, store_file_bytes
-from app.services.client_inquiries import create_or_reuse_client_inquiry
+from app.services.client_inquiries import _parse_local_datetime, create_or_reuse_client_inquiry, serialize_client_inquiry
 from app.services.quote_dispatcher import dispatch_quote_job
 from app.services.rbac import has_admin_role
 from app.services.quote_job_readability import (
@@ -56,7 +59,56 @@ def _format_dt(value: Optional[datetime]) -> Optional[str]:
     return value.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _serialize_job(job: QuoteJob, include_events: bool = True, include_result: bool = True) -> dict:
+def _serialize_history_summary(record: Optional[QuoteHistory]) -> Optional[dict]:
+    if not record:
+        return None
+    return {
+        "id": record.id,
+        "quote_id": record.quote_id,
+        "confirmed_by": record.confirmed_by,
+        "pushed_to_dingtalk": record.pushed_to_dingtalk,
+        "created_at": _format_dt(record.created_at),
+        "total_amount": record.total_amount,
+        "item_count": record.item_count,
+        "display_title": record.display_title,
+        "project_summary": record.project_summary,
+    }
+
+
+def _quote_job_context_maps(
+    db: Session,
+    jobs: list[QuoteJob],
+) -> tuple[dict[str, ClientInquiry], dict[str, QuoteHistory]]:
+    job_ids = [job.job_id for job in jobs]
+    inquiry_ids = [job.client_inquiry_id for job in jobs if job.client_inquiry_id]
+    inquiries_by_id: dict[str, ClientInquiry] = {}
+    histories_by_job_id: dict[str, QuoteHistory] = {}
+
+    if inquiry_ids:
+        inquiries = db.query(ClientInquiry).filter(ClientInquiry.inquiry_id.in_(inquiry_ids)).all()
+        inquiries_by_id = {inquiry.inquiry_id: inquiry for inquiry in inquiries}
+
+    if job_ids:
+        histories = (
+            db.query(QuoteHistory)
+            .filter(QuoteHistory.quote_job_id.in_(job_ids))
+            .order_by(QuoteHistory.created_at.desc(), QuoteHistory.id.desc())
+            .all()
+        )
+        for history in histories:
+            if history.quote_job_id and history.quote_job_id not in histories_by_job_id:
+                histories_by_job_id[history.quote_job_id] = history
+
+    return inquiries_by_id, histories_by_job_id
+
+
+def _serialize_job(
+    job: QuoteJob,
+    include_events: bool = True,
+    include_result: bool = True,
+    client_inquiry: Optional[ClientInquiry] = None,
+    history: Optional[QuoteHistory] = None,
+) -> dict:
     data = {
         "job_id": job.job_id,
         "username": job.username,
@@ -81,6 +133,8 @@ def _serialize_job(job: QuoteJob, include_events: bool = True, include_result: b
         "updated_at": _format_dt(job.updated_at),
         "finished_at": _format_dt(job.finished_at),
         "error_message": job.error_message,
+        "client_inquiry": serialize_client_inquiry(client_inquiry) if client_inquiry else None,
+        "history": _serialize_history_summary(history),
     }
     if include_events:
         data["events"] = [serialize_event_row(item) for item in job.events] or event_rows_from_json(job.events_json)
@@ -96,6 +150,23 @@ def _get_accessible_job(job_id: str, current_user: User, db: Session) -> QuoteJo
     if not has_admin_role(current_user) and job.username != current_user.username:
         raise HTTPException(status_code=404, detail="报价任务不存在")
     return job
+
+
+def _serialize_job_with_context(
+    db: Session,
+    job: QuoteJob,
+    *,
+    include_events: bool = True,
+    include_result: bool = True,
+) -> dict:
+    inquiries_by_id, histories_by_job_id = _quote_job_context_maps(db, [job])
+    return _serialize_job(
+        job,
+        include_events=include_events,
+        include_result=include_result,
+        client_inquiry=inquiries_by_id.get(job.client_inquiry_id),
+        history=histories_by_job_id.get(job.job_id),
+    )
 
 
 def _dispatch_and_store(job: QuoteJob, db: Session) -> None:
@@ -247,10 +318,15 @@ async def list_quote_jobs(
     page_size: int = Query(20, ge=1, le=100),
     status_filter: Optional[str] = Query(None, alias="status"),
     username: Optional[str] = None,
+    source: Optional[str] = None,
+    keyword: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     query = db.query(QuoteJob)
+    joined_inquiry = False
     if not has_admin_role(current_user):
         query = query.filter(QuoteJob.username == current_user.username)
     elif username:
@@ -261,6 +337,39 @@ async def list_quote_jobs(
         if statuses:
             query = query.filter(QuoteJob.status.in_(statuses))
 
+    start = _parse_local_datetime(date_from)
+    end = _parse_local_datetime(date_to)
+    if start:
+        query = query.filter(QuoteJob.created_at >= start)
+    if end:
+        query = query.filter(QuoteJob.created_at <= end)
+
+    if source:
+        query = query.outerjoin(ClientInquiry, QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id)
+        joined_inquiry = True
+        query = query.filter(ClientInquiry.source == source.strip())
+
+    if keyword:
+        keyword_value = keyword.strip()
+        if keyword_value:
+            if not joined_inquiry:
+                query = query.outerjoin(ClientInquiry, QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id)
+                joined_inquiry = True
+            pattern = f"%{keyword_value}%"
+            query = query.filter(
+                or_(
+                    QuoteJob.job_id.like(pattern),
+                    QuoteJob.username.like(pattern),
+                    QuoteJob.message.like(pattern),
+                    QuoteJob.request_summary.like(pattern),
+                    QuoteJob.source_file_name.like(pattern),
+                    QuoteJob.file_name.like(pattern),
+                    ClientInquiry.source.like(pattern),
+                    ClientInquiry.client_name.like(pattern),
+                    ClientInquiry.client_phone.like(pattern),
+                )
+            )
+
     total = query.count()
     jobs = (
         query.order_by(QuoteJob.created_at.desc(), QuoteJob.id.desc())
@@ -268,8 +377,18 @@ async def list_quote_jobs(
         .limit(page_size)
         .all()
     )
+    inquiries_by_id, histories_by_job_id = _quote_job_context_maps(db, jobs)
     return api_page(
-        [_serialize_job(job, include_events=False, include_result=False) for job in jobs],
+        [
+            _serialize_job(
+                job,
+                include_events=False,
+                include_result=False,
+                client_inquiry=inquiries_by_id.get(job.client_inquiry_id),
+                history=histories_by_job_id.get(job.job_id),
+            )
+            for job in jobs
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -282,7 +401,7 @@ async def get_quote_job(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    data = _serialize_job(_get_accessible_job(job_id, current_user, db))
+    data = _serialize_job_with_context(db, _get_accessible_job(job_id, current_user, db))
     return api_ok(data)
 
 

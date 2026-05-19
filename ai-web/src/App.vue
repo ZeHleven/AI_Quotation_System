@@ -68,7 +68,7 @@
           @click="navigate('/admin/dashboard')"
         >
           <el-icon><DataAnalysis /></el-icon>
-          <span>报价速度</span>
+          <span>效率驾驶舱</span>
         </button>
         <button v-if="canOpenLegacyQuote" class="nav-item" type="button" @click="openLegacy('/index.html')">
           <el-icon><Document /></el-icon>
@@ -389,6 +389,146 @@
                 </section>
               </template>
             </el-tab-pane>
+
+            <el-tab-pane v-if="canViewQuoteOperations" label="报价运营" name="operations">
+              <section class="dashboard-section">
+                <div class="section-title">
+                  <el-icon><Document /></el-icon>
+                  <span>报价任务闭环</span>
+                  <small>共 {{ quoteJobTotal }} 条</small>
+                </div>
+                <div class="operation-filters">
+                  <el-select
+                    v-model="quoteJobFilters.status"
+                    size="small"
+                    clearable
+                    placeholder="任务状态"
+                    @change="applyQuoteJobFilters"
+                  >
+                    <el-option
+                      v-for="option in quoteJobStatusOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                  <el-select
+                    v-model="quoteJobFilters.source"
+                    size="small"
+                    clearable
+                    placeholder="需求来源"
+                    @change="applyQuoteJobFilters"
+                  >
+                    <el-option
+                      v-for="option in clientInquirySourceOptions.slice(1)"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                  <el-input
+                    v-model="quoteJobFilters.keyword"
+                    size="small"
+                    clearable
+                    placeholder="客户/电话/任务"
+                    @keyup.enter="applyQuoteJobFilters"
+                    @clear="applyQuoteJobFilters"
+                  />
+                  <el-input
+                    v-model="quoteJobFilters.username"
+                    size="small"
+                    clearable
+                    placeholder="提交人"
+                    @keyup.enter="applyQuoteJobFilters"
+                    @clear="applyQuoteJobFilters"
+                  />
+                  <el-button size="small" type="primary" plain @click="applyQuoteJobFilters">查询</el-button>
+                  <el-button size="small" :icon="Refresh" plain @click="loadQuoteJobs">刷新</el-button>
+                  <el-button size="small" :icon="Clock" plain @click="markQuoteTimeouts">标记超时</el-button>
+                </div>
+                <el-table
+                  :data="quoteJobs"
+                  row-key="job_id"
+                  class="users-table"
+                  empty-text="暂无报价任务"
+                >
+                  <el-table-column prop="created_at" label="提交时间" min-width="150">
+                    <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+                  </el-table-column>
+                  <el-table-column label="客户" min-width="190">
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.client_inquiry?.client_name || '-' }}</strong>
+                        <small>{{ row.client_inquiry?.client_phone || '-' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="需求" min-width="220" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <span>{{ row.request_summary || row.message_preview || '-' }}</span>
+                        <small>{{ row.client_inquiry?.source || '未填写' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="username" label="提交人" width="110" />
+                  <el-table-column label="状态" width="110">
+                    <template #default="{ row }">
+                      <el-tag :type="jobStatusTag(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="AI 耗时" width="110">
+                    <template #default="{ row }">{{ formatMs(row.duration_ms) }}</template>
+                  </el-table-column>
+                  <el-table-column label="确认/推送" min-width="150">
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <span>{{ row.history ? formatAmount(row.history.total_amount) : '未确认' }}</span>
+                        <small>{{ pushStatusLabel(row.history) }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="异常" min-width="180" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.error_message || '-' }}</template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="250" fixed="right">
+                    <template #default="{ row }">
+                      <div class="row-actions">
+                        <el-button size="small" :icon="Document" plain @click="openQuoteJobDetail(row)">详情</el-button>
+                        <el-button
+                          size="small"
+                          :icon="Refresh"
+                          plain
+                          :disabled="!canRetryQuoteJob(row)"
+                          @click="retryQuoteJob(row)"
+                        >
+                          重试
+                        </el-button>
+                        <el-button
+                          size="small"
+                          :icon="Delete"
+                          type="danger"
+                          plain
+                          :disabled="!canCancelQuoteJob(row)"
+                          @click="cancelQuoteJob(row)"
+                        >
+                          取消
+                        </el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-pagination
+                  v-if="quoteJobTotal > quoteJobPageSize"
+                  v-model:current-page="quoteJobPage"
+                  :page-size="quoteJobPageSize"
+                  :total="quoteJobTotal"
+                  layout="total, prev, pager, next"
+                  small
+                  @current-change="loadQuoteJobs"
+                />
+              </section>
+            </el-tab-pane>
           </el-tabs>
         </template>
 
@@ -542,13 +682,91 @@
         </div>
       </template>
     </el-drawer>
+
+    <el-drawer v-model="quoteJobDrawer.visible" size="640px" title="报价任务详情">
+      <div v-if="quoteJobDrawer.loading" class="center-state">
+        <el-icon class="spin"><Refresh /></el-icon>
+        <span>加载中</span>
+      </div>
+      <template v-else-if="quoteJobDrawer.job">
+        <div class="detail-grid">
+          <div>
+            <small>任务号</small>
+            <strong>{{ quoteJobDrawer.job.job_id }}</strong>
+          </div>
+          <div>
+            <small>状态</small>
+            <strong>{{ statusLabel(quoteJobDrawer.job.status) }}</strong>
+          </div>
+          <div>
+            <small>客户</small>
+            <strong>{{ quoteJobDrawer.job.client_inquiry?.client_name || '-' }}</strong>
+          </div>
+          <div>
+            <small>联系电话</small>
+            <strong>{{ quoteJobDrawer.job.client_inquiry?.client_phone || '-' }}</strong>
+          </div>
+          <div>
+            <small>需求来源</small>
+            <strong>{{ quoteJobDrawer.job.client_inquiry?.source || '-' }}</strong>
+          </div>
+          <div>
+            <small>咨询时间</small>
+            <strong>{{ formatDate(quoteJobDrawer.job.client_inquiry?.inquiry_time) }}</strong>
+          </div>
+          <div>
+            <small>提交人</small>
+            <strong>{{ quoteJobDrawer.job.username }}</strong>
+          </div>
+          <div>
+            <small>钉钉推送</small>
+            <strong>{{ pushStatusLabel(quoteJobDrawer.job.history) }}</strong>
+          </div>
+        </div>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Document /></el-icon>
+            <span>需求摘要</span>
+          </div>
+          <p class="detail-text">{{ quoteJobDrawer.job.request_summary || quoteJobDrawer.job.message_preview || '-' }}</p>
+        </section>
+        <section class="drawer-section" v-if="quoteJobDrawer.job.error_message">
+          <div class="section-title">
+            <el-icon><Clock /></el-icon>
+            <span>异常信息</span>
+          </div>
+          <p class="detail-text">{{ quoteJobDrawer.job.error_message }}</p>
+        </section>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Histogram /></el-icon>
+            <span>进度事件</span>
+          </div>
+          <el-timeline>
+            <el-timeline-item
+              v-for="event in quoteJobDrawer.job.events || []"
+              :key="`${event.event_index || event.status}-${event.created_at || event.message}`"
+              :timestamp="formatDate(event.created_at)"
+              placement="top"
+            >
+              <div class="event-row">
+                <strong>{{ event.stage || event.status || event.event_type }}</strong>
+                <el-tag size="small" effect="plain">{{ event.event_type || event.status }}</el-tag>
+              </div>
+              <p>{{ event.message || '-' }}</p>
+            </el-timeline-item>
+          </el-timeline>
+          <el-empty v-if="!quoteJobDrawer.job.events?.length" description="暂无进度事件" />
+        </section>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Clock,
   DataAnalysis,
@@ -611,6 +829,17 @@ const clientInquirySourceOptions = [
   { value: '其他', label: '其他' },
 ]
 
+const quoteJobStatusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'queued', label: '排队中' },
+  { value: 'running', label: '处理中' },
+  { value: 'succeeded', label: '已完成' },
+  { value: 'failed', label: '失败' },
+  { value: 'canceled', label: '已取消' },
+  { value: 'timed_out', label: '已超时' },
+  { value: 'failed,canceled,timed_out', label: '异常状态' },
+]
+
 const loginForm = reactive({ username: '', password: '' })
 const session = reactive({ user: null })
 const users = ref([])
@@ -621,10 +850,20 @@ const clientInquiries = ref([])
 const clientInquiryTotal = ref(0)
 const clientInquiryPage = ref(1)
 const clientInquiryPageSize = 20
+const quoteJobs = ref([])
+const quoteJobTotal = ref(0)
+const quoteJobPage = ref(1)
+const quoteJobPageSize = 15
 const clientInquiryFilters = reactive({
   source: '',
   keyword: '',
   hasQuoteJob: true,
+})
+const quoteJobFilters = reactive({
+  status: '',
+  source: '',
+  keyword: '',
+  username: '',
 })
 const dashboardRange = ref('last_30_days')
 const dashboardTab = ref('quote')
@@ -646,10 +885,17 @@ const eventsDrawer = reactive({
   revokeNote: '',
 })
 
+const quoteJobDrawer = reactive({
+  visible: false,
+  loading: false,
+  job: null,
+})
+
 const roles = computed(() => session.user?.roles || [])
 const canMutateRoles = computed(() => roles.value.includes('system_admin'))
 const canAccessPermissions = computed(() => roles.value.includes('system_admin') || roles.value.includes('admin'))
 const canViewDashboard = computed(() => canAccessPermissions.value || roles.value.includes('viewer'))
+const canViewQuoteOperations = computed(() => canAccessPermissions.value)
 const canOpenLegacyQuote = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
 const visibleDailyTrends = computed(() => (quoteDashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
@@ -729,6 +975,36 @@ function statusLabel(status) {
     timed_out: '已超时',
   }
   return labels[status] || status
+}
+
+function jobStatusTag(status) {
+  if (status === 'succeeded') return 'success'
+  if (status === 'failed' || status === 'timed_out') return 'danger'
+  if (status === 'canceled') return 'info'
+  if (status === 'running') return 'warning'
+  return 'primary'
+}
+
+function formatAmount(value) {
+  if (value === null || value === undefined) return '-'
+  return Number(value).toLocaleString('zh-CN', {
+    style: 'currency',
+    currency: 'CNY',
+    maximumFractionDigits: 0,
+  })
+}
+
+function pushStatusLabel(history) {
+  if (!history) return '未确认'
+  return history.pushed_to_dingtalk ? '已推送钉钉' : '已确认未推送'
+}
+
+function canRetryQuoteJob(row) {
+  return ['failed', 'canceled', 'timed_out'].includes(row.status)
+}
+
+function canCancelQuoteJob(row) {
+  return ['queued', 'running'].includes(row.status)
 }
 
 function landingPath(user) {
@@ -819,12 +1095,114 @@ function applyClientInquiryFilters() {
   loadClientInquiries()
 }
 
+async function loadQuoteJobs() {
+  if (!canViewQuoteOperations.value) return
+  const params = {
+    page: quoteJobPage.value,
+    page_size: quoteJobPageSize,
+  }
+  if (quoteJobFilters.status) params.status = quoteJobFilters.status
+  if (quoteJobFilters.source) params.source = quoteJobFilters.source
+  const keyword = quoteJobFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
+  const username = quoteJobFilters.username.trim()
+  if (username) params.username = username
+  const rangeSource = quoteDashboard.value || responseDashboard.value
+  if (rangeSource?.range_start) params.date_from = rangeSource.range_start
+  if (rangeSource?.range_end) params.date_to = rangeSource.range_end
+
+  try {
+    const response = await api.get('/quote/jobs', { params })
+    quoteJobs.value = responseData(response) || []
+    quoteJobTotal.value = response.data?.total ?? quoteJobs.value.length
+  } catch (error) {
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '报价任务加载失败'))
+  }
+}
+
+function applyQuoteJobFilters() {
+  quoteJobPage.value = 1
+  loadQuoteJobs()
+}
+
+async function openQuoteJobDetail(row) {
+  quoteJobDrawer.visible = true
+  quoteJobDrawer.loading = true
+  quoteJobDrawer.job = null
+  try {
+    const response = await api.get(`/quote/jobs/${row.job_id}`)
+    quoteJobDrawer.job = responseData(response)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '任务详情加载失败'))
+  } finally {
+    quoteJobDrawer.loading = false
+  }
+}
+
+async function retryQuoteJob(row) {
+  if (!canRetryQuoteJob(row)) return
+  state.submitting = true
+  try {
+    await api.post(`/quote/jobs/${row.job_id}/retry`)
+    ElMessage.success('已创建重试任务')
+    await loadQuoteJobs()
+    await loadDashboards()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '重试失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function cancelQuoteJob(row) {
+  if (!canCancelQuoteJob(row)) return
+  try {
+    await ElMessageBox.confirm('确认取消这条报价任务？', '取消任务', {
+      type: 'warning',
+      confirmButtonText: '确认取消',
+      cancelButtonText: '返回',
+    })
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/quote/jobs/${row.job_id}/cancel`)
+    ElMessage.success('已取消任务')
+    await loadQuoteJobs()
+    await loadDashboards()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '取消失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function markQuoteTimeouts() {
+  state.submitting = true
+  try {
+    const response = await api.post('/admin/quote/jobs/mark_timeouts', null, {
+      params: { timeout_minutes: 30 },
+    })
+    ElMessage.success(`已标记 ${response.data?.marked_count ?? 0} 条超时任务`)
+    await loadQuoteJobs()
+    await loadDashboards()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '标记超时失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
 async function loadDashboards() {
   state.loading = true
   state.error = ''
   dashboardFeature.quoteDisabled = false
   dashboardFeature.responseDisabled = false
   clientInquiryPage.value = 1
+  quoteJobPage.value = 1
   let loadedCount = 0
   try {
     try {
@@ -854,20 +1232,26 @@ async function loadDashboards() {
       else throw error
     }
 
+    if (canViewQuoteOperations.value) {
+      await loadQuoteJobs()
+      loadedCount += 1
+    }
     if (loadedCount === 0) {
       state.error = 'feature_disabled'
       return
     }
     if (dashboardTab.value === 'quote' && dashboardFeature.quoteDisabled) {
-      dashboardTab.value = 'response'
+      dashboardTab.value = dashboardFeature.responseDisabled ? 'operations' : 'response'
     } else if (dashboardTab.value === 'response' && dashboardFeature.responseDisabled) {
-      dashboardTab.value = 'quote'
+      dashboardTab.value = dashboardFeature.quoteDisabled ? 'operations' : 'quote'
     }
   } catch (error) {
     quoteDashboard.value = null
     responseDashboard.value = null
     clientInquiries.value = []
     clientInquiryTotal.value = 0
+    quoteJobs.value = []
+    quoteJobTotal.value = 0
     if (error.response?.status === 401) state.error = 'unauthorized'
     else if (error.response?.status === 403) state.error = 'forbidden'
     else ElMessage.error(apiErrorMessage(error, '看板加载失败'))

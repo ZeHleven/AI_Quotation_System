@@ -239,6 +239,26 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 - 已修复 Celery worker 单独启动时未加载 `client_inquiries` 元数据导致 Phase 2 报价任务停留 `queued` 的问题；`scripts/phase2_response_smoke.ps1` 使用 Windows `China Standard Time` 生成测试询价时间，避免本机时区造成响应耗时偏差。
 - 系统完善前不正式投入生产使用，正式生产启用待统一 Runbook。
 
+### 阶段 2.5｜管理员报价运营闭环（后台补强，不启动 Phase 3）
+
+本阶段不是独立大模块，不新增 `execution_tasks`，也不迁移旧 `admin.html` 的知识库功能。目标是在 Vite 管理台把现有报价任务、咨询记录和确认推送状态串起来，让管理员能从一个入口追踪报价闭环。
+
+范围：
+
+- `/api/v1/quote/jobs` 返回报价任务时补充 `client_inquiry` 和已确认 `history` 摘要。
+- 报价任务列表支持按状态、需求来源、关键词、提交人和时间范围筛选。
+- `/admin/dashboard` 新增“报价运营”标签页，展示客户、电话、需求来源、提交人、任务状态、AI 耗时、确认金额、钉钉推送状态和异常信息。
+- 管理员可从该视图查看任务详情、重试失败/取消/超时任务、取消排队/运行中的任务，并触发现有的超时标记接口。
+- 权限边界沿用现有 `quote_jobs` 接口：`admin` / `system_admin` 可看全量，普通用户仍只能看本人任务；Vite 管理台仅向管理员展示该标签页。
+
+完成记录（当前环境验证完成，非正式生产上线）：
+
+- 已复用现有 `quote_jobs`、`client_inquiries`、`quote_history` 数据，不新增数据库结构。
+- 已补充后端列表/详情上下文字段和自动化测试。
+- 已在 Vite 管理台接入“报价运营”视图。
+- 当前环境已验证提交人列、筛选、任务详情和页面显示正常。
+- 该阶段已封板，后续若进入任务执行体系，按 Phase 3 的 `execution_tasks` 路线单独推进。
+
 ### 阶段 3｜执行速度追踪
 
 新增 `execution_tasks` 与 `execution_task_events`。

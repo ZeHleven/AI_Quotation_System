@@ -317,6 +317,13 @@ def serve_vite_business():
     return _serve_vite_index()
 
 
+@app.get("/admin/business-ledger", include_in_schema=False)
+def serve_vite_business_ledger():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
 @app.get("/favicon.svg", include_in_schema=False)
 def serve_vite_favicon():
     for base_dir in (_VITE_DIST_DIR, _VITE_PUBLIC_DIR):

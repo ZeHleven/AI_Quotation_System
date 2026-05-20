@@ -73,14 +73,15 @@ Clear_test/
 - AI 平台架构升级 Phase 2 响应速度追踪已完成当前环境运行态验收（2026-05-18）：新增 `FEATURE_CLIENT_INQUIRY`、`FEATURE_DASHBOARD_RESPONSE`、`client_inquiries`、报价任务咨询关联、咨询查询/修正接口和 `/admin/dashboard` 响应速度标签页；当前环境 Alembic 已升级到 `20260514_0012 (head)`，功能开关已打开且 `PUBLIC_ACCESS_ENABLED=false`；内网 smoke 已展示 1 条可信响应样本，平均首次响应 15 分钟，Celery worker Phase 2 元数据加载问题已修复。
 - AI 平台架构升级 Phase 2.5 管理员报价运营闭环已完成当前环境验证（2026-05-18）：复用 `quote_jobs`、`client_inquiries`、`quote_history`，在 `/admin/dashboard` 新增“报价运营”标签页；提交人列、筛选、任务详情、重试/取消/超时标记入口已落地；不新增数据库结构，不启动 Phase 3。
 - AI 平台架构升级 Phase 3 执行速度追踪已完成当前环境验证（2026-05-19）：新增 `execution_tasks`、`execution_task_events`、`FEATURE_EXECUTION`、`FEATURE_DASHBOARD_EXECUTION`、执行任务 CRUD/取消接口、执行速度聚合接口、`/admin/execution` 任务页和 `/admin/dashboard` 执行速度标签页；当前环境已打开开关并验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已显示取消数量。
+- AI 平台架构升级 Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收（2026-05-19）：新增 `meeting_notes`、`task_drafts`、`meeting_note_revisions`、`FEATURE_MEETING_AI`、会议纪要接口和 `/admin/execution` 会议纪要标签页；当前环境已打开 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`，内网 smoke 已验证纪要提取草稿、确认写入 `execution_tasks`、人工补充后作废、revision 补充任务和 `/admin/execution` 访问。当前不启动 Phase 4b/4c/6，不迁移旧 `index.html` / `admin.html`。
 - 产品边界：系统完善前不正式投入生产使用；后续阶段先按内网开发/验证推进，最后统一准备正式生产 Runbook。
 - 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
-- 架构升级路线按 `docs/superpowers/specs/2026-05-14-ai-platform-upgrade-design.md` 分阶段执行；当前已完成到 Phase 3 执行速度追踪当前环境验证，不启动 Phase 4+ 的会议 AI、语音转写或经营驾驶舱。
-- 当前代码迁移 head：`20260514_0013`；物料库主存储为 MySQL `materials` / `material_snapshots`，报价反馈新增 `quote_feedback` / `quote_corrections` / `quote_rag_traces`，Prompt 回归评测新增 `prompt_regression_cases` / `prompt_regression_runs`，知识库治理新增 `knowledge_candidates`，Phase 0 RBAC 新增 `users.role_version` / `dingtalk_user_id` / `dingtalk_bound_at`、`user_roles`、`user_role_events`，Phase 2 响应速度新增 `client_inquiries` 和 `quote_jobs.client_inquiry_id`，Phase 3 执行速度新增 `execution_tasks` 和 `execution_task_events`。
-- 内网验证数据库若低于 `20260514_0013`，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪和 Phase 3 执行速度追踪。
+- 架构升级路线按 `docs/superpowers/specs/2026-05-14-ai-platform-upgrade-design.md` 分阶段执行；当前已完成到 Phase 4a 手动会议纪要 + 草稿确认当前环境运行态验收，不启动 Phase 4b/4c/6 的语音转写、钉钉会议导入或经营驾驶舱。
+- 当前代码迁移 head：`20260514_0015`；物料库主存储为 MySQL `materials` / `material_snapshots`，报价反馈新增 `quote_feedback` / `quote_corrections` / `quote_rag_traces`，Prompt 回归评测新增 `prompt_regression_cases` / `prompt_regression_runs`，知识库治理新增 `knowledge_candidates`，Phase 0 RBAC 新增 `users.role_version` / `dingtalk_user_id` / `dingtalk_bound_at`、`user_roles`、`user_role_events`，Phase 2 响应速度新增 `client_inquiries` 和 `quote_jobs.client_inquiry_id`，Phase 3 执行速度新增 `execution_tasks` 和 `execution_task_events`，Phase 4a 会议纪要新增 `meeting_notes`、`task_drafts` 和 `meeting_note_revisions`。
+- 内网验证数据库若低于 `20260514_0015`，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪和 Phase 4a 会议纪要草稿确认。
 - 新增数据库字段/表必须走 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` 或启动兼容迁移。
 - `LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅保留为旧 `rag_materials.json` 自动导入源；RAG 评测报告目录由 `RAG_EVAL_REPORT_DIR` 控制。
-- 最新验证（2026-05-19，Phase 3 当前环境）：`python -m alembic heads` 显示 `20260514_0013 (head)`；`python -m compileall app` 通过；`python -m pytest` 为 `92 passed`；`python -m pytest tests\test_execution_tasks_phase3.py` 通过；`npm.cmd run build` 通过。当前环境已打开 `FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION`，并验证 `/admin/execution` 与 `/admin/dashboard` 执行速度标签页正常，取消数量已进入执行速度趋势。
+- 最新验证（2026-05-19，Phase 4a 运行态收尾）：`python -m alembic current` 显示 `20260514_0015 (head)`；`scripts\phase4a_meeting_smoke.ps1` 通过，覆盖自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 200；`python -m compileall app scripts` 通过；`python -m pytest` 为 `96 passed`；`npm.cmd run build` 通过。当前不启动 Phase 4b/4c/6，`PUBLIC_ACCESS_ENABLED=false` 边界保持不变。
 
 ## 账号
 

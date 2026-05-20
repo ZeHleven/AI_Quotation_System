@@ -1,6 +1,6 @@
 # API-CONTRACTS｜升级路线新增接口契约骨架
 > 创建日期：2026-05-15
-> 状态：Phase 0 接口已完成当前环境验证；Phase 1 报价速度看板已完成当前环境运行态验收；Phase 2 响应速度接口已完成当前环境运行态验收。系统完善前不正式投入生产使用。
+> 状态：Phase 0 接口已完成当前环境验证；Phase 1 报价速度看板已完成当前环境运行态验收；Phase 2 响应速度接口已完成当前环境运行态验收；Phase 4a 会议纪要与草稿确认接口已完成当前环境运行态验收；BIZ-1a 商务台账和 BIZ-2a 成本数据库接口契约已预定义，开发尚未开始。系统完善前不正式投入生产使用。
 > 关联主文档：[2026-05-14-ai-platform-upgrade-design.md](2026-05-14-ai-platform-upgrade-design.md)
 
 ## 目标
@@ -210,6 +210,8 @@ Phase 2 字段级 Schema 已补齐到代码层：
 - 当前环境运行态验证：`FEATURE_CLIENT_INQUIRY=true`、`FEATURE_DASHBOARD_RESPONSE=true`、`PUBLIC_ACCESS_ENABLED=false`；响应速度看板已展示 1 条可信样本，平均首次响应 15 分钟，SLA 达标率 100%。
 - 自动化验证：`python -m pytest` 为 `86 passed`，`npm.cmd run build` 通过。
 
+**BIZ-1a 扩展说明**（待开发）：`client_inquiries` 表将通过新 Alembic revision 新增 `direction`（`inbound`/`outbound`）、`stage`、`next_followup_at`、`cancelled_at`、`cancelled_by_id`、`cancel_reason` 字段，并新建 `client_inquiry_events` 审计表。BIZ-1a 使用 `direction='outbound'`；负责人复用已有 `responder_id` 字段，不新增 `assignee_id`。`outbound` 记录的 `inquiry_time` 自动设为 `created_at`，`first_response_time` 设为 `NULL`。BIZ-1a Alembic 需将 `client_inquiries.first_response_time` 调整为 nullable；Phase 2 `inbound` 记录仍保持非空。历史 `inbound` 记录通过 Alembic migration 的 `UPDATE` 语句将 `direction` 默认填充为 `'inbound'`。原 Phase 2 `inbound` 逻辑和响应速度看板口径不受影响。`PATCH /api/v1/client-inquiries/{id}` 白名单将在 BIZ-1a 开发时同步扩展。
+
 ## 阶段 3：执行任务（✅ 当前环境验证通过）
 
 | 接口 | 方法 | 权限 | 功能开关 | 说明 |
@@ -240,8 +242,11 @@ Phase 2 字段级 Schema 已补齐到代码层：
 | 接口 | 方法 | 权限 | 功能开关 | 说明 |
 |------|------|------|----------|------|
 | `/api/v1/meetings` | POST | staff / manager / admin / system_admin | FEATURE_MEETING_AI | 保存纪要并触发 AI 提取 |
+| `/api/v1/meetings` | GET | staff / manager / admin / system_admin | FEATURE_MEETING_AI | 查询会议纪要；staff / manager 仅自己的 |
 | `/api/v1/meetings/{id}` | PATCH | 创建人 / admin / system_admin | FEATURE_MEETING_AI | 草稿阶段更正纪要并重新提取 |
+| `/api/v1/meetings/{id}` | GET | 创建人 / admin / system_admin | FEATURE_MEETING_AI | 查看纪要、草稿和 revision |
 | `/api/v1/meetings/{id}/revisions` | POST | admin / system_admin | FEATURE_MEETING_AI | 已确认后创建 revision，不覆盖原纪要 |
+| `/api/v1/meetings/{id}/drafts` | POST | 创建人 / admin / system_admin | FEATURE_MEETING_AI | AI 未提取或需补充时人工新增任务草稿 |
 | `/api/v1/meetings/{id}/cancel` | POST | 创建人 / admin / system_admin | FEATURE_MEETING_AI | 作废 draft 纪要，关联草稿置为 rejected |
 | `/api/v1/meetings/{id}/confirm-tasks` | POST | staff / manager / admin / system_admin | FEATURE_MEETING_AI | 确认草稿写入任务 |
 | `/api/v1/meetings/transcribe` | POST | staff / manager / admin / system_admin | FEATURE_AUDIO_TRANSCRIPTION | 上传音频转写 |
@@ -250,7 +255,120 @@ Phase 2 字段级 Schema 已补齐到代码层：
 
 `confirm-tasks` 依赖 `execution_tasks` 表已存在，但不受 `FEATURE_EXECUTION=false` 阻断；该开关只控制独立任务管理 UI 和任务 CRUD 入口。
 
+Phase 4a 当前实现说明：
+
+- 新增 Alembic `20260514_0014` 创建 `meeting_notes`，`20260514_0015` 创建 `task_drafts` 与 `meeting_note_revisions`。
+- `POST /api/v1/meetings` 最低请求字段：`content`。响应返回纪要详情与 `drafts`，每条草稿包含 `title`、`source_sentence`、`suggested_assignee_id`、`suggested_due_at`、`status` 和 `prompt_version`。
+- 当前任务提取使用固定 JSON Schema 的本地结构化提取器，输出统一校验为 `{"tasks":[...]}`；不接受自由文本解析。后续可在同一服务边界替换为外部 LLM。
+- `POST /api/v1/meetings/{id}/confirm-tasks` 最低请求字段：`drafts[].draft_id`、`drafts[].action`。`action=accept` 时必须携带最终 `assignee_id` 和 `due_at`，可覆盖 `title` 与 `notes`；`action=reject` 时可携带 `rejection_reason`。
+- 已确认草稿写入 `execution_tasks` 时固定映射 `source='meeting'`、`source_ref_id=meeting_note_id`、`status='pending'`，并写入 `execution_task_events`。
+- `FEATURE_EXECUTION=false` 时，`confirm-tasks` 仍可写入 `execution_tasks`；`FEATURE_EXECUTION` 只影响独立任务管理接口和 UI。
+- 当前环境运行态验收已通过：`FEATURE_MEETING_AI=true`、`PUBLIC_ACCESS_ENABLED=false`；`scripts\phase4a_meeting_smoke.ps1` 已验证自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 200。
+- Phase 4b `transcribe*` 与 Phase 4c `import-dingtalk` 仍未实现，接口不得提前开放。
+
+## BIZ-1a：商务台账（待开发）
+
+> 功能开关：`FEATURE_BUSINESS_LEDGER`；Alembic revision 在 `20260514_0015` 之后，与 BIZ-2a 独立排期。
+
+| 接口 | 方法 | 权限 | 功能开关 | 说明 |
+|------|------|------|----------|------|
+| `/api/v1/business-ledger` | POST | admin / system_admin / staff（商务角色） | FEATURE_BUSINESS_LEDGER | 新建跟进记录（`direction='outbound'`） |
+| `/api/v1/business-ledger` | GET | admin / system_admin / staff | FEATURE_BUSINESS_LEDGER | 列表；admin 可查全员，staff 仅自己；支持阶段/负责人/逾期筛选 |
+| `/api/v1/business-ledger/{id}` | GET | admin / system_admin / staff（自己的） | FEATURE_BUSINESS_LEDGER | 单条详情 |
+| `/api/v1/business-ledger/{id}` | PATCH | admin / system_admin / staff（自己的） | FEATURE_BUSINESS_LEDGER | 更新阶段、下次跟进时间、备注等；`direction` 不可修改 |
+| `/api/v1/business-ledger/{id}/cancel` | POST | admin / system_admin | FEATURE_BUSINESS_LEDGER | 软删除（作废）；`reason` 必填；写入 `client_inquiry_events`，设置 `cancelled_at`、`cancelled_by_id`、`cancel_reason` |
+
+`POST /api/v1/business-ledger` 请求字段：
+
+- `source`（信息来源：自主开拓 / 介绍 / 招标平台 / 其他）
+- `client_name`（客户名）
+- `client_phone`（联系方式）
+- `stage`（当前阶段，默认 `初步接触`）
+- `next_followup_at`（下次跟进时间，ISO 8601）
+- `responder_id`（负责人用户 ID；复用已有字段，outbound 场景表示台账负责人）
+- `notes`（备注）
+
+`company_name` 本阶段不暴露，后续如需要必须先通过 Alembic 为 `client_inquiries` 增加底层字段。
+
+`GET /api/v1/business-ledger` 查询参数：
+
+- `stage`（阶段筛选，多选）
+- `source`（信息来源）
+- `responder_id`（负责人）
+- `overdue_only`（仅逾期未跟进，boolean）
+- `date_from` / `date_to`（创建时间范围）
+- `keyword`（客户名/联系方式/备注模糊搜索）
+- `page` / `page_size`
+
+`PATCH /api/v1/business-ledger/{id}` 可修改字段白名单：
+
+- `stage`（`admin` / `system_admin` / 负责人本人；终态后返回 `409 STATE_CONFLICT`）
+- `next_followup_at`
+- `client_phone`
+- `notes`
+- `responder_id`（仅 `admin` / `system_admin`）
+- `source`（仅 `admin` / `system_admin`）
+
+重复调用语义：
+
+- `stage` 已为终态（`成单`/`丢单`）时 PATCH 返回 `409 STATE_CONFLICT`。
+- 已作废记录 PATCH 返回 `409 STATE_CONFLICT`。
+
+## BIZ-2a：成本数据库（待开发）
+
+> 功能开关：`FEATURE_COST_DB`；Alembic revision 在 `20260514_0015` 之后，与 BIZ-1a 独立排期。
+
+| 接口 | 方法 | 权限 | 功能开关 | 说明 |
+|------|------|------|----------|------|
+| `/api/v1/admin/cost-items` | POST | admin / system_admin | FEATURE_COST_DB | 新建成本条目（默认 `status='draft'`） |
+| `/api/v1/admin/cost-items` | GET | admin / system_admin / staff（只读） | FEATURE_COST_DB | 列表；支持大类/子类/状态/关键词筛选 |
+| `/api/v1/admin/cost-items/{id}` | GET | admin / system_admin / staff（只读） | FEATURE_COST_DB | 单条详情含价格历史 |
+| `/api/v1/admin/cost-items/{id}` | PATCH | admin / system_admin | FEATURE_COST_DB | 更新字段（包括价格）；变更写 `cost_item_history` |
+| `/api/v1/admin/cost-items/{id}/activate` | POST | admin / system_admin | FEATURE_COST_DB | 核定（`draft -> active`） |
+| `/api/v1/admin/cost-items/{id}/archive` | POST | admin / system_admin | FEATURE_COST_DB | 停用（`draft/active -> archived`）；`active -> archived` 需提交 `reason` |
+| `/api/v1/admin/cost-items/import/preview` | POST | admin / system_admin | FEATURE_COST_DB | 批量导入预览（解析 Excel，返回待确认条目列表 + `batch_id`） |
+| `/api/v1/admin/cost-items/import/confirm` | POST | admin / system_admin | FEATURE_COST_DB | 批量导入确认（需携带 `batch_id`；全部落库为 `draft`；重复 confirm 幂等） |
+
+`POST /api/v1/admin/cost-items` 最低请求字段：
+
+- `category`（大类，必填）
+- `subcategory`（子类）
+- `item_name`（条目名，必填）
+- `spec`（规格）
+- `unit`（单位，必填）
+- `price`（单价，必填）
+- `price_type`（`labor` 劳务 / `material` 材料 / `combined` 综合，必填）
+- `source`（`manual` 手动 / `imported` 导入 / `ai_suggested` AI 建议，默认 `manual`）
+- `effective_date`（生效日期）
+- `notes`（备注）
+
+`GET /api/v1/admin/cost-items` 查询参数：
+
+- `category` / `subcategory`
+- `status`（`draft` / `active` / `archived`，多选）
+- `price_type`
+- `keyword`（`item_name` / `spec` 模糊搜索）
+- `page` / `page_size`
+
+`POST /api/v1/admin/cost-items/{id}/archive` 请求字段（`active -> archived` 时必填）：
+
+- `reason`
+
+批量导入幂等约定：
+
+- `POST /import/preview`：解析上传的 Excel，返回 `{ batch_id, items: [...], duplicate_warnings: [...] }`。`batch_id` 为服务端生成的 UUID，与本次解析结果绑定，有效期 30 分钟。
+- `POST /import/confirm`：请求体必须携带 `batch_id`（来自 preview 响应）。服务端按 `batch_id` 查找缓存的解析结果并落库为 `draft`。`batch_id` 过期（>30 分钟）返回 `410 BATCH_EXPIRED`。重复 confirm 同一 `batch_id` 返回 `200 + 已确认结果`，不重复落库。
+- 重复条目判定规则：`category + subcategory + item_name + spec + unit` 五字段完全匹配时，在 preview 响应的 `duplicate_warnings` 中标记，confirm 时默认跳过已有 `active` 记录；已有 `draft` 记录时覆盖更新。
+
+重复调用语义：
+
+- 已 `active` 再次 activate 返回 `200 + 当前对象`。
+- 已 `archived` 再次 archive 返回 `200 + 当前对象`。
+- 已 `archived` 后 activate 返回 `409 STATE_CONFLICT`。
+
 ## 阶段 5：知识导入
+
+> 当前执行顺序以 ROADMAP.md 的 BIZ Track 为准，本节为后续能力契约保留。原 Phase 5 知识历史数据导入目标已并入 BIZ-2a（成本数据库初始化）和 BIZ-2d（成本库联动 RAG）；本节接口在 BIZ-2 稳定后重新评估是否需要独立入口。
 
 | 接口 | 方法 | 权限 | 功能开关 | 说明 |
 |------|------|------|----------|------|
@@ -274,6 +392,8 @@ Phase 2 字段级 Schema 已补齐到代码层：
 - `trace_id`
 
 ## 阶段 6：经营数据
+
+> 当前执行顺序以 ROADMAP.md 的 BIZ Track 为准，本节为后续能力契约保留。原 Phase 6 已重命名为 BIZ-3 经营驾驶舱，依赖 BIZ-1 商务数据稳定后启动；本节接口契约在 BIZ-3 正式开发时参照执行。
 
 | 接口 | 方法 | 权限 | 功能开关 | 说明 |
 |------|------|------|----------|------|
@@ -367,5 +487,8 @@ AI 原文短时 URL 响应字段：
 | `meetings/{id}/cancel` | 已 cancelled 返回 `200 + 当前对象` | confirmed 后 cancel 返回 409 |
 | `execution-tasks/{id}/cancel` | 已 cancelled 返回 `200 + 当前对象` | 已 done 后 cancel 返回 409 |
 | `quote/jobs/{id}/retry` | 服务端应防重复创建；同一源 job 同一时间只允许一个 active retry | 源 job 不存在或无权访问返回 404 / 403 |
+| `business-ledger/{id}` PATCH | `stage` 已为终态（成单/丢单）返回 `409 STATE_CONFLICT` | 已作废记录返回 `409 STATE_CONFLICT` |
+| `admin/cost-items/{id}/activate` | 已 `active` 返回 `200 + 当前对象` | 已 `archived` 后 activate 返回 `409 STATE_CONFLICT` |
+| `admin/cost-items/{id}/archive` | 已 `archived` 返回 `200 + 当前对象` | 已 `archived` 后 activate 返回 `409 STATE_CONFLICT` |
 
 状态机详见 [STATE-MACHINES.md](STATE-MACHINES.md)，功能开关依赖详见 [FEATURE-FLAGS.md](FEATURE-FLAGS.md)。

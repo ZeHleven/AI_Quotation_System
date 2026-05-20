@@ -1,6 +1,6 @@
 # STATE-MACHINES｜关键实体状态机
 > 创建日期：2026-05-15
-> 状态：规划中
+> 状态：Phase 4a 任务草稿与会议纪要状态机已完成当前环境运行态验收；Phase 4b/4c/6 仍未启动。
 > 关联主文档：[2026-05-14-ai-platform-upgrade-design.md](2026-05-14-ai-platform-upgrade-design.md)
 
 ## 目标
@@ -73,6 +73,13 @@ pending_review -> rejected
 - 已 `accepted` 的草稿再次确认返回 `200 + 已创建任务`，不得重复创建任务。
 - `rejected` 后再次确认返回 `409 CONFLICT`。
 
+当前 Phase 4a 实现已落地：
+
+- `POST /api/v1/meetings/{id}/confirm-tasks` 对 `accepted` 草稿重复确认返回已创建任务，不重复创建。
+- `rejected` 草稿再次确认返回 `409`。
+- AI 未提取到草稿时，可通过 `/api/v1/meetings/{id}/drafts` 人工补充 `pending_review` 草稿。
+- 当前环境 smoke 已验证自动提取草稿确认写入 `execution_tasks`，以及人工补充草稿后作废。
+
 ## meeting_notes
 
 ```text
@@ -92,6 +99,69 @@ revised -> confirmed
 - revision 后可重新提取补充草稿，但不得自动修改已确认的 `execution_tasks`。
 - `revised -> confirmed` 只确认本次 revision 新增或修改出的 `task_drafts`。后端必须基于 `meeting_note_id + normalized_title + assignee_id + due_at` 做重复检测，疑似重复时返回草稿冲突供人工处理，不自动创建重复 `execution_tasks`。
 - revision 确认不得覆盖原 `meeting_notes.confirmed_at`；每次更正时间写入 `meeting_note_revisions.created_at`，并在 revision 记录中保存本次确认生成的 task ids。
+
+当前 Phase 4a 实现已落地：
+
+- `draft` 纪要可编辑并重新提取，旧 `pending_review` 草稿自动置为 `rejected`，原因 `meeting_reextracted`。
+- `draft -> cancelled` 会将关联 `pending_review` 草稿置为 `rejected`，原因 `meeting_cancelled`。
+- `confirmed` 后只能通过 `meeting_note_revisions` 记录更正内容，原始 `content` 不覆盖。
+- revision 生成的补充草稿确认后不覆盖原 `confirmed_at`。
+- 当前环境 smoke 已验证 `confirmed -> revised -> confirmed` 的补充任务路径，并确认 `/admin/execution` 入口可访问。
+
+## client_inquiries（BIZ-1a 商务台账）
+
+`direction` 区分来源方向：`outbound` 主动开拓（BIZ-1a 商务台账），`inbound` 被动接单（Phase 2 历史记录保留）。
+
+`stage` 表示跟进阶段，由操作人手动更新：
+
+```text
+初步接触 -> 需求确认
+需求确认 -> 报价中
+报价中 -> 跟进议价
+跟进议价 -> 成单
+跟进议价 -> 丢单
+任意阶段 -> 成单
+任意阶段 -> 丢单
+```
+
+终态：`成单` / `丢单`。
+
+规则：
+
+- `direction` 创建后不可修改；`outbound` 受 `FEATURE_BUSINESS_LEDGER` 控制，`inbound` 受 `FEATURE_CLIENT_INQUIRY` 控制。
+- `stage` 由负责人或 `admin` 手动更新，不触发自动状态流转。
+- `成单` / `丢单` 为终态；进入终态后不允许切换回其他阶段。终态记录如需修正，由 `admin` 软删除后重新创建。
+- `outbound` 记录的 `next_followup_at` 超期后不自动变更 `stage`，由 Celery beat 标记"逾期未跟进"并推送钉钉提醒（BIZ-1b 实现）。
+- `inbound` 记录不参与跟进提醒逻辑。
+- 所有 `stage` 变更必须写 `client_inquiry_events` 审计表（BIZ-1a Alembic revision 同步新建）；创建和软删除同样写审计。`client_inquiry_events` 字段：`id, inquiry_id, event_type, old_value, new_value, operator_id, operated_at, ip_address, user_agent, trace_id`；可选扩展字段 `before_json, after_json`（记录变更前后完整快照）。与通用规则第 16/17 条一致：系统自动任务触发时 `operator_id=NULL`、`ip_address='0.0.0.0'`、`user_agent='system:<task_name>'`、`trace_id='system-<task_name>-<run_id>'`。
+- 软删除字段：`cancelled_at`（时间戳）、`cancelled_by_id`（操作人）、`cancel_reason`（必填文本）；进入软删除态后记录不参与列表查询，但审计事件保留。
+- 负责人字段：`outbound` 记录复用已有 `responder_id` 字段表示台账负责人；不新增 `assignee_id`，避免与 `inbound` 场景的"首响应人"语义混淆。
+- `outbound` 创建时：`inquiry_time` 自动设为 `created_at`；`first_response_time` 设为 `NULL`（主动开拓无"首响应"概念）。
+- 历史 `inbound` 数据迁移默认：现有记录通过 Alembic revision 的 `UPDATE` 语句将 `direction` 默认填充为 `'inbound'`。
+- BIZ-1a 前置：`client_inquiries` 表已存在（Alembic `20260514_0012`），新增 `direction`、`stage`、`next_followup_at`、`cancelled_at`、`cancelled_by_id`、`cancel_reason` 字段，以及新建 `client_inquiry_events` 表，均须通过新 Alembic revision（接在 `20260514_0015` 之后）。
+
+## cost_items（BIZ-2a 成本数据库）
+
+```text
+draft -> active
+draft -> archived
+active -> archived
+```
+
+终态：`archived`（已停用）。
+
+规则：
+
+- `draft` 为新建或批量导入后的默认状态（待核定），不进入报价底价参考。
+- `active` 为核定后的正式状态，进入报价底价参考和 RAG 知识联动（BIZ-2d）。
+- `archived` 表示已停用，不再进入报价参考；已停用条目不可恢复，如需重新启用须创建新条目。
+- `draft -> active`（核定）/ `draft -> archived`（直接停用）/ `active -> archived`（停用正式条目）仅允许 `admin` / `system_admin` 执行。
+- `active -> archived` 必须提交 `reason`，不依赖 `business_events`（BIZ-3 表，尚未存在）。
+- 所有状态变更和价格修改同步写入 `cost_item_history`，字段包含：`old_price`、`new_price`、`old_status`、`new_status`、`change_type`（`price_change` / `status_change`）、`changed_by`、`change_reason`、`changed_at`。状态变更时 `old_price` / `new_price` 可为 `NULL`；价格修改时 `old_status` / `new_status` 可为 `NULL`。
+- 已 `active` 再次核定返回 `200 + 当前对象`。
+- 已 `archived` 再次停用返回 `200 + 当前对象`。
+- 已 `archived` 后核定返回 `409 CONFLICT`。
+- BIZ-2a 前置：`cost_items` / `cost_item_history` 表须通过新 Alembic revision 创建（接在 `20260514_0015` 之后，与 BIZ-1a `direction` 字段 revision 独立排期）。
 
 ## contract_adjustments
 

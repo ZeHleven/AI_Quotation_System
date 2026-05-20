@@ -1,6 +1,6 @@
 # 系统升级路线图
 
-> 最后更新：2026-05-19
+> 最后更新：2026-05-20
 
 > 业务优化 P4 更新：真实用户体验优化代码层已落地，`index.html` 新增失败原因建议、预审风险提示和人工修改沉淀知识入口；本阶段不新增 Alembic revision。
 > P4 运行态手工验收已完成（2026-05-08）：22/22 项全部通过，详见 `AI_Middle_Office/P4_ACCEPTANCE.md`。
@@ -9,22 +9,239 @@
 > AI 平台架构升级 Phase 2 响应速度追踪已完成当前环境运行态验收（2026-05-18）：`FEATURE_CLIENT_INQUIRY` 与 `FEATURE_DASHBOARD_RESPONSE` 已在内网环境打开，响应速度看板展示 1 条可信样本，平均首次响应 15 分钟；已修复 Celery worker Phase 2 元数据加载问题。正式生产启用仍待系统整体完善后统一 Runbook。
 > AI 平台架构升级 Phase 2.5 管理员报价运营闭环已完成当前环境验证（2026-05-18）：复用现有报价任务、咨询记录和报价历史数据，在 `/admin/dashboard` 增加“报价运营”视图；支持状态/来源/客户关键词/提交人筛选、提交人独立列、任务详情、重试、取消和超时标记。该阶段为后台体验补强，不启动 Phase 3 的执行任务模型。
 > AI 平台架构升级 Phase 3 执行速度追踪已完成当前环境验证（2026-05-19）：新增 `execution_tasks` / `execution_task_events`、`FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION`、执行任务 CRUD/取消接口、执行速度聚合接口、`/admin/execution` 任务页和 `/admin/dashboard` 执行速度标签页；当前环境已打开开关并验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已显示取消数量。
+> AI 平台架构升级 Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收（2026-05-19）：新增 `meeting_notes`、`task_drafts`、`meeting_note_revisions`、`FEATURE_MEETING_AI`，会议纪要可提取任务草稿，人工确认后写入 `execution_tasks`；当前环境已打开 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`，内网 smoke 已验证自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 访问。当前不启动 Phase 4b/4c/6，不迁移旧 `index.html` / `admin.html`。
 > 产品边界：系统完善前不正式投入生产使用；后续各阶段先按内网开发/验证推进，等平台能力完整后再统一准备正式生产 Runbook。
+> 业务提效路线（BIZ Track）已加入（2026-05-19）：基于商务部和成本报价部实地访谈，新增 BIZ-1 商务获客情报、BIZ-2 报价系统增强、BIZ-3 经营驾驶舱、BIZ-4 知识库治理四条业务线；Phase 4b/4c 同步暂缓；`client_inquiries` 已改造为双向模型以支持主动开拓。详见"业务提效路线（BIZ Track）"章节。
+> AI 平台升级 BIZ Track BIZ-1a 商务台账 v1 已完成当前环境验证（2026-05-20）：新增 Alembic `20260520_0016`，`client_inquiries` 已支持 `direction='outbound'`、阶段、下次跟进、作废字段和 `client_inquiry_events` 审计；新增 `FEATURE_BUSINESS_LEDGER`、5 个 `/api/v1/business-ledger` 接口和 Vite `/admin/business-ledger` 页面；后端 `124 passed`、前端 build 通过，`scripts/biz1a_business_ledger_smoke.ps1` 已在当前 9000 环境验证创建、筛选、PATCH、作废、Phase 2 隔离和 XFF 审计。
 
 ---
 
-## 当前冻结状态（2026-05-18）
+## 当前冻结状态（2026-05-20）
 
 - **后端基础设施优化已收束**：后端重构 P0-P3、补充一致性优化、运维告警收敛、Alembic 迁移纪律均已落地；后续不再做无触发的基础设施打磨。
-- **数据库规范**：当前代码迁移 head 为 `20260514_0013`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪和 Phase 3 执行速度追踪。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
+- **数据库规范**：当前代码迁移 head 为 `20260520_0016`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认和 BIZ-1a 商务台账。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
 - **业务优化 P0-P4 已完成到代码层**：P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理、P4 真实用户体验优化均已落地。
 - **前端优化 P0-P3 已完成**：已完成 `FRONTEND_ACCEPTANCE.md`、`static/js/shared.js`、`admin.html` 模块拆分，以及报价进度、失败恢复、上传/推送状态优化。
 - **AI 平台升级 Phase 0 已完成开发与当前环境验证**：Vite 壳、登录鉴权统一、RBAC 与 SPA fallback 已通过；旧 `index.html` / `admin.html` / `app.html` 继续保留，后续按设计文档逐步收拢入口。正式生产上线待单独 Runbook。
 - **AI 平台升级 Phase 1 报价速度看板已完成当前环境运行态验收**：已新增报价速度聚合接口和 Vite 看板入口，功能开关已在当前环境打开；已修复新报价任务 `duration_ms` 实测写入，并在备份后回填历史 121 条成功任务的 0 耗时记录；页面、看板数据和新增真实报价统计均已确认正常；未迁移旧业务页面，正式生产启用待单独 Runbook。
 - **AI 平台升级 Phase 2 响应速度追踪已完成当前环境运行态验收**：已新增 `client_inquiries`、`quote_jobs.client_inquiry_id`、咨询查询/修正接口、响应速度聚合接口和 Vite 响应速度视图；当前环境 Alembic 已升级到 `20260514_0012 (head)`，`FEATURE_CLIENT_INQUIRY=true`、`FEATURE_DASHBOARD_RESPONSE=true`、`PUBLIC_ACCESS_ENABLED=false`；内网 smoke 已展示 1 条可信样本，平均首次响应 15 分钟，SLA 达标率 100%，并修复 Celery worker Phase 2 元数据加载问题。
 - **AI 平台升级 Phase 3 执行速度追踪已完成当前环境验证**：已新增执行任务 schema、任务接口、事件记录、执行速度聚合和 Vite 执行任务页面；当前环境已打开 `FEATURE_EXECUTION=true`、`FEATURE_DASHBOARD_EXECUTION=true` 且 `PUBLIC_ACCESS_ENABLED=false`，已验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已补充取消数量。
+- **AI 平台升级 Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收**：已新增会议纪要、纪要更正、任务草稿 schema、会议接口、固定 JSON Schema 提取器和 Vite 会议纪要标签页；当前环境已打开 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`，确认草稿可写入既有 `execution_tasks`，不依赖 `FEATURE_EXECUTION=true`；内网 smoke 已验证自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 访问。当前不启动语音转写、钉钉会议导入、经营驾驶舱或旧 HTML 迁移。
+- **AI 平台升级 BIZ Track BIZ-1a 商务台账 v1 已完成当前环境验证**：已新增 `FEATURE_BUSINESS_LEDGER`、`client_inquiries.direction/stage/next_followup_at/cancelled_*`、`client_inquiry_events`、商务台账 service/schema/API、Vite `/admin/business-ledger` 内联页面和 `scripts/biz1a_business_ledger_smoke.ps1`；当前环境 smoke 已验证 admin/staff 权限、逾期筛选、作废、Phase 2 数据隔离、response-speed 口径不变和 XFF 审计。BIZ-1a v1 已落地字段为 `client_name` / `client_phone`；项目名 / 公司名暂由 `notes` 承载，后续是否拆字段待真实台账数据积累后评估。
 - **正式生产策略**：系统整体完善前不正式投入生产使用；不再为单一阶段单独做正式生产上线闭环。
 - **维护策略**：进入问题驱动维护阶段，优先投入报价准确率、知识库质量、RAG 评测和真实用户体验问题。
+- **Phase 4b/4c 暂缓**：语音转写（Phase 4b）和钉钉会议导入（Phase 4c）暂缓，等业务提效路线（BIZ Track）核心功能稳定后再重新评估必要性。
+- **client_inquiries 双向模型已落地**：原被动接单（inbound）模型前提不成立——当今市场公司须主动开拓，客户主动联系的情况几乎不存在。`client_inquiries` 已通过 Alembic `20260520_0016` 增加 `direction`（`inbound`/`outbound`）字段；BIZ-1a 商务台账落在 `outbound` 方向；Phase 2 `FEATURE_CLIENT_INQUIRY` 和 `FEATURE_DASHBOARD_RESPONSE` 继续只统计 `inbound`，当前 smoke 已确认 response-speed 样本数不受 outbound 记录影响。
+
+## 业务提效路线（BIZ Track，2026-05-19 新增）
+
+### 背景
+
+Phase 0–4a 解决了系统底座（权限、任务、看板、会议纪要）。在与**商务部**和**成本报价部**进行实地访谈后，识别出两个部门当前最大的日常痛点，均不在底座范围内：
+
+- **商务部**：项目/客户跟进靠微信和人脑记忆，无台账，信息断层，跟进节点丢失，报价询价响应慢。
+- **成本报价部**：市场单价靠人脑/旧 Excel，无数字化成本库；报价时无法快速查询材料底价；输入漏项靠人工逐项核对，效率低且易出错。
+
+BIZ Track 在原有底座之上，新增面向这两个部门的业务效率工具，不替换底座，不干扰已完成的 Phase 0–4a。
+
+### 整体路线概览
+
+| 编号 | 名称 | 对应部门 | 优先级 | 依赖 |
+|------|------|---------|--------|------|
+| BIZ-1 | 商务获客情报 | 商务部 | P1（与 BIZ-2 并行） | Phase 0 RBAC |
+| BIZ-2 | 报价系统增强 | 成本报价部 | P1（与 BIZ-1 并行） | Phase 0 RBAC |
+| BIZ-3 | 经营驾驶舱 | 管理层 | P2（BIZ-1 数据稳定后） | BIZ-1 + 合同/回款模型 |
+| BIZ-4 | 知识库治理 | 成本报价部 | 并入 BIZ-2，不单独排期 | BIZ-2a |
+
+### 已调整事项（相对原 Phase 规划）
+
+| 调整项 | 原规划 | 调整后 | 原因 |
+|--------|--------|--------|------|
+| Phase 4b 语音转写 | Phase 4a 后启动 | 暂缓 | 业务部门未提出实际需求，BIZ Track 优先 |
+| Phase 4c 钉钉会议导入 | Phase 4b 后启动 | 暂缓 | 同上 |
+| Phase 5 知识库历史数据导入 | 独立 Phase | 并入 BIZ-2a | 成本报价部已有旧 Excel，直接复用 |
+| Phase 6 经营驾驶舱数据底座 | 独立 Phase | 重命名为 BIZ-3 | 依赖 BIZ-1 商务数据，需等 BIZ-1 稳定 |
+| client_inquiries 模型 | 被动接单（inbound） | 双向（direction 字段） | 市场实情：主动开拓为主，被动接单几乎不存在 |
+
+---
+
+### BIZ-1 商务获客情报
+
+**目标**：给商务部提供一个轻量的"项目/客户跟进台账"，从微信/人脑记忆迁移到系统，核心是不漏单、随时可查当前跟进状态。
+
+#### BIZ-1a 商务台账 v1（首期，锁定范围）
+
+**当前状态**：已完成当前环境验证（2026-05-20）。已落地 Alembic `20260520_0016`、`FEATURE_BUSINESS_LEDGER`、5 个 `/api/v1/business-ledger` 接口、`/admin/business-ledger` Vite 页面和 `scripts/biz1a_business_ledger_smoke.ps1`。
+
+**v1 字段范围（锁定，不扩展到 CRM）**
+
+| 字段 | 说明 |
+|------|------|
+| 客户名 | 已落地为 `client_name`；项目名 / 公司名暂由 `notes` 承载，待真实台账数据积累后再评估是否拆字段 |
+| 联系方式 | 电话/微信，手动录入 |
+| 信息来源 | 下拉：自主开拓 / 介绍 / 招标平台 / 其他 |
+| 当前阶段 | 下拉：初步接触 / 需求确认 / 报价中 / 跟进议价 / 成单 / 丢单 |
+| 下次跟进时间 | 日期，超期高亮提醒 |
+| 负责人 | 关联用户 |
+| 备注 | 自由文本 |
+
+**v1 明确不做（防止 CRM 蔓延）**
+
+- 企业背调 / 外部平台数据接入
+- 合同条款分析 / 财务风险评估
+- 自动查找联系人 / 爬取公司信息
+- 投标文件管理 / 客户评分体系
+
+**技术实现**：复用 `client_inquiries` 表，新增 `direction='outbound'`（主动开拓）；原有 `inbound` 记录为被动接单（历史数据保留）。Alembic `20260520_0016` 已新增 `direction`、`stage`、`next_followup_at`、`cancelled_at`、`cancelled_by_id`、`cancel_reason` 字段，并将 `first_response_time` 调整为 nullable；新建 `client_inquiry_events` 审计表记录 create / stage_change / transfer / edit / cancel。BIZ-1a 时间字段沿用 Phase 2 `client_inquiries` 的 naive Asia/Shanghai 口径，后续若 BIZ-3 需要跨时区聚合再统一治理。
+
+**验收标准**：
+- [x] 商务人员可在 Vite 页面新增、编辑、查看项目跟进记录
+- [x] 超期未跟进的记录在列表中高亮提醒
+- [x] admin 可查看全员台账并按负责人过滤
+- [x] 不影响原有 `FEATURE_CLIENT_INQUIRY` / `FEATURE_DASHBOARD_RESPONSE` 数据；当前 smoke 中 response-speed 样本数保持 `17 / 9`
+
+#### BIZ-1b 跟进提醒（BIZ-1a 稳定后）
+
+- Celery beat 每日检查 `next_followup_at < now()` 的记录
+- 向负责人推送钉钉提醒，格式：`[待跟进] {项目名} - {客户名}，计划跟进时间：{date}`
+
+#### BIZ-1c 跟进记录流水（BIZ-1b 后评估）
+
+- 每次跟进可追加一条流水（时间 + 内容 + 下次计划）
+- 台账主记录仅更新当前阶段和下次跟进时间
+
+#### BIZ-1d 招标平台接入（有 API 后再评估）
+
+- 与众车等平台的 API 对接，自动拉取符合筛选条件的项目线索
+- 前置条件：确认平台 API 是否开放，成本和访问策略待定
+
+---
+
+### BIZ-2 报价系统增强
+
+**目标**：给成本报价部提供数字化"材料成本库"，让报价员在 AI 报价时能够快速查询和核对底价，并辅助发现漏项。
+
+#### BIZ-2a 成本数据库初始化（最高优先级）
+
+**前置确认（已确认）**
+
+| 问题 | 已确认答案 |
+|------|-----------|
+| 数据维护负责人 | 成本部指定主负责人；采购部辅助维护材料采购价 |
+| 更新触发条件 | ① 市场明显波动 ② 新项目开工前 ③ 供应商报价更新 ④ 季度定期复核 |
+| 审核流程 | 系统导出 Excel → 成本部线下审核 → 反馈意见 → 系统更新（无需系统内审批流） |
+| 历史数据处理 | 旧 Excel（2025广东旗胜标杆价初稿）作为结构参考和初始导入，状态标记为"待核定"，不作为正式底价 |
+| 初始数据策略 | 近期真实报价作为种子数据，高频品类通过系统使用自动识别 |
+
+**数据模型**（新增 Alembic revision，接在 `20260520_0016` 之后）
+
+```
+cost_items
+  id, category（大类）, subcategory（子类）, item_name, spec（规格）
+  unit（单位）, price（单价）, price_type（labor劳务/material材料/combined综合）
+  status（draft待核定/active正式/archived已停用）
+  source（manual手动/imported导入/ai_suggested AI建议）
+  effective_date, notes
+  created_by, created_at, updated_at
+
+cost_item_history
+  id, cost_item_id, old_price, new_price, changed_by, change_reason, changed_at
+```
+
+**旧 Excel 导入策略**：
+- 解析旧 Excel 结构，映射到 `cost_items` 字段
+- 全部以 `status='draft'` 导入，不自动升为 `active`
+- 导入后通过管理台审核界面逐条或批量核定
+
+**验收标准**：
+- [ ] `cost_items` 和 `cost_item_history` 表通过 Alembic 迁移创建成功
+- [ ] 旧 Excel 可通过导入脚本解析并落库，状态为 `draft`
+- [ ] 管理台可查看、筛选、编辑、核定（draft→active）和停用（active→archived）成本条目
+- [ ] 价格变更自动写入 `cost_item_history`
+
+#### BIZ-2b 报价时材料底价查询（BIZ-2a 完成后）
+
+- 报价员在输入工料单时，AI 报价流程自动匹配 `cost_items`（active 状态）中的参考底价
+- 在预审弹窗中展示"成本库参考价 vs AI 生成价"对比
+- 匹配逻辑：优先精确匹配 `item_name + spec`，其次模糊匹配 `item_name`，无匹配时显示"无底价参考"
+
+#### BIZ-2c 漏项检测（BIZ-2b 后评估）
+
+- AI 报价生成后，与成本库高频出现的配套条目对比
+- 检测疑似漏项并在预审弹窗中给出提示（"通常还包含：XXX"）
+- 初期基于规则（同类项目历史共现），后期可接 RAG 增强
+
+#### BIZ-2d 知识库联动（并入 BIZ-2，持续维护）
+
+- `cost_items` 中 `active` 状态的材料价格作为 RAG 知识库的补充来源
+- 知识库热更新时同步从 `cost_items` 抽取最新价格，不依赖手动维护 `rag_materials.json`
+- 原 Phase 5（知识库历史数据治理导入）的目标通过 BIZ-2a 导入和 BIZ-2d 联动覆盖，不单独排期
+
+---
+
+### BIZ-3 经营驾驶舱
+
+**目标**：管理层可在一个页面看到公司的合同签约、回款、项目成本、毛利等经营指标，辅助决策。
+
+**前置依赖**：
+- BIZ-1 商务数据稳定（项目/合同关联已建立）
+- 合同、回款、项目成本数据模型已设计并有真实数据录入
+
+**计划内容（BIZ-1 稳定后再详细规划）**：
+- 合同模型：`contracts`（draft/signed/archived/cancelled）
+- 回款模型：`payments`（pending/paid/cancelled）
+- 项目成本模型：`project_costs`（active/cancelled）
+- 驾驶舱视图：合同金额、已回款、待回款、成本、毛利的月度/季度趋势
+
+**注意**：STATE-MACHINES.md 中已预定义 `contracts`、`payments`、`project_costs`、`contract_adjustments` 的状态机规则，BIZ-3 实现时必须严格遵守，不得绕过状态机直接改状态字段。
+
+---
+
+### BIZ-4 知识库治理
+
+已并入 BIZ-2，不单独排期。覆盖：
+- 旧 Excel 导入（BIZ-2a）
+- 成本库联动 RAG（BIZ-2d）
+- 知识候选从真实反馈生成（已在 P3 落地）
+
+---
+
+### 推进序列
+
+**第一阶段（当前，BIZ-1a 已完成，BIZ-2a 待开始）**
+
+| 子项 | 内容 | 状态 |
+|------|------|------|
+| Phase 4a 运行态验收 | 打开 `FEATURE_MEETING_AI`，走读会议纪要页面，确认功能正常 | 已完成（不阻塞） |
+| BIZ-2a 数据模型 | 设计 `cost_items` + `cost_item_history`，新增 Alembic revision | 待开始 |
+| BIZ-2a 旧 Excel 导入 | 解析旧 Excel 结构，编写导入脚本，落库为 `draft` | 待 BIZ-2a 数据模型完成 |
+| BIZ-2a 管理台界面 | 成本条目查看、筛选、核定、停用 | 待 BIZ-2a 数据模型完成 |
+| BIZ-1a 台账 | `client_inquiries` 新增 `direction`/`stage`/`next_followup_at`/`cancelled_*` 字段（含将 `first_response_time` 改为 nullable），新建 `client_inquiry_events` 审计表，Vite 台账页面 | 已完成当前环境验证（2026-05-20） |
+
+**第二阶段（BIZ-1a + BIZ-2a 完成后）**
+
+| 子项 | 内容 |
+|------|------|
+| BIZ-1b | 跟进超期钉钉提醒 |
+| BIZ-2b | 报价时材料底价查询 + 预审价格对比 |
+| BIZ-2d | 成本库联动 RAG 热更新 |
+
+**第三阶段（第二阶段稳定后）**
+
+| 子项 | 内容 |
+|------|------|
+| BIZ-1c | 跟进流水记录 |
+| BIZ-2c | 漏项检测 |
+| BIZ-3 | 经营驾驶舱（合同/回款/成本/毛利） |
+
+**暂缓评估（触发条件明确后再启动）**
+
+| 子项 | 触发条件 |
+|------|---------|
+| BIZ-1d 招标平台接入 | 确认众车等平台 API 可调用，成本和接入策略明确 |
+| Phase 4b 语音转写 | 会议纪要 Phase 4a 已在真实业务中稳定使用，且有明确转写需求 |
+| Phase 4c 钉钉会议导入 | 同上，且钉钉 API 授权已申请 |
+| P5 LangGraph | 自适应多轮检索、主动澄清或多模型状态机有真实触发需求时 |
 
 ## 业务优化路线（2026-05-07）
 
@@ -44,6 +261,8 @@
 | 已完成当前环境运行态验收 | AI 平台升级 Phase 2：响应速度追踪 | 已新增咨询记录模型、报价任务关联、咨询查询/修正接口、响应速度聚合和 Vite 响应速度视图；当前环境 Alembic 已升级到 `20260514_0012 (head)`，内网 smoke 样本已进入响应看板，平均首次响应 15 分钟，Celery worker 元数据加载问题已修复；正式生产准备推迟到系统整体完善后统一处理。 |
 | 已完成当前环境验证 | AI 平台升级 Phase 2.5：管理员报价运营闭环 | 已在 Vite 管理台新增“报价运营”标签页，串联报价任务、客户咨询、确认报价和钉钉推送状态；后端报价任务列表补充客户/历史摘要和筛选能力；提交人独立列、筛选和任务详情已验证；不新增数据库结构，不启动 Phase 3。 |
 | 已完成当前环境验证 | AI 平台升级 Phase 3：执行速度追踪 | 已新增执行任务 schema、任务接口、事件记录、执行速度聚合和 Vite 执行任务页面；当前环境已打开 `FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION` 并完成任务创建、开始、完成、取消、详情事件和执行速度看板验证，执行趋势已显示取消数量。 |
+| 已完成当前环境运行态验收 | AI 平台升级 Phase 4a：手动会议纪要 + 草稿确认 | 已新增 `meeting_notes` / `task_drafts` / `meeting_note_revisions`、会议接口和 Vite 会议纪要标签页；当前环境已打开 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`，smoke 已验证草稿确认写入 `execution_tasks`、AI 未提取时人工补充后作废和 revision 补充任务；当前不启动 Phase 4b/4c/6，不迁移旧 HTML。 |
+| 已完成当前环境验证 | AI 平台升级 BIZ Track BIZ-1a：商务台账 v1 | 已新增 Alembic `20260520_0016`、`FEATURE_BUSINESS_LEDGER`、商务台账 API/service/schema、`client_inquiry_events` 审计表、Vite `/admin/business-ledger` 页面和 smoke 脚本；当前环境 smoke 已验证 2 条 outbound 创建、1 条作废、5 条事件、XFF=`1.2.3.4`、Phase 2 列表隔离和 response-speed 样本 `17 / 9` 保持不变。 |
 
 - [x] **P0 报价反馈闭环 + 版本追踪**：新增 `quote_feedback`、`quote_corrections`、`quote_rag_traces`，在异步报价预审完成时记录 AI 初稿，在 `/confirm_push` 成功后记录最终人工确认稿和字段差异，在预审打回时记录 rejection；新增 `DIFY_APP_VERSION`、`DIFY_WORKFLOW_VERSION`、`DIFY_PROMPT_VERSION`、`DIFY_RELEASE_ID`、`RAG_COLLECTION_ALIAS` 配置。
 - [x] **P0 前端上下文传递**：`index.html` 在预审弹窗保存 `quote_job_id` / `trace_id`，确认推送时带回后端，打回重填时调用 `/api/v1/quote/feedback/reject` 做轻量记录。
@@ -63,6 +282,8 @@
 - [x] **AI 平台升级 Phase 2 响应速度追踪当前环境运行态验收完成**：2026-05-18 完成，新增 Alembic `20260514_0012`、`client_inquiries`、`quote_jobs.client_inquiry_id`、`FEATURE_CLIENT_INQUIRY`、`FEATURE_DASHBOARD_RESPONSE`、`GET/PATCH /api/v1/client-inquiries`、`GET /api/v1/admin/dashboard/response-speed` 和 Vite 驾驶舱“响应速度”标签页；默认时间样本仅计数量不计平均响应耗时；当前环境 Alembic 已升级到 `20260514_0012 (head)`，功能开关已打开且 `PUBLIC_ACCESS_ENABLED=false`；内网 smoke 已创建带 `inquiry_time` 的报价任务并在看板展示 1 条可信样本，平均首次响应 15 分钟、SLA 达标率 100%；已修复 Celery worker 单独运行时未加载 `client_inquiries` 元数据导致任务卡在 `queued` 的问题，并新增 `scripts/phase2_response_smoke.ps1` 固化中国时区造数方式；`python -m alembic heads` 显示 `20260514_0012 (head)`，`python -m compileall app scripts`、`python -m pytest`（86 passed）和 `npm.cmd run build` 均通过。
 - [x] **AI 平台升级 Phase 2.5 管理员报价运营闭环当前环境验证完成**：2026-05-18 完成，复用现有 `quote_jobs`、`client_inquiries`、`quote_history`，在 `/admin/dashboard` 新增“报价运营”标签页；当前环境已验证提交人列、筛选、任务详情和页面显示正常；该阶段已封板，不新增数据库结构，不启动 Phase 3。
 - [x] **AI 平台升级 Phase 3 执行速度追踪当前环境验证完成**：2026-05-19 完成，新增 Alembic `20260514_0013`、`execution_tasks`、`execution_task_events`、`FEATURE_EXECUTION`、`FEATURE_DASHBOARD_EXECUTION`、执行任务 CRUD/取消接口、执行速度聚合接口、`/admin/execution` 和 `/admin/dashboard` 执行速度标签页；当前环境已打开开关并验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已显示取消数量；`python -m compileall app`、`python -m pytest`（92 passed）、`python -m pytest tests\test_execution_tasks_phase3.py` 和 `npm.cmd run build` 均通过。
+- [x] **AI 平台升级 Phase 4a 手动会议纪要 + 草稿确认当前环境运行态验收完成**：2026-05-19 完成，新增 Alembic `20260514_0014` / `20260514_0015`、`meeting_notes`、`task_drafts`、`meeting_note_revisions`、`FEATURE_MEETING_AI`、会议纪要创建/查询/更正/取消/草稿补充/草稿确认接口和 Vite `/admin/execution`“会议纪要”标签页；当前环境已打开 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`，`scripts/phase4a_meeting_smoke.ps1` 已验证自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 200；`FEATURE_AUDIO_TRANSCRIPTION` 仅预留开关，Phase 4b/4c/6 未启动，旧 `index.html` / `admin.html` 未迁移；`python -m alembic current` 显示 `20260514_0015 (head)`，`python -m compileall app scripts`、`python -m pytest`（96 passed）和 `npm.cmd run build` 均通过。
+- [x] **AI 平台升级 BIZ Track BIZ-1a 商务台账 v1 当前环境验证完成**：2026-05-20 完成，新增 Alembic `20260520_0016`、`FEATURE_BUSINESS_LEDGER`、`client_inquiries.direction/stage/next_followup_at/cancelled_*`、`client_inquiry_events`、5 个 `/api/v1/business-ledger` 接口、Vite `/admin/business-ledger` 页面和 `scripts/biz1a_business_ledger_smoke.ps1`；`python -m pytest` 为 `124 passed`，`npm.cmd run build` 通过，当前 9000 环境 smoke 输出 `created=2 cancelled=1 feature_flag=true`、`event_count=5`、XFF 审计 `ip_address=1.2.3.4`，并确认 outbound 不污染 Phase 2 `client-inquiries` 与 response-speed 样本。
 - [ ] **P5 LangGraph 触发项**：仅在需要自适应多轮检索、主动澄清、多模型状态机或替换 N8N 核心编排时再评估。
 
 ## 高优先级

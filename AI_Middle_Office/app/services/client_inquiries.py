@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models.client_inquiry import ClientInquiry
+from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
 from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.rbac import has_admin_role, has_any_role
@@ -69,7 +69,10 @@ def require_client_inquiry_access(user: User) -> None:
 
 def get_accessible_client_inquiry(db: Session, inquiry_id: str, user: User) -> ClientInquiry:
     require_client_inquiry_access(user)
-    query = db.query(ClientInquiry).filter(ClientInquiry.inquiry_id == inquiry_id)
+    query = db.query(ClientInquiry).filter(
+        ClientInquiry.inquiry_id == inquiry_id,
+        ClientInquiry.direction == DIRECTION_INBOUND,
+    )
     if not can_view_all_client_inquiries(user):
         query = query.filter(ClientInquiry.responder_id == user.id)
     inquiry = query.first()
@@ -110,6 +113,7 @@ def create_or_reuse_client_inquiry(
         time_source=normalized_source,
         responder_id=current_user.id,
         notes=_clean_text(notes, 2000),
+        direction=DIRECTION_INBOUND,
     )
     db.add(inquiry)
     db.flush()

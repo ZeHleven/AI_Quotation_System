@@ -37,10 +37,11 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - AI 平台架构升级 Phase 2 响应速度追踪已完成当前环境运行态验收（2026-05-18）：新增 `FEATURE_CLIENT_INQUIRY`、`FEATURE_DASHBOARD_RESPONSE`、`client_inquiries`、报价任务咨询关联、咨询查询/修正接口和 `/admin/dashboard` 响应速度标签页；当前环境 Alembic 已升级到 `20260514_0012 (head)`，功能开关已打开且 `PUBLIC_ACCESS_ENABLED=false`；内网 smoke 已展示 1 条可信响应样本，平均首次响应 15 分钟，Celery worker Phase 2 元数据加载问题已修复。
 - AI 平台架构升级 Phase 2.5 管理员报价运营闭环已完成当前环境验证（2026-05-18）：复用 `quote_jobs`、`client_inquiries`、`quote_history`，在 `/admin/dashboard` 新增“报价运营”标签页；提交人列、筛选、任务详情、重试/取消/超时标记入口已落地；不新增数据库结构，不启动 Phase 3。
 - AI 平台架构升级 Phase 3 执行速度追踪已完成当前环境验证（2026-05-19）：新增 `execution_tasks`、`execution_task_events`、`FEATURE_EXECUTION`、`FEATURE_DASHBOARD_EXECUTION`、执行任务 CRUD/取消接口、执行速度聚合接口、`/admin/execution` 任务页和 `/admin/dashboard` 执行速度标签页；当前环境已打开开关并验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已显示取消数量。
+- AI 平台架构升级 Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收（2026-05-19）：新增 `meeting_notes`、`task_drafts`、`meeting_note_revisions`、`FEATURE_MEETING_AI`、会议纪要接口和 `/admin/execution` 会议纪要标签页；当前环境已打开 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`，内网 smoke 已验证纪要提取草稿、确认写入 `execution_tasks`、人工补充后作废、revision 补充任务和 `/admin/execution` 访问。当前不启动 Phase 4b/4c/6，不迁移旧 `index.html` / `admin.html`。
 - 产品边界：系统完善前不正式投入生产使用；后续阶段先按内网开发/验证推进，最后统一准备正式生产 Runbook。
 - 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
-- 当前数据库迁移 head：`20260514_0013`；内网验证数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪和 Phase 3 执行速度追踪。
-- 最新验证（2026-05-19，Phase 3 当前环境）：`python -m alembic heads` 显示 `20260514_0013 (head)`；`python -m compileall app` 通过；`python -m pytest` 为 `92 passed`；`python -m pytest tests\test_execution_tasks_phase3.py` 通过；`npm.cmd run build` 通过。当前环境已打开 `FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION`，并验证 `/admin/execution` 与 `/admin/dashboard` 执行速度标签页正常，取消数量已进入执行速度趋势。
+- 当前数据库迁移 head：`20260514_0015`；内网验证数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪和 Phase 4a 会议纪要草稿确认。
+- 最新验证（2026-05-19，Phase 4a 运行态收尾）：`python -m alembic current` 显示 `20260514_0015 (head)`；`scripts\phase4a_meeting_smoke.ps1` 通过，覆盖自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 200；`python -m compileall app scripts` 通过；`python -m pytest` 为 `96 passed`；`npm.cmd run build` 通过。当前不启动 Phase 4b/4c/6，`PUBLIC_ACCESS_ENABLED=false` 边界保持不变。
 
 ## 关键模块
 
@@ -57,7 +58,9 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - `app/api/v1/users.py`：用户配额管理、Phase 0 角色授权/撤销和权限历史。
 - `app/api/v1/quote_jobs.py`：新版异步报价任务 API，创建、查询、事件流、取消、重试、超时标记。
 - `app/api/v1/execution_tasks.py`：Phase 3 执行任务 API，创建、列表、详情、进度更新和取消。
+- `app/api/v1/meetings.py`：Phase 4a 会议纪要 API，创建/查询/详情/草稿阶段更正、人工补充草稿、取消、确认草稿和纪要 revision。
 - `app/services/execution_tasks.py` / `app/services/execution_dashboard.py`：执行任务状态机、事件审计和执行速度看板聚合。
+- `app/services/meetings.py`：会议纪要提取、任务草稿治理、确认写入 `execution_tasks` 和模型调用审计。
 - `app/services/quote_job_runner.py`：后台任务执行链路，负责文件读取、GLM-4V、n8n 调用、结果落库和额度扣减。
 - `app/services/quote_feedback.py`：报价反馈闭环服务，记录 AI 初稿、人工确认稿、字段级修正、Dify/prompt 版本和 RAG trace。
 - `app/services/prompt_regression.py`：从真实报价反馈固化黄金案例，并计算 prompt 版本的总价偏差、格式错误率、遗漏率、打回率和综合分。

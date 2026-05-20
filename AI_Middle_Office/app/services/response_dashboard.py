@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.client_inquiry import ClientInquiry
+from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
 from app.models.user import User
 
 
@@ -107,7 +107,11 @@ def build_response_speed_dashboard(db: Session, *, range_name: str = "last_30_da
     start, end = _range_bounds(range_name)
     inquiries = (
         db.query(ClientInquiry)
-        .filter(ClientInquiry.inquiry_time >= _db_time(start), ClientInquiry.inquiry_time <= _db_time(end))
+        .filter(
+            ClientInquiry.direction == DIRECTION_INBOUND,
+            ClientInquiry.inquiry_time >= _db_time(start),
+            ClientInquiry.inquiry_time <= _db_time(end),
+        )
         .order_by(ClientInquiry.inquiry_time.asc(), ClientInquiry.id.asc())
         .all()
     )

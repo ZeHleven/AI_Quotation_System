@@ -157,3 +157,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1
 - **收尾配置清理**：新增 `LEGACY_MATERIALS_FILE` 和 `RAG_EVAL_REPORT_DIR`；`MATERIALS_FILE` 仅作为旧 JSON 导入兼容 alias。
 - **验收状态**：Alembic 当前为 `20260505_0003`；旧物料已入库 70 条；RAG eval `quality_ok=True`；`pytest` 为 `55 passed`。
 - **Git 状态**：最新提交 `6e54c09 clarify legacy materials config` 已推送至 GitHub `main`。
+
+# 2026-05-20 升级补充（BIZ-1a 商务台账 v1）
+
+- **当前环境验证完成**：BIZ Track BIZ-1a 商务台账 v1 已完成代码、测试、前端 build 和当前 9000 环境 smoke；`python -m pytest` 为 `124 passed`，`npm.cmd run build` 通过，`scripts/biz1a_business_ledger_smoke.ps1` 输出 `created=2 cancelled=1 feature_flag=true`、`event_count=5`、XFF 审计 `ip_address=1.2.3.4`。
+- **数据库结构**：新增 Alembic `20260520_0016`；`client_inquiries` 增加 `direction`、`stage`、`next_followup_at`、`cancelled_at`、`cancelled_by_id`、`cancel_reason`，并将 `first_response_time` 改为 nullable；新增 `client_inquiry_events` 审计表。
+- **功能开关与接口**：新增 `FEATURE_BUSINESS_LEDGER`（默认关闭）；接口为 `POST /api/v1/business-ledger`、`GET /api/v1/business-ledger`、`GET /api/v1/business-ledger/{id}`、`PATCH /api/v1/business-ledger/{id}`、`POST /api/v1/business-ledger/{id}/cancel`。
+- **前端入口**：Vite 壳内联新增 `/admin/business-ledger`，未新增 `views/BusinessLedger.vue`，未迁移旧 `index.html` / `admin.html` / `app.html`。
+- **权限与审计**：staff 仅查看/编辑自己负责的 outbound 记录；admin / system_admin 可查看全员、转交负责人并作废；审计上下文按 X-Forwarded-For 首段优先记录真实终端 IP，以适配 Caddy 反向代理。
+- **字段约定**：BIZ-1a v1 已落地字段为 `client_name` / `client_phone`；项目名 / 公司名暂由 `notes` 承载，是否拆字段待真实台账数据积累后评估。
+- **时间口径**：BIZ-1a 时间字段沿用 Phase 2 `client_inquiries` 的 naive Asia/Shanghai 口径，与 response-speed 当前统计保持一致；后续若 BIZ-3 经营驾驶舱需要跨时区聚合，再统一切换到 timezone-aware UTC。

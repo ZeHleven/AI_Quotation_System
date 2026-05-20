@@ -19,6 +19,7 @@ settings.apply_proxy_env()
 
 from app.api.v1 import (
     auth,
+    business_ledger,
     client_inquiries,
     dashboard,
     execution_tasks,
@@ -26,6 +27,7 @@ from app.api.v1 import (
     history,
     knowledge_candidates,
     materials,
+    meetings,
     model_gateway,
     ops,
     prompt_regression,
@@ -43,7 +45,9 @@ from app.models import quote_feedback as quote_feedback_model  # noqa: F401 — 
 from app.models import prompt_regression as prompt_regression_model  # noqa: F401 — 触发 Prompt 回归表建表
 from app.models import knowledge_candidate as knowledge_candidate_model  # noqa: F401 — 触发知识候选表建表
 from app.models import client_inquiry as client_inquiry_model  # noqa: F401 — 触发客户咨询表建表
+from app.models import client_inquiry_event as client_inquiry_event_model  # noqa: F401 — 触发商务台账事件表建表
 from app.models import execution_task as execution_task_model  # noqa: F401 — 触发执行任务表建表
+from app.models import meeting as meeting_model  # noqa: F401 — 触发会议纪要与草稿表建表
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -162,11 +166,13 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
 app.include_router(client_inquiries.router, prefix="/api/v1", tags=["Client Inquiries"])
+app.include_router(business_ledger.router, prefix="/api/v1", tags=["Business Ledger"])
 app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
 app.include_router(users.router, prefix="/api/v1", tags=["Users"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
 app.include_router(execution_tasks.router, prefix="/api/v1", tags=["Execution Tasks"])
+app.include_router(meetings.router, prefix="/api/v1", tags=["Meetings"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
 app.include_router(quote_jobs.router, prefix="/api/v1", tags=["Async Quote Jobs"])
 app.include_router(quote_feedback.router, prefix="/api/v1", tags=["Quote Feedback"])

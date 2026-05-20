@@ -119,7 +119,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "key": "execution",
                 "name": "执行任务",
                 "path": "/admin/execution",
-                "status": "available" if settings.feature_execution else "pending",
+                "status": "available" if settings.feature_execution or settings.feature_meeting_ai else "pending",
             }
         )
     if {"system_admin", "admin", "viewer"} & roles:

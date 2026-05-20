@@ -1,5 +1,5 @@
 # AI 智能报价中台 — 项目上下文文档
-> 最后更新：2026-05-06
+> 最后更新：2026-05-20
 
 ---
 
@@ -53,20 +53,25 @@ C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\
     │   │   ├── users.py         # 用户配额管理（admin）
     │   │   ├── chat.py          # 兼容层（仅 re-export，勿直接引用）
     │   │   ├── quote_jobs.py    # 异步报价任务：创建、状态查询、SSE 事件订阅
+    │   │   ├── business_ledger.py # BIZ-1a 商务台账：创建、列表、详情、更新、作废
     │   │   └── auth.py          # 登录/注册/change_password 接口
     │   ├── schemas\
     │   │   ├── quote.py         # confirm_push / 报价请求 Pydantic schema
+    │   │   ├── business_ledger.py # BIZ-1a 商务台账请求/响应 schema
     │   │   └── response.py      # 通用响应体 schema
     │   ├── models\
     │   │   ├── user.py          # User 表（含 must_change_password 字段）
     │   │   ├── material.py      # Material 表（知识库条目持久化）
     │   │   ├── quote_history.py # QuoteHistory 表
-    │   │   └── quote_job.py     # QuoteJob 异步任务表
+    │   │   ├── quote_job.py     # QuoteJob 异步任务表
+    │   │   ├── client_inquiry.py # Phase 2 inbound + BIZ-1a outbound 商务台账主表
+    │   │   └── client_inquiry_event.py # BIZ-1a 商务台账审计事件
     │   ├── services\
     │   │   ├── excel_service.py      # Excel 生成（从 chat.py 抽取）
     │   │   ├── quote_helpers.py      # 文件名生成 / HMAC 签名（从 chat.py 抽取）
     │   │   ├── quote_dispatcher.py   # local/celery/disabled 调度入口
-    │   │   └── quote_job_runner.py   # 报价任务执行器
+    │   │   ├── quote_job_runner.py   # 报价任务执行器
+    │   │   └── business_ledger.py    # BIZ-1a 商务台账 service、权限、状态流转、审计
     │   ├── tasks\
     │   │   ├── celery_app.py         # Celery 应用配置
     │   │   └── quote_tasks.py        # Celery 报价任务
@@ -78,6 +83,8 @@ C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\
     │       ├── rate_limit.py
     │       └── security.py
     ├── create_admin.py          # 一次性脚本：创建 admin 用户
+    ├── alembic\versions\20260520_0016_add_business_ledger.py # BIZ-1a 商务台账迁移
+    ├── scripts\biz1a_business_ledger_smoke.ps1 # BIZ-1a 当前环境 smoke
     ├── install_service.ps1      # Windows 任务计划程序安装脚本
     ├── .env                     # ZHIPU_API_KEY / WEBHOOK_SECRET / RELOAD_SECRET
     └── logs\                    # 服务日志目录
@@ -528,3 +535,14 @@ C:\Users\12521\miniconda3\python.exe -m celery -A app.tasks.celery_app.celery_ap
 - **P3收口 前端统一读取**：前端三个页面统一通过 `res.data` 读取响应，与后端格式一一对应。
 - **收尾配置清理**：`LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅作为旧 JSON 导入源，RAG 评测报告目录独立为 `RAG_EVAL_REPORT_DIR`。
 - **验收闭环**：Alembic `20260505_0003`、物料入库 70 条、RAG eval `quality_ok=True`、`pytest 55 passed`、提交 `6e54c09` 已推送。
+
+# 2026-05-20 升级补充（BIZ-1a 商务台账 v1）
+
+- **当前环境验证完成**：BIZ Track BIZ-1a 商务台账 v1 已完成当前环境验证；`python -m pytest` 为 `124 passed`，`npm.cmd run build` 通过，`scripts/biz1a_business_ledger_smoke.ps1` 在 9000 环境输出 `created=2 cancelled=1 feature_flag=true`、`event_count=5`、XFF 审计 `ip_address=1.2.3.4`。
+- **数据库迁移**：新增 Alembic `20260520_0016_add_business_ledger.py`；`client_inquiries` 增加 `direction`、`stage`、`next_followup_at`、`cancelled_at`、`cancelled_by_id`、`cancel_reason`，并将 `first_response_time` 调整为 nullable；新增 `client_inquiry_events` 审计表，记录 create / stage_change / transfer / edit / cancel。
+- **后端文件**：新增 `app/api/v1/business_ledger.py`、`app/services/business_ledger.py`、`app/schemas/business_ledger.py`、`app/models/client_inquiry_event.py`；`app/models/client_inquiry.py` 补充 outbound 方向、阶段常量和作废字段。
+- **接口与开关**：新增 `FEATURE_BUSINESS_LEDGER`，关闭时 `/api/v1/business-ledger*` 返回 `404 NOT_FOUND`；开放 5 个接口：创建、列表、详情、PATCH、作废。
+- **前端入口**：Vite `ai-web/src/App.vue` 内联新增 `/admin/business-ledger` 页面，包含筛选、分页、新建、编辑、详情、作废和逾期高亮；未新增 `ai-web/src/views/BusinessLedger.vue`，未迁移旧 `index.html` / `admin.html` / `app.html`。
+- **权限与审计**：staff 仅查看/编辑自己负责的 outbound 记录，PATCH 字段限 `stage`、`next_followup_at`、`client_phone`、`notes`；admin / system_admin 可查看全员、按负责人筛选、转交 `responder_id`、修改 `source/client_name` 并作废。审计上下文优先取 `X-Forwarded-For` 首段，以适配 Caddy 反向代理。
+- **字段约定**：BIZ-1a v1 已落地字段为 `client_name` / `client_phone`；项目名 / 公司名暂由 `notes` 承载，是否拆字段待真实台账数据积累后评估。
+- **时间口径**：BIZ-1a 时间字段为 naive Asia/Shanghai，与 Phase 2 `client_inquiries` 当前口径一致；后续若 BIZ-3 经营驾驶舱需要跨时区聚合，再统一切换到 timezone-aware UTC。

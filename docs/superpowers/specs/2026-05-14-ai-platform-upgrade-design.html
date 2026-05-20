@@ -1,1009 +1,1549 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>旗胜 AI 平台架构升级路线 v6</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>旗胜 AI 平台架构升级路线 v41</title>
   <style>
-
-code{white-space: pre-wrap;}
-span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
-div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
-
-ul.task-list[class]{list-style: none;}
-ul.task-list li input[type="checkbox"] {
-font-size: inherit;
-width: 0.8em;
-margin: 0 0.8em 0.2em -1.6em;
-vertical-align: middle;
-}
-.display.math{display: block; text-align: center; margin: 0.5rem auto;}
-</style>
-  <style type="text/css">body {
-font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-max-width: 960px;
-margin: 40px auto;
-padding: 0 24px;
-line-height: 1.9;
-color: #222;
-font-size: 15px;
-}
-h1 { font-size: 2em; color: #1a3a5c; border-bottom: 2px solid #1a3a5c; padding-bottom: 8px; margin-top: 32px; }
-h2 { font-size: 1.4em; color: #1a3a5c; border-bottom: 1px solid #ccd; padding-bottom: 6px; margin-top: 28px; }
-h3 { font-size: 1.15em; color: #2a4a7c; margin-top: 20px; }
-table { border-collapse: collapse; width: 100%; margin: 16px 0; }
-th, td { border: 1px solid #bbb; padding: 8px 14px; text-align: left; }
-th { background: #eaf0f8; font-weight: bold; }
-tr:nth-child(even) td { background: #f8fafc; }
-code { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-family: Consolas, 'Courier New', monospace; font-size: 0.9em; }
-pre { background: #f3f4f6; padding: 14px 18px; border-radius: 6px; overflow-x: auto; font-size: 0.9em; }
-pre code { background: none; padding: 0; }
-blockquote { border-left: 4px solid #8ab; margin-left: 0; padding: 8px 20px; color: #555; background: #f5faff; border-radius: 0 4px 4px 0; }
+:root { --ink: #1f2937; --muted: #64748b; --line: #d8e0ea; --soft: #f6f8fb; --soft-2: #eef4fb; --brand: #173b63; --accent: #b78b3b; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif; color: var(--ink); background: #f3f6fa; line-height: 1.85; font-size: 15px; }
+.page-shell { display: grid; grid-template-columns: 284px minmax(0, 1fr); min-height: 100vh; }
+.sidebar { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 24px 18px; border-right: 1px solid var(--line); background: #ffffff; }
+.brand { font-weight: 700; color: var(--brand); font-size: 18px; line-height: 1.35; }
+.version { margin-top: 8px; color: var(--muted); font-size: 12px; }
+.toc-title { margin: 24px 0 10px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.toc a { display: block; color: #284c70; text-decoration: none; padding: 5px 0; border-radius: 4px; }
+.toc a:hover { color: var(--accent); }
+.toc .doc-link { font-weight: 700; margin-top: 8px; }
+.toc .sub-link { font-size: 12px; color: var(--muted); padding-left: 12px; line-height: 1.45; }
+.content { max-width: 1120px; width: 100%; margin: 0 auto; padding: 34px 40px 56px; }
+.cover { background: #ffffff; border: 1px solid var(--line); border-radius: 8px; padding: 28px 32px; margin-bottom: 24px; }
+.cover h1 { margin: 0 0 10px; color: var(--brand); font-size: 28px; border: none; padding: 0; }
+.cover p { margin: 6px 0; color: var(--muted); }
+.doc-section { background: #ffffff; border: 1px solid var(--line); border-radius: 8px; padding: 28px 32px; margin: 22px 0; }
+.source-label { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+h1, h2, h3, h4 { color: var(--brand); line-height: 1.35; }
+h1 { font-size: 26px; border-bottom: 2px solid var(--brand); padding-bottom: 8px; margin-top: 0; }
+h2 { font-size: 21px; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-top: 28px; }
+h3 { font-size: 17px; margin-top: 22px; color: #244f7a; }
+h4 { font-size: 15px; margin-top: 18px; }
+p { margin: 10px 0; }
+.table-wrap { overflow-x: auto; margin: 16px 0; }
+table { border-collapse: collapse; width: 100%; min-width: 620px; }
+th, td { border: 1px solid #c5d1df; padding: 8px 12px; text-align: left; vertical-align: top; }
+th { background: var(--soft-2); font-weight: 700; color: #173b63; }
+tr:nth-child(even) td { background: #fbfcfe; }
+code { background: #f1f5f9; border: 1px solid #e2e8f0; padding: 1px 5px; border-radius: 4px; font-family: Consolas, "Courier New", monospace; font-size: 0.92em; }
+pre { background: #111827; color: #e5e7eb; padding: 16px 18px; border-radius: 8px; overflow-x: auto; line-height: 1.6; }
+pre code { background: transparent; border: none; color: inherit; padding: 0; }
+blockquote { border-left: 4px solid var(--accent); margin: 14px 0; padding: 10px 18px; color: #475569; background: #fffaf0; border-radius: 0 6px 6px 0; }
 ul, ol { padding-left: 1.6em; }
 li { margin: 4px 0; }
-hr { border: none; border-top: 1px solid #ddd; margin: 32px 0; }
-a { color: #2a6eb5; }
-@media print {
-body { max-width: 100%; margin: 0; padding: 16px; font-size: 13px; }
-h1 { font-size: 1.6em; }
-h2 { font-size: 1.2em; }
-}
+hr { border: none; border-top: 1px solid var(--line); margin: 28px 0; }
+a { color: #1d65a6; }
+@media (max-width: 980px) { .page-shell { display: block; } .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); } .content { padding: 22px 18px 40px; } .doc-section, .cover { padding: 20px 18px; } }
+@media print { body { background: #ffffff; font-size: 12px; } .page-shell { display: block; } .sidebar { display: none; } .content { max-width: none; padding: 0; } .cover, .doc-section { border: none; padding: 0; margin: 0 0 18px; page-break-inside: avoid; } a { color: inherit; text-decoration: none; } pre { background: #f3f4f6; color: #111827; border: 1px solid #d1d5db; } }
 </style>
 </head>
 <body>
-<header id="title-block-header">
-<h1 class="title">旗胜 AI 平台架构升级路线 v6</h1>
-</header>
-<h1 id="旗胜-ai-平台架构升级路线">旗胜 AI 平台架构升级路线</h1>
-<blockquote>
-<p>创建日期：2026-05-14 最后更新：2026-05-14（v6：指标口径修正 +
-钉钉推送矛盾修正 + Celery beat 运维三件套 + 阶段 0 拆分 + priority 字段
-+ 测试清单补充） 状态：规划中 负责人：待定</p>
-</blockquote>
+  <div class="page-shell">
+    <aside class="sidebar">
+      <div class="brand">旗胜 AI 平台架构升级路线</div>
+      <div class="version">版本: v41<br />生成时间: 2026-05-18（Phase 0 + Phase 1 当前环境验收完成；Phase 2 代码层完成）</div>
+      <div class="toc-title">目录</div>
+      <nav class="toc">
+        <a class="doc-link" href="#doc-2026-05-14-ai-platform-upgrade-design">旗胜 AI 平台架构升级路线</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-1-背景与目标-2">1. 背景与目标</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-2-专题文档索引-3">2. 专题文档索引</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-3-指标口径-4">3. 指标口径</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-4-实施路径-9">4. 实施路径</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-5-阶段概要-10">5. 阶段概要</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-6-功能开关-21">6. 功能开关</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-7-alembic-迁移顺序-22">7. Alembic 迁移顺序</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-8-definition-of-done-23">8. Definition of Done</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-9-测试要求-24">9. 测试要求</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-10-外部依赖准备-25">10. 外部依赖准备</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-11-文档维护-26">11. 文档维护</a><a class="sub-link" href="#doc-2026-05-14-ai-platform-upgrade-design-12-变更记录-27">12. 变更记录</a><a class="doc-link" href="#doc-adr-rbac">ADR-RBAC｜多角色权限、公网安全与钉钉二次验证</a><a class="sub-link" href="#doc-adr-rbac-决策摘要-29">决策摘要</a><a class="sub-link" href="#doc-adr-rbac-角色模型-30">角色模型</a><a class="sub-link" href="#doc-adr-rbac-权限矩阵-31">权限矩阵</a><a class="sub-link" href="#doc-adr-rbac-钉钉登录二次验证-32">钉钉登录二次验证</a><a class="sub-link" href="#doc-adr-rbac-高风险操作-33">高风险操作</a><a class="sub-link" href="#doc-adr-rbac-公网访问安全门槛-34">公网访问安全门槛</a><a class="sub-link" href="#doc-adr-rbac-对象存储演进-35">对象存储演进</a><a class="sub-link" href="#doc-adr-rbac-文件与离职访问-36">文件与离职访问</a><a class="sub-link" href="#doc-adr-rbac-验收要求-37">验收要求</a><a class="doc-link" href="#doc-adr-business-dashboard">ADR-Business-Dashboard｜经营驾驶舱数据底座</a><a class="sub-link" href="#doc-adr-business-dashboard-决策摘要-39">决策摘要</a><a class="sub-link" href="#doc-adr-business-dashboard-数据模型-40">数据模型</a><a class="sub-link" href="#doc-adr-business-dashboard-合同调整项口径-41">合同调整项口径</a><a class="sub-link" href="#doc-adr-business-dashboard-成本与返工-42">成本与返工</a><a class="sub-link" href="#doc-adr-business-dashboard-毛利与回款口径-43">毛利与回款口径</a><a class="sub-link" href="#doc-adr-business-dashboard-项目归档规则-44">项目归档规则</a><a class="sub-link" href="#doc-adr-business-dashboard-导入与审计-45">导入与审计</a><a class="sub-link" href="#doc-adr-business-dashboard-权限-脱敏与导出-46">权限、脱敏与导出</a><a class="sub-link" href="#doc-adr-business-dashboard-关键索引-47">关键索引</a><a class="sub-link" href="#doc-adr-business-dashboard-验收要求-48">验收要求</a><a class="doc-link" href="#doc-adr-ai-governance">ADR-AI-Governance｜AI 调用治理、脱敏与可追溯</a><a class="sub-link" href="#doc-adr-ai-governance-决策摘要-50">决策摘要</a><a class="sub-link" href="#doc-adr-ai-governance-原始输入输出-的定义-51">“原始输入输出”的定义</a><a class="sub-link" href="#doc-adr-ai-governance-数据外发规则-52">数据外发规则</a><a class="sub-link" href="#doc-adr-ai-governance-调用日志模型-53">调用日志模型</a><a class="sub-link" href="#doc-adr-ai-governance-原文保留策略-54">原文保留策略</a><a class="sub-link" href="#doc-adr-ai-governance-原文清理任务-55">原文清理任务</a><a class="sub-link" href="#doc-adr-ai-governance-prompt-版本与复盘-56">Prompt 版本与复盘</a><a class="sub-link" href="#doc-adr-ai-governance-脱敏规则-57">脱敏规则</a><a class="sub-link" href="#doc-adr-ai-governance-验收要求-58">验收要求</a><a class="doc-link" href="#doc-adr-asyncjob">ADR-AsyncJob｜后台异步任务边界</a><a class="sub-link" href="#doc-adr-asyncjob-决策摘要-60">决策摘要</a><a class="sub-link" href="#doc-adr-asyncjob-当前策略-61">当前策略</a><a class="sub-link" href="#doc-adr-asyncjob-超时策略-62">超时策略</a><a class="sub-link" href="#doc-adr-asyncjob-超时扫描任务-63">超时扫描任务</a><a class="sub-link" href="#doc-adr-asyncjob-未来-async-jobs-结构-64">未来 async_jobs 结构</a><a class="sub-link" href="#doc-adr-asyncjob-celery-beat-健康检查-65">Celery beat 健康检查</a><a class="sub-link" href="#doc-adr-asyncjob-验收要求-66">验收要求</a><a class="doc-link" href="#doc-api-contracts">API-CONTRACTS｜升级路线新增接口契约骨架</a><a class="sub-link" href="#doc-api-contracts-目标-68">目标</a><a class="sub-link" href="#doc-api-contracts-通用响应-69">通用响应</a><a class="sub-link" href="#doc-api-contracts-http-状态码与错误码-70">HTTP 状态码与错误码</a><a class="sub-link" href="#doc-api-contracts-阶段-0-权限与登录-71">阶段 0：权限与登录</a><a class="sub-link" href="#doc-api-contracts-阶段-1-报价速度看板-72">阶段 1：报价速度看板</a><a class="sub-link" href="#doc-api-contracts-阶段-2-响应速度-73">阶段 2：响应速度</a><a class="sub-link" href="#doc-api-contracts-阶段-3-执行任务-74">阶段 3：执行任务</a><a class="sub-link" href="#doc-api-contracts-阶段-4-会议与转写-75">阶段 4：会议与转写</a><a class="sub-link" href="#doc-api-contracts-阶段-5-知识导入-76">阶段 5：知识导入</a><a class="sub-link" href="#doc-api-contracts-阶段-6-经营数据-77">阶段 6：经营数据</a><a class="sub-link" href="#doc-api-contracts-附录-a-样板图报价-78">附录 A：样板图报价</a><a class="sub-link" href="#doc-api-contracts-导出水印-79">导出水印</a><a class="sub-link" href="#doc-api-contracts-重复调用语义-80">重复调用语义</a><a class="doc-link" href="#doc-state-machines">STATE-MACHINES｜关键实体状态机</a><a class="sub-link" href="#doc-state-machines-目标-82">目标</a><a class="sub-link" href="#doc-state-machines-通用规则-83">通用规则</a><a class="sub-link" href="#doc-state-machines-quote-jobs-transcription-image-analysis-84">quote_jobs / transcription / image_analysis</a><a class="sub-link" href="#doc-state-machines-execution-tasks-85">execution_tasks</a><a class="sub-link" href="#doc-state-machines-task-drafts-86">task_drafts</a><a class="sub-link" href="#doc-state-machines-meeting-notes-87">meeting_notes</a><a class="sub-link" href="#doc-state-machines-contract-adjustments-88">contract_adjustments</a><a class="sub-link" href="#doc-state-machines-projects-archive-89">projects archive</a><a class="sub-link" href="#doc-state-machines-business-import-batches-90">business_import_batches</a><a class="sub-link" href="#doc-state-machines-rag-reload-91">rag_reload</a><a class="doc-link" href="#doc-feature-flags">FEATURE-FLAGS｜功能开关与阶段依赖矩阵</a><a class="sub-link" href="#doc-feature-flags-目标-93">目标</a><a class="sub-link" href="#doc-feature-flags-功能开关矩阵-94">功能开关矩阵</a><a class="sub-link" href="#doc-feature-flags-phase-3-phase-4-依赖约定-95">Phase 3 / Phase 4 依赖约定</a><a class="sub-link" href="#doc-feature-flags-vite-路由表-96">Vite 路由表</a><a class="doc-link" href="#doc-appendix-image-to-quote">APPENDIX-Image-to-Quote｜样板图驱动报价</a><a class="sub-link" href="#doc-appendix-image-to-quote-功能概述-98">功能概述</a><a class="sub-link" href="#doc-appendix-image-to-quote-整体流程-99">整体流程</a><a class="sub-link" href="#doc-appendix-image-to-quote-模型策略-100">模型策略</a><a class="sub-link" href="#doc-appendix-image-to-quote-数据模型-101">数据模型</a><a class="sub-link" href="#doc-appendix-image-to-quote-materials-json-schema-102">materials_json Schema</a><a class="sub-link" href="#doc-appendix-image-to-quote-面积与数量-103">面积与数量</a><a class="sub-link" href="#doc-appendix-image-to-quote-适配现有报价流程-104">适配现有报价流程</a><a class="sub-link" href="#doc-appendix-image-to-quote-功能开关-105">功能开关</a><a class="sub-link" href="#doc-appendix-image-to-quote-测试要求-106">测试要求</a><a class="sub-link" href="#doc-appendix-image-to-quote-验收标准-107">验收标准</a><a class="doc-link" href="#doc-runbook-phase0-launch">RUNBOOK-Phase0-Launch｜阶段 0 上线操作手册</a><a class="sub-link" href="#doc-runbook-phase0-launch-目标-109">目标</a><a class="sub-link" href="#doc-runbook-phase0-launch-上线前检查-110">上线前检查</a><a class="sub-link" href="#doc-runbook-phase0-launch-备份步骤-111">备份步骤</a><a class="sub-link" href="#doc-runbook-phase0-launch-迁移步骤-112">迁移步骤</a><a class="sub-link" href="#doc-runbook-phase0-launch-部署步骤-113">部署步骤</a><a class="sub-link" href="#doc-runbook-phase0-launch-冒烟测试-114">冒烟测试</a><a class="sub-link" href="#doc-runbook-phase0-launch-上线后角色分配-115">上线后角色分配</a><a class="sub-link" href="#doc-runbook-phase0-launch-打开功能开关-116">打开功能开关</a><a class="sub-link" href="#doc-runbook-phase0-launch-回滚方案-117">回滚方案</a><a class="sub-link" href="#doc-runbook-phase0-launch-验收签字-118">验收签字</a>
+      </nav>
+    </aside>
+    <main class="content">
+      <section class="cover">
+        <h1>旗胜 AI 平台架构升级路线 v41</h1>
+        <p>本 HTML 由主路线图、ADR、接口契约、状态机、功能开关、附录和阶段 0 Runbook 合并生成。</p>
+        <p style="color:#15803d;font-weight:600;">✅ Phase 0 当前环境验证已完成（2026-05-18）&nbsp;｜&nbsp;✅ Phase 1 报价速度看板当前环境运行态验收已完成（2026-05-18）&nbsp;｜&nbsp;✅ Phase 2 响应速度追踪代码层已完成（2026-05-18，当前环境运行态验收待执行）</p>
+        <p>源目录: C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\docs\superpowers\specs</p>
+      </section>
+      <section id="doc-2026-05-14-ai-platform-upgrade-design" class="doc-section" data-source="2026-05-14-ai-platform-upgrade-design.md">
+<div class="source-label">来源: 2026-05-14-ai-platform-upgrade-design.md</div>
+<h1 id="doc-2026-05-14-ai-platform-upgrade-design-旗胜-ai-平台架构升级路线-1">旗胜 AI 平台架构升级路线</h1>
+<blockquote><p>创建日期：2026-05-14 最后更新：2026-05-18（Phase 0 开发与当前环境验证完成；Phase 1 当前环境运行态验收完成；Phase 2 代码层完成） 状态：Phase 0 当前环境验证完成；Phase 1 报价速度看板当前环境运行态验收已完成；Phase 2 响应速度追踪代码层已完成。系统完善前不正式投入生产使用，正式生产 Runbook 推迟到平台能力完整后统一准备 负责人：待定</p></blockquote>
 <hr />
-<h2 id="背景与目标">背景与目标</h2>
-<p>基于旗胜智能装饰”AI 落地方案”战略架构图，当前报价系统（03 AI
-报价系统）已基本完整，需要在此基础上扩展完成另外三个模块：</p>
-<table>
-<colgroup>
-<col style="width: 23%" />
-<col style="width: 34%" />
-<col style="width: 42%" />
-</colgroup>
-<thead>
-<tr>
-<th>模块</th>
-<th>当前状态</th>
-<th>本路线目标</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>01 AI 知识库系统</td>
-<td>🟡 基础已有，等待历史数据</td>
-<td>数据到位后批量治理导入</td>
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-1-背景与目标-2">1. 背景与目标</h2>
+<p>基于旗胜智能装饰“AI 落地方案”战略架构图，当前 03 AI 报价系统已基本完整，需要在现有系统上扩展另外三个模块：01 AI 知识库系统、02 AI 执行系统、04 AI 管理驾驶舱。</p>
+<p>所有模块在现有项目内扩展，不新建项目。共用用户体系、MySQL、Redis/Celery、钉钉 Webhook、RAG 服务和现有 FastAPI 网关。</p>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>模块</th><th>当前状态</th><th>路线目标</th>
+</tr></thead>
+<tbody><tr>
+<td>01 AI 知识库系统</td><td>基础已有，等待历史数据</td><td>数据到位后批量治理导入</td>
 </tr>
 <tr>
-<td>02 AI 执行系统</td>
-<td>❌ 完全空白</td>
-<td>会议纪要 → 任务拆解 → 跟踪闭环</td>
+<td>02 AI 执行系统</td><td>空白</td><td>会议纪要 -&gt; 任务拆解 -&gt; 跟踪闭环</td>
 </tr>
 <tr>
-<td>03 AI 报价系统</td>
-<td>✅ 已完整</td>
-<td>持续优化准确率</td>
+<td>03 AI 报价系统</td><td>已完整</td><td>持续优化准确率，并新增样板图入口</td>
 </tr>
 <tr>
-<td>04 AI 管理驾驶舱</td>
-<td>🟡 仅有运维监控</td>
-<td>三类效率指标全覆盖</td>
+<td>04 AI 管理驾驶舱</td><td>仅有运维监控</td><td>效率指标 + 经营指标分阶段覆盖</td>
 </tr>
 </tbody>
-</table>
-<p><strong>核心价值观</strong>：团队效率，“快”是最重要的衡量标准。三类”快”的定义如下：</p>
-<table>
-<thead>
-<tr>
-<th>快的类型</th>
-<th>定义</th>
-<th>数据来源</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>报价快</td>
-<td>客户需求到报价单交付的时长</td>
-<td>QuoteJob 时间戳</td>
+</table></div>
+<p>核心价值观：团队效率，“快”是最重要的衡量标准。</p>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>快的类型</th><th>定义</th><th>数据来源</th>
+</tr></thead>
+<tbody><tr>
+<td>报价快</td><td>客户需求到报价单交付的时长</td><td>QuoteJob / QuoteHistory</td>
 </tr>
 <tr>
-<td>响应快</td>
-<td>客户咨询到有人接单的时长</td>
-<td>ClientInquiry（新建）</td>
+<td>响应快</td><td>客户咨询到有人接单的时长</td><td>ClientInquiry</td>
 </tr>
 <tr>
-<td>执行快</td>
-<td>会议决定到任务落地的时长</td>
-<td>ExecutionTask（新建）</td>
+<td>执行快</td><td>会议决定到任务落地的时长</td><td>ExecutionTask</td>
 </tr>
 </tbody>
-</table>
-<p><strong>架构决策</strong>：所有模块在现有系统上扩展，不新建项目。共用用户体系（JWT）、数据库（MySQL）、基础设施（Redis
-/ Celery / 钉钉 Webhook）。</p>
+</table></div>
+<p>部署边界：当前只服务旗胜一家企业，暂不引入 <code>tenant_id</code>。但公司名称、钉钉 Webhook、模型开关、SLA 阈值、经营数据模板等不得硬编码，应放入 <code>.env</code> 或后续配置表。</p>
+<p>公网边界：系统未来可能公网访问。公网入口启用前必须通过安全门槛，详见 <a href="#doc-adr-rbac">ADR-RBAC.md</a>。</p>
+<p>容量边界：初期约 20 名员工使用，每天报价任务 10 单以内。合同、录音、效果图当前可继续使用 MinIO，后续预留迁移到阿里云 OSS / 腾讯云 COS 的对象存储抽象。</p>
 <hr />
-<h2 id="指标口径定义先于看板开发">指标口径定义（先于看板开发）</h2>
-<p>驾驶舱开发前必须明确每个指标的计算口径，避免管理层与业务员理解不一致。</p>
-<h3 id="报价耗时三层分区展示">报价耗时（三层，分区展示）</h3>
-<table>
-<colgroup>
-<col style="width: 30%" />
-<col style="width: 34%" />
-<col style="width: 34%" />
-</colgroup>
-<thead>
-<tr>
-<th>指标名</th>
-<th>计算方式</th>
-<th>面向受众</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>AI 生成耗时</td>
-<td><code>QuoteJob.duration_ms</code>（已有字段），或
-<code>created_at → finished_at</code></td>
-<td>工程侧（系统性能）</td>
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-2-专题文档索引-3">2. 专题文档索引</h2>
+<p>本主文档只保留路线、阶段、验收和跨模块决策。细节拆分到以下文档：</p>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>文档</th><th>范围</th>
+</tr></thead>
+<tbody><tr>
+<td><a href="#doc-adr-rbac">ADR-RBAC.md</a></td><td>多角色权限、<code>role_version</code>、钉钉二次验证、公网安全、附件权限</td>
 </tr>
 <tr>
-<td>人工确认耗时</td>
-<td><code>QuoteHistory.created_at - QuoteJob.finished_at</code>（confirm_push
-成功即为人工确认时间点）；无 QuoteHistory
-记录时<strong>不纳入统计</strong>，不做 fallback</td>
-<td>管理层（业务效率）</td>
+<td><a href="#doc-adr-business-dashboard">ADR-Business-Dashboard.md</a></td><td>项目、合同、回款、成本、增减项、返工成本、毛利率</td>
 </tr>
 <tr>
-<td>总交付耗时</td>
-<td><code>QuoteHistory.created_at - QuoteJob.created_at</code>（同上，无
-QuoteHistory 则排除）</td>
-<td>管理层（端到端）</td>
+<td><a href="#doc-adr-ai-governance">ADR-AI-Governance.md</a></td><td>AI 数据外发、调用日志、原始输入输出保留、脱敏、Prompt 版本</td>
+</tr>
+<tr>
+<td><a href="#doc-adr-asyncjob">ADR-AsyncJob.md</a></td><td><code>ExecutionTask</code> 与后台异步任务边界、<code>quote_jobs.job_type</code>、未来任务中心</td>
+</tr>
+<tr>
+<td><a href="#doc-appendix-image-to-quote">APPENDIX-Image-to-Quote.md</a></td><td>样板图驱动报价、视觉识别、需求表、适配现有报价流程</td>
+</tr>
+<tr>
+<td><a href="#doc-runbook-phase0-launch">RUNBOOK-Phase0-Launch.md</a></td><td>阶段 0 上线步骤、备份、迁移、冒烟、开关、回滚</td>
+</tr>
+<tr>
+<td><a href="#doc-api-contracts">API-CONTRACTS.md</a></td><td>新增接口契约、错误码、权限、功能开关行为</td>
+</tr>
+<tr>
+<td><a href="#doc-state-machines">STATE-MACHINES.md</a></td><td>关键实体状态机、重复调用语义、禁止转换</td>
+</tr>
+<tr>
+<td><a href="#doc-feature-flags">FEATURE-FLAGS.md</a></td><td>功能开关依赖矩阵、Vite 路由阶段、登录后落地页</td>
 </tr>
 </tbody>
-</table>
-<blockquote>
-<p>注1：<code>QuoteJob</code> 当前无 <code>started_at</code> 字段（只有
-<code>created_at</code> / <code>finished_at</code> /
-<code>duration_ms</code>）。如将来需要区分”排队等待”与”真正 AI
-执行”时间，再新增 <code>started_at</code>。
-注2：三个数字不要混在同一张图里，否则”系统很快但人工很慢”的真实问题会被平均数掩盖。
-注3：<code>QuoteHistory.created_at</code> 即 confirm_push
-成功时间，是最准确的人工确认时间点，应作为主口径；<code>QuoteFeedback</code>
-记录的是预审弹窗交互数据，不用于耗时计算基准。</p>
-</blockquote>
-<h3 id="响应耗时">响应耗时</h3>
-<ul>
-<li>首次响应时长 =
-<code>ClientInquiry.first_response_time - ClientInquiry.inquiry_time</code></li>
-<li>SLA 状态：按渠道设定阈值（如电话 2 小时、微信 4 小时）</li>
-</ul>
-<h3 id="执行耗时">执行耗时</h3>
-<ul>
-<li>任务完成时长 =
-<code>ExecutionTask.completed_at - ExecutionTask.created_at</code></li>
-<li>逾期判断 =
-动态计算（<code>due_at &lt; now() AND completed_at IS NULL</code>），不作为持久状态存储</li>
-</ul>
+</table></div>
 <hr />
-<h2 id="实施路径路径-c先可见再闭环最后外部集成">实施路径：路径
-C（先可见、再闭环、最后外部集成）</h2>
-<pre><code>第 1-2 周   阶段 0+1   Vite 登录鉴权统一 + 报价速度看板
-第 3-4 周   阶段 2     响应速度追踪（嵌入报价流程）
-第 5-6 周   阶段 3     ExecutionTask 模型 + 执行速度看板
-第 7-9 周   阶段 4a    手动会议纪要 + AI 任务草稿确认
-第 10-12 周 阶段 4b    语音转写接入
-第 13周+    阶段 4c    钉钉会议导入（等权限到位）
-等数据到位   阶段 5     01 知识库历史数据批量治理导入</code></pre>
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-3-指标口径-4">3. 指标口径</h2>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-全局时间口径">全局时间口径</h3>
+<p>所有业务时间口径统一按中国时区 <code>Asia/Shanghai</code> 解释，包括"今日 / 本周 / 本月 / 当天有效 / 逾期 / SLA"。数据库字段优先使用 timezone-aware datetime；如底层仍存 naive datetime，后端必须按 <code>Asia/Shanghai</code> 统一转换后再聚合。</p>
+<p>看板按自然日、自然周、自然月统计：</p>
+<ul><li>今日：<code>Asia/Shanghai</code> 当天 00:00:00 至 23:59:59</li><li>本周：周一 00:00:00 至周日 23:59:59</li><li>本月：自然月第一天 00:00:00 至最后一天 23:59:59</li></ul>
+<p><code>trace_id</code>、审计时间、AI 调用时间、Celery 任务时间可同时保留 UTC 时间戳，但展示给业务用户时统一显示为中国时区。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-报价耗时-5">报价耗时</h3>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>指标名</th><th>计算方式</th><th>面向受众</th>
+</tr></thead>
+<tbody><tr>
+<td>AI 生成耗时</td><td><code>QuoteJob.duration_ms</code>；新任务由 worker 基于单次运行实测耗时写入，必要时回退 <code>QuoteJob.created_at -&gt; QuoteJob.finished_at</code></td><td>工程侧</td>
+</tr>
+<tr>
+<td>人工确认耗时</td><td><code>QuoteHistory.created_at - QuoteJob.finished_at</code>；无 QuoteHistory 不纳入统计；旧数据如存在 <code>finished_at</code> UTC/本地时区偏移，展示聚合层做只读校正</td><td>管理层</td>
+</tr>
+<tr>
+<td>总交付耗时</td><td><code>QuoteHistory.created_at - QuoteJob.created_at</code>；无 QuoteHistory 不纳入统计</td><td>管理层</td>
+</tr>
+</tbody>
+</table></div>
+<p>三个数字分区展示，不合并平均。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-响应耗时-6">响应耗时</h3>
+<p>首次响应时长 = <code>ClientInquiry.first_response_time - ClientInquiry.inquiry_time</code>。</p>
+<p>统计范围仅限已经进入报价流程并生成 QuoteJob 的客户咨询。未形成报价的零散咨询当前不纳入响应速度指标，也不建设独立线索模块。</p>
+<p>初期 SLA 统一按自然时间计算，不引入工作日、上班时间、节假日。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-执行耗时-7">执行耗时</h3>
+<p>任务完成时长 = <code>ExecutionTask.completed_at - ExecutionTask.created_at</code>。</p>
+<p>逾期判断动态计算：<code>due_at &lt; now() AND completed_at IS NULL AND status NOT IN (&#x27;done&#x27;,&#x27;cancelled&#x27;)</code>。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-经营指标-8">经营指标</h3>
+<p>经营口径详见 <a href="#doc-adr-business-dashboard">ADR-Business-Dashboard.md</a>。</p>
+<p>核心公式：</p>
+<pre><code class="language-text">有效合同金额 = 原合同金额 + 已确认增项 + 已确认签证 - 已确认减项 - 已确认优惠
+有效成本 = active 成本汇总，含返工成本
+毛利润 = 有效合同金额 - 有效成本
+毛利率 = 毛利润 / 有效合同金额
+回款率 = 已回款金额 / 有效合同金额</code></pre>
+<p>回款不参与毛利计算，只用于现金流、回款率和逾期应收。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-空数据与低可信数据展示">空数据与低可信数据展示</h3>
+<p>所有驾驶舱页面必须区分以下状态：</p>
+<ul><li>功能未开启：显示"功能未开启"，不展示空白页</li><li>无数据：显示"暂无数据，数据从上线后开始统计"</li><li>样本量过小：显示"样本量较少，仅供参考"</li><li>低可信数据：例如 <code>time_source='default'</code>，只计入数量，不计入平均响应时长</li></ul>
+<p>响应速度看板必须同时展示纳入均值的样本量和被排除的默认时间样本量，避免默认时间把平均响应时长压成 0。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-api-schema-优先级">API Schema 优先级</h3>
+<p><code>API-CONTRACTS.md</code> 当前是接口骨架。进入代码实现前，Phase 0 / 1 / 2 必须先补齐字段级请求 / 响应 Schema，形成 Pydantic 模型和前端类型。优先级如下：</p>
+<ol><li>Phase 0：<code>auth/me</code>、角色授予 / 撤销、权限历史、钉钉验证</li><li>Phase 1：报价速度看板聚合响应</li><li>Phase 2：报价创建附带咨询字段、<code>client_inquiries</code> 查询 / 修正、响应速度看板聚合响应</li></ol>
+<p>Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求在 Phase 0 一次性写完全部后续接口。</p>
 <hr />
-<h2 id="阶段-0vite-登录鉴权统一">阶段 0｜Vite 登录鉴权统一</h2>
-<p><strong>时间</strong>：第 1 周（与阶段 1 并行）
-<strong>策略</strong>：不全量迁移，新建 Vite
-壳，优先统一鉴权层，旧页面保留逐步迁移。</p>
-<h3 id="任务清单">任务清单</h3>
-<ul class="task-list">
-<li><label><input type="checkbox"></input>初始化 Vite + Vue 3 + TypeScript
-工程</label></li>
-<li><label><input type="checkbox"></input>配置 FastAPI 托管 Vite
-编译产物，设置 SPA fallback 路由：</label>
-<ul>
-<li>未匹配的路径返回 Vite 的 <code>index.html</code>（交由 vue-router
-处理）</li>
-<li>例外路由：<code>/index.html</code>、<code>/admin.html</code>、<code>/app.html</code>
-继续静态服务旧页面</li>
-<li>避免 <code>/admin/dashboard</code> 刷新后出现 FastAPI 404</li>
-</ul></li>
-<li><label><input type="checkbox"></input>优先迁移 <code>/login</code>
-页面（原 app.html 登录部分）</label></li>
-<li><label><input type="checkbox"></input>统一封装
-<code>apiClient</code>（Axios 实例）：</label>
-<ul>
-<li>JWT 存取（localStorage）</li>
-<li>401 自动跳转登录</li>
-<li>admin 路由守卫</li>
-<li>过期处理</li>
-</ul></li>
-<li><label><input type="checkbox"></input>接入
-vue-router，规划路由结构：</label>
-<ul>
-<li><code>/login</code> — 登录页</li>
-<li><code>/quote</code> — 报价工作台（原 index.html，后续迁移）</li>
-<li><code>/admin/knowledge</code> — 知识库管理（原 admin.html
-部分，后续迁移）</li>
-<li><code>/admin/dashboard</code> — 管理驾驶舱（新，走 Vite）</li>
-<li><code>/admin/execution</code> — 执行系统（新，走 Vite）</li>
-</ul></li>
-<li><label><input type="checkbox"></input>旧的 index.html / admin.html
-暂时保留，入口逐步收拢到新壳</label></li>
-<li><label><input type="checkbox"></input>新增 <code>users.role</code>
-字段（Alembic migration）：现有 <code>is_admin=True</code> 迁移为
-<code>role=&#39;admin&#39;</code>，其余迁移为
-<code>role=&#39;staff&#39;</code>；<strong>全量替换代码中 <code>is_admin</code>
-字段引用为 <code>role</code> 检查</strong>，更新
-<code>app/dependencies.py</code> 的
-<code>require_admin</code>（此步须在阶段 0
-完成，否则新旧权限逻辑并存会产生 bug）</label></li>
-</ul>
-<h3 id="为什么这么做">为什么这么做</h3>
-<p>鉴权层如果新旧并存，会出现”旧页面能进、新页面被踢回登录”的问题，以及
-JWT 过期逻辑不一致的 bug。登录和 Axios
-拦截器优先统一，后续旧页面迁移时只需接入已有的
-apiClient，不用重写鉴权逻辑。</p>
-<h3 id="最小交付物定义week-1-结束时">最小交付物定义（Week 1
-结束时）</h3>
-<ul>
-<li><code>/login</code> 页面可正常登录并跳转</li>
-<li><code>apiClient</code>（JWT 存取、401 跳转、admin
-路由守卫）封装完毕</li>
-<li><code>vue-router</code>
-骨架配置完成（路由定义存在，页面可以是空占位）</li>
-<li>旧 <code>/index.html</code>、<code>/admin.html</code>
-仍可正常访问</li>
-<li><code>users.role</code> 迁移完成，代码中 <code>is_admin</code>
-引用全部替换</li>
-</ul>
-<p>报价速度接口与看板开发移至 Week 2，不压入 Week 1。</p>
-<h3 id="预期成果">预期成果</h3>
-<p>新驾驶舱和执行系统页面走
-Vite，鉴权行为与旧页面完全一致，用户无感知切换。</p>
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-4-实施路径-9">4. 实施路径</h2>
+<pre><code class="language-text">第 1-2 周    阶段 0（已完成）+ 阶段 1   Vite 登录鉴权统一 + 报价速度看板
+第 3-4 周    阶段 2     响应速度追踪（嵌入报价流程）
+第 5-6 周    阶段 3     ExecutionTask 模型 + 执行速度看板
+第 7-9 周    阶段 4a    手动会议纪要 + AI 任务草稿确认
+第 10-12 周  阶段 4b    语音转写接入
+第 13 周+    阶段 4c    钉钉会议导入（等权限到位）
+等数据到位   阶段 5     知识库历史数据批量治理导入
+数据模板确认后 阶段 6   经营驾驶舱数据底座
+并行附录      附录 A     样板图驱动报价</code></pre>
+<p>节奏原则：先驾驶舱可见，再业务闭环，最后外部集成。</p>
 <hr />
-<h2 id="阶段-1报价速度看板">阶段 1｜报价速度看板</h2>
-<p><strong>时间</strong>：第 1-2 周</p>
-<h3 id="任务清单-1">任务清单</h3>
-<ul class="task-list">
-<li><label><input type="checkbox"></input>新增聚合接口
-<code>GET /api/v1/admin/dashboard/quote-speed</code></label>
-<ul>
-<li>返回三层耗时指标（AI 生成 / 人工确认 / 总交付）</li>
-<li>数据来源：QuoteJob（时间戳）+ QuoteHistory（confirm 时间）+
-QuoteFeedback（修改标记）</li>
-</ul></li>
-<li><label><input type="checkbox"></input>驾驶舱前端”报价速度”面板（Vite
-新页面）：</label>
-<ul>
-<li>三张独立指标卡片（分区展示，不合并）</li>
-<li>折线图：近 30 天日均各阶段耗时趋势</li>
-<li>AI 修改率趋势（来自 QuoteFeedback.was_modified）</li>
-<li>⚠️ 冷启动处理：有效数据（含 QuoteHistory 的报价）低于 10
-条时，图表区显示”数据采集中（需至少 10
-条已确认报价）“提示，不渲染空折线图，避免管理层误判为系统故障</li>
-</ul></li>
-</ul>
-<h3 id="为什么这么做-1">为什么这么做</h3>
-<p>数据已在数据库中（QuoteJob + QuoteFeedback），无需新增采集。2
-周内让管理层看到报价环节的效率基线，有基线才能评估后续优化效果。</p>
-<h3 id="预期成果-1">预期成果</h3>
-<p>管理层一屏看到：AI
-生成平均多快、人工确认拖了多久、端到端交付时长——三个数字分开展示，哪个环节慢一目了然。</p>
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-5-阶段概要-10">5. 阶段概要</h2>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-阶段-0-vite-登录鉴权统一-11">阶段 0｜Vite 登录鉴权统一（✅ 2026-05-18 已完成开发与当前环境验证）</h3>
+<p>策略：不全量迁移旧页面。先搭 Vite 壳并统一登录、鉴权、路由守卫和 API client。</p>
+<p>内部拆分：</p>
+<ul><li>0a：RBAC、多角色权限管理、登录鉴权统一</li><li>0b：Vite 壳、SPA fallback、新页面入口</li></ul>
+<p>关键决策：</p>
+<ul><li><code>users.role</code> 已存在，仅保留兼容</li><li>新增 <code>users.role_version</code>、<code>users.dingtalk_user_id</code>、<code>users.dingtalk_bound_at</code>、<code>user_roles</code>、<code>user_role_events</code></li><li>真实权限以 <code>user_roles</code> 为准</li><li>公网访问时 <code>system_admin</code> / <code>admin</code> 每次登录需钉钉二次验证，当天有效</li><li>Vite 新前端预留 HttpOnly Cookie + CSRF 迁移点</li></ul>
+<p>详见 <a href="#doc-adr-rbac">ADR-RBAC.md</a>。</p>
+<p>上线步骤详见 <a href="#doc-runbook-phase0-launch">RUNBOOK-Phase0-Launch.md</a>。</p>
+<p><strong>完成记录（当前环境验证，非正式生产上线）：</strong></p>
+<ul><li>Alembic 已升级到 <code>20260514_0011 (head)</code>。</li><li>已新增并验证 <code>users.role_version</code>、<code>users.dingtalk_user_id</code>、<code>users.dingtalk_bound_at</code>、<code>user_roles</code>、<code>user_role_events</code>。</li><li>已完成 <code>users.role</code> 到 <code>user_roles</code> 的兼容迁移；<code>SYSTEM_ADMIN_USERNAME=admin</code> 已具备 <code>system_admin + admin</code>。</li><li>JWT / 当前会话已写入并校验 <code>role_version</code>；旧 token 访问 <code>/api/v1/auth/me</code> 返回 401。</li><li><code>/login</code>、<code>/admin/permissions</code>、<code>/admin/dashboard</code>、<code>/index.html</code>、<code>/admin.html</code>、<code>/app.html</code> 当前环境冒烟均返回 200。</li><li>当前环境 <code>FEATURE_VITE_FRONTEND=true</code> 已打开，<code>PUBLIC_ACCESS_ENABLED=false</code> 保持关闭。</li><li>正式生产上线尚未发生，未来需要单独 Runbook。</li><li>Phase 1 报价速度看板未在 Phase 0 启动，已在后续 Phase 1 完成运行态验收；Phase 2 响应追踪已在后续完成代码层交付；Phase 3+ 的执行任务、经营驾驶舱仍未启动。</li></ul>
+<h3 id=”doc-2026-05-14-ai-platform-upgrade-design-阶段-1-报价速度看板-12”>阶段 1｜报价速度看板（✅ 当前环境运行态验收完成）</h3>
+<p>新增 <code>GET /api/v1/admin/dashboard/quote-speed</code>。</p>
+<p>看板展示：</p>
+<ul><li>AI 生成耗时</li><li>人工确认耗时</li><li>总交付耗时</li><li>AI 修改率趋势</li></ul>
+<p>冷启动时如果数据不足，页面必须提示”数据从上线后开始统计”。</p>
+<p><strong>完成记录（当前环境运行态验收，非正式生产上线）：</strong></p>
+<ul><li>已新增 <code>FEATURE_DASHBOARD_QUOTE</code>，默认关闭；关闭时接口返回 <code>403 FEATURE_DISABLED</code>，前端展示”功能未开启”。</li><li>已新增报价速度聚合接口，按 <code>Asia/Shanghai</code> 支持 <code>today</code> / <code>week</code> / <code>month</code> / <code>last_30_days</code>。</li><li>已接入 <code>/admin/dashboard</code> Vite 页面，展示报价任务数、AI 生成耗时、人工确认耗时、总交付耗时、AI 修改率、趋势和状态分布。</li><li>已限制访问角色为 <code>admin</code> / <code>system_admin</code> / <code>viewer</code>；<code>staff</code> 不可访问看板接口。</li><li><code>quote_job_runner</code> 已改为基于 <code>time.perf_counter()</code> 写入单次报价运行实测 <code>duration_ms</code>，避免成功任务显示 0 秒。</li><li>已新增 <code>scripts/diagnose_quote_job_durations.py</code>，支持只读诊断和显式 <code>--apply</code> 回填；历史 121 条成功任务的 <code>duration_ms=0</code> 已在 <code>C:\AI_Backups\20260517_205242\db\ai_quotation.sql</code> 备份后完成回填。</li><li>报价速度聚合层已对旧数据中 <code>finished_at</code> 比 <code>created_at</code> 早 8 小时的记录做只读展示校正，避免人工确认耗时被系统时区差放大。</li><li>自动化验证已通过：<code>python -m compileall app scripts</code>、<code>python -m pytest</code>（85 passed）和 <code>npm.cmd run build</code>。</li><li>当前环境运行态验收已通过：<code>/admin/dashboard</code> 页面无 404 / 403 / 控制台接口错误，三类耗时显示正常，新增真实报价任务已进入统计且 AI 生成耗时大于 0。</li><li>未迁移旧 <code>index.html</code> / <code>admin.html</code> 业务功能；Phase 2 已在后续完成代码层交付，Phase 3+ 未启动。</li></ul>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-阶段-2-响应速度追踪-13">阶段 2｜响应速度追踪（✅ 代码层已完成，当前环境运行态验收待执行）</h3>
+<p>新增 <code>client_inquiries</code>，但不建设独立线索系统。报价任务创建时可填写来源渠道 / 客户信息，并自动生成 ClientInquiry。</p>
+<p>统计边界：只统计已进入报价流程的咨询。</p>
+<p><code>ClientInquiry</code> 表示一次业务咨询，<code>QuoteJob</code> 表示一次技术报价尝试。新增 <code>quote_jobs.client_inquiry_id</code> 支持一次咨询对应多次报价尝试，例如原始报价、重试报价和后续修正版报价。</p>
+<p>创建时机：报价任务参数校验、文件基础校验通过后创建或复用 <code>ClientInquiry</code>。请求不合法、用户未授权或附件完全不可读时不创建；AI / RAG / N8N 后续失败仍保留咨询记录。</p>
+<p>响应时间可信度使用 <code>time_source</code> 标注：</p>
+<ul><li><code>manual</code>：员工填写的真实首次咨询时间</li><li><code>default</code>：系统默认用报价创建时间，仅计入咨询数量，不计入平均响应时长</li><li><code>integration</code>：未来由钉钉 / 微信等集成回填</li></ul>
+<p>报价重试必须继承原 <code>client_inquiry_id</code>、<code>inquiry_time</code> 和 <code>time_source</code>，不得重置响应耗时。</p>
+<p><strong>完成记录（代码层，非正式生产上线）：</strong></p>
+<ul><li>已新增 Alembic <code>20260514_0012</code>，创建 <code>client_inquiries</code> 并为 <code>quote_jobs</code> 增加 <code>client_inquiry_id</code>。</li><li>已新增 <code>FEATURE_CLIENT_INQUIRY</code>、<code>FEATURE_DASHBOARD_RESPONSE</code> 和 <code>RESPONSE_SLA_MINUTES</code>，默认关闭。</li><li>已在 <code>POST /api/v1/quote/jobs</code> 接入可选咨询字段；开关关闭时保持旧行为，不写咨询记录。</li><li>已新增 <code>GET /api/v1/client-inquiries</code> 和 <code>PATCH /api/v1/client-inquiries/{id}</code>；staff / manager 仅能查看和修正自己的咨询记录，admin / system_admin 可查看全部。</li><li>已新增 <code>GET /api/v1/admin/dashboard/response-speed</code>，默认时间样本只计数量、不计入平均首次响应耗时。</li><li>已在 <code>/admin/dashboard</code> 接入"响应速度"标签页，与报价速度共用时间范围控件；所有看板开关关闭时仍显示"功能未开启"。</li><li>自动化验证已通过：<code>python -m alembic heads</code> 显示 <code>20260514_0012 (head)</code>，<code>python -m compileall app scripts</code>、<code>python -m pytest</code>（85 passed）和 <code>npm.cmd run build</code> 均通过。</li><li>当前环境 Alembic 升级、开关打开和真实运行态验收待执行；系统完善前不正式投入生产使用。</li></ul>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-阶段-3-执行速度追踪-14">阶段 3｜执行速度追踪</h3>
+<p>新增 <code>execution_tasks</code> 与 <code>execution_task_events</code>。</p>
+<p>命名不使用 <code>tasks</code>，避免与 Celery task 和 <code>app/tasks/</code> 混淆。</p>
+<p><code>execution_tasks</code> 最低字段：</p>
+<ul><li><code>id, created_at, updated_at</code></li><li><code>title</code></li><li><code>source: meeting / quote / manual</code></li><li><code>source_ref_id</code></li><li><code>assignee_id: FK -&gt; users.id</code></li><li><code>due_at</code></li><li><code>completed_at: nullable</code></li><li><code>status: pending / in_progress / done / cancelled</code></li><li><code>notes</code></li></ul>
+<p>逾期状态不持久化，接口动态返回 <code>is_overdue</code>。</p>
+<p>钉钉提醒先走任务通知群 Webhook，个人 @ 等企业应用权限到位后再做。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-阶段-4a-ai-执行系统-手动纪要-草稿确认-15">阶段 4a｜AI 执行系统：手动纪要 + 草稿确认</h3>
+<p>新增 <code>meeting_notes</code> 与 <code>task_drafts</code>。</p>
+<p>已确认纪要后续更正使用独立 <code>meeting_note_revisions</code> 表，不直接覆盖原始纪要。revision 可重新提取补充草稿，但不得自动修改已确认的 <code>execution_tasks</code>。</p>
+<p><code>meeting_note_revisions</code> 最低字段：</p>
+<ul><li><code>id, created_at</code></li><li><code>meeting_note_id</code></li><li><code>content</code></li><li><code>reason</code></li><li><code>created_by</code></li><li><code>previous_content_sha256</code></li><li><code>trace_id</code></li></ul>
+<p>流程：</p>
+<pre><code class="language-text">会议纪要录入 -&gt; AI 提取任务草稿 -&gt; 人工确认 / 修改 -&gt; 正式写入 execution_tasks</code></pre>
+<p>AI 输出必须是固定 JSON Schema，不接受自由文本解析。任务草稿必须回显 <code>source_sentence</code>，帮助人工判断 AI 理解依据。</p>
+<p>AI 调用治理详见 <a href="#doc-adr-ai-governance">ADR-AI-Governance.md</a>。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-阶段-4b-语音转写接入-16">阶段 4b｜语音转写接入</h3>
+<p>主选讯飞录音文件识别，阿里云作为备选。转写任务临时复用 <code>quote_jobs + job_type=&#x27;transcription&#x27;</code>，状态机与报价任务一致。</p>
+<p>音频上传后：</p>
+<pre><code class="language-text">上传音频 -&gt; 转写文本 -&gt; 写回 meeting_notes.transcript_text -&gt; 自动触发阶段 4a 任务提取</code></pre>
+<p>异步任务边界详见 <a href="#doc-adr-asyncjob">ADR-AsyncJob.md</a>。</p>
+<p>阶段 4 依赖阶段 3 的 schema，但不依赖 <code>FEATURE_EXECUTION=true</code>。即 <code>execution_tasks</code> 表必须已迁移，<code>FEATURE_MEETING_AI=true</code> 时 <code>confirm-tasks</code> 可正常写入执行任务；<code>FEATURE_EXECUTION</code> 只控制独立任务管理 UI 和任务 CRUD 入口。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-阶段-4c-钉钉会议导入-17">阶段 4c｜钉钉会议导入</h3>
+<p>等钉钉企业应用权限审批后启动。不允许卡住主闭环。</p>
+<p>拉取结果进入同一条流程：</p>
+<pre><code class="language-text">钉钉会议记录 -&gt; meeting_notes -&gt; task_drafts -&gt; execution_tasks</code></pre>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-阶段-5-知识库历史数据治理导入-18">阶段 5｜知识库历史数据治理导入</h3>
+<p>历史成交数据不得直接导入 <code>materials</code>，必须先进入 <code>knowledge_candidates</code>。</p>
+<p>扩展字段：</p>
+<ul><li><code>source_batch_id</code></li><li><code>source_file</code></li><li><code>source_line</code></li><li><code>data_type</code></li><li><code>confidence</code></li><li><code>target_type</code></li><li><code>target_id</code></li><li><code>snapshot_id</code></li></ul>
+<p>导入后先跑 RAG 评测，若 Hit@K 或 MRR 下滑，按 <code>source_batch_id</code> 回滚。</p>
+<p>批次确认后如有数据进入 <code>materials</code> 或 RAG 文档，自动 enqueue 一次 <code>rag_reload</code>。reload 成功后自动 enqueue <code>rag_eval</code> 并写入评测报告；reload / eval 失败不回滚导入，但必须告警并在知识库页面显示待处理状态。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-阶段-6-经营驾驶舱数据底座-19">阶段 6｜经营驾驶舱数据底座</h3>
+<p>新增：</p>
+<ul><li><code>projects</code></li><li><code>project_quotes</code></li><li><code>contracts</code></li><li><code>contract_adjustments</code></li><li><code>payments</code></li><li><code>project_costs</code></li><li><code>business_events</code></li><li><code>business_import_batches</code></li></ul>
+<p>增项、减项、优惠、签证必须单独追踪，不直接覆盖原合同金额。返工成本用 <code>project_costs.cost_type=&#x27;rework&#x27;</code> 追踪。</p>
+<p>项目归档后默认隐藏，但仍计入经营统计。经营数据和合同明细导出仅允许 <code>admin</code> / <code>system_admin</code>，并必须带水印。</p>
+<p>详见 <a href="#doc-adr-business-dashboard">ADR-Business-Dashboard.md</a>。</p>
+<h3 id="doc-2026-05-14-ai-platform-upgrade-design-附录-a-样板图驱动报价-20">附录 A｜样板图驱动报价</h3>
+<p>新增效果图报价入口，与文字 / 清单图入口并列，不替换现有流程。详见 <a href="#doc-appendix-image-to-quote">APPENDIX-Image-to-Quote.md</a>。</p>
 <hr />
-<h2 id="阶段-2响应速度追踪">阶段 2｜响应速度追踪</h2>
-<p><strong>时间</strong>：第 3-4 周</p>
-<h3 id="设计原则">设计原则</h3>
-<p>响应速度追踪<strong>嵌入报价流程</strong>，而非独立填报表单。业务员创建报价任务时顺手填写客户信息，系统自动生成
-ClientInquiry 记录，降低登记成本至接近零。</p>
-<h3 id="新增数据模型-client_inquiries">新增数据模型
-<code>client_inquiries</code></h3>
-<pre><code>字段：
-- id, created_at, updated_at
-- source: 来源渠道（微信 / 电话 / 现场 / 老客户 / 其他）
-- inquiry_time: 客户最早咨询时间；用户可手填，不填则默认写入当前时间
-- first_response_time: 首次响应时间；报价任务创建时自动写入当前时间（创建即代表接单）；
-  后续接入钉钉/微信后可用真实首次回复时间覆盖
-- responder_id: 接单人（关联 users 表，默认为创建报价的用户）
-- client_name: 客户姓名/公司（可选）
-- client_phone: 客户电话（可选）
-- status: 业务状态（pending / responded / converted / abandoned）
-  ⚠️ 不与 SLA 状态混用：sla_status 按渠道阈值动态计算返回，不持久化存储
-- quote_job_id: 关联 QuoteJob（外键）
-- notes: 备注</code></pre>
-<blockquote>
-<p>SLA 阈值配置：初期写入 <code>.env</code>（如
-<code>SLA_PHONE_HOURS=2</code>、<code>SLA_WECHAT_HOURS=4</code>、<code>SLA_ONSITE_HOURS=8</code>），由接口读取后按渠道动态返回。如将来需要多客户/多项目差异化阈值，再迁移到
-<code>sla_config</code> 数据库表；当前阶段不过度设计。超时由
-<code>first_response_time - inquiry_time &gt; 阈值</code>
-实时计算，不写入数据库。</p>
-</blockquote>
-<h3 id="任务清单-2">任务清单</h3>
-<ul class="task-list">
-<li><label><input type="checkbox"></input>新增 <code>client_inquiries</code>
-表 + Alembic migration</label></li>
-<li><label><input type="checkbox"></input>修改报价任务创建流程：<code>POST /api/v1/quote/jobs</code>
-新增可选字段（来源渠道 / 客户信息），创建任务时自动生成
-ClientInquiry</label></li>
-<li><label><input type="checkbox"></input>新增接口
-<code>GET /api/v1/admin/dashboard/response-speed</code>（聚合统计）</label></li>
-<li><label><input type="checkbox"></input>报价工作台前端：发起报价时新增”来源渠道”下拉选择（不强制填写，降低阻力）</label></li>
-<li><label><input type="checkbox"></input>驾驶舱”响应速度”面板：</label>
-<ul>
-<li>平均首次响应时长（按渠道分组）</li>
-<li>SLA 达标率趋势</li>
-<li>各业务员响应速度对比</li>
-<li>逾期未响应数量预警</li>
-<li>⚠️ 面板须标注”数据起始日期（Phase 2
-上线日期）“，避免管理层将历史空白误读为系统故障；历史 QuoteJob 无对应
-ClientInquiry 记录，不纳入统计范围</li>
-</ul></li>
-</ul>
-<h3 id="为什么这么做-2">为什么这么做</h3>
-<p>独立的登记入口业务员大概率不会坚持填。嵌入报价创建流程后，登记是报价的自然副产品，数据质量有保证。预留
-<code>first_response_time</code>
-和自动化字段，后续可从钉钉/微信自动回填，不需要改数据模型。</p>
-<h3 id="预期成果-2">预期成果</h3>
-<p>每笔报价自动关联一条咨询记录，管理层看到各渠道和各业务员的响应速度对比，可以定向改进最慢的环节。</p>
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-6-功能开关-21">6. 功能开关</h2>
+<pre><code class="language-env">FEATURE_DASHBOARD_QUOTE=false
+FEATURE_DASHBOARD_RESPONSE=false
+FEATURE_DASHBOARD_EXECUTION=false
+FEATURE_DASHBOARD_BUSINESS=false
+FEATURE_CLIENT_INQUIRY=false
+RESPONSE_SLA_MINUTES=30
+FEATURE_EXECUTION=false
+FEATURE_MEETING_AI=false
+FEATURE_AUDIO_TRANSCRIPTION=false
+FEATURE_VITE_FRONTEND=false
+PUBLIC_ACCESS_ENABLED=false
+
+FEATURE_IMAGE_QUOTE=false
+FEATURE_IMAGE_QUOTE_GLM=true
+
+AI_RAW_LOG_ENABLED=false
+AI_RAW_LOG_RETENTION_DAYS=7
+AI_RAW_LOG_MAX_RETENTION_DAYS=30</code></pre>
+<p>开关启动时读取，修改需重启服务。未启用接口返回 <code>HTTP 403 FEATURE_DISABLED</code>。依赖矩阵和 Vite 路由阶段详见 <a href="#doc-feature-flags">FEATURE-FLAGS.md</a>。</p>
 <hr />
-<h2 id="阶段-3执行速度追踪">阶段 3｜执行速度追踪</h2>
-<p><strong>时间</strong>：第 5-6 周</p>
-<h3 id="新增数据模型-execution_tasks">新增数据模型
-<code>execution_tasks</code></h3>
-<blockquote>
-<p>命名说明：不使用 <code>tasks</code>，避免与 Celery task 和
-<code>app/tasks/</code> 目录概念混淆。</p>
-</blockquote>
-<pre><code>字段：
-- id, created_at, updated_at
-- title: 任务标题
-- source: 来源类型（meeting / quote / manual）
-- source_ref_id: 来源关联 ID（如 MeetingNote.id 或 QuoteJob.id）
-- assignee_id: 负责人（关联 users 表）
-- priority: 优先级（low / normal / urgent，默认 normal）
-- due_at: 截止时间
-- completed_at: 完成时间（NULL 表示未完成）
-- status: 状态（pending / in_progress / done / cancelled）
-- notes: 备注</code></pre>
-<blockquote>
-<p>逾期状态不存储为持久字段，统一由
-<code>due_at &lt; now() AND completed_at IS NULL</code>
-动态计算，避免定时任务未跑时状态脏数据。</p>
-</blockquote>
-<h3 id="任务清单-3">任务清单</h3>
-<ul class="task-list">
-<li><label><input type="checkbox"></input>新增 <code>execution_tasks</code> 表
-+ Alembic migration</label></li>
-<li><label><input type="checkbox"></input>新增接口：</label>
-<ul>
-<li><code>POST /api/v1/execution-tasks</code> — 创建任务</li>
-<li><code>GET /api/v1/execution-tasks</code> — 列表查询</li>
-<li><code>PATCH /api/v1/execution-tasks/{id}</code> — 更新任务（含
-status=cancelled 软删除）</li>
-<li>⚠️ 不提供硬删除接口；admin 可将 status 置为
-cancelled，保留审计链</li>
-<li><code>GET /api/v1/admin/dashboard/execution-speed</code> —
-聚合统计</li>
-</ul></li>
-<li><label><input type="checkbox"></input>任务创建/分配后，通过任务专用群
-Webhook 推送通知（**阶段 3 范围：群消息，不做个人 <span class="citation" data-cites="*">@*</span>*）</label>
-<ul>
-<li>新建钉钉”任务通知”专用群，配置机器人获取
-<code>DINGTALK_TASK_WEBHOOK</code>（与报价推送群
-<code>DINGTALK_WEBHOOK</code>
-<strong>物理分离</strong>，避免互相污染）</li>
-<li>推送内容：任务标题、负责人姓名、截止时间、来源（会议/报价/手动）</li>
-<li>⚠️ 个人 @ ActionCard 需要企业应用权限，延至阶段 4c
-权限审批通过后接入</li>
-</ul></li>
-<li><label><input type="checkbox"></input>新增 Celery beat
-定时任务：每小时扫描逾期任务</label>
-<ul>
-<li>条件：<code>due_at &lt; now() AND completed_at IS NULL AND status NOT IN (&#39;done&#39;,&#39;cancelled&#39;)</code></li>
-<li>触发钉钉逾期提醒（同上
-<code>DINGTALK_TASK_WEBHOOK</code>），限制每任务每天最多提醒 1
-次，避免轰炸</li>
-<li>⚠️ beat 是<strong>独立进程</strong>，运维三件套须同步落地：
-<ol type="1">
-<li><code>start_all.ps1</code> 新增 beat 启动步骤（位于 Celery worker
-启动之后）</li>
-<li><code>install_celery_worker_service.ps1</code> 注册独立任务计划程序
-<code>AI_MiddleOffice_CeleryBeat</code></li>
-<li><code>/health/ready</code> 新增 <code>celery_beat</code>
-状态探活（检查 beat PID 文件或 Redis heartbeat key）</li>
-</ol></li>
-</ul></li>
-<li><label><input type="checkbox"></input>新增
-<code>execution_task_events</code>
-审计表，记录创建、分配、推送、提醒、完成、取消等事件</label>
-<ul>
-<li>字段：id、task_id、event_type、operator_id（NULL=系统自动）、notes、created_at</li>
-<li>事件只追加不修改，支持审计和后续自动化</li>
-</ul></li>
-<li><label><input type="checkbox"></input>驾驶舱”执行速度”面板：</label>
-<ul>
-<li>任务完成率（本周 / 本月）</li>
-<li>逾期任务数量（动态计算）预警</li>
-<li>平均任务完成时长</li>
-<li>各负责人任务量与完成率对比</li>
-</ul></li>
-</ul>
-<h3 id="为什么这么做-3">为什么这么做</h3>
-<p>先建好数据模型，阶段 4 的 AI 会议纪要功能只需往
-<code>execution_tasks</code> 自动写入，驾驶舱不用再改。这是阶段 4
-的技术铺垫。</p>
-<h3 id="预期成果-3">预期成果</h3>
-<p>驾驶舱三块面板（报价速度 / 响应速度 /
-执行速度）全部上线，管理层一屏看全三类”快”，红黄灯预警哪个环节在拖。</p>
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-7-alembic-迁移顺序-22">7. Alembic 迁移顺序</h2>
+<pre><code class="language-text">① users.dingtalk_user_id / dingtalk_bound_at / role_version 补列 + user_roles / user_role_events 建表
+   同步迁移 users.role=&#x27;user&#x27; -&gt; staff；users.role=&#x27;admin&#x27; -&gt; admin
+        ↓
+② client_inquiries
+   execution_tasks
+   quote_image_analyses（含 model_provider / model_name / confidence_avg / timed_out / canceled）
+        ↓
+②-b ALTER TABLE quote_jobs ADD client_inquiry_id
+     ALTER TABLE quote_jobs ADD timeout_at
+     ALTER TABLE quote_jobs ADD source_type, image_analysis_id
+        ↓
+③ client_inquiry_events
+   execution_task_events
+   审计表补 ip_address / user_agent / trace_id
+        ↓
+④ meeting_notes
+        ↓
+⑤ task_drafts
+   meeting_note_revisions
+        ↓
+⑤-b ALTER TABLE meeting_notes ADD transcript_text, audio_object_id
+     ALTER TABLE quote_jobs ADD job_type
+        ↓
+⑥ ALTER TABLE knowledge_candidates ADD source_batch_id, target_type 等字段
+   rag_reload / rag_eval 任务记录与知识状态查询所需字段
+        ↓
+⑦ projects / project_quotes / contracts / contract_adjustments / payments / project_costs / business_events / business_import_batches
+   project_costs.created_by 必填；payments.amount / project_costs.amount 加 CHECK (amount &gt; 0)
+   business_events 增补 exported / import_rollback_failed 等事件类型
+        ↓
+⑧ ai_invocations / ai_call_logs 原文对象、raw_log_status、raw_log_error、raw_logs_cleaned_at、prompt / workflow / dify 版本字段</code></pre>
+<p>所有新增表和字段必须走 Alembic revision，不允许回退到 <code>AUTO_CREATE_TABLES</code> 或启动兼容迁移。<code>quote_jobs.timeout_at</code> 用于 <code>mark_async_job_timeouts</code>，索引建议为 <code>(job_type, status, timeout_at)</code>。</p>
 <hr />
-<h2 id="阶段-4aai-执行系统手动纪要-草稿确认">阶段 4a｜AI
-执行系统——手动纪要 + 草稿确认</h2>
-<p><strong>时间</strong>：第 7-9 周</p>
-<h3 id="设计原则-1">设计原则</h3>
-<p>AI 从会议纪要提取的任务<strong>不直接写入</strong>
-<code>execution_tasks</code>，必须经过草稿确认层（与报价预审弹窗逻辑一致）：</p>
-<pre><code>会议纪要录入 → AI 提取任务草稿 → 人工确认/修改 → 正式写入 execution_tasks</code></pre>
-<p>避免 AI 把”讨论事项”误判为”责任任务”。</p>
-<h3 id="新增数据模型-meeting_notes-task_drafts">新增数据模型
-<code>meeting_notes</code> + <code>task_drafts</code></h3>
-<pre><code>meeting_notes:
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-8-definition-of-done-23">8. Definition of Done</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>阶段</th><th>完成定义</th>
+</tr></thead>
+<tbody><tr>
+<td>阶段 0</td><td>✅ 已完成当前环境验证：登录、Vite fallback、RBAC、<code>role_version</code>、权限管理页面、公网安全门槛清单可验收；正式生产准备推迟到系统整体完善后统一处理</td>
+</tr>
+<tr>
+<td>阶段 1</td><td>✅ 已完成当前环境运行态验收：报价速度接口有数据，三类耗时分区展示，新增真实报价任务可进入统计；正式生产准备推迟到系统整体完善后统一处理</td>
+</tr>
+<tr>
+<td>阶段 2</td><td>代码层已完成：创建报价可自动生成 ClientInquiry，响应看板标注统计边界、起始日期、样本量和低可信数据排除规则；当前环境运行态验收待执行</td>
+</tr>
+<tr>
+<td>阶段 3</td><td>ExecutionTask 可创建、分配、完成、取消；逾期动态计算；Celery beat 开机自启和健康检查可用</td>
+</tr>
+<tr>
+<td>阶段 4a</td><td>纪要生成草稿，人工确认后写入 ExecutionTask，AI 失败可降级手动添加</td>
+</tr>
+<tr>
+<td>阶段 4b</td><td>上传音频后返回转写文本，并自动进入任务草稿流程；精度评测达标</td>
+</tr>
+<tr>
+<td>阶段 4c</td><td>钉钉会议导入进入同一纪要 -&gt; 草稿 -&gt; 任务流程</td>
+</tr>
+<tr>
+<td>阶段 5</td><td>导入后 RAG 评测不低于基线；可按批次追溯和回滚</td>
+</tr>
+<tr>
+<td>阶段 6</td><td>经营数据可导入和回滚；增减项、返工成本、毛利率口径正确；viewer 只能看脱敏汇总</td>
+</tr>
+<tr>
+<td>附录 A</td><td>效果图识别达标，失败可降级，现有文字报价路径无回归</td>
+</tr>
+</tbody>
+</table></div>
+<p>所有新增表、MinIO 对象和文件引用必须纳入备份。阶段 0、阶段 4b、阶段 6 上线前各做一次恢复演练。</p>
+<p>高风险阶段上线前必须补 Runbook：</p>
+<ul><li>Phase 3：执行任务上线 Runbook，覆盖任务创建、钉钉提醒、逾期扫描、权限回滚</li><li>Phase 5：知识批量导入 Runbook，覆盖预览、确认、reload、eval、批次回滚</li><li>Phase 6：经营数据导入 / 回滚 Runbook，覆盖模板、预览、确认、导出水印、权限脱敏、归档统计</li></ul>
+<p>每个看板上线前必须准备 5-10 条验收种子数据，用于验证聚合、空数据、低可信数据、逾期、归档、导出水印和权限脱敏。</p>
+<hr />
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-9-测试要求-24">9. 测试要求</h2>
+<p>最低自动化覆盖：</p>
+<ul><li>RBAC 迁移、角色叠加、撤权旧 token 失效</li><li>钉钉登录二次验证：管理员每次登录验证，当天有效，跨自然日失效</li><li>公网安全门槛配置检查</li><li>ClientInquiry 自动创建和统计边界</li><li><code>time_source='default'</code> 不计入平均响应时长，但计入咨询数量</li><li>今日 / 本周 / 本月 / 当天有效均按 <code>Asia/Shanghai</code> 计算</li><li>Quote retry 继承原 ClientInquiry，不重置响应耗时</li><li>ExecutionTask 逾期动态计算</li><li>状态机禁止转换和重复调用语义</li><li>Feature Flag 依赖矩阵和功能未开启页面</li><li>AI 调用日志不泄露原始敏感内容</li><li>语音转写 mock 成功 / 失败 / 超限</li><li>经营数据导入预览、确认、重复检测、回滚</li><li>合同调整项和返工成本参与毛利率计算</li><li>项目归档默认隐藏但仍计入经营统计</li><li>Excel 导出仅 admin/system_admin 可用，并包含水印字段</li><li>文件访问权限、签名 URL 过期、离职撤权不可访问</li><li>样板图路径不影响文字报价路径</li></ul>
+<hr />
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-10-外部依赖准备-25">10. 外部依赖准备</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>依赖</th><th>用于阶段</th><th>准备内容</th><th>建议启动时间</th>
+</tr></thead>
+<tbody><tr>
+<td>钉钉任务通知 Webhook</td><td>3</td><td>任务通知群、机器人、<code>DINGTALK_TASK_WEBHOOK</code></td><td>Phase 3 前 1 周</td>
+</tr>
+<tr>
+<td>钉钉企业应用</td><td>0 / 4c / 公网</td><td>二次验证、个人 @、会议记录权限</td><td>越早越好</td>
+</tr>
+<tr>
+<td>语音转写 API</td><td>4b</td><td>讯飞 / 阿里云账号、热词、额度、并发限制</td><td>Phase 4a 开始</td>
+</tr>
+<tr>
+<td>经营数据模板</td><td>6</td><td>项目、合同、调整项、回款、成本 Excel 模板</td><td>Phase 6 前</td>
+</tr>
+<tr>
+<td>公网基础设施</td><td>公网前</td><td>域名、HTTPS、反向代理、CORS、CSRF、登录防爆破、文件签名 URL</td><td>公网前至少 1 周</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-11-文档维护-26">11. 文档维护</h2>
+<p>本文件是总控路线图。任何单个主题超过 200 行，必须进入 ADR 或附录，不再继续堆叠到主文档。</p>
+<p>根目录 <code>AGENTS.md</code> / <code>ROADMAP.md</code> 已同步更新，后续以本总控路线图和 ADR/附录为准。</p>
+<hr />
+<h2 id="doc-2026-05-14-ai-platform-upgrade-design-12-变更记录-27">12. 变更记录</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>日期</th><th>变更内容</th><th>操作人</th>
+</tr></thead>
+<tbody><tr>
+<td>2026-05-14</td><td>初版创建</td><td>AI 辅助规划</td>
+</tr>
+<tr>
+<td>2026-05-14</td><td>v2-v12：逐轮补齐 Vite 分批迁移、指标口径、响应追踪、ExecutionTask 命名、逾期动态计算、草稿确认层、知识导入批次追踪、SPA fallback、Celery beat、语音转写、附录 A 等细节</td><td>Codex / Claude / 用户反馈</td>
+</tr>
+<tr>
+<td>2026-05-14</td><td>v13：补充多角色 RBAC、system_admin、经营驾驶舱数据底座、QuoteHistory 与 Project 多对多关系</td><td>Codex 架构补丁</td>
+</tr>
+<tr>
+<td>2026-05-14</td><td>v14：补充 <code>role_version</code>、异步任务边界、导入幂等、经营审计、批次回滚、文档拆分规则</td><td>Codex 架构硬化</td>
+</tr>
+<tr>
+<td>2026-05-14</td><td>v15：补充公网安全门槛、响应统计边界、毛利率口径、文件永久保存、离职撤权不可访问</td><td>用户业务口径 + Codex</td>
+</tr>
+<tr>
+<td>2026-05-14</td><td>v16：按专题拆分为 ADR/附录，并补齐钉钉二次验证、合同调整项、AI 调用治理</td><td>用户确认 + Codex</td>
+</tr>
+<tr>
+<td>2026-05-14</td><td>v17：补齐钉钉登录二验（每次登录、当天有效）、合同调整项确认权限、经营导出控制、AI 原文 7 天游标清理、阶段 0 上线 Runbook</td><td>用户业务口径 + Codex</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v18：补齐容量假设、对象存储演进、项目归档口径、导出水印和 API 契约骨架</td><td>用户业务口径 + Codex</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v19：补齐 staff / manager 查看和更新本人执行任务的权限边界，限制其不得修改负责人、截止时间和来源字段</td><td>Codex</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v20：新增状态机和功能开关矩阵，补齐 HTTP 状态码、动作接口、咨询与报价重试关系、timeout_at、RAG reload/eval、Phase 3/4 解耦和上线 Runbook 说明</td><td>Claude 建议 + Codex</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v21：补齐 Asia/Shanghai 时间口径、自然时间 SLA、空数据与低可信数据展示、Phase 0-2 API Schema 优先级、后续 Runbook 和验收种子数据要求</td><td>Codex</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v22：补齐状态机审计字段统一口径、转写超时引用、PUBLIC_ACCESS_ENABLED 前置清单、导出审计写入 business_events、Phase 0 viewer 访问旧页面边界</td><td>Claude 建议 + Codex</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v23：在状态机中内联转写 timeout_at 公式，将 PUBLIC_ACCESS_ENABLED 前置清单改为前置检查，并明确只分配 viewer / manager 的用户访问旧页面返回 401 / 403 属于预期行为</td><td>Claude 建议 + Codex</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v24：补齐 contracts 状态机、FEATURE_AUDIO_TRANSCRIPTION 对 FEATURE_MEETING_AI 的依赖、用户列表接口字段、钉钉不可用时高安全 break-glass 策略和 Beat 任务调度表</td><td>Claude 建议 + Codex</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v25：明确钉钉验证按 Asia/Shanghai 截止，补 ExecutionTask cancel 动作接口、timeout_at 旧数据回填基准、旧页面迁移准出条件和 project_costs.created_by</td><td>Claude 建议 + Codex</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v26：将 RBAC 中"用户本地自然日"改为 Asia/Shanghai，补合同 sign/archive/cancel 动作接口，并明确 pending_reload 是标记不是 rag_reload 持久状态</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v27：补齐 business_events.entity_type=export、project_costs 修正流程和 cancel 动作、quote_image_analyses timed_out/canceled 同步、AI raw log cleaned 状态与 00:30 清理时间</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v28：将撤权从 DELETE 改为 revoke 动作接口，补合同 signed/archived/cancelled 时间戳、rag_reload 超时机制、break_glass_sessions 模型、图片识别 provider 开关语义和 AI 调用 user_id 归属</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v29：补齐 payments / project_costs 状态机、回款动作接口、钉钉验证过期懒更新、合同作废对回款和调整项的统计排除、图片置信度映射和 rag_reload 调用日志类型</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v30：补齐 business_events signed/archived/unarchived 事件、contract_adjustments confirmed_by/confirmed_at 口径、admin_action_challenges 目标字段类型、会议纪要 revision 权限和 rollback 幂等语义</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v31：补齐墙面层高系数与洞口扣减公式、project_quotes created_at/created_by、import_type 单数命名、合同全文外发高风险操作、challenge 过期懒更新和 viewer 经营汇总白名单</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v32：补齐 users.dingtalk_user_id 字段约束、payment_terms 类型、合同和调整项金额 CHECK、project_costs updated_at 语义、execution_tasks.completed_at 写入规则和 AI 原文对象存储路径</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v33：补齐 quote_image_analyses.model_provider 枚举、视觉模型持续低召回阈值、AI raw log save_failed 与删除失败重试、合同 archived 不回退、反向调整追溯和导入 rollback_failed 状态</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v34：补齐 execution_tasks 取消权限、meeting_notes draft 作废、系统自动审计填充值、project_costs replaces_cost_id、rag_reload 分布式锁、知识候选审批审计、prompt_version 格式和统一脱敏策略</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v35：补齐图片分析重试与文件有效性、confidence_avg 类型、adapter 去重和 notes 保留、RAG eval 状态机、知识状态接口、AI 原文查看接口、钉钉验证边界和公网判定规则</td><td>Codex 判断 + Claude 建议</td>
+</tr>
+<tr>
+<td>2026-05-15</td><td>v36：补齐实现前规格收口：执行任务 PATCH 进度白名单、business_events 导出和回滚失败事件、取消原因统一落审计、AI 原文短链响应体、FEATURE_IMAGE_QUOTE_GLM 矩阵、settings 路由边界、Phase 0 Runbook 字段检查和旧 RAG 方案历史标记</td><td>Codex</td>
+</tr>
+<tr>
+<td>2026-05-18</td><td>v37：记录 Phase 0 开发与当前环境验证完成，Alembic <code>20260514_0011 (head)</code>、RBAC / <code>role_version</code>、Vite 壳、SPA fallback 和当前环境冒烟均通过；正式生产上线待单独 Runbook；Phase 1 随后启动</td><td>Codex</td>
+</tr>
+<tr>
+<td>2026-05-18</td><td>v38：完成 Phase 1 报价速度看板代码层交付，新增 <code>FEATURE_DASHBOARD_QUOTE</code>、<code>/api/v1/admin/dashboard/quote-speed</code>、<code>/admin/dashboard</code> 看板视图与自动化测试；<code>compileall</code>、全量 <code>pytest</code> 和 Vite build 通过；正式生产启用仍待单独 Runbook</td><td>Codex</td>
+</tr>
+<tr>
+<td>2026-05-18</td><td>v39：修复 Phase 1 报价耗时口径，worker 改为写入实测 <code>duration_ms</code>，历史 121 条成功任务 0 耗时已在当前数据库备份后回填，聚合层只读校正旧 <code>finished_at</code> 时区偏移；全量 <code>pytest</code> 更新为 80 passed</td><td>Codex</td>
+</tr>
+<tr>
+<td>2026-05-18</td><td>v40：记录 Phase 1 当前环境运行态验收通过，<code>/admin/dashboard</code> 页面、看板数据和新增真实报价统计均正常；正式生产启用仍待单独 Runbook，Phase 2+ 未启动</td><td>Codex</td>
+</tr>
+<tr>
+<td>2026-05-18</td><td>v41：记录系统完善前不正式投入生产使用；完成 Phase 2 响应速度追踪代码层，新增 <code>client_inquiries</code>、<code>quote_jobs.client_inquiry_id</code>、咨询查询/修正接口、响应速度聚合接口、<code>FEATURE_CLIENT_INQUIRY</code> / <code>FEATURE_DASHBOARD_RESPONSE</code> 和 Vite 响应速度标签页；当前环境 Alembic 已升级到 <code>20260514_0012 (head)</code>，<code>pytest</code> 更新为 85 passed，Phase 3+ 未启动</td><td>Codex</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="doc-adr-rbac" class="doc-section" data-source="ADR-RBAC.md">
+<div class="source-label">来源: ADR-RBAC.md</div>
+<h1 id="doc-adr-rbac-adr-rbac-多角色权限-公网安全与钉钉二次验证-28">ADR-RBAC｜多角色权限、公网安全与钉钉二次验证</h1>
+<blockquote><p>创建日期：2026-05-14 状态：规划中 关联主文档：<a href="#doc-2026-05-14-ai-platform-upgrade-design">2026-05-14-ai-platform-upgrade-design.md</a></p></blockquote>
+<h2 id="doc-adr-rbac-决策摘要-29">决策摘要</h2>
+<p>系统从单字段 <code>users.role</code> 迁移为多角色 RBAC。<code>users.role</code> 仅保留旧页面和旧接口兼容，真实权限以 <code>user_roles</code> 表为准。系统未来可能公网访问，公网开放前必须完成 HTTPS、Cookie、CSRF、防爆破、CORS 白名单、文件鉴权和钉钉二次验证。</p>
+<p>公网访问启用后，<code>system_admin</code> / <code>admin</code> 每次登录都必须通过钉钉二次验证。验证通过后，当天有效；跨自然日或重新登录时必须重新验证。</p>
+<h2 id="doc-adr-rbac-角色模型-30">角色模型</h2>
+<pre><code>user_roles:
 - id, created_at
-- content: 原始纪要文本
-- source: 来源类型（manual / audio / dingtalk）
-- created_by: 录入人
+- user_id: FK -&gt; users.id
+- role: system_admin / admin / staff / manager / viewer
+- created_by: FK -&gt; users.id
+- note: 授权备注
 
-task_drafts:
-- id, meeting_note_id（关联 meeting_notes）
-- title: AI 提取的任务标题
-- suggested_assignee: AI 建议负责人（存储原始名字字符串，非 user_id）
-- suggested_due_at: AI 建议截止时间
-- status: 草稿状态（pending_review / accepted / rejected）
-- accepted_task_id: 确认后关联的 ExecutionTask.id
-
-&gt; `suggested_assignee` 存储 AI 输出的原始文字（如&quot;张总&quot;、&quot;小李&quot;），草稿确认界面展示此字符串，由人工在确认时从下拉列表选择实际 `assignee_id`，**不做自动模糊匹配**——避免&quot;张三&quot;静默错配到&quot;张三丰&quot;，造成任务推送错误。</code></pre>
-<h3 id="任务清单-4">任务清单</h3>
-<ul class="task-list">
-<li><label><input type="checkbox"></input>新增 <code>meeting_notes</code> /
-<code>task_drafts</code> 表 + Alembic migration</label></li>
-<li><label><input type="checkbox"></input>新增接口
-<code>POST /api/v1/meetings</code>（保存纪要 + 触发 AI 提取）</label>
-<ul>
-<li>调用 DeepSeek 解析纪要，返回结构化任务草稿列表</li>
-</ul></li>
-<li><label><input type="checkbox"></input>新增接口
-<code>POST /api/v1/meetings/{id}/confirm-tasks</code>（人工确认后批量写入
-execution_tasks）</label></li>
-<li><label><input type="checkbox"></input>前端执行系统页面：</label>
-<ul>
-<li>富文本会议纪要录入框</li>
-<li>AI 提取结果草稿列表（支持逐条确认、修改、删除）</li>
-<li>一键确认写入正式任务</li>
-</ul></li>
-</ul>
-<h3 id="预期成果-4">预期成果</h3>
-<p>业务员录入一次会议纪要，AI
-自动提取任务草稿，人工二次确认后进入执行追踪，钉钉推送给负责人。</p>
-<hr />
-<h2 id="阶段-4b语音转写接入">阶段 4b｜语音转写接入</h2>
-<p><strong>时间</strong>：第 10-12 周</p>
-<h3 id="任务清单-5">任务清单</h3>
-<ul class="task-list">
-<li><label><input type="checkbox"></input>评估并接入语音转写服务（讯飞实时语音
-API 或阿里云语音识别）</label></li>
-<li><label><input type="checkbox"></input>新增接口
-<code>POST /api/v1/meetings/transcribe</code>（上传音频 →
-返回转写文本）</label></li>
-<li><label><input type="checkbox"></input>转写结果自动进入 AI
-任务提取流程（复用阶段 4a 的逻辑）</label></li>
-<li><label><input type="checkbox"></input>前端：上传录音按钮 +
-转写进度展示</label></li>
-</ul>
-<hr />
-<h2 id="阶段-4c钉钉会议导入待权限就绪">阶段
-4c｜钉钉会议导入（待权限就绪）</h2>
-<p><strong>时间</strong>：第 13 周起，等企业应用权限审批通过后启动</p>
-<blockquote>
-<p>注意：钉钉”读取会议记录”涉及企业应用权限审批，周期不可控。不应让此项卡住主闭环。阶段
-4a 完成后主流程已完整，本阶段是增量自动化。</p>
-</blockquote>
-<h3 id="任务清单-6">任务清单</h3>
-<ul class="task-list">
-<li><label><input type="checkbox"></input>提前申请钉钉企业应用权限（会议记录读取）</label></li>
-<li><label><input type="checkbox"></input>新增接口
-<code>POST /api/v1/meetings/import-dingtalk</code></label></li>
-<li><label><input type="checkbox"></input>拉取结果进入相同的纪要 →
-草稿确认流程</label></li>
-</ul>
-<hr />
-<h2 id="阶段-501-知识库历史数据治理导入">阶段 5｜01
-知识库历史数据治理导入</h2>
-<p><strong>时间</strong>：等工程部提供历史成交数据后启动</p>
-<h3 id="设计原则-2">设计原则</h3>
-<p>历史成交数据结构混杂（材料价格、工艺做法、项目案例、报价策略、地区差异），不能直接导入
-<code>materials</code> 表，必须经过暂存审核和分类治理。</p>
-<h3 id="扩展现有-knowledge_candidates-表支持批次追踪">扩展现有
-<code>knowledge_candidates</code> 表支持批次追踪</h3>
-<p>在现有知识候选字段基础上新增：</p>
-<pre><code>来源追踪字段：
-- source_batch_id: 批次标识（同一次导入共享，用于整批回滚）
-- source_file: 来源文件名
-- source_line: 原始行号/页码
-- data_type: 数据类型（material / technique / case / pricing_sample / risk_rule）
-- confidence: 置信度（0.0-1.0，人工标注或模型输出）
-
-落库目标追踪字段（审核通过后写入）：
-- target_type: 写入目标类型（material / rag_doc / case / pricing_sample）
-- target_id: 写入目标记录 ID
-- snapshot_id: 写入时的材料库快照 ID（关联 materials_audit）</code></pre>
-<blockquote>
-<p>仅有来源（source_batch_id）而没有去向（target_type / target_id /
-snapshot_id），整批回滚时无法精确定位要撤销哪些记录。来源和去向必须同时记录。</p>
-</blockquote>
-<h3 id="任务清单-7">任务清单</h3>
-<ul class="task-list">
-<li><label><input type="checkbox"></input>与工程部确认数据格式（Excel / CSV /
-纸质扫描）</label></li>
-<li><label><input type="checkbox"></input>制定数据模板标准，工程部按模板整理后交付</label></li>
-<li><label><input type="checkbox"></input>如为非结构化格式：用 GLM-4V 或 OCR
-提取结构化字段</label></li>
-<li><label><input type="checkbox"></input>批量导入至
-<code>knowledge_candidates</code>（暂存，不直接入库）</label></li>
-<li><label><input type="checkbox"></input>人工审核分类：分流至 materials /
-案例库 / RAG 文档</label></li>
-<li><label><input type="checkbox"></input>审核完成后触发 RAG
-热更新（<code>/admin/reload</code>）</label></li>
-<li><label><input type="checkbox"></input>执行 RAG
-评测（eval_rag.py），对比导入前后 Hit@K 和 MRR</label></li>
-<li><label><input type="checkbox"></input>如质量下滑，按
-<code>source_batch_id</code> 整批回滚</label></li>
-</ul>
-<h3 id="为什么这么做-4">为什么这么做</h3>
-<p>直接批量写入 materials 会污染现有 70
-条精标数据，且无法追溯问题数据来源。经过暂存→审核→分类的治理流程，发现问题可按批次追溯或整批回滚，知识库质量可控。</p>
-<h3 id="预期成果-5">预期成果</h3>
-<p>知识库从 70 条扩展至数百条真实成交行情，RAG
-检索准确率显著提升，每批数据来源可查、可回滚。</p>
-<hr />
-<h2 id="整体时间线">整体时间线</h2>
-<pre><code>Week 1     Vite 壳 + 登录鉴权统一 + 报价速度接口开发
-Week 2     报价速度看板上线（可演示给管理层）
-Week 3     client_inquiries 模型 + 报价流程嵌入登记
-Week 4     响应速度面板上线
-Week 5     execution_tasks 模型 + 任务 CRUD 接口
-Week 6     执行速度面板上线（驾驶舱三类指标齐全，完整演示）
-Week 7-9   meeting_notes + task_drafts + AI 拆任务 + 草稿确认流程
-Week 10-12 语音转写接入
-Week 13+   钉钉会议导入（等权限）
-等数据到位  知识库历史数据批量治理导入</code></pre>
-<hr />
-<h2 id="技术依赖与风险">技术依赖与风险</h2>
-<table>
-<colgroup>
-<col style="width: 30%" />
-<col style="width: 34%" />
-<col style="width: 34%" />
-</colgroup>
-<thead>
-<tr>
-<th>依赖项</th>
-<th>风险等级</th>
-<th>缓解措施</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Vite 分批迁移</td>
-<td>低</td>
-<td>鉴权层优先统一，旧页面逐步迁移，不影响现有功能</td>
-</tr>
-<tr>
-<td>响应速度手动录入习惯</td>
-<td>中</td>
-<td>嵌入报价流程，降低录入成本至接近零</td>
-</tr>
-<tr>
-<td>DeepSeek 任务拆解质量</td>
-<td>中</td>
-<td>草稿确认层兜底，AI 误判不会直接入库</td>
-</tr>
-<tr>
-<td>讯飞/阿里云语音 API</td>
-<td>低</td>
-<td>商业 API，接入文档成熟，风险可控</td>
-</tr>
-<tr>
-<td>钉钉企业应用权限</td>
-<td>高</td>
-<td>提前申请，不等此项上线主闭环</td>
-</tr>
-<tr>
-<td>工程部历史数据质量</td>
-<td>高</td>
-<td>先定数据模板标准，交付前对齐格式，批次追踪支持整批回滚</td>
-</tr>
-</tbody>
-</table>
-<hr />
-<h2 id="实施保障">实施保障</h2>
-<blockquote>
-<p>本章不扩展功能范围，只明确权限、接口规范、事件追踪、验收标准、回滚开关、测试要求和外部依赖，防止实施阶段跑偏。</p>
-</blockquote>
-<h3 id="权限矩阵">1. 权限矩阵</h3>
-<p>系统目前只有 admin /
-普通用户两个角色，无法满足新模块的访问控制需求。需在 <code>users</code>
-表新增 <code>role</code> 字段（枚举：<code>admin</code> /
-<code>staff</code> / <code>manager</code> / <code>viewer</code>），通过
-Alembic migration 将现有 <code>is_admin=true</code> 迁移为
-<code>role=&#39;admin&#39;</code>，其余迁移为 <code>role=&#39;staff&#39;</code>。</p>
-<table>
-<colgroup>
-<col style="width: 8%" />
-<col style="width: 9%" />
-<col style="width: 22%" />
-<col style="width: 30%" />
-<col style="width: 29%" />
-</colgroup>
-<thead>
-<tr>
-<th>功能</th>
-<th style="text-align: center;">admin</th>
-<th style="text-align: center;">staff（业务员）</th>
-<th style="text-align: center;">manager（项目负责人）</th>
-<th style="text-align: center;">viewer（管理层只读）</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>创建 / 取消报价任务</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅ 自己</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-</tr>
-<tr>
-<td>查看报价任务</td>
-<td style="text-align: center;">✅ 全部</td>
-<td style="text-align: center;">✅ 自己</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-</tr>
-<tr>
-<td>创建 ClientInquiry</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-</tr>
-<tr>
-<td>查看 ClientInquiry</td>
-<td style="text-align: center;">✅ 全部</td>
-<td style="text-align: center;">✅ 自己</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-</tr>
-<tr>
-<td>手动创建 ExecutionTask</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-</tr>
-<tr>
-<td>查看 ExecutionTask</td>
-<td style="text-align: center;">✅ 全部</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">✅ 分配给自己的</td>
-<td style="text-align: center;">❌</td>
-</tr>
-<tr>
-<td>更新 ExecutionTask</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">✅ 分配给自己的</td>
-<td style="text-align: center;">❌</td>
-</tr>
-<tr>
-<td>取消 ExecutionTask</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-</tr>
-<tr>
-<td>录入会议纪要 / 确认草稿任务</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">❌</td>
-</tr>
-<tr>
-<td>查看驾驶舱</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">✅</td>
-</tr>
-<tr>
-<td>管理知识库 / 用户</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-</tr>
-</tbody>
-</table>
-<h3 id="用户与钉钉账号映射">2. 用户与钉钉账号映射</h3>
-<p>任务推送若只往群发消息，负责人很容易忽略。需要绑定个人钉钉账号才能 @
-到人。</p>
-<p><strong>新增字段</strong>：<code>users.dingtalk_user_id</code>（VARCHAR
-64, nullable），Alembic migration 新增。</p>
-<p><strong>推送路由策略（分阶段演进）</strong>： - <strong>阶段
-3</strong>：统一推送到任务专用群
-Webhook（<code>DINGTALK_TASK_WEBHOOK</code>，与报价推送群
-<code>DINGTALK_WEBHOOK</code>
-物理分离），消息内含负责人姓名，但**不做个人 <span class="citation" data-cites="*">@*</span>* - <strong>阶段 4c
-后</strong>（企业应用权限到位）：有 <code>dingtalk_user_id</code>
-的用户改发 ActionCard 并 <span class="citation" data-cites="负责人">@负责人</span>；无绑定的仍走群消息 - 推送失败：60
-秒后重试一次；仍失败则写入
-<code>execution_task_events</code>（event_type=push_failed）并继续，不阻断任务创建
-- 推送记录：每次推送无论成功失败均写入
-<code>execution_task_events</code></p>
-<blockquote>
-<p>新增配置项 <code>DINGTALK_TASK_WEBHOOK</code>，区别于现有报价推送用的
-<code>DINGTALK_WEBHOOK</code>。</p>
-</blockquote>
-<h3 id="事件流水表">3. 事件流水表</h3>
-<p><code>execution_task_events</code> 已在阶段 3 中列出。对称补充
-<code>client_inquiry_events</code>：</p>
-<pre><code>client_inquiry_events:
+user_role_events:
 - id, created_at
-- inquiry_id:   外键 → client_inquiries.id
-- event_type:   created | responded | converted | abandoned | note_added | push_failed
-- operator_id:  外键 → users.id（NULL 表示系统自动触发）
-- notes:        备注</code></pre>
-<p>统一原则：事件只追加不修改，event_type 枚举固定，operator_id=NULL
-表示系统自动动作。</p>
-<h3 id="阶段验收标准definition-of-done">4. 阶段验收标准（Definition of
-Done）</h3>
-<table>
-<colgroup>
-<col style="width: 40%" />
-<col style="width: 60%" />
-</colgroup>
-<thead>
-<tr>
-<th>阶段</th>
-<th>完成定义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>阶段 0</td>
-<td><code>/login</code> 可正常登录；旧
-<code>/index.html</code>、<code>/admin.html</code> 仍可访问；刷新
-<code>/admin/dashboard</code> 不出现 FastAPI 404</td>
+- target_user_id: FK -&gt; users.id
+- role: system_admin / admin / staff / manager / viewer
+- action: granted / revoked
+- operator_id: FK -&gt; users.id
+- ip_address
+- user_agent
+- trace_id
+- note: 备注</code></pre>
+<p><code>users.role_version</code> 为整数，默认 1。每次授予、撤销角色或禁用账号时递增。JWT / Cookie 会话中写入 <code>role_version</code>，后端鉴权时与数据库比对，不一致则返回 401。</p>
+<p>首次迁移由 <code>.env</code> 指定 <code>SYSTEM_ADMIN_USERNAME</code>，默认 <code>admin</code>。该账号自动获得 <code>system_admin + admin</code>。若账号不存在，迁移必须失败，不允许系统进入无人可管理状态。</p>
+<p>允许多个 <code>system_admin</code>，但必须满足以下约束：</p>
+<ul><li>只有 <code>system_admin</code> 可以授予或撤销 <code>system_admin</code></li><li>授予或撤销 <code>system_admin</code> 必须存在当天有效的钉钉登录验证</li><li>授权和撤权必须填写 <code>note</code>，并写入 <code>user_role_events</code></li><li>禁止撤销最后一个 <code>system_admin</code></li><li>禁止禁用最后一个 <code>system_admin</code></li><li>唯一 <code>system_admin</code> 不能自我降权</li></ul>
+<h2 id="doc-adr-rbac-权限矩阵-31">权限矩阵</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>功能</th><th>system_admin</th><th>admin</th><th>staff</th><th>manager</th><th>viewer</th>
+</tr></thead>
+<tbody><tr>
+<td>管理用户角色 / 功能开关 / 运维状态</td><td>是</td><td>否</td><td>否</td><td>否</td><td>否</td>
 </tr>
 <tr>
-<td>阶段 1</td>
-<td><code>GET /api/v1/admin/dashboard/quote-speed</code>
-有数据；管理员看到三类耗时分区趋势折线图</td>
+<td>创建 / 取消报价任务</td><td>是</td><td>是</td><td>自己</td><td>否</td><td>否</td>
 </tr>
 <tr>
-<td>阶段 2</td>
-<td>创建报价任务时自动生成 ClientInquiry
-记录；响应速度面板标注数据起始日期且不为空</td>
+<td>查看报价任务</td><td>全部</td><td>全部</td><td>自己</td><td>否</td><td>否</td>
 </tr>
 <tr>
-<td>阶段 3</td>
-<td>ExecutionTask
-可创建、分配、完成、取消；逾期动态计算与数据库一致；Celery beat 已纳入
-<code>start_all.ps1</code>；钉钉推送在分配后可发出</td>
+<td>创建 ClientInquiry</td><td>是</td><td>是</td><td>是</td><td>否</td><td>否</td>
 </tr>
 <tr>
-<td>阶段 4a</td>
-<td>录入会议纪要后生成草稿列表；确认后 ExecutionTask
-正确写入；钉钉推送给负责人成功</td>
+<td>查看 ClientInquiry</td><td>全部</td><td>全部</td><td>自己</td><td>否</td><td>否</td>
 </tr>
 <tr>
-<td>阶段 4b</td>
-<td>上传音频后返回转写文本，自动进入草稿提取流程</td>
+<td>手动创建 ExecutionTask</td><td>是</td><td>是</td><td>否</td><td>否</td><td>否</td>
 </tr>
 <tr>
-<td>阶段 5</td>
-<td>批量导入后 RAG 评测 Hit@K ≥ 导入前基线；每条来源可追溯到
-source_batch_id</td>
-</tr>
-</tbody>
-</table>
-<h3 id="功能开关与回滚策略">5. 功能开关与回滚策略</h3>
-<p>新功能上线出问题时可快速关闭，不影响现有报价系统。在
-<code>.env</code> 中新增以下开关（默认
-<code>false</code>，逐阶段上线后置 <code>true</code>）：</p>
-<pre><code>FEATURE_DASHBOARD=false         # 驾驶舱面板（阶段 1-3）
-FEATURE_CLIENT_INQUIRY=false    # 响应速度追踪（阶段 2）
-FEATURE_EXECUTION=false         # 执行任务模块（阶段 3-4）
-FEATURE_MEETING_AI=false        # AI 会议纪要提取（阶段 4a）
-FEATURE_VITE_FRONTEND=false     # Vite 新前端（阶段 0，稳定后置 true）</code></pre>
-<p>开关在启动时读取，修改需重启服务。未启用的功能接口返回
-<code>HTTP 503 Feature not enabled</code>，前端路由守卫同步屏蔽对应入口。</p>
-<h3 id="测试清单">6. 测试清单</h3>
-<p>遵循现有测试规范（pytest + SQLite 测试库，不访问真实外部服务，mock
-Webhook）：</p>
-<p><strong>后端最小覆盖</strong>： -
-<code>execution_tasks</code>：status 非法值拒绝；逾期动态计算（有 due_at
-无 completed_at → overdue；有 completed_at → not overdue） -
-<code>client_inquiries</code>：创建报价任务时自动生成记录；inquiry_time
-默认为创建时间；first_response_time 自动填入 - 权限边界：staff 创建
-ExecutionTask → 403；manager 更新他人任务 → 403；viewer 访问非驾驶舱接口
-→ 403 - 驾驶舱聚合：有报价记录时三类耗时接口返回非空且分区数据 -
-钉钉推送：mock Webhook，验证调用时机与 payload 结构；推送失败后写入
-event_type=push_failed - <code>client_inquiries</code>
-状态自动流转：创建报价任务后 <code>status</code> 自动置为
-<code>responded</code>，<code>first_response_time</code>
-自动写入当前时间；<code>confirm_push</code> 成功后 <code>status</code>
-自动置为
-<code>converted</code>（两个流转均需自动化测试，不只做手工验收）</p>
-<p><strong>业务流手工验收</strong>： - 创建报价 → ClientInquiry 自动生成
-→ 响应速度看板统计更新 - 会议纪要录入 → AI 草稿生成 → 人工确认选择负责人
-→ ExecutionTask 写入 → 钉钉推送 - 逾期场景：due_at 设为近未来 → Celery
-beat 触发 → 验证钉钉提醒发出且 event 记录写入</p>
-<h3 id="数据字典枚举值固化">7. 数据字典（枚举值固化）</h3>
-<p>所有枚举值在后端 Pydantic schema 中定义为 <code>Literal</code>
-类型，前端从同名常量文件读取，禁止字符串硬编码散落在业务代码中。</p>
-<pre><code>client_inquiries.source:
-  wechat | phone | onsite | referral | other
-
-client_inquiries.status:
-  pending | responded | converted | abandoned
-  状态转移：
-    pending     → responded:  报价任务创建时系统自动置（first_response_time 同步写入）
-    responded   → converted:  confirm_push 成功后系统自动置
-    pending/responded → abandoned: 手动 PATCH status=abandoned
-
-execution_tasks.source:
-  meeting | quote | manual
-
-execution_tasks.status:
-  pending | in_progress | done | cancelled
-
-execution_tasks.priority:
-  low | normal | urgent
-
-task_drafts.status:
-  pending_review | accepted | rejected
-
-meeting_notes.source:
-  manual | audio | dingtalk
-
-knowledge_candidates.data_type:
-  material | technique | case | pricing_sample | risk_rule
-
-knowledge_candidates.target_type:
-  material | rag_doc | case | pricing_sample
-
-users.role:
-  admin | staff | manager | viewer</code></pre>
-<h3 id="外部依赖准备清单">8. 外部依赖准备清单</h3>
-<table>
-<colgroup>
-<col style="width: 15%" />
-<col style="width: 23%" />
-<col style="width: 28%" />
-<col style="width: 31%" />
-</colgroup>
-<thead>
-<tr>
-<th>依赖</th>
-<th>用于阶段</th>
-<th>需准备内容</th>
-<th>建议启动时间</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>钉钉任务通知 Webhook</td>
-<td>3</td>
-<td>建”任务通知”专用群、创建机器人、获取
-<code>DINGTALK_TASK_WEBHOOK</code> URL</td>
-<td>Phase 3 开始前 1 周</td>
+<td>查看 ExecutionTask</td><td>全部</td><td>全部</td><td>分配给自己的</td><td>分配给自己的</td><td>否</td>
 </tr>
 <tr>
-<td>语音转写 API（讯飞 / 阿里云）</td>
-<td>4b</td>
-<td>注册账号、实名认证、申请
-AppID/Secret、充值测试额度、确认并发限制</td>
-<td>Phase 4a 开始时（提前 2 周）</td>
+<td>更新 ExecutionTask</td><td>是</td><td>是</td><td>分配给自己的进度 / 备注</td><td>分配给自己的进度 / 备注</td><td>否</td>
 </tr>
 <tr>
-<td>钉钉企业应用（会议记录权限）</td>
-<td>4c</td>
-<td>企业管理员审批、提交应用审核材料、准备测试会议样本、确认 API
-调用频率限制</td>
-<td>Phase 4a 开始时（审批周期不可控，越早越好）</td>
+<td>取消 ExecutionTask</td><td>是</td><td>是</td><td>否</td><td>否</td><td>否</td>
+</tr>
+<tr>
+<td>录入会议纪要 / 确认草稿任务</td><td>是</td><td>是</td><td>是</td><td>是</td><td>否</td>
+</tr>
+<tr>
+<td>查看效率驾驶舱</td><td>是</td><td>是</td><td>否</td><td>否</td><td>是</td>
+</tr>
+<tr>
+<td>查看经营驾驶舱</td><td>是</td><td>是</td><td>否</td><td>否</td><td>是</td>
+</tr>
+<tr>
+<td>查看 / 下载合同、录音、效果图附件</td><td>全部</td><td>全部</td><td>自己报价相关效果图</td><td>分配给自己的任务录音</td><td>否</td>
+</tr>
+<tr>
+<td>管理知识库</td><td>是</td><td>是</td><td>否</td><td>否</td><td>否</td>
 </tr>
 </tbody>
-</table>
-<hr />
-<h2 id="变更记录">变更记录</h2>
-<table>
-<colgroup>
-<col style="width: 26%" />
-<col style="width: 39%" />
-<col style="width: 34%" />
-</colgroup>
-<thead>
-<tr>
-<th>日期</th>
-<th>变更内容</th>
-<th>操作人</th>
+</table></div>
+<p>权限取所有角色的并集。例如 <code>staff + manager</code> 既可创建报价，也可更新分配给自己的执行任务。后端不得只读取单个 <code>users.role</code> 判断权限。</p>
+<p>普通员工和 manager 更新分配给自己的 <code>ExecutionTask</code> 时，只能更新进度类字段，例如 <code>status</code>、<code>completed_at</code>、<code>notes</code>。不得修改 <code>assignee_id</code>、<code>due_at</code>、<code>source</code>、<code>source_ref_id</code> 等分配与来源字段，避免员工绕过管理分派。</p>
+<p>Phase 3 前尚无执行任务入口，<code>manager</code> 与 <code>staff</code> 在实际业务能力上差异很小。权限管理页面必须提示：“manager 角色将在执行任务功能上线后生效”。<code>viewer</code> 也可能在看板开关开启前没有可见页面，权限页面应展示每个角色当前可用模块和待上线模块。</p>
+<h2 id="doc-adr-rbac-钉钉登录二次验证-32">钉钉登录二次验证</h2>
+<p>公网访问启用后，<code>system_admin</code> / <code>admin</code> 每次登录都必须通过钉钉二次验证。仅靠 Webhook 机器人不能证明操作者身份，因此二次验证必须基于钉钉企业应用 OAuth / 扫码 / 免登能力，或企业应用发送的可回调确认动作。</p>
+<p>验证有效期：</p>
+<ul><li>登录时完成钉钉验证后，当前会话获得 <code>dingtalk_verified_until</code></li><li>有效期到用户本地自然日结束（建议 23:59:59）</li><li>跨自然日后继续使用后台时，必须重新钉钉验证</li><li>用户主动退出登录后，本次会话失效；再次登录仍需钉钉验证</li><li>撤销角色、禁用账号或递增 <code>users.role_version</code> 后，钉钉验证状态同时失效</li></ul>
+<p>建议数据模型：</p>
+<pre><code>admin_login_verifications:
+- id, created_at
+- user_id: FK -&gt; users.id
+- dingtalk_user_id
+- verified_at
+- verified_until
+- login_session_id
+- ip_address
+- user_agent
+- trace_id
+- status: active / expired / revoked</code></pre>
+<p>公网访问前，所有 <code>system_admin</code> / <code>admin</code> 必须绑定 <code>users.dingtalk_user_id</code>。未绑定钉钉账号的管理员不得通过公网入口登录后台。</p>
+<h2 id="doc-adr-rbac-高风险操作-33">高风险操作</h2>
+<p>高风险操作包括：</p>
+<ul><li>授予或撤销角色，尤其是 <code>system_admin</code> / <code>admin</code></li><li>修改功能开关</li><li>启用 <code>PUBLIC_ACCESS_ENABLED</code></li><li>导出合同、回款、客户明细</li><li>下载合同文件、会议录音</li><li>批次导入确认、批次回滚</li><li>删除或物理清理文件对象</li></ul>
+<p>高风险操作默认复用当天有效的钉钉登录验证，不再每次操作单独验证，避免操作过重。但每次高风险操作必须写入审计事件，记录 <code>operator_id</code>、<code>dingtalk_user_id</code>、<code>verified_at</code>、<code>action_type</code>、目标对象、IP、user agent 和 <code>trace_id</code>。</p>
+<p>若后续某类操作风险升高，可再引入单次操作挑战。预留模型如下：</p>
+<pre><code>admin_action_challenges:
+- id, created_at, expires_at
+- challenge_id: UUID
+- user_id: FK -&gt; users.id
+- action_type: grant_role / revoke_role / export_business_data / download_contract / rollback_import / enable_public_access / delete_file
+- target_type, target_id
+- status: pending / verified / expired / cancelled
+- dingtalk_user_id
+- verified_at
+- metadata_json
+- trace_id</code></pre>
+<p>单次操作挑战有效期建议 5 分钟。同一挑战必须校验 <code>challenge_id</code>、用户、动作类型和目标对象一致，不能用一次验证复用到不同操作。</p>
+<h2 id="doc-adr-rbac-公网访问安全门槛-34">公网访问安全门槛</h2>
+<p><code>PUBLIC_ACCESS_ENABLED=false</code> 为默认值。设置为 true 前必须满足：</p>
+<ul><li>全站 HTTPS，禁止公网明文 HTTP 登录</li><li>Cookie 设置 <code>HttpOnly</code> / <code>Secure</code> / <code>SameSite=Lax</code> 或更严格</li><li>Vite 新前端优先使用 HttpOnly Cookie 会话</li><li>旧页面兼容期允许 Bearer JWT + localStorage，但公网入口不得长期依赖 localStorage</li><li>POST / PATCH / DELETE 启用 CSRF 校验</li><li>登录接口启用失败次数限制、短时锁定、审计日志</li><li>CORS 使用白名单，禁止 <code>*</code></li><li>文件下载、音频播放、合同预览必须走后端鉴权和短时签名 URL</li></ul>
+<h2 id="doc-adr-rbac-对象存储演进-35">对象存储演进</h2>
+<p>当前阶段可继续使用本地 MinIO，后续文件对象迁移到阿里云 OSS 或腾讯云 COS。业务代码不得直接依赖 MinIO SDK，应通过统一 <code>file_storage</code> 抽象访问对象存储。</p>
+<p>要求：</p>
+<ul><li><code>file_objects</code> 存储逻辑文件 ID、bucket、object key、provider、content_type、size、checksum</li><li>下载统一走后端鉴权，再生成短时签名 URL</li><li>provider 可取 <code>minio</code> / <code>aliyun_oss</code> / <code>tencent_cos</code></li><li>迁移对象存储时不改变业务表中的 <code>file_object_id</code></li><li>备份策略必须同时覆盖数据库元数据和对象文件</li></ul>
+<h2 id="doc-adr-rbac-文件与离职访问-36">文件与离职访问</h2>
+<p>合同、录音、效果图默认永久保存。员工离职时撤销其所有 <code>user_roles</code> 或设置账号禁用，并递增 <code>users.role_version</code>，旧 JWT / Cookie 会话立即失效。</p>
+<p>文件访问策略：</p>
+<ul><li>合同文件：仅 <code>admin</code> / <code>system_admin</code> 可查看明细和下载</li><li>录音文件：会议创建人、任务负责人、<code>admin</code> / <code>system_admin</code> 可访问</li><li>效果图：按报价任务归属和报价权限访问</li><li>viewer 不可下载合同、录音或客户敏感附件</li></ul>
+<h2 id="doc-adr-rbac-验收要求-37">验收要求</h2>
+<ul><li>撤销角色后旧 token 请求返回 401</li><li>纯 staff 访问 admin 接口返回 403</li><li>staff / manager 更新他人任务返回 403</li><li>staff / manager 修改自己任务的 <code>assignee_id</code> / <code>due_at</code> 返回 403</li><li>viewer 访问明细列表和合同下载返回 403</li><li><code>PUBLIC_ACCESS_ENABLED=true</code> 时，缺 HTTPS / CSRF / CORS 白名单 / 钉钉绑定任一条件，启动失败或健康检查 degraded</li><li><code>system_admin</code> / <code>admin</code> 公网登录未通过钉钉二次验证时返回 403</li><li>钉钉登录验证跨自然日后自动失效</li><li>高风险操作缺少当天有效钉钉验证时返回 403</li><li>禁止撤销、禁用或自我降权导致系统没有任何 <code>system_admin</code></li><li>Phase 0 权限页面提示 manager / viewer 的当前可用模块和待上线模块</li></ul>
+</section>
+<section id="doc-adr-business-dashboard" class="doc-section" data-source="ADR-Business-Dashboard.md">
+<div class="source-label">来源: ADR-Business-Dashboard.md</div>
+<h1 id="doc-adr-business-dashboard-adr-business-dashboard-经营驾驶舱数据底座-38">ADR-Business-Dashboard｜经营驾驶舱数据底座</h1>
+<blockquote><p>创建日期：2026-05-14 状态：规划中 关联主文档：<a href="#doc-2026-05-14-ai-platform-upgrade-design">2026-05-14-ai-platform-upgrade-design.md</a></p></blockquote>
+<h2 id="doc-adr-business-dashboard-决策摘要-39">决策摘要</h2>
+<p>经营驾驶舱分阶段建设。当前先建立项目、报价关联、合同、回款、成本、合同调整项和审计数据底座，支持手工录入与 Excel 导入。后续若接入财务软件或合同系统，只替换采集方式，不改变核心模型。</p>
+<p>报价单不能直接等同合同或项目。真实业务中可能出现多个报价合并成一个项目，也可能一个报价拆成多个项目，因此 <code>QuoteHistory</code> 与 <code>Project</code> 使用 <code>project_quotes</code> 多对多关系。</p>
+<h2 id="doc-adr-business-dashboard-数据模型-40">数据模型</h2>
+<pre><code>projects:
+- id, created_at, updated_at
+- project_name
+- client_name, client_phone
+- status: lead / active / completed / cancelled
+- archived_at: nullable
+- owner_id: FK -&gt; users.id
+- notes
+
+project_quotes:
+- id
+- project_id: FK -&gt; projects.id
+- quote_history_id: FK -&gt; quote_history.id
+- relation_type: primary / alternative / partial / merged
+- allocation_amount: Numeric(12,2), nullable
+- allocation_ratio: Numeric(8,4), nullable
+- notes
+
+contracts:
+- id, created_at, updated_at
+- project_id: FK -&gt; projects.id
+- contract_no: unique
+- contract_amount: Numeric(12,2)
+- signed_at
+- payment_terms
+- file_object_id: FK -&gt; file_objects.file_id, nullable
+- status: draft / signed / archived / cancelled
+
+contract_adjustments:
+- id, created_at, updated_at
+- project_id: FK -&gt; projects.id
+- contract_id: FK -&gt; contracts.id
+- adjustment_type: add_item / deduction / discount / change_order
+- amount: Numeric(12,2), positive
+- reason
+- created_by: FK -&gt; users.id
+- approved_by: FK -&gt; users.id, nullable
+- confirmed_at
+- file_object_id: FK -&gt; file_objects.file_id, nullable
+- status: draft / confirmed / cancelled
+
+payments:
+- id, created_at, updated_at
+- project_id: FK -&gt; projects.id
+- contract_id: FK -&gt; contracts.id
+- amount: Numeric(12,2)
+- due_at
+- paid_at: nullable
+- status: pending / paid / cancelled
+- notes
+
+project_costs:
+- id, created_at, updated_at
+- project_id: FK -&gt; projects.id
+- cost_type: material / labor / subcontract / rework / other
+- amount: Numeric(12,2)
+- occurred_at
+- related_adjustment_id: FK -&gt; contract_adjustments.id, nullable
+- status: active / cancelled
+- notes
+
+business_events:
+- id, created_at
+- entity_type: project / contract / contract_adjustment / payment / cost / import_batch
+- entity_id
+- event_type: created / updated / cancelled / imported / import_confirmed / import_rolled_back / confirmed
+- operator_id: FK -&gt; users.id, nullable
+- before_json, after_json
+- ip_address
+- user_agent
+- trace_id
+- notes
+
+business_import_batches:
+- id, created_at, updated_at
+- batch_id: unique
+- import_type: projects / contracts / contract_adjustments / payments / costs
+- source_file
+- status: preview / confirmed / cancelled / rolled_back
+- row_count
+- error_count
+- created_by: FK -&gt; users.id</code></pre>
+<h2 id="doc-adr-business-dashboard-合同调整项口径-41">合同调整项口径</h2>
+<p>增项、减项、优惠、签证和合同修正必须单独追踪，不直接覆盖 <code>contracts.contract_amount</code>。原因是老板后续会关心合同变化过程，直接改合同金额会丢失经营解释。</p>
+<p>调整项金额统一存正数，正负方向由 <code>adjustment_type</code> 决定：</p>
+<ul><li><code>add_item</code>：加合同额</li><li><code>change_order</code>：加合同额，适用于签证或确认变更</li><li><code>deduction</code>：减合同额</li><li><code>discount</code>：减合同额</li></ul>
+<p>只有 <code>status=&#x27;confirmed&#x27;</code> 的调整项进入经营指标。<code>draft</code> 和 <code>cancelled</code> 不参与计算。</p>
+<p>当前阶段确认权限先放给 <code>admin</code> / <code>system_admin</code>，后续再结合业务审批流细化。<code>staff</code> 可提出草稿但不得确认；<code>viewer</code> 不可创建或确认。</p>
+<p>状态规则：</p>
+<ul><li><code>draft</code>：草稿，可修改</li><li><code>confirmed</code>：已确认，进入有效合同金额；确认后不得直接修改金额，如需变更，新增一条反向调整项</li><li><code>cancelled</code>：已作废，不进入指标；作废必须填写原因并写入 <code>business_events</code></li></ul>
+<p>附件规则：增项、签证、减项或优惠如有书面凭证，应上传 <code>file_object_id</code>。当前阶段不强制上传附件，但确认时必须填写 <code>reason</code>。</p>
+<p>动作接口：</p>
+<ul><li><code>POST /api/v1/contract-adjustments/{id}/confirm</code>：仅 <code>admin</code> / <code>system_admin</code> 可用；确认后金额锁定，写入 <code>business_events</code></li><li><code>POST /api/v1/contract-adjustments/{id}/cancel</code>：仅 <code>admin</code> / <code>system_admin</code> 可用；<code>reason</code> 必填，写入 <code>business_events</code></li><li>普通 <code>PATCH /api/v1/contract-adjustments/{id}</code> 仅用于编辑 <code>draft</code>，不得承担 confirm / cancel 语义</li><li>已 <code>confirmed</code> 再次 confirm 返回当前对象；已 <code>cancelled</code> 后 confirm 返回 409</li></ul>
+<p>有效合同金额：</p>
+<pre><code class="language-text">base_contract_amount = sum(contracts.contract_amount where status in signed, archived)
+confirmed_additions = sum(contract_adjustments.amount where type in add_item, change_order and status=confirmed)
+confirmed_deductions = sum(contract_adjustments.amount where type in deduction, discount and status=confirmed)
+effective_contract_amount = base_contract_amount + confirmed_additions - confirmed_deductions</code></pre>
+<h2 id="doc-adr-business-dashboard-成本与返工-42">成本与返工</h2>
+<p>返工成本常见，使用 <code>project_costs.cost_type=&#x27;rework&#x27;</code> 单独追踪，不另建返工表。若返工与某个变更单相关，可写入 <code>related_adjustment_id</code>。</p>
+<p>有效成本：</p>
+<pre><code class="language-text">effective_cost = sum(project_costs.amount where status=&#x27;active&#x27;)</code></pre>
+<h2 id="doc-adr-business-dashboard-毛利与回款口径-43">毛利与回款口径</h2>
+<p>毛利润按合同金额口径计算，不按实际回款计算。</p>
+<pre><code class="language-text">gross_profit = effective_contract_amount - effective_cost
+gross_margin = gross_profit / effective_contract_amount</code></pre>
+<p>回款只用于现金流、回款率和逾期应收，不参与毛利计算。</p>
+<pre><code class="language-text">paid_amount = sum(payments.amount where status=&#x27;paid&#x27;)
+collection_rate = paid_amount / effective_contract_amount
+overdue_receivable = sum(payments.amount where due_at &lt; now and paid_at is null and status=&#x27;pending&#x27;)</code></pre>
+<p>税费暂不拆分，合同金额按录入金额原样统计。若财务后续要求不含税口径，再新增税额 / 不含税金额字段。</p>
+<h2 id="doc-adr-business-dashboard-项目归档规则-44">项目归档规则</h2>
+<p>项目完成后可归档。归档不是删除，也不改变经营统计口径。</p>
+<ul><li><code>projects.status=&#x27;completed&#x27;</code> 表示项目已完成</li><li><code>projects.archived_at IS NOT NULL</code> 表示已归档</li><li>默认列表、默认项目看板隐藏已归档项目</li><li>经营驾驶舱汇总统计仍计入已归档项目</li><li>明细查询提供 <code>include_archived=true</code> 参数</li><li>归档和取消归档都必须写入 <code>business_events</code></li></ul>
+<p>动作接口：</p>
+<ul><li><code>POST /api/v1/projects/{id}/archive</code>：设置 <code>archived_at</code>，写入 <code>business_events</code></li><li><code>POST /api/v1/projects/{id}/unarchive</code>：清空 <code>archived_at</code>，写入 <code>business_events</code></li><li>已归档项目再次 archive 返回当前对象；未归档项目再次 unarchive 返回当前对象</li><li>普通 <code>PATCH /api/v1/projects/{id}</code> 不承担归档 / 取消归档语义</li></ul>
+<p>这样既保持老板看经营总账时数字完整，也避免日常操作界面被已完结项目干扰。</p>
+<h2 id="doc-adr-business-dashboard-导入与审计-45">导入与审计</h2>
+<p>Excel / CSV 导入必须先生成预览，不得直接落库。每次导入生成 <code>batch_id</code>，支持重复导入检测、确认、取消和回滚。</p>
+<p>经营数据所有创建、修改、取消、导入确认、回滚都写入 <code>business_events</code>。事件只追加不修改。审计事件必须包含 <code>operator_id</code>、<code>ip_address</code>、<code>user_agent</code>、<code>trace_id</code> 和变更前后快照。</p>
+<h2 id="doc-adr-business-dashboard-权限-脱敏与导出-46">权限、脱敏与导出</h2>
+<p>viewer 可以看经营汇总、项目排行和员工效率排行，但不得看到客户姓名、手机号、合同文件、合同明细、回款明细。viewer 不得绕过驾驶舱聚合接口直接访问 <code>contracts</code> / <code>payments</code> 明细。</p>
+<p>合同文件下载属于高风险操作，公网访问时 admin / system_admin 需通过钉钉二次验证。</p>
+<p>经营数据和合同明细导出 Excel 仅允许 <code>admin</code> / <code>system_admin</code>，viewer 不提供脱敏版明细导出。原因是脱敏导出仍可能通过项目名称、金额、时间组合反推出客户和经营信息。</p>
+<p>导出要求：</p>
+<ul><li>导出必须写入 <code>business_events</code> 或专用 <code>export_events</code></li><li>记录导出人、角色、导出类型、筛选条件、行数、IP、时间</li><li>公网访问时，导出前必须存在当天有效的钉钉登录验证</li><li>导出文件必须带水印字段：导出人、导出时间、导出用途、系统名称</li><li>导出文件不长期保存在服务器，生成后短时有效；如需留存，作为 <code>file_objects</code> 受权限控制</li></ul>
+<h2 id="doc-adr-business-dashboard-关键索引-47">关键索引</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>表</th><th>索引字段</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td>projects</td><td><code>(status, created_at)</code></td><td>项目状态聚合</td>
 </tr>
-</thead>
-<tbody>
 <tr>
-<td>2026-05-14</td>
-<td>初版创建</td>
-<td>AI 辅助规划</td>
+<td>projects</td><td><code>(archived_at, status)</code></td><td>默认隐藏归档项目</td>
 </tr>
 <tr>
-<td>2026-05-14</td>
-<td>v2 更新：Vite 分批迁移策略、ClientInquiry
-嵌入报价流程、ExecutionTask
-命名、逾期动态计算、草稿确认层、知识导入批次追踪、指标口径定义</td>
-<td>Codex 审查 + Claude 确认</td>
+<td>project_quotes</td><td><code>(project_id, quote_history_id)</code></td><td>多对多关联</td>
 </tr>
 <tr>
-<td>2026-05-14</td>
-<td>v3 更新：修正 QuoteJob 字段（无 started_at，使用
-duration_ms）、人工确认耗时口径（confirmed_at fallback
-QuoteHistory）、ClientInquiry SLA 拆分动态计算、ExecutionTask
-无硬删除、知识导入新增落库目标追踪字段（target_type/target_id/snapshot_id）、Vite
-SPA fallback 路由配置</td>
-<td>Codex 审查 v3 + Claude 确认</td>
+<td>contracts</td><td><code>(contract_no)</code> UNIQUE</td><td>合同编号幂等</td>
 </tr>
 <tr>
-<td>2026-05-14</td>
-<td>v4 更新：ClientInquiry.first_response_time
-改为报价任务创建时自动写入（创建即代表接单）；阶段 3
-新增钉钉任务推送通知（复用现有 Webhook，无需企业权限）、Celery beat
-逾期扫描与钉钉提醒、可选 execution_task_events 审计表</td>
-<td>Codex 审查 v4 + Claude 确认</td>
+<td>contracts</td><td><code>(project_id, signed_at)</code></td><td>签约统计</td>
 </tr>
 <tr>
-<td>2026-05-14</td>
-<td>v5
-更新：新增”实施保障”章节（权限矩阵、用户钉钉映射、事件流水表、验收标准、功能开关、测试清单、数据字典、外部依赖准备清单）；修正
-SLA 阈值存储策略、ClientInquiry 历史数据边界标注、Celery beat
-为独立进程说明、Phase 4a suggested_assignee 不做自动模糊匹配</td>
-<td>Codex 审查 v5 + Claude 确认</td>
+<td>contract_adjustments</td><td><code>(contract_id, status, adjustment_type)</code></td><td>有效调整项统计</td>
 </tr>
 <tr>
-<td>2026-05-14</td>
-<td>v6 更新：① 人工确认耗时主口径改为
-<code>QuoteHistory.created_at</code>，移除 QuoteFeedback
-fallback，添加注3；② 阶段 3 钉钉推送明确为群消息，个人 @ ActionCard
-延至阶段 4c，与实施保障第 2 节对齐；③ Celery beat
-展开运维三件套（start_all.ps1 / 任务计划程序 / health 探活）；④ 阶段 0
-新增权限迁移任务，拆分 Week 1（鉴权层）/ Week
-2（看板），补充最小交付物定义；⑤ execution_tasks 新增 priority
-字段及枚举；⑥ 阶段 1 补充冷启动数据提示逻辑；⑦ 测试清单补充
-ClientInquiry 状态自动流转测试</td>
-<td>用户反馈 + Claude 审查</td>
+<td>payments</td><td><code>(project_id, due_at, paid_at, status)</code></td><td>回款与逾期</td>
+</tr>
+<tr>
+<td>project_costs</td><td><code>(project_id, status, occurred_at, cost_type)</code></td><td>有效成本</td>
+</tr>
+<tr>
+<td>business_events</td><td><code>(entity_type, entity_id, created_at)</code></td><td>审计追踪</td>
+</tr>
+<tr>
+<td>business_import_batches</td><td><code>(batch_id)</code> UNIQUE</td><td>导入幂等</td>
 </tr>
 </tbody>
-</table>
+</table></div>
+<h2 id="doc-adr-business-dashboard-验收要求-48">验收要求</h2>
+<ul><li>一个报价可拆到多个项目，一个项目可合并多个报价</li><li>拆分 / 合并时记录 <code>allocation_amount</code> 或 <code>allocation_ratio</code></li><li>增项、减项、优惠、签证单独记录，不直接覆盖原合同金额</li><li>当前阶段 <code>admin</code> / <code>system_admin</code> 可确认合同调整项；确认后不得直接改金额</li><li>合同调整项 confirm / cancel 使用独立动作接口，cancel 必须填写 reason</li><li>毛利率按 <code>effective_contract_amount - effective_cost</code> 计算</li><li>返工成本可按 <code>cost_type=&#x27;rework&#x27;</code> 单独统计</li><li>viewer 只能看到脱敏汇总，访问合同 / 回款明细返回 403</li><li>经营数据和合同明细导出仅允许 admin / system_admin，并写入审计事件</li><li>导出 Excel 带水印字段：导出人、导出时间、导出用途、系统名称</li><li>项目归档后默认列表隐藏，但经营统计仍计入</li><li>项目 archive / unarchive 使用独立动作接口并写审计</li><li>导入支持预览、确认、重复检测和批次回滚</li></ul>
+</section>
+<section id="doc-adr-ai-governance" class="doc-section" data-source="ADR-AI-Governance.md">
+<div class="source-label">来源: ADR-AI-Governance.md</div>
+<h1 id="doc-adr-ai-governance-adr-ai-governance-ai-调用治理-脱敏与可追溯-49">ADR-AI-Governance｜AI 调用治理、脱敏与可追溯</h1>
+<blockquote><p>创建日期：2026-05-14 状态：规划中 关联主文档：<a href="#doc-2026-05-14-ai-platform-upgrade-design">2026-05-14-ai-platform-upgrade-design.md</a></p></blockquote>
+<h2 id="doc-adr-ai-governance-决策摘要-50">决策摘要</h2>
+<p>系统会调用 DeepSeek、GLM、讯飞 / 阿里云、RAG 服务等 AI 或外部智能服务。会议纪要、录音转写、效果图、历史成交数据和报价上下文可能包含客户信息、价格、合同内容。必须在设计阶段明确数据外发、日志保留、脱敏和复盘策略。</p>
+<p>默认策略：保存结构化摘要和可追溯元数据，不长期保存原始输入输出。原始输入输出只在调试期开启，当前默认保留 7 天，后续可按需要调整，但最长不超过 30 天，并仅允许 <code>system_admin</code> 查看。</p>
+<h2 id="doc-adr-ai-governance-原始输入输出-的定义-51">“原始输入输出”的定义</h2>
+<p>AI 调用原始输入输出指每次模型调用时系统发送给模型的完整内容，以及模型返回的完整内容。</p>
+<p>例子：</p>
+<ul><li>会议纪要拆任务：输入 = 系统 Prompt + 会议纪要文本；输出 = AI 提取的任务 JSON</li><li>效果图识别：输入 = 图片引用 + 识别 Prompt；输出 = 识别出的材料清单</li><li>报价优化：输入 = 用户需求 + RAG 检索结果 + Prompt；输出 = AI 报价建议</li><li>语音转写：输入 = 音频文件；输出 = 转写文本</li></ul>
+<p>这些原文可能包含客户姓名、手机号、地址、合同金额、工程价格、录音文本，因此不能无边界长期保存。</p>
+<h2 id="doc-adr-ai-governance-数据外发规则-52">数据外发规则</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>数据类型</th><th>可否发外部 AI</th><th>要求</th>
+</tr></thead>
+<tbody><tr>
+<td>普通报价需求</td><td>可以</td><td>去除非必要手机号、身份证、详细地址</td>
+</tr>
+<tr>
+<td>RAG 检索片段</td><td>可以</td><td>仅发送报价需要的片段，不发送整库</td>
+</tr>
+<tr>
+<td>会议纪要</td><td>可以</td><td>尽量脱敏客户手机号、身份证、详细地址</td>
+</tr>
+<tr>
+<td>会议录音</td><td>可以发转写服务</td><td>仅用于转写，不用于模型训练；优先选择企业服务条款明确的供应商</td>
+</tr>
+<tr>
+<td>效果图 / 样板图</td><td>可以</td><td>不附带客户身份信息</td>
+</tr>
+<tr>
+<td>合同文件全文</td><td>默认不发</td><td>需 system_admin 审批并记录审计</td>
+</tr>
+<tr>
+<td>回款 / 成本明细</td><td>默认不发</td><td>只允许汇总或脱敏摘要进入 AI</td>
+</tr>
+<tr>
+<td>历史成交数据</td><td>可以治理导入</td><td>先进入 <code>knowledge_candidates</code>，不得直接污染材料库</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="doc-adr-ai-governance-调用日志模型-53">调用日志模型</h2>
+<p>优先扩展现有 <code>model_call_logs</code>，如字段不足再新增 <code>ai_invocations</code>。统一记录：</p>
+<pre><code>ai_invocations / model_call_logs:
+- id, created_at
+- task_type: quote / meeting_extract / transcription / image_analysis / rag_eval / prompt_regression
+- provider: deepseek / zhipu / iflytek / aliyun / rag_service / other
+- model_name
+- prompt_version
+- username
+- source_ref_type, source_ref_id
+- input_summary
+- output_summary
+- input_sha256
+- output_sha256
+- raw_input_object_id: nullable
+- raw_output_object_id: nullable
+- latency_ms
+- status: succeeded / failed / timed_out / canceled
+- error_message
+- token_usage_json
+- ip_address
+- user_agent
+- trace_id</code></pre>
+<p><code>input_summary</code> / <code>output_summary</code> 用于长期保留。<code>raw_input_object_id</code> / <code>raw_output_object_id</code> 仅在调试期开启。</p>
+<h2 id="doc-adr-ai-governance-原文保留策略-54">原文保留策略</h2>
+<p>配置项：</p>
+<pre><code class="language-env">AI_RAW_LOG_ENABLED=false
+AI_RAW_LOG_RETENTION_DAYS=7
+AI_RAW_LOG_MAX_RETENTION_DAYS=30</code></pre>
+<p>规则：</p>
+<ul><li>默认不保存原始输入输出，只保存摘要、hash、模型信息、耗时、错误</li><li>调试期可开启 <code>AI_RAW_LOG_ENABLED=true</code></li><li>原文存储到受权限保护的对象存储，不直接写入普通日志文件</li><li>原文默认 7 天自动清理，最长 30 天</li><li>原文查看仅限 <code>system_admin</code>，公网访问时需钉钉二次验证</li><li>清理任务只删除原文对象，保留摘要和 hash，便于后续证明调用发生过</li></ul>
+<h2 id="doc-adr-ai-governance-原文清理任务-55">原文清理任务</h2>
+<p>新增 Celery beat 定时任务 <code>cleanup_ai_raw_logs</code>，每天凌晨执行一次。</p>
+<p>清理规则：</p>
+<ul><li>读取 <code>AI_RAW_LOG_RETENTION_DAYS</code>，当前默认 7 天</li><li>删除超过保留期的 <code>raw_input_object_id</code> / <code>raw_output_object_id</code> 对应对象</li><li>将记录中的 <code>raw_input_object_id</code> / <code>raw_output_object_id</code> 置空或标记为 cleaned</li><li>保留 <code>input_summary</code>、<code>output_summary</code>、<code>input_sha256</code>、<code>output_sha256</code>、模型信息、耗时、错误信息</li><li>每次清理写入审计日志：清理数量、失败数量、开始时间、结束时间</li><li>清理失败不得影响主业务，但 <code>/health/ready</code> 或运维看板应能看到最近一次清理状态</li></ul>
+<p>如果 <code>AI_RAW_LOG_ENABLED=false</code>，清理任务仍可运行，但只处理历史遗留原文对象。</p>
+<h2 id="doc-adr-ai-governance-prompt-版本与复盘-56">Prompt 版本与复盘</h2>
+<p>所有 AI 功能必须有 <code>prompt_version</code>。Prompt 修改后需能比较修改前后的指标。</p>
+<p>最低要求：</p>
+<ul><li>会议任务拆解记录 prompt_version 和任务提取成功率</li><li>效果图识别记录 prompt_version、召回率、精确率</li><li>RAG 评测记录 Hit@K、MRR、评测集版本</li><li>报价优化记录 DIFY / workflow / prompt 版本</li></ul>
+<h2 id="doc-adr-ai-governance-脱敏规则-57">脱敏规则</h2>
+<p>进入 AI 前尽量脱敏：</p>
+<ul><li>手机号保留前三后四，中间替换为 <code>****</code></li><li>身份证、银行卡、详细住址默认删除</li><li>合同文件和回款明细默认只传摘要</li><li>客户姓名如非必要，替换为“客户”</li></ul>
+<p>脱敏不应破坏报价必需信息。例如面积、材料、工艺、地区差异、合同金额、成本金额在经营分析中可能必要，但发送给通用大模型时优先使用聚合摘要。</p>
+<h2 id="doc-adr-ai-governance-验收要求-58">验收要求</h2>
+<ul><li>每类 AI 调用都能追溯 provider、model_name、prompt_version、耗时、状态</li><li>默认关闭原文保存时，日志中无完整会议纪要、合同全文、手机号明文</li><li>开启原文保存后，原文对象 7 天后被清理</li><li><code>cleanup_ai_raw_logs</code> 每日运行并记录清理数量</li><li>system_admin 以外角色无法查看原文</li><li>合同文件全文发外部 AI 前必须有审计事件</li><li>Prompt 修改后可按版本对比质量指标</li></ul>
+</section>
+<section id="doc-adr-asyncjob" class="doc-section" data-source="ADR-AsyncJob.md">
+<div class="source-label">来源: ADR-AsyncJob.md</div>
+<h1 id="doc-adr-asyncjob-adr-asyncjob-后台异步任务边界-59">ADR-AsyncJob｜后台异步任务边界</h1>
+<blockquote><p>创建日期：2026-05-14 状态：规划中 关联主文档：<a href="#doc-2026-05-14-ai-platform-upgrade-design">2026-05-14-ai-platform-upgrade-design.md</a></p></blockquote>
+<h2 id="doc-adr-asyncjob-决策摘要-60">决策摘要</h2>
+<p><code>ExecutionTask</code> 表示人要完成的业务任务，<code>AsyncJob</code> 表示系统后台异步任务。两者必须分清，避免把 Celery 后台任务、报价任务、会议待办混在同一个概念里。</p>
+<p>当前阶段允许语音转写临时复用 <code>quote_jobs + job_type</code>，因为它与报价任务状态机完全一致。若非报价类异步任务超过 2 类，或需要统一任务中心展示所有后台任务，再新增 <code>async_jobs</code> / <code>async_job_events</code>。</p>
+<p>阶段 4 的会议任务确认依赖阶段 3 的 <code>execution_tasks</code> schema，但不依赖 <code>FEATURE_EXECUTION=true</code>。<code>FEATURE_EXECUTION</code> 控制独立任务管理 UI，<code>FEATURE_MEETING_AI</code> 控制会议纪要到任务的写入流程。</p>
+<h2 id="doc-adr-asyncjob-当前策略-61">当前策略</h2>
+<p><code>quote_jobs.job_type</code>：</p>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>job_type</th><th>含义</th>
+</tr></thead>
+<tbody><tr>
+<td>quote</td><td>现有报价异步任务</td>
+</tr>
+<tr>
+<td>transcription</td><td>语音转写任务</td>
+</tr>
+</tbody>
+</table></div>
+<p>状态机复用现有状态：</p>
+<pre><code class="language-text">queued -&gt; running -&gt; succeeded / failed / timed_out / canceled</code></pre>
+<p>转写查询接口使用 <code>quote_jobs.job_id</code> UUID，不暴露内部整数 id。</p>
+<h2 id="doc-adr-asyncjob-超时策略-62">超时策略</h2>
+<p>新增 <code>quote_jobs.timeout_at</code>，创建异步任务时写入任务自己的超时时间，不在扫描时临时用统一阈值计算。</p>
+<p>建议配置：</p>
+<pre><code class="language-env">QUOTE_JOB_TIMEOUT_MINUTES=30
+IMAGE_ANALYSIS_TIMEOUT_MINUTES=30
+TRANSCRIPTION_DEFAULT_TIMEOUT_MINUTES=240
+TRANSCRIPTION_MIN_TIMEOUT_MINUTES=60
+TRANSCRIPTION_MAX_TIMEOUT_MINUTES=480</code></pre>
+<p>转写任务如能读取音频时长：</p>
+<pre><code class="language-text">timeout_minutes = clamp(audio_duration_minutes * 3 + 30, min=60, max=480)
+timeout_at = created_at + timeout_minutes</code></pre>
+<p>如无法读取音频时长，使用 <code>TRANSCRIPTION_DEFAULT_TIMEOUT_MINUTES=240</code>。</p>
+<p>Alembic 要求：</p>
+<ul><li><code>ALTER TABLE quote_jobs ADD timeout_at</code></li><li>建议索引：<code>(job_type, status, timeout_at)</code></li><li>旧的 <code>queued</code> / <code>running</code> 数据按 <code>job_type</code> 回填默认 <code>timeout_at</code></li><li>已处于终态的数据可为空或按历史完成时间回填</li></ul>
+<h2 id="doc-adr-asyncjob-超时扫描任务-63">超时扫描任务</h2>
+<p>主流程使用 Celery beat 定时执行 <code>mark_async_job_timeouts</code>：</p>
+<pre><code class="language-text">status IN (&#x27;queued&#x27;, &#x27;running&#x27;) AND timeout_at &lt; now()</code></pre>
+<p>该任务必须按 <code>job_type</code> 写入对应错误信息，并保持幂等。已处于终态的任务不得再次修改。</p>
+<p>旧接口 <code>POST /api/v1/admin/quote/jobs/mark_timeouts</code> 保留为 <code>admin</code> 手动兜底，不再作为主流程。它必须复用 <code>mark_async_job_timeouts</code> 的同一服务函数，不得绕过 <code>timeout_at</code> 和状态机判断。稳定后可标记 deprecated，但 v20 不直接删除。</p>
+<h2 id="doc-adr-asyncjob-未来-async-jobs-结构-64">未来 async_jobs 结构</h2>
+<pre><code>async_jobs:
+- job_id: UUID 字符串
+- job_type: quote / transcription / image_analysis / rag_eval / import / prompt_regression
+- owner_user_id
+- status: queued / running / succeeded / failed / timed_out / canceled
+- stage
+- progress
+- source_ref_type, source_ref_id
+- result_json
+- error_message
+- celery_task_id
+- timeout_at
+- created_at, started_at, finished_at
+
+async_job_events:
+- job_id
+- event_type
+- message
+- payload_json
+- created_at</code></pre>
+<p>触发拆表条件：</p>
+<ul><li>非报价类异步任务超过 2 类</li><li>管理员需要统一任务中心</li><li>不同 job_type 状态机出现明显分叉</li><li>需要跨模块统一取消、重试、优先级调度</li></ul>
+<h2 id="doc-adr-asyncjob-celery-beat-健康检查-65">Celery beat 健康检查</h2>
+<p>阶段 3 的逾期提醒、<code>mark_async_job_timeouts</code>、<code>cleanup_ai_raw_logs</code> 都依赖 Celery beat。beat 必须是独立进程，运维三件套同步落地：</p>
+<ul><li><code>start_all.ps1</code> 启动 beat</li><li>Windows 任务计划程序注册 <code>AI_MiddleOffice_CeleryBeat</code></li><li><code>/health/ready</code> 检查 Redis heartbeat key</li></ul>
+<p>heartbeat 方案：</p>
+<pre><code class="language-text">beat 每 60 秒写入 celery_beat_alive
+TTL = 90 秒
+/health/ready 检查 key 是否存在</code></pre>
+<p>选择 Redis heartbeat 而非 PID 文件，是因为 PID 文件只能证明进程曾经启动，不能证明调度循环仍在工作。</p>
+<h2 id="doc-adr-asyncjob-验收要求-66">验收要求</h2>
+<ul><li>报价任务和转写任务均可按 <code>job_type</code> 查询</li><li>转写状态值与报价任务状态值一致</li><li>不同 <code>job_type</code> 使用不同 <code>timeout_at</code>，2 小时录音不会被 30 分钟报价阈值误杀</li><li><code>mark_async_job_timeouts</code> 自动标记超时，旧 <code>mark_timeouts</code> 接口仅作为手动兜底</li><li>beat 重启后能自动恢复</li><li><code>/health/ready</code> 能发现 beat 不工作</li><li>未来新增 <code>async_jobs</code> 时，旧 <code>quote_jobs</code> 仍保持兼容</li></ul>
+</section>
+<section id="doc-api-contracts" class="doc-section" data-source="API-CONTRACTS.md">
+<div class="source-label">来源: API-CONTRACTS.md</div>
+<h1 id="doc-api-contracts-api-contracts-升级路线新增接口契约骨架-67">API-CONTRACTS｜升级路线新增接口契约骨架</h1>
+<blockquote><p>创建日期：2026-05-15 状态：规划中 关联主文档：<a href="#doc-2026-05-14-ai-platform-upgrade-design">2026-05-14-ai-platform-upgrade-design.md</a></p></blockquote>
+<h2 id="doc-api-contracts-目标-68">目标</h2>
+<p>本文件固定新增接口的命名、权限、功能开关、错误码和重复调用边界。实施时每个接口必须补齐请求体、响应体、分页、排序和测试用例。</p>
+<h2 id="doc-api-contracts-通用响应-69">通用响应</h2>
+<p>继续沿用现有 <code>api_ok</code> / <code>api_page</code> 响应风格。</p>
+<p>错误响应必须包含稳定错误码：</p>
+<pre><code class="language-json">{
+  &quot;ok&quot;: false,
+  &quot;error_code&quot;: &quot;PERMISSION_DENIED&quot;,
+  &quot;message&quot;: &quot;无权限访问&quot;,
+  &quot;trace_id&quot;: &quot;...&quot;
+}</code></pre>
+<h2 id="doc-api-contracts-http-状态码与错误码-70">HTTP 状态码与错误码</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>HTTP</th><th>error_code</th><th>场景</th><th>前端动作</th>
+</tr></thead>
+<tbody><tr>
+<td>401</td><td>AUTH_REQUIRED</td><td>未登录或登录过期</td><td>清会话并跳转登录</td>
+</tr>
+<tr>
+<td>401</td><td>ROLE_VERSION_EXPIRED</td><td>角色变更、账号禁用或旧 token 缺少 <code>role_version</code></td><td>清会话，提示重新登录</td>
+</tr>
+<tr>
+<td>403</td><td>DINGTALK_VERIFY_REQUIRED</td><td>需要钉钉登录二次验证</td><td>弹钉钉验证流程，不清登录态</td>
+</tr>
+<tr>
+<td>403</td><td>PERMISSION_DENIED</td><td>权限不足</td><td>显示无权限</td>
+</tr>
+<tr>
+<td>403</td><td>FILE_ACCESS_DENIED</td><td>文件无权访问</td><td>显示文件无权访问</td>
+</tr>
+<tr>
+<td>403</td><td>FEATURE_DISABLED</td><td>功能开关未开启</td><td>显示“功能未开启”</td>
+</tr>
+<tr>
+<td>404</td><td>RESOURCE_NOT_FOUND</td><td>资源不存在</td><td>显示不存在或返回列表</td>
+</tr>
+<tr>
+<td>409</td><td>IMPORT_DUPLICATE_DETECTED</td><td>导入重复数据</td><td>显示重复导入提示</td>
+</tr>
+<tr>
+<td>409</td><td>STATE_CONFLICT</td><td>状态机不允许该动作</td><td>显示当前状态不可操作</td>
+</tr>
+<tr>
+<td>422</td><td>VALIDATION_ERROR</td><td>请求参数非法</td><td>显示字段错误</td>
+</tr>
+<tr>
+<td>502</td><td>AI_PARSE_FAILED</td><td>AI 输出解析失败</td><td>显示 AI 结果异常</td>
+</tr>
+<tr>
+<td>502</td><td>TRANSCRIPTION_FAILED</td><td>语音转写失败</td><td>显示转写失败</td>
+</tr>
+<tr>
+<td>503</td><td>AI_PROVIDER_UNAVAILABLE</td><td>AI / RAG / 转写服务不可用</td><td>显示服务暂不可用</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="doc-api-contracts-阶段-0-权限与登录-71">阶段 0：权限与登录</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>接口</th><th>方法</th><th>权限</th><th>功能开关</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td><code>/api/v1/auth/login</code></td><td>POST</td><td>公开</td><td>无</td><td>登录；公网 admin/system_admin 需钉钉二验</td>
+</tr>
+<tr>
+<td><code>/api/v1/auth/me</code></td><td>GET</td><td>登录</td><td>无</td><td>返回 <code>roles</code>、兼容 <code>role</code>、<code>role_version</code></td>
+</tr>
+<tr>
+<td><code>/api/v1/admin/users/{id}/roles</code></td><td>POST</td><td>system_admin</td><td>无</td><td>授予角色</td>
+</tr>
+<tr>
+<td><code>/api/v1/admin/users/{id}/roles/{role}</code></td><td>DELETE</td><td>system_admin</td><td>无</td><td>撤销角色</td>
+</tr>
+<tr>
+<td><code>/api/v1/admin/users/{id}/role-events</code></td><td>GET</td><td>system_admin</td><td>无</td><td>查看授权历史</td>
+</tr>
+<tr>
+<td><code>/api/v1/auth/dingtalk/verify</code></td><td>POST</td><td>admin/system_admin</td><td>PUBLIC_ACCESS_ENABLED</td><td>钉钉登录二次验证</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="doc-api-contracts-阶段-1-报价速度看板-72">阶段 1：报价速度看板</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>接口</th><th>方法</th><th>权限</th><th>功能开关</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td><code>/api/v1/admin/dashboard/quote-speed</code></td><td>GET</td><td>admin / system_admin / viewer</td><td>FEATURE_DASHBOARD_QUOTE</td><td>报价速度聚合</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="doc-api-contracts-阶段-2-响应速度-73">阶段 2：响应速度</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>接口</th><th>方法</th><th>权限</th><th>功能开关</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td><code>/api/v1/admin/dashboard/response-speed</code></td><td>GET</td><td>admin / system_admin / viewer</td><td>FEATURE_DASHBOARD_RESPONSE</td><td>响应速度聚合</td>
+</tr>
+<tr>
+<td><code>/api/v1/quote/jobs</code></td><td>POST</td><td>staff / admin / system_admin</td><td>既有报价开关</td><td>创建报价时可附带咨询来源字段</td>
+</tr>
+<tr>
+<td><code>/api/v1/client-inquiries</code></td><td>GET</td><td>staff / admin / system_admin</td><td>FEATURE_CLIENT_INQUIRY</td><td>查询咨询记录；staff 仅自己的</td>
+</tr>
+<tr>
+<td><code>/api/v1/client-inquiries/{id}</code></td><td>PATCH</td><td>staff / admin / system_admin</td><td>FEATURE_CLIENT_INQUIRY</td><td>修正来源、客户信息、首次响应时间；staff 仅自己的</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>ClientInquiry</code> 表示一次业务咨询，<code>QuoteJob</code> 表示一次技术报价尝试。报价任务基础参数和文件基础校验通过后创建或复用 <code>ClientInquiry</code>；请求不合法、用户未授权或附件完全不可读时不创建。AI / RAG / N8N 后续失败不删除咨询记录。</p>
+<p><code>QuoteJob</code> 重试时继承原 <code>client_inquiry_id</code>、<code>inquiry_time</code>、<code>time_source</code> 和来源字段，不创建新的 <code>ClientInquiry</code>。</p>
+<h2 id="doc-api-contracts-阶段-3-执行任务-74">阶段 3：执行任务</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>接口</th><th>方法</th><th>权限</th><th>功能开关</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td><code>/api/v1/execution-tasks</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_EXECUTION</td><td>创建任务</td>
+</tr>
+<tr>
+<td><code>/api/v1/execution-tasks</code></td><td>GET</td><td>admin / system_admin / staff / manager</td><td>FEATURE_EXECUTION</td><td>列表查询，staff / manager 仅分配给自己的</td>
+</tr>
+<tr>
+<td><code>/api/v1/execution-tasks/{id}</code></td><td>PATCH</td><td>admin / system_admin / staff / manager</td><td>FEATURE_EXECUTION</td><td>更新任务；staff / manager 仅自己的进度和备注</td>
+</tr>
+<tr>
+<td><code>/api/v1/admin/dashboard/execution-speed</code></td><td>GET</td><td>admin / system_admin / viewer</td><td>FEATURE_DASHBOARD_EXECUTION</td><td>执行速度聚合</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>staff</code> / <code>manager</code> 更新自己任务时，仅允许修改 <code>status</code>、<code>completed_at</code>、<code>notes</code>。修改负责人、截止时间、来源字段必须由 <code>admin</code> / <code>system_admin</code> 完成。</p>
+<h2 id="doc-api-contracts-阶段-4-会议与转写-75">阶段 4：会议与转写</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>接口</th><th>方法</th><th>权限</th><th>功能开关</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td><code>/api/v1/meetings</code></td><td>POST</td><td>staff / manager / admin / system_admin</td><td>FEATURE_MEETING_AI</td><td>保存纪要并触发 AI 提取</td>
+</tr>
+<tr>
+<td><code>/api/v1/meetings/{id}</code></td><td>PATCH</td><td>创建人 / admin / system_admin</td><td>FEATURE_MEETING_AI</td><td>草稿阶段更正纪要并重新提取</td>
+</tr>
+<tr>
+<td><code>/api/v1/meetings/{id}/revisions</code></td><td>POST</td><td>创建人 / admin / system_admin</td><td>FEATURE_MEETING_AI</td><td>已确认后创建 revision，不覆盖原纪要</td>
+</tr>
+<tr>
+<td><code>/api/v1/meetings/{id}/confirm-tasks</code></td><td>POST</td><td>staff / manager / admin / system_admin</td><td>FEATURE_MEETING_AI</td><td>确认草稿写入任务</td>
+</tr>
+<tr>
+<td><code>/api/v1/meetings/transcribe</code></td><td>POST</td><td>staff / manager / admin / system_admin</td><td>FEATURE_AUDIO_TRANSCRIPTION</td><td>上传音频转写</td>
+</tr>
+<tr>
+<td><code>/api/v1/meetings/transcribe/{job_id}</code></td><td>GET</td><td>登录且有权限</td><td>FEATURE_AUDIO_TRANSCRIPTION</td><td>查询转写任务</td>
+</tr>
+<tr>
+<td><code>/api/v1/meetings/import-dingtalk</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_MEETING_AI</td><td>钉钉会议导入</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>confirm-tasks</code> 依赖 <code>execution_tasks</code> 表已存在，但不受 <code>FEATURE_EXECUTION=false</code> 阻断；该开关只控制独立任务管理 UI 和任务 CRUD 入口。</p>
+<h2 id="doc-api-contracts-阶段-5-知识导入-76">阶段 5：知识导入</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>接口</th><th>方法</th><th>权限</th><th>功能开关</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td><code>/api/v1/admin/knowledge/import/preview</code></td><td>POST</td><td>admin / system_admin</td><td>无</td><td>知识导入预览</td>
+</tr>
+<tr>
+<td><code>/api/v1/admin/knowledge/import/confirm</code></td><td>POST</td><td>admin / system_admin</td><td>无</td><td>确认导入到 candidates；成功后触发 RAG reload</td>
+</tr>
+<tr>
+<td><code>/api/v1/admin/knowledge/import/{batch_id}/rollback</code></td><td>POST</td><td>admin / system_admin</td><td>无</td><td>批次回滚</td>
+</tr>
+</tbody>
+</table></div>
+<p>批次 confirm 后如有数据进入 <code>materials</code> 或 RAG 文档，自动 enqueue <code>rag_reload</code>。<code>rag_reload</code> 成功后自动 enqueue <code>rag_eval</code>，结果写入评测报告。reload / eval 失败不回滚导入，但必须告警并在知识库页面显示待处理状态。</p>
+<h2 id="doc-api-contracts-阶段-6-经营数据-77">阶段 6：经营数据</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>接口</th><th>方法</th><th>权限</th><th>功能开关</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td><code>/api/v1/admin/dashboard/business</code></td><td>GET</td><td>admin / system_admin / viewer</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>经营汇总，viewer 脱敏</td>
+</tr>
+<tr>
+<td><code>/api/v1/projects</code></td><td>POST/GET/PATCH</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>项目管理</td>
+</tr>
+<tr>
+<td><code>/api/v1/projects/{id}/archive</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>归档项目，写审计</td>
+</tr>
+<tr>
+<td><code>/api/v1/projects/{id}/unarchive</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>取消归档，写审计</td>
+</tr>
+<tr>
+<td><code>/api/v1/contracts</code></td><td>POST/GET/PATCH</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>合同管理</td>
+</tr>
+<tr>
+<td><code>/api/v1/contract-adjustments</code></td><td>POST/GET/PATCH</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>增减项 / 优惠 / 签证</td>
+</tr>
+<tr>
+<td><code>/api/v1/contract-adjustments/{id}/confirm</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>确认调整项，金额锁定</td>
+</tr>
+<tr>
+<td><code>/api/v1/contract-adjustments/{id}/cancel</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>作废调整项，<code>reason</code> 必填</td>
+</tr>
+<tr>
+<td><code>/api/v1/payments</code></td><td>POST/GET/PATCH</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>回款管理</td>
+</tr>
+<tr>
+<td><code>/api/v1/project-costs</code></td><td>POST/GET/PATCH</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>成本管理</td>
+</tr>
+<tr>
+<td><code>/api/v1/business/import/preview</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>经营数据导入预览</td>
+</tr>
+<tr>
+<td><code>/api/v1/business/import/confirm</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>导入确认</td>
+</tr>
+<tr>
+<td><code>/api/v1/business/import/{batch_id}/rollback</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>批次回滚</td>
+</tr>
+<tr>
+<td><code>/api/v1/business/export</code></td><td>POST</td><td>admin / system_admin</td><td>FEATURE_DASHBOARD_BUSINESS</td><td>导出 Excel，必须水印和审计</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="doc-api-contracts-附录-a-样板图报价-78">附录 A：样板图报价</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>接口</th><th>方法</th><th>权限</th><th>功能开关</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td><code>/api/v1/quote/analyze-image</code></td><td>POST</td><td>staff / admin / system_admin</td><td>FEATURE_IMAGE_QUOTE</td><td>上传效果图识别</td>
+</tr>
+<tr>
+<td><code>/api/v1/quote/analyze-image/{id}</code></td><td>GET</td><td>登录且有权限</td><td>FEATURE_IMAGE_QUOTE</td><td>查询识别结果</td>
+</tr>
+<tr>
+<td><code>/api/v1/quote/analyze-image/{id}/events</code></td><td>GET</td><td>登录且有权限</td><td>FEATURE_IMAGE_QUOTE</td><td>SSE 进度</td>
+</tr>
+<tr>
+<td><code>/api/v1/quote/build-materials-table</code></td><td>POST</td><td>staff / admin / system_admin</td><td>FEATURE_IMAGE_QUOTE</td><td>面积 -&gt; 需求表</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="doc-api-contracts-导出水印-79">导出水印</h2>
+<p>经营数据和合同明细导出的 Excel 必须包含水印字段：</p>
+<ul><li>导出人</li><li>导出时间</li><li>导出用途</li><li>系统名称</li><li>trace_id</li></ul>
+<p>导出操作必须写审计事件，公网访问时必须存在当天有效的钉钉登录验证。</p>
+<h2 id="doc-api-contracts-重复调用语义-80">重复调用语义</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>动作</th><th>重复调用</th><th>冲突场景</th>
+</tr></thead>
+<tbody><tr>
+<td><code>contract-adjustments/{id}/confirm</code></td><td>已 confirmed 返回 <code>200 + 当前对象</code></td><td>cancelled 后 confirm 返回 409</td>
+</tr>
+<tr>
+<td><code>contract-adjustments/{id}/cancel</code></td><td>已 cancelled 返回 <code>200 + 当前对象</code></td><td>缺少 <code>reason</code> 返回 422</td>
+</tr>
+<tr>
+<td><code>projects/{id}/archive</code></td><td>已归档返回 <code>200 + 当前对象</code></td><td>无</td>
+</tr>
+<tr>
+<td><code>projects/{id}/unarchive</code></td><td>未归档返回 <code>200 + 当前对象</code></td><td>无</td>
+</tr>
+<tr>
+<td><code>business/import/confirm</code></td><td>已 confirmed 返回 <code>200 + 已确认结果</code></td><td>rolled_back 后 confirm 返回 409</td>
+</tr>
+<tr>
+<td><code>business/import/{batch_id}/rollback</code></td><td>已 rolled_back 返回 <code>200 + 当前结果</code></td><td>preview 状态 rollback 返回 409</td>
+</tr>
+<tr>
+<td><code>meetings/{id}/confirm-tasks</code></td><td>已生成任务返回 <code>200 + 已生成任务列表</code></td><td>rejected 草稿重新确认返回 409</td>
+</tr>
+<tr>
+<td><code>quote/jobs/{id}/retry</code></td><td>服务端应防重复创建；同一源 job 同一时间只允许一个 active retry</td><td>源 job 不存在或无权访问返回 404 / 403</td>
+</tr>
+</tbody>
+</table></div>
+<p>状态机详见 <a href="#doc-state-machines">STATE-MACHINES.md</a>，功能开关依赖详见 <a href="#doc-feature-flags">FEATURE-FLAGS.md</a>。</p>
+</section>
+<section id="doc-state-machines" class="doc-section" data-source="STATE-MACHINES.md">
+<div class="source-label">来源: STATE-MACHINES.md</div>
+<h1 id="doc-state-machines-state-machines-关键实体状态机-81">STATE-MACHINES｜关键实体状态机</h1>
+<blockquote><p>创建日期：2026-05-15 状态：规划中 关联主文档：<a href="#doc-2026-05-14-ai-platform-upgrade-design">2026-05-14-ai-platform-upgrade-design.md</a></p></blockquote>
+<h2 id="doc-state-machines-目标-82">目标</h2>
+<p>本文件固定关键实体的状态转换、重复调用语义和禁止转换。后端实现时不得绕过状态机直接改状态字段。</p>
+<h2 id="doc-state-machines-通用规则-83">通用规则</h2>
+<ul><li>所有状态转换必须写审计事件或领域事件。</li><li>重复调用如果不会改变业务结果，优先返回 <code>200 + 当前对象</code>，方便前端重试。</li><li>已进入终态后再次执行相反动作，返回 <code>409 CONFLICT</code>。</li><li>所有异步任务必须有 <code>trace_id</code>，用于串联 API 请求、Celery 任务、AI 调用、RAG reload 和审计日志。</li></ul>
+<h2 id="doc-state-machines-quote-jobs-transcription-image-analysis-84">quote_jobs / transcription / image_analysis</h2>
+<pre><code class="language-text">queued -&gt; running -&gt; succeeded
+queued -&gt; running -&gt; failed
+queued -&gt; running -&gt; timed_out
+queued -&gt; canceled
+running -&gt; canceled</code></pre>
+<p>终态：<code>succeeded</code> / <code>failed</code> / <code>timed_out</code> / <code>canceled</code>。</p>
+<p>规则：</p>
+<ul><li><code>mark_async_job_timeouts</code> 只处理 <code>queued</code> / <code>running</code> 且 <code>timeout_at &lt; now()</code> 的任务。</li><li>终态任务不得重新进入 <code>queued</code> / <code>running</code>。</li><li>重试必须创建新 job，原 job 保留终态。</li><li>quote retry 继承原 <code>client_inquiry_id</code>，不得创建新的 <code>ClientInquiry</code>。</li></ul>
+<h2 id="doc-state-machines-execution-tasks-85">execution_tasks</h2>
+<pre><code class="language-text">pending -&gt; in_progress -&gt; done
+pending -&gt; done
+pending -&gt; cancelled
+in_progress -&gt; cancelled</code></pre>
+<p>规则：</p>
+<ul><li><code>cancelled</code> 和 <code>done</code> 为终态。</li><li>逾期不作为持久状态，由 <code>due_at &lt; now() AND completed_at IS NULL AND status NOT IN (&#x27;done&#x27;,&#x27;cancelled&#x27;)</code> 动态计算。</li><li><code>staff</code> / <code>manager</code> 只能更新分配给自己的进度字段，不得修改负责人、截止时间和来源字段。</li><li>已 <code>done</code> 再次标记完成返回 <code>200 + 当前对象</code>。</li><li><code>cancelled</code> 后再完成返回 <code>409 CONFLICT</code>。</li></ul>
+<h2 id="doc-state-machines-task-drafts-86">task_drafts</h2>
+<pre><code class="language-text">pending_review -&gt; accepted
+pending_review -&gt; rejected</code></pre>
+<p>规则：</p>
+<ul><li><code>accepted</code> 后写入 <code>execution_tasks</code> 并记录 <code>accepted_task_id</code>。</li><li>已 <code>accepted</code> 的草稿再次确认返回 <code>200 + 已创建任务</code>，不得重复创建任务。</li><li><code>rejected</code> 后再次确认返回 <code>409 CONFLICT</code>。</li></ul>
+<h2 id="doc-state-machines-meeting-notes-87">meeting_notes</h2>
+<pre><code class="language-text">draft -&gt; confirmed
+confirmed -&gt; revised
+revised -&gt; confirmed</code></pre>
+<p>规则：</p>
+<ul><li><code>draft</code> 阶段允许编辑正文并重新提取任务草稿。</li><li>一旦 <code>confirm-tasks</code> 成功写入正式任务，原纪要进入 <code>confirmed</code>。</li><li><code>confirmed</code> 后不得直接覆盖原始正文，必须写入 <code>meeting_note_revisions</code>。</li><li>revision 后可重新提取补充草稿，但不得自动修改已确认的 <code>execution_tasks</code>。</li></ul>
+<h2 id="doc-state-machines-contract-adjustments-88">contract_adjustments</h2>
+<pre><code class="language-text">draft -&gt; confirmed
+draft -&gt; cancelled
+confirmed -&gt; cancelled</code></pre>
+<p>规则：</p>
+<ul><li><code>confirm</code> 是独立动作接口，不通过普通 PATCH 完成。</li><li><code>cancel</code> 必须提交 <code>reason</code>，并写入 <code>business_events</code>。</li><li><code>confirmed</code> 后金额不得直接修改；如需变更，新增一条反向调整项。</li><li>已 <code>confirmed</code> 再次 confirm 返回 <code>200 + 当前对象</code>。</li><li>已 <code>cancelled</code> 后 confirm 返回 <code>409 CONFLICT</code>。</li></ul>
+<h2 id="doc-state-machines-projects-archive-89">projects archive</h2>
+<p>归档不是 <code>projects.status</code>，而是 <code>archived_at</code>。</p>
+<p>规则：</p>
+<ul><li>archive 已归档项目返回 <code>200 + 当前对象</code>。</li><li>unarchive 未归档项目返回 <code>200 + 当前对象</code>。</li><li>archive / unarchive 必须写入 <code>business_events</code>。</li><li>默认列表隐藏已归档项目，经营统计仍计入。</li></ul>
+<h2 id="doc-state-machines-business-import-batches-90">business_import_batches</h2>
+<pre><code class="language-text">preview -&gt; confirmed
+preview -&gt; cancelled
+confirmed -&gt; rolled_back</code></pre>
+<p>规则：</p>
+<ul><li><code>confirm</code> 成功后不得再次落库；重复 confirm 返回 <code>200 + 已确认结果</code>。</li><li><code>rolled_back</code> 后再次 confirm 返回 <code>409 CONFLICT</code>。</li><li><code>rollback</code> 必须按 <code>batch_id</code> 撤销本批次落库结果。</li><li>rollback 失败必须保留错误信息并告警。</li></ul>
+<h2 id="doc-state-machines-rag-reload-91">rag_reload</h2>
+<pre><code class="language-text">queued -&gt; running -&gt; succeeded
+queued -&gt; running -&gt; failed
+running + 新 reload 请求 -&gt; pending_reload</code></pre>
+<p>规则：</p>
+<ul><li>同一时间只允许一个 RAG reload 运行。</li><li>reload 运行中收到新的 reload 请求，不并发启动，标记 <code>pending_reload=true</code>。</li><li>当前 reload 完成后必须立即检查 <code>pending_reload</code>，若存在则马上启动下一次 reload，不等待下一个 Celery beat 周期。</li><li>reload 成功后自动 enqueue <code>rag_eval</code>。</li><li>reload / eval 失败不回滚导入，但必须告警并在知识库页面显示“待重新加载”或“评测失败”。</li></ul>
+</section>
+<section id="doc-feature-flags" class="doc-section" data-source="FEATURE-FLAGS.md">
+<div class="source-label">来源: FEATURE-FLAGS.md</div>
+<h1 id="doc-feature-flags-feature-flags-功能开关与阶段依赖矩阵-92">FEATURE-FLAGS｜功能开关与阶段依赖矩阵</h1>
+<blockquote><p>创建日期：2026-05-15 状态：规划中 关联主文档：<a href="#doc-2026-05-14-ai-platform-upgrade-design">2026-05-14-ai-platform-upgrade-design.md</a></p></blockquote>
+<h2 id="doc-feature-flags-目标-93">目标</h2>
+<p>本文件固定功能开关、Schema 依赖、运行前置条件和 Vite 路由开放阶段。功能开关控制入口和行为，不得替代数据库迁移顺序。</p>
+<h2 id="doc-feature-flags-功能开关矩阵-94">功能开关矩阵</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>开关</th><th>阶段</th><th>Schema / 服务依赖</th><th>开启前置条件</th><th>关闭时行为</th>
+</tr></thead>
+<tbody><tr>
+<td><code>FEATURE_VITE_FRONTEND</code></td><td>0</td><td>Vite 构建产物、SPA fallback</td><td><code>/login</code>、权限管理、旧路由冒烟通过</td><td>继续使用旧 <code>app.html</code> / <code>index.html</code> / <code>admin.html</code></td>
+</tr>
+<tr>
+<td><code>FEATURE_DASHBOARD_QUOTE</code></td><td>1</td><td><code>quote_jobs</code> / <code>quote_feedback</code> / <code>quote_history</code></td><td>报价速度接口有基线数据</td><td>看板显示功能未开启</td>
+</tr>
+<tr>
+<td><code>FEATURE_CLIENT_INQUIRY</code></td><td>2</td><td><code>client_inquiries</code>、<code>quote_jobs.client_inquiry_id</code></td><td>报价创建流程已接入咨询字段</td><td>创建报价不写咨询记录，响应看板不可用</td>
+</tr>
+<tr>
+<td><code>FEATURE_DASHBOARD_RESPONSE</code></td><td>2</td><td><code>client_inquiries</code></td><td>有响应统计数据</td><td>响应速度看板显示功能未开启</td>
+</tr>
+<tr>
+<td><code>FEATURE_EXECUTION</code></td><td>3</td><td><code>execution_tasks</code> / <code>execution_task_events</code></td><td>任务 CRUD 和权限测试通过</td><td>隐藏任务管理 UI</td>
+</tr>
+<tr>
+<td><code>FEATURE_DASHBOARD_EXECUTION</code></td><td>3</td><td><code>execution_tasks</code></td><td>执行速度聚合接口可用</td><td>执行速度看板显示功能未开启</td>
+</tr>
+<tr>
+<td><code>FEATURE_MEETING_AI</code></td><td>4a</td><td><code>execution_tasks</code>、<code>meeting_notes</code>、<code>task_drafts</code></td><td>AI JSON Schema、草稿确认流程可用</td><td>会议 AI 页面显示功能未开启</td>
+</tr>
+<tr>
+<td><code>FEATURE_AUDIO_TRANSCRIPTION</code></td><td>4b</td><td><code>quote_jobs.job_type</code>、<code>quote_jobs.timeout_at</code>、对象存储</td><td>转写服务账号、额度、回调/轮询可用</td><td>上传录音入口隐藏</td>
+</tr>
+<tr>
+<td><code>FEATURE_DASHBOARD_BUSINESS</code></td><td>6</td><td>经营数据表、导入审计表</td><td>导入模板、权限脱敏、导出水印通过</td><td>经营驾驶舱显示功能未开启</td>
+</tr>
+<tr>
+<td><code>FEATURE_IMAGE_QUOTE</code></td><td>附录 A</td><td><code>file_objects</code>、<code>quote_image_analyses</code></td><td>图片识别 mock 和降级路径通过</td><td>样板图入口隐藏</td>
+</tr>
+<tr>
+<td><code>PUBLIC_ACCESS_ENABLED</code></td><td>公网前</td><td>HTTPS、Cookie、CSRF、CORS、文件签名 URL、钉钉二验</td><td>安全门槛全部通过</td><td>仅内网访问，不开放公网入口</td>
+</tr>
+<tr>
+<td><code>AI_RAW_LOG_ENABLED</code></td><td>可选</td><td><code>ai_call_logs</code> 原文字段、清理任务</td><td>脱敏和 7 天游标清理通过</td><td>只记录脱敏摘要，不保存原文</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="doc-feature-flags-phase-3-phase-4-依赖约定-95">Phase 3 / Phase 4 依赖约定</h2>
+<p>Schema 层强依赖，Feature Flag 层解耦：</p>
+<ul><li><code>FEATURE_MEETING_AI</code> 依赖 <code>execution_tasks</code> 表已经存在。</li><li><code>FEATURE_MEETING_AI</code> 不依赖 <code>FEATURE_EXECUTION=true</code>。</li><li><code>FEATURE_EXECUTION=false</code> 时，<code>/meetings/{id}/confirm-tasks</code> 仍可在 <code>FEATURE_MEETING_AI=true</code> 下写入 <code>execution_tasks</code>。</li><li><code>FEATURE_EXECUTION</code> 只控制任务管理 UI 和独立任务 CRUD 入口是否开放。</li></ul>
+<p>这样可以先上线会议纪要闭环，再决定是否开放独立任务中心。</p>
+<h2 id="doc-feature-flags-vite-路由表-96">Vite 路由表</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>路由</th><th>阶段</th><th>Feature Flag</th><th>说明</th>
+</tr></thead>
+<tbody><tr>
+<td><code>/login</code></td><td>Phase 0</td><td>无</td><td>新登录页</td>
+</tr>
+<tr>
+<td><code>/admin/permissions</code></td><td>Phase 0</td><td><code>FEATURE_VITE_FRONTEND</code></td><td>权限管理页；Phase 0 管理员默认落地页</td>
+</tr>
+<tr>
+<td><code>/admin/users</code></td><td>Phase 0</td><td><code>FEATURE_VITE_FRONTEND</code></td><td>用户列表和角色分配</td>
+</tr>
+<tr>
+<td><code>/admin/dashboard</code></td><td>Phase 1 起</td><td><code>FEATURE_DASHBOARD_QUOTE</code> / <code>FEATURE_DASHBOARD_RESPONSE</code> / <code>FEATURE_DASHBOARD_EXECUTION</code></td><td>所有看板开关均关闭时显示“功能未开启”，不得作为 Phase 0 默认落地页</td>
+</tr>
+<tr>
+<td><code>/admin/execution</code></td><td>Phase 3 / 4</td><td><code>FEATURE_EXECUTION</code> / <code>FEATURE_MEETING_AI</code></td><td>任务管理和会议执行系统</td>
+</tr>
+<tr>
+<td><code>/admin/business</code></td><td>Phase 6</td><td><code>FEATURE_DASHBOARD_BUSINESS</code></td><td>经营驾驶舱</td>
+</tr>
+<tr>
+<td><code>/quote</code></td><td>后续迁移</td><td>待定</td><td>旧 <code>/index.html</code> 保留到迁移完成</td>
+</tr>
+<tr>
+<td><code>/admin/knowledge</code></td><td>后续迁移</td><td>待定</td><td>旧 <code>/admin.html</code> 保留到迁移完成</td>
+</tr>
+<tr>
+<td><code>/admin/settings</code></td><td>后续</td><td>待定</td><td>系统配置页</td>
+</tr>
+</tbody>
+</table></div>
+<p>登录后跳转顺序：</p>
+<ol><li>URL 带 <code>redirect</code> 且用户有权限时，优先回到 <code>redirect</code>。</li><li><code>system_admin</code> / <code>admin</code> 默认进入 <code>/admin/permissions</code>。</li><li><code>staff</code> 默认进入旧 <code>/index.html</code>，直到 <code>/quote</code> 完成迁移。</li><li>其他角色进入第一个已开启且有权限的模块。</li><li>没有任何可用模块时显示空状态页，提示联系管理员分配权限或开启功能。</li></ol>
+<p>Vite 路由守卫规则：</p>
+<ul><li>未登录跳 <code>/login</code>。</li><li>无权限显示 403 页面。</li><li>功能未开启显示“功能未开启”，不展示空白页。</li><li>旧路由 <code>/index.html</code>、<code>/admin.html</code>、<code>/app.html</code> 不进入 SPA fallback。</li></ul>
+</section>
+<section id="doc-appendix-image-to-quote" class="doc-section" data-source="APPENDIX-Image-to-Quote.md">
+<div class="source-label">来源: APPENDIX-Image-to-Quote.md</div>
+<h1 id="doc-appendix-image-to-quote-appendix-image-to-quote-样板图驱动报价-97">APPENDIX-Image-to-Quote｜样板图驱动报价</h1>
+<blockquote><p>创建日期：2026-05-14 状态：规划中 关联主文档：<a href="#doc-2026-05-14-ai-platform-upgrade-design">2026-05-14-ai-platform-upgrade-design.md</a></p></blockquote>
+<h2 id="doc-appendix-image-to-quote-功能概述-98">功能概述</h2>
+<p>样板图驱动报价是在现有文字 / 清单图报价入口之外新增的入口。用户上传装修效果图，系统识别主要材料和工艺，生成可编辑需求表，再进入现有预审和报价流程。</p>
+<p>核心原则：识别只是辅助填表，不替代人工确认。识别失败时降级到手动填写需求表。</p>
+<h2 id="doc-appendix-image-to-quote-整体流程-99">整体流程</h2>
+<pre><code class="language-text">上传效果图
+  -&gt; 视觉模型识别材料 / 工艺
+  -&gt; 生成需求表草稿
+  -&gt; 用户补充面积 / 门窗洞口
+  -&gt; 系统计算数量
+  -&gt; 人工确认需求表
+  -&gt; 转成现有文字报价输入
+  -&gt; 复用 N8N / RAG / 预审 / confirm_push</code></pre>
+<p><code>QuoteJob.source_type</code> 区分 <code>text</code> / <code>image</code>，用于后续统计两种入口的准确率和人工修改率。</p>
+<h2 id="doc-appendix-image-to-quote-模型策略-100">模型策略</h2>
+<p>首选 GLM-4V，因为现有系统已接入智谱 AI。若测试集召回率持续低于 80%，通过 <code>model_gateway</code> 切换至 GPT-4o Vision 或其他视觉模型，业务代码不直接依赖具体模型。</p>
+<p>达标标准：</p>
+<ul><li>召回率 &gt;= 80%</li><li>精确率 &gt;= 70%</li><li>基于 10-20 张 golden set 样板图评测</li></ul>
+<h2 id="doc-appendix-image-to-quote-数据模型-101">数据模型</h2>
+<pre><code>quote_image_analyses:
+- id, created_at
+- file_object_id: FK -&gt; file_objects.file_id
+- model_provider
+- raw_response
+- materials_json
+- confidence_avg
+- status: pending / done / failed</code></pre>
+<p><code>quote_jobs</code> 扩展：</p>
+<pre><code>source_type: text / image
+image_analysis_id: FK -&gt; quote_image_analyses.id, nullable</code></pre>
+<p>多图场景不在阶段 A 支持。阶段 D 如需支持多图，新增 <code>quote_job_image_analyses</code> 关联表，避免双向循环 FK。</p>
+<h2 id="doc-appendix-image-to-quote-materials-json-schema-102">materials_json Schema</h2>
+<pre><code class="language-json">{
+  &quot;version&quot;: &quot;1.0&quot;,
+  &quot;materials&quot;: [
+    {
+      &quot;area&quot;: &quot;客厅地面&quot;,
+      &quot;material&quot;: &quot;复合木地板&quot;,
+      &quot;work_type&quot;: &quot;铺贴&quot;,
+      &quot;confidence&quot;: &quot;high&quot;,
+      &quot;notes&quot;: &quot;&quot;
+    }
+  ]
+}</code></pre>
+<p>字段名不得随意扩展。需要升级时通过 <code>version</code> 字段演进。</p>
+<h2 id="doc-appendix-image-to-quote-面积与数量-103">面积与数量</h2>
+<p>面积录入分两步：</p>
+<ul><li>阶段 B1：用户填写总面积，系统按识别区域分配</li><li>阶段 B2：支持户型图 / 平面图提取面积</li></ul>
+<p>数量计算规则：</p>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>材料类型</th><th>计算方式</th>
+</tr></thead>
+<tbody><tr>
+<td>地面铺贴</td><td>区域面积 * 1.05</td>
+</tr>
+<tr>
+<td>墙面涂刷 / 贴砖</td><td>区域面积 <em> 层高系数 </em> 1.05，扣除门窗洞口</td>
+</tr>
+<tr>
+<td>顶面</td><td>区域面积</td>
+</tr>
+<tr>
+<td>线性材料</td><td><code>sqrt(区域面积) * 4</code>，标注估算值</td>
+</tr>
+</tbody>
+</table></div>
+<p>门窗洞口默认标准尺寸：门洞 2.0 平方米 / 个，窗户 1.5 平方米 / 个。未填写则需求表标注“未扣除门窗洞口，预审时请核实”。</p>
+<h2 id="doc-appendix-image-to-quote-适配现有报价流程-104">适配现有报价流程</h2>
+<p>后端新增 <code>image_quote_adapter.py</code>，将需求表 JSON 转成现有自然语言文字清单：</p>
+<pre><code class="language-text">客厅地面 复合木地板铺贴 42.00㎡
+主卧墙面 乳胶漆涂刷 68.04㎡</code></pre>
+<p>转换后的文字作为 <code>user_input</code> 写入 <code>QuoteJob</code>，后续 N8N / RAG / Dify / DeepSeek / 预审 / confirm_push 全部复用现有流程。</p>
+<h2 id="doc-appendix-image-to-quote-功能开关-105">功能开关</h2>
+<pre><code class="language-env">FEATURE_IMAGE_QUOTE=false
+FEATURE_IMAGE_QUOTE_GLM=true</code></pre>
+<h2 id="doc-appendix-image-to-quote-测试要求-106">测试要求</h2>
+<ul><li><code>image_quote_adapter.py</code> 单元测试覆盖至少 10 种材料组合</li><li>面积和数量计算覆盖损耗、线性材料、门窗扣减</li><li>mock 视觉模型调用，验证异步任务和 SSE 事件</li><li>图片路径 confirm_push 后可通过 <code>QuoteHistory.quote_job_id -&gt; QuoteJob.source_type</code> 判断来源为 image</li><li>现有文字报价路径无回归</li></ul>
+<h2 id="doc-appendix-image-to-quote-验收标准-107">验收标准</h2>
+<ul><li>上传效果图后 30 秒内返回识别结果或明确失败原因</li><li>golden set 召回率 &gt;= 80%，精确率 &gt;= 70%</li><li>识别失败出现“跳过识别，手动填写”降级入口</li><li>需求表所有字段可编辑</li><li>低置信度行有高亮提示</li><li>切换视觉模型后业务代码零改动</li></ul>
+</section>
+<section id="doc-runbook-phase0-launch" class="doc-section" data-source="RUNBOOK-Phase0-Launch.md">
+<div class="source-label">来源: RUNBOOK-Phase0-Launch.md</div>
+<h1 id="doc-runbook-phase0-launch-runbook-phase0-launch-阶段-0-上线操作手册-108">RUNBOOK-Phase0-Launch｜阶段 0 上线操作手册</h1>
+<blockquote><p>创建日期：2026-05-14 状态：规划中 关联主文档：<a href="#doc-2026-05-14-ai-platform-upgrade-design">2026-05-14-ai-platform-upgrade-design.md</a></p></blockquote>
+<h2 id="doc-runbook-phase0-launch-目标-109">目标</h2>
+<p>阶段 0 上线内容包括 Vite 壳、登录鉴权统一、多角色 RBAC、<code>role_version</code>、权限管理页面、SPA fallback、公网安全门槛配置骨架。旧 <code>index.html</code> / <code>admin.html</code> 保留，不在阶段 0 强制迁移报价工作台和知识库管理页面。</p>
+<h2 id="doc-runbook-phase0-launch-上线前检查-110">上线前检查</h2>
+<ul><li>确认当前 git 分支和提交范围</li><li>确认生产数据库当前 Alembic head</li><li>确认 <code>.env</code> 已配置 <code>SYSTEM_ADMIN_USERNAME</code>，默认 <code>admin</code></li><li>确认 <code>SYSTEM_ADMIN_USERNAME</code> 对应用户存在</li><li>确认 <code>PUBLIC_ACCESS_ENABLED=false</code></li><li>确认 <code>FEATURE_VITE_FRONTEND=false</code>，待冒烟通过后再打开</li><li>确认钉钉企业应用方案已登记为后续公网二验依赖；内网阶段可先不强制上线</li><li>确认 <code>backup_all.ps1</code> 已包含 <code>users</code> / <code>user_roles</code> / <code>user_role_events</code></li></ul>
+<h2 id="doc-runbook-phase0-launch-备份步骤-111">备份步骤</h2>
+<ol><li>执行数据库备份。</li><li>备份当前前端静态文件：<code>app.html</code>、<code>index.html</code>、<code>admin.html</code>、<code>static/</code>。</li><li>备份 <code>.env</code>，注意不得提交 git。</li><li>记录备份文件路径、时间、操作人。</li></ol>
+<h2 id="doc-runbook-phase0-launch-迁移步骤-112">迁移步骤</h2>
+<ol><li>执行 Alembic 升级。</li><li>检查新增字段和表：</li></ol>
+<ul><li><code>users.role_version</code></li><li><code>users.dingtalk_user_id</code></li><li><code>user_roles</code></li><li><code>user_role_events</code></li></ul>
+<ol><li>执行角色迁移：</li></ol>
+<ul><li><code>users.role=&#x27;user&#x27;</code> -&gt; <code>user_roles.role=&#x27;staff&#x27;</code></li><li><code>users.role=&#x27;admin&#x27;</code> -&gt; <code>user_roles.role=&#x27;admin&#x27;</code></li><li><code>SYSTEM_ADMIN_USERNAME</code> -&gt; <code>system_admin + admin</code></li></ul>
+<ol><li>若 <code>SYSTEM_ADMIN_USERNAME</code> 不存在，迁移失败并回滚，不允许继续上线。</li><li>迁移完成后，旧 JWT 因不包含 <code>role_version</code> 会返回 401，所有存量登录会话强制失效。这是预期行为，不是故障。上线通知中必须提醒用户重新登录。</li></ol>
+<h2 id="doc-runbook-phase0-launch-部署步骤-113">部署步骤</h2>
+<ol><li>构建 Vite 前端。</li><li>将 Vite 编译产物交由 FastAPI 托管。</li><li>配置 SPA fallback：</li></ol>
+<ul><li><code>/admin/dashboard</code> 刷新返回 Vite <code>index.html</code></li><li><code>/index.html</code>、<code>/admin.html</code>、<code>/app.html</code> 继续返回旧页面</li></ul>
+<ol><li>重启 FastAPI。</li><li>如启用 Celery 相关检查，确认 worker / beat 不受影响。</li></ol>
+<h2 id="doc-runbook-phase0-launch-冒烟测试-114">冒烟测试</h2>
+<ul><li>访问 <code>/login</code>，可正常登录</li><li>登录后 <code>/api/v1/auth/me</code> 返回 <code>roles: []</code> 或角色数组，且包含兼容 <code>role</code></li><li><code>system_admin</code> 可进入权限管理页面</li><li>授予一个测试用户 <code>viewer</code>，写入 <code>user_role_events</code></li><li>撤销该角色后 <code>users.role_version</code> 递增，旧 token 请求返回 401</li><li>访问 <code>/admin/dashboard</code>，刷新不出现 FastAPI 404</li><li>访问 <code>/index.html</code>，旧报价工作台仍可打开</li><li>访问 <code>/admin.html</code>，旧知识库管理仍可打开</li><li>访问 <code>/app.html</code>，旧登录门户仍按兼容策略可打开或跳转新 <code>/login</code></li><li>旧报价工作台 <code>/index.html</code> 使用迁移后的 <code>users.role</code> 兼容字段仍可完成鉴权</li><li>旧知识库管理 <code>/admin.html</code> 使用迁移后的 admin 兼容字段仍可完成鉴权</li><li>旧 token 访问 <code>/api/v1/auth/me</code> 返回 401；重新登录后返回 <code>roles</code> / <code>role_version</code></li><li><code>PUBLIC_ACCESS_ENABLED=false</code> 时公网入口不开启</li><li><code>FEATURE_VITE_FRONTEND=false</code> 时旧入口不受影响</li></ul>
+<h2 id="doc-runbook-phase0-launch-上线后角色分配-115">上线后角色分配</h2>
+<p>Phase 0 只自动迁移已有 <code>user</code> / <code>admin</code>。<code>manager</code> / <code>viewer</code> 是新增角色，不会自动分配给存量用户。</p>
+<p>上线后 <code>system_admin</code> 需要通过权限管理页面为相关人员手动分配：</p>
+<ul><li><code>viewer</code>：用于后续查看效率和经营驾驶舱</li><li><code>manager</code>：用于后续执行任务上线后查看和更新分配给自己的任务</li></ul>
+<p>权限管理页面必须提示：</p>
+<ul><li><code>manager</code> 角色在 <code>FEATURE_EXECUTION</code> / <code>FEATURE_MEETING_AI</code> 上线后才有实际业务入口</li><li><code>viewer</code> 在看板功能开关开启前可能没有可见页面</li><li>当前可用模块和待上线模块应在角色说明中展示</li></ul>
+<h2 id="doc-runbook-phase0-launch-打开功能开关-116">打开功能开关</h2>
+<p>冒烟测试通过后：</p>
+<pre><code class="language-env">FEATURE_VITE_FRONTEND=true</code></pre>
+<p>重启服务后再次执行冒烟测试。</p>
+<p>公网访问保持：</p>
+<pre><code class="language-env">PUBLIC_ACCESS_ENABLED=false</code></pre>
+<p>公网入口必须等 HTTPS、Cookie、CSRF、防爆破、CORS 白名单、文件签名 URL、钉钉登录二验全部完成后再打开。</p>
+<h2 id="doc-runbook-phase0-launch-回滚方案-117">回滚方案</h2>
+<p>优先使用功能开关回滚：</p>
+<pre><code class="language-env">FEATURE_VITE_FRONTEND=false</code></pre>
+<p>重启服务后旧页面继续使用。</p>
+<p>如数据库迁移出现问题：</p>
+<ol><li>停止服务。</li><li>按 Alembic revision 回滚到阶段 0 前。</li><li>如回滚失败，使用上线前数据库备份恢复。</li><li>恢复旧前端静态文件。</li><li>记录失败原因和处理结果。</li></ol>
+<p>不得使用 <code>git reset --hard</code> 或手工删表作为常规回滚方式。</p>
+<h2 id="doc-runbook-phase0-launch-验收签字-118">验收签字</h2>
+<p>上线完成需记录：</p>
+<ul><li>上线时间</li><li>操作人</li><li>数据库 revision</li><li>备份路径</li><li>冒烟测试结果</li><li>存量 session 失效通知是否已发送</li><li>manager / viewer 首批角色分配是否完成</li><li>是否打开 <code>FEATURE_VITE_FRONTEND</code></li><li><code>PUBLIC_ACCESS_ENABLED</code> 是否仍为 false</li><li>遗留问题</li></ul>
+</section>
+    </main>
+  </div>
 </body>
 </html>

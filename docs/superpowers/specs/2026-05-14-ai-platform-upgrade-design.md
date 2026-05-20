@@ -1,8 +1,10 @@
 # 旗胜 AI 平台架构升级路线
 > 创建日期：2026-05-14
-> 最后更新：2026-05-19（Phase 0-3 已完成当前环境验证；Phase 2.5 管理员报价运营闭环已完成当前环境验证）
-> 状态：Phase 0 当前环境验证完成；Phase 1 报价速度看板当前环境运行态验收已完成；Phase 2 响应速度追踪当前环境运行态验收已完成；Phase 2.5 管理员报价运营闭环已完成当前环境验证；Phase 3 执行速度追踪已完成当前环境验证。系统完善前不正式投入生产使用，正式生产 Runbook 推迟到平台能力完整后统一准备。
+> 最后更新：2026-05-19（Phase 0-3 已完成当前环境验证；Phase 4a 已完成当前环境运行态验收）
+> 状态：Phase 0 当前环境验证完成；Phase 1 报价速度看板当前环境运行态验收已完成；Phase 2 响应速度追踪当前环境运行态验收已完成；Phase 2.5 管理员报价运营闭环已完成当前环境验证；Phase 3 执行速度追踪已完成当前环境验证；Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收。系统完善前不正式投入生产使用，正式生产 Runbook 推迟到平台能力完整后统一准备。
 > 负责人：待定
+>
+> **⚠️ 优先级说明（2026-05-19 更新）**：本文件保留 Phase 0–4a 的设计细节、历史决策和底座技术边界。**Phase 4a 之后的执行顺序由 `ROADMAP.md` 中的"业务提效路线（BIZ Track）"覆盖**——Phase 4b（语音转写）和 Phase 4c（钉钉会议导入）已暂缓；原 Phase 5（知识库历史数据导入）并入 BIZ-2a；原 Phase 6（经营驾驶舱数据底座）重命名为 BIZ-3。凡本文件路线与 `ROADMAP.md` 有冲突，**以 `ROADMAP.md` 为准**。
 
 ---
 
@@ -295,7 +297,7 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 - 自动化验证已通过：`python -m alembic heads` 显示 `20260514_0013 (head)`；`python -m compileall app`、`python -m pytest`（92 passed）、`python -m pytest tests\test_execution_tasks_phase3.py` 和 `npm.cmd run build` 均通过。
 - 不包含会议纪要 AI、语音转写、钉钉会议导入和经营驾驶舱；这些仍归后续 Phase 4+ / Phase 6。
 
-### 阶段 4a｜AI 执行系统：手动纪要 + 草稿确认
+### 阶段 4a｜AI 执行系统：手动纪要 + 草稿确认（✅ 当前环境运行态验收完成）
 
 新增 `meeting_notes` 与 `task_drafts`。
 
@@ -320,6 +322,18 @@ Phase 3 以后可在各阶段开工前补齐对应字段级 Schema，不要求�
 AI 输出必须是固定 JSON Schema，不接受自由文本解析。任务草稿必须回显 `source_sentence`，帮助人工判断 AI 理解依据。
 
 AI 调用治理详见 [ADR-AI-Governance.md](ADR-AI-Governance.md)。
+
+完成记录（当前环境运行态验收，非正式生产上线）：
+
+- 已新增 Alembic `20260514_0014` 创建 `meeting_notes`，`20260514_0015` 创建 `task_drafts` 与 `meeting_note_revisions`。
+- 已新增 `FEATURE_MEETING_AI` / `FEATURE_AUDIO_TRANSCRIPTION` 配置；当前仅 Phase 4a 使用 `FEATURE_MEETING_AI`，默认关闭，当前环境已打开 `FEATURE_MEETING_AI=true`。
+- 已新增 `/api/v1/meetings` 创建/查询/详情/草稿阶段更正、`/api/v1/meetings/{id}/drafts` 人工补充草稿、`/api/v1/meetings/{id}/cancel`、`/api/v1/meetings/{id}/confirm-tasks` 和 `revisions` 接口。
+- 任务草稿保留 `source_sentence`，确认后写入已有 `execution_tasks`，并记录 `execution_task_events`；`FEATURE_EXECUTION=false` 时 `confirm-tasks` 仍可写入执行任务。
+- 当前任务提取使用固定 JSON Schema 的本地结构化提取器，输出统一校验为 `{"tasks":[...]}`；AI 未提取到任务时可人工补充草稿。
+- Vite `/admin/execution` 已接入“会议纪要”标签页，支持录入纪要、查看草稿、逐条确认/驳回和人工补充。
+- 当前环境 smoke 已通过：`scripts\phase4a_meeting_smoke.ps1` 验证自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 返回 200。
+- 自动化验证已通过：`python -m alembic current` 显示 `20260514_0015 (head)`；`python -m compileall app scripts`、`python -m pytest`（96 passed）和 `npm.cmd run build` 均通过。
+- 不包含语音转写、钉钉会议导入、经营驾驶舱和旧 `index.html` / `admin.html` 迁移。
 
 ### 阶段 4b｜语音转写接入
 
@@ -464,7 +478,7 @@ AI_RAW_LOG_MAX_RETENTION_DAYS=30
 | 阶段 1 | 已完成当前环境运行态验收：报价速度接口有数据，三类耗时分区展示，新增真实报价任务可进入统计；正式生产准备推迟到系统整体完善后统一处理 |
 | 阶段 2 | 已完成当前环境运行态验收：创建报价可自动生成 ClientInquiry，响应看板标注统计边界、样本量和低可信数据排除规则，内网 smoke 可展示 15 分钟响应样本；正式生产准备推迟到系统整体完善后统一处理 |
 | 阶段 3 | 当前环境已验证 ExecutionTask 可创建、分配、开始、完成、取消；逾期动态计算；执行速度看板可展示任务、完成、取消、逾期和平均完成耗时 |
-| 阶段 4a | 纪要生成草稿，人工确认后写入 ExecutionTask，AI 失败可降级手动添加 |
+| 阶段 4a | 已完成当前环境运行态验收：纪要生成草稿，人工确认后写入 ExecutionTask，AI 失败可降级手动添加；smoke 已覆盖自动提取确认、人工补充作废、revision 补充任务和 `/admin/execution` 访问 |
 | 阶段 4b | 上传音频后返回转写文本，并自动进入任务草稿流程；精度评测达标 |
 | 阶段 4c | 钉钉会议导入进入同一纪要 -> 草稿 -> 任务流程 |
 | 阶段 5 | 导入后 RAG 评测不低于基线；可按批次追溯和回滚 |
@@ -565,3 +579,5 @@ AI_RAW_LOG_MAX_RETENTION_DAYS=30
 | 2026-05-18 | v41：记录系统完善前不正式投入生产使用；完成 Phase 2 响应速度追踪代码层，新增 `client_inquiries`、`quote_jobs.client_inquiry_id`、咨询查询/修正接口、响应速度聚合接口、`FEATURE_CLIENT_INQUIRY` / `FEATURE_DASHBOARD_RESPONSE` 和 Vite 响应速度标签页；当前环境 Alembic 已升级到 `20260514_0012 (head)`，`pytest` 更新为 85 passed，Phase 3+ 未启动 | Codex |
 | 2026-05-18 | v42：完成 Phase 2 当前环境运行态验收，功能开关已在内网环境打开且 `PUBLIC_ACCESS_ENABLED=false`；修复 Celery worker 缺少 `ClientInquiry` 元数据导入导致测试任务卡在 `queued` 的问题；新增 `scripts/phase2_response_smoke.ps1`，按中国时区生成验收样本，响应速度看板已显示 1 条样本、平均首次响应 15 分钟；`pytest` 更新为 86 passed，Phase 3+ 未启动 | Codex |
 | 2026-05-19 | v43：完成 Phase 3 执行速度追踪当前环境验证，新增 `execution_tasks` / `execution_task_events`、执行任务 CRUD/取消接口、执行速度聚合接口、`FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION`、`/admin/execution` 和执行速度标签页；当前环境已验证任务创建、开始、完成、取消、详情事件和看板展示，执行趋势已补充取消数量；`pytest` 更新为 92 passed | Codex |
+| 2026-05-19 | v44：完成 Phase 4a 手动会议纪要 + 草稿确认代码层与自动化验证，新增 `meeting_notes` / `task_drafts` / `meeting_note_revisions`、`FEATURE_MEETING_AI`、会议纪要接口、固定 JSON Schema 提取器和 `/admin/execution` 会议纪要标签页；草稿确认写入 `execution_tasks`，`pytest` 更新为 96 passed；Phase 4b/4c/6 未启动，旧 HTML 未迁移 | Codex |
+| 2026-05-19 | v45：完成 Phase 4a 当前环境运行态验收，当前环境 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`；新增 `scripts/phase4a_meeting_smoke.ps1` 固化验收，已通过自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 200；`pytest` 保持 96 passed，Vite build 通过；Phase 4b/4c/6 未启动，旧 HTML 未迁移 | Codex |

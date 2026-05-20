@@ -79,6 +79,9 @@ class Settings:
     feature_dashboard_response: bool = _env_bool("FEATURE_DASHBOARD_RESPONSE", False)
     feature_execution: bool = _env_bool("FEATURE_EXECUTION", False)
     feature_dashboard_execution: bool = _env_bool("FEATURE_DASHBOARD_EXECUTION", False)
+    feature_meeting_ai: bool = _env_bool("FEATURE_MEETING_AI", False)
+    feature_audio_transcription: bool = _env_bool("FEATURE_AUDIO_TRANSCRIPTION", False)
+    feature_business_ledger: bool = _env_bool("FEATURE_BUSINESS_LEDGER", False)
     response_sla_minutes: int = _env_int("RESPONSE_SLA_MINUTES", 30)
     public_access_enabled: bool = _env_bool("PUBLIC_ACCESS_ENABLED", False)
 

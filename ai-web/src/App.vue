@@ -79,6 +79,15 @@
           <el-icon><Clock /></el-icon>
           <span>执行任务</span>
         </button>
+        <button
+          v-if="canViewBusinessLedger"
+          :class="['nav-item', { active: routeName === 'businessLedger' }]"
+          type="button"
+          @click="navigate('/admin/business-ledger')"
+        >
+          <el-icon><Tickets /></el-icon>
+          <span>商务台账</span>
+        </button>
         <button v-if="canOpenLegacyQuote" class="nav-item" type="button" @click="openLegacy('/index.html')">
           <el-icon><Document /></el-icon>
           <span>旧报价工作台</span>
@@ -643,138 +652,410 @@
         <template v-else-if="routeName === 'execution'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">Phase 3</p>
-              <h2>执行任务</h2>
+              <p class="eyebrow">Phase 3 / 4a</p>
+              <h2>执行系统</h2>
             </div>
             <div class="heading-actions">
+              <el-button v-if="canCreateMeetingNote" :icon="Tickets" type="primary" plain @click="openMeetingCreate">
+                录入纪要
+              </el-button>
               <el-button v-if="canCreateExecutionTask" :icon="Plus" type="primary" @click="openExecutionCreate">
                 新建任务
               </el-button>
-              <el-button :icon="Refresh" plain @click="loadExecutionTasks">刷新</el-button>
+              <el-button :icon="Refresh" plain @click="refreshExecutionPage">刷新</el-button>
             </div>
           </div>
+          <el-tabs v-model="executionPageTab" class="dashboard-tabs">
+            <el-tab-pane label="执行任务" name="tasks">
+              <el-alert
+                v-if="executionFeatureDisabled"
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="执行任务功能尚未开启"
+              />
+              <template v-else>
+                <div class="operation-filters">
+                  <el-select
+                    v-model="executionTaskFilters.status"
+                    size="small"
+                    clearable
+                    placeholder="任务状态"
+                    @change="applyExecutionTaskFilters"
+                  >
+                    <el-option
+                      v-for="option in executionStatusOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                  <el-select
+                    v-model="executionTaskFilters.source"
+                    size="small"
+                    clearable
+                    placeholder="任务来源"
+                    @change="applyExecutionTaskFilters"
+                  >
+                    <el-option
+                      v-for="option in executionSourceOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                  <el-input
+                    v-model="executionTaskFilters.keyword"
+                    size="small"
+                    clearable
+                    placeholder="任务标题/备注"
+                    @keyup.enter="applyExecutionTaskFilters"
+                    @clear="applyExecutionTaskFilters"
+                  />
+                  <el-button size="small" type="primary" plain @click="applyExecutionTaskFilters">查询</el-button>
+                </div>
+                <el-table
+                  :data="executionTasks"
+                  row-key="id"
+                  class="users-table"
+                  empty-text="暂无执行任务"
+                >
+                  <el-table-column label="任务" min-width="220" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.title }}</strong>
+                        <small>{{ executionSourceLabel(row.source) }} · {{ row.source_ref_id || '无来源编号' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="assignee_username" label="负责人" width="120" />
+                  <el-table-column label="截止时间" min-width="150">
+                    <template #default="{ row }">{{ formatDate(row.due_at) }}</template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="110">
+                    <template #default="{ row }">
+                      <el-tag :type="executionStatusTag(row.status)" effect="plain">{{ executionStatusLabel(row.status) }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="逾期" width="90">
+                    <template #default="{ row }">
+                      <el-tag :type="row.is_overdue ? 'danger' : 'info'" effect="plain">
+                        {{ row.is_overdue ? '逾期' : '正常' }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="notes" label="备注" min-width="180" show-overflow-tooltip />
+                  <el-table-column label="操作" width="270" fixed="right">
+                    <template #default="{ row }">
+                      <div class="row-actions">
+                        <el-button size="small" :icon="Document" plain @click="openExecutionDetail(row)">详情</el-button>
+                        <el-button
+                          size="small"
+                          plain
+                          :disabled="row.status !== 'pending'"
+                          @click="updateExecutionTaskStatus(row, 'in_progress')"
+                        >
+                          开始
+                        </el-button>
+                        <el-button
+                          size="small"
+                          plain
+                          :disabled="!['pending', 'in_progress'].includes(row.status)"
+                          @click="updateExecutionTaskStatus(row, 'done')"
+                        >
+                          完成
+                        </el-button>
+                        <el-button
+                          v-if="canCreateExecutionTask"
+                          size="small"
+                          type="danger"
+                          plain
+                          :disabled="!['pending', 'in_progress'].includes(row.status)"
+                          @click="cancelExecutionTask(row)"
+                        >
+                          取消
+                        </el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-pagination
+                  v-if="executionTaskTotal > executionTaskPageSize"
+                  v-model:current-page="executionTaskPage"
+                  :page-size="executionTaskPageSize"
+                  :total="executionTaskTotal"
+                  layout="total, prev, pager, next"
+                  small
+                  @current-change="loadExecutionTasks"
+                />
+              </template>
+            </el-tab-pane>
+
+            <el-tab-pane label="会议纪要" name="meetings">
+              <el-alert
+                v-if="meetingFeatureDisabled"
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="会议纪要功能尚未开启"
+              />
+              <template v-else>
+                <div class="meeting-filters">
+                  <el-select
+                    v-model="meetingFilters.status"
+                    size="small"
+                    clearable
+                    placeholder="纪要状态"
+                    @change="applyMeetingFilters"
+                  >
+                    <el-option
+                      v-for="option in meetingStatusOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                  <el-input
+                    v-model="meetingFilters.keyword"
+                    size="small"
+                    clearable
+                    placeholder="纪要内容/异常"
+                    @keyup.enter="applyMeetingFilters"
+                    @clear="applyMeetingFilters"
+                  />
+                  <el-button size="small" type="primary" plain @click="applyMeetingFilters">查询</el-button>
+                  <el-button size="small" :icon="Refresh" plain @click="loadMeetings">刷新</el-button>
+                </div>
+                <el-table
+                  :data="meetings"
+                  row-key="id"
+                  class="users-table"
+                  empty-text="暂无会议纪要"
+                >
+                  <el-table-column label="纪要" min-width="260" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ meetingPreview(row) }}</strong>
+                        <small>{{ row.created_by_username || '-' }} · {{ formatDate(row.created_at) }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="110">
+                    <template #default="{ row }">
+                      <el-tag :type="meetingStatusTag(row.status)" effect="plain">{{ meetingStatusLabel(row.status) }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="提取" width="120">
+                    <template #default="{ row }">
+                      <el-tag effect="plain">{{ meetingAiStatusLabel(row.ai_status) }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="草稿" width="120">
+                    <template #default="{ row }">
+                      {{ row.accepted_draft_count || 0 }} / {{ row.draft_count || 0 }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="190" fixed="right">
+                    <template #default="{ row }">
+                      <div class="row-actions">
+                        <el-button size="small" :icon="Document" plain @click="openMeetingDetail(row)">详情</el-button>
+                        <el-button
+                          size="small"
+                          type="danger"
+                          plain
+                          :disabled="row.status !== 'draft'"
+                          @click="cancelMeeting(row)"
+                        >
+                          作废
+                        </el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-pagination
+                  v-if="meetingTotal > meetingPageSize"
+                  v-model:current-page="meetingPage"
+                  :page-size="meetingPageSize"
+                  :total="meetingTotal"
+                  layout="total, prev, pager, next"
+                  small
+                  @current-change="loadMeetings"
+                />
+              </template>
+            </el-tab-pane>
+          </el-tabs>
+        </template>
+
+        <template v-else-if="routeName === 'businessLedger'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">BIZ-1a</p>
+              <h2>商务台账</h2>
+            </div>
+            <div class="heading-actions">
+              <el-button :icon="Plus" type="primary" :disabled="businessLedgerFeatureDisabled" @click="openBusinessLedgerCreate">
+                新建记录
+              </el-button>
+              <el-button :icon="Refresh" plain @click="loadBusinessLedgers">刷新</el-button>
+            </div>
+          </div>
+
           <el-alert
-            v-if="executionFeatureDisabled"
+            v-if="businessLedgerFeatureDisabled"
             class="dashboard-alert"
             type="info"
             show-icon
             :closable="false"
-            title="执行任务功能尚未开启"
-          />
+            title="商务台账功能尚未开启"
+          ></el-alert>
           <template v-else>
-            <div class="operation-filters">
+            <div class="business-ledger-filters">
               <el-select
-                v-model="executionTaskFilters.status"
+                v-model="businessLedgerFilters.stage"
                 size="small"
+                multiple
+                collapse-tags
+                collapse-tags-tooltip
                 clearable
-                placeholder="任务状态"
-                @change="applyExecutionTaskFilters"
+                placeholder="阶段"
+                @change="applyBusinessLedgerFilters"
               >
                 <el-option
-                  v-for="option in executionStatusOptions"
+                  v-for="option in businessLedgerStageOptions"
                   :key="option.value"
                   :label="option.label"
                   :value="option.value"
-                />
+                ></el-option>
               </el-select>
               <el-select
-                v-model="executionTaskFilters.source"
+                v-model="businessLedgerFilters.source"
                 size="small"
                 clearable
-                placeholder="任务来源"
-                @change="applyExecutionTaskFilters"
+                placeholder="来源"
+                @change="applyBusinessLedgerFilters"
               >
                 <el-option
-                  v-for="option in executionSourceOptions"
+                  v-for="option in clientInquirySourceOptions.slice(1)"
                   :key="option.value"
                   :label="option.label"
                   :value="option.value"
-                />
+                ></el-option>
               </el-select>
+              <el-select
+                v-if="canManageBusinessLedger"
+                v-model="businessLedgerFilters.responder_id"
+                size="small"
+                filterable
+                clearable
+                placeholder="负责人"
+                @change="applyBusinessLedgerFilters"
+              >
+                <el-option
+                  v-for="user in businessLedgerResponderOptions"
+                  :key="user.id"
+                  :label="user.username"
+                  :value="user.id"
+                ></el-option>
+              </el-select>
+              <el-date-picker
+                v-model="businessLedgerFilters.dateRange"
+                size="small"
+                type="datetimerange"
+                value-format="YYYY-MM-DDTHH:mm:ss"
+                format="YYYY-MM-DD HH:mm"
+                start-placeholder="开始时间"
+                end-placeholder="结束时间"
+                @change="applyBusinessLedgerFilters"
+              ></el-date-picker>
               <el-input
-                v-model="executionTaskFilters.keyword"
+                v-model="businessLedgerFilters.keyword"
                 size="small"
                 clearable
-                placeholder="任务标题/备注"
-                @keyup.enter="applyExecutionTaskFilters"
-                @clear="applyExecutionTaskFilters"
-              />
-              <el-button size="small" type="primary" plain @click="applyExecutionTaskFilters">查询</el-button>
+                placeholder="客户/电话/备注"
+                @keyup.enter="applyBusinessLedgerFilters"
+                @clear="applyBusinessLedgerFilters"
+              ></el-input>
+              <el-checkbox
+                v-model="businessLedgerFilters.overdue_only"
+                @change="applyBusinessLedgerFilters"
+              >
+                只看逾期
+              </el-checkbox>
+              <el-button size="small" type="primary" plain @click="applyBusinessLedgerFilters">查询</el-button>
             </div>
+
             <el-table
-              :data="executionTasks"
-              row-key="id"
-              class="users-table"
-              empty-text="暂无执行任务"
+              v-loading="businessLedgerLoading"
+              :data="businessLedgers"
+              row-key="inquiry_id"
+              class="users-table business-ledger-table"
+              empty-text="暂无商务台账"
+              :row-class-name="businessLedgerRowClass"
             >
-              <el-table-column label="任务" min-width="220" show-overflow-tooltip>
+              <el-table-column label="客户/要点" min-width="220" show-overflow-tooltip>
                 <template #default="{ row }">
                   <div class="operation-client">
-                    <strong>{{ row.title }}</strong>
-                    <small>{{ executionSourceLabel(row.source) }} · {{ row.source_ref_id || '无来源编号' }}</small>
+                    <strong>{{ row.client_name || '-' }}</strong>
+                    <small>{{ businessLedgerPreview(row) }}</small>
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column prop="assignee_username" label="负责人" width="120" />
-              <el-table-column label="截止时间" min-width="150">
-                <template #default="{ row }">{{ formatDate(row.due_at) }}</template>
-              </el-table-column>
-              <el-table-column label="状态" width="110">
+              <el-table-column prop="client_phone" label="联系方式" min-width="130" />
+              <el-table-column prop="source" label="来源" width="110" />
+              <el-table-column label="阶段" width="120">
                 <template #default="{ row }">
-                  <el-tag :type="executionStatusTag(row.status)" effect="plain">{{ executionStatusLabel(row.status) }}</el-tag>
+                  <el-tag :type="businessStageTag(row.stage)" effect="plain">{{ row.stage || '-' }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="逾期" width="90">
+              <el-table-column label="下次跟进" min-width="160">
                 <template #default="{ row }">
-                  <el-tag :type="row.is_overdue ? 'danger' : 'info'" effect="plain">
-                    {{ row.is_overdue ? '逾期' : '正常' }}
-                  </el-tag>
+                  <div class="ledger-followup-cell">
+                    <span>{{ formatDate(row.next_followup_at) }}</span>
+                    <el-tag v-if="isBusinessLedgerOverdue(row)" type="danger" effect="plain" size="small">
+                      逾期
+                    </el-tag>
+                  </div>
                 </template>
               </el-table-column>
+              <el-table-column prop="responder_username" label="负责人" width="120" />
               <el-table-column prop="notes" label="备注" min-width="180" show-overflow-tooltip />
-              <el-table-column label="操作" width="270" fixed="right">
+              <el-table-column label="操作" width="260" fixed="right">
                 <template #default="{ row }">
                   <div class="row-actions">
-                    <el-button size="small" :icon="Document" plain @click="openExecutionDetail(row)">详情</el-button>
+                    <el-button size="small" :icon="Document" plain @click="openBusinessLedgerDetail(row)">详情</el-button>
                     <el-button
                       size="small"
                       plain
-                      :disabled="row.status !== 'pending'"
-                      @click="updateExecutionTaskStatus(row, 'in_progress')"
+                      :disabled="!canEditBusinessLedger(row)"
+                      @click="openBusinessLedgerEdit(row)"
                     >
-                      开始
+                      编辑
                     </el-button>
                     <el-button
-                      size="small"
-                      plain
-                      :disabled="!['pending', 'in_progress'].includes(row.status)"
-                      @click="updateExecutionTaskStatus(row, 'done')"
-                    >
-                      完成
-                    </el-button>
-                    <el-button
-                      v-if="canCreateExecutionTask"
+                      v-if="canManageBusinessLedger"
                       size="small"
                       type="danger"
                       plain
-                      :disabled="!['pending', 'in_progress'].includes(row.status)"
-                      @click="cancelExecutionTask(row)"
+                      :disabled="!canCancelBusinessLedger(row)"
+                      @click="cancelBusinessLedger(row)"
                     >
-                      取消
+                      作废
                     </el-button>
                   </div>
                 </template>
               </el-table-column>
             </el-table>
             <el-pagination
-              v-if="executionTaskTotal > executionTaskPageSize"
-              v-model:current-page="executionTaskPage"
-              :page-size="executionTaskPageSize"
-              :total="executionTaskTotal"
+              v-if="businessLedgerTotal > businessLedgerPageSize"
+              v-model:current-page="businessLedgerPage"
+              :page-size="businessLedgerPageSize"
+              :total="businessLedgerTotal"
               layout="total, prev, pager, next"
               small
-              @current-change="loadExecutionTasks"
-            />
+              @current-change="loadBusinessLedgers"
+            ></el-pagination>
           </template>
         </template>
 
@@ -851,6 +1132,143 @@
         </template>
       </section>
     </main>
+
+    <el-dialog v-model="businessLedgerDialog.visible" :title="businessLedgerDialogTitle" width="620px">
+      <el-form label-position="top" :model="businessLedgerDialog.form">
+        <div class="ledger-form-grid">
+          <el-form-item label="客户">
+            <el-input
+              v-model="businessLedgerDialog.form.client_name"
+              maxlength="128"
+              :disabled="businessLedgerDialog.mode === 'edit' && !canManageBusinessLedger"
+            ></el-input>
+          </el-form-item>
+          <el-form-item label="联系方式">
+            <el-input v-model="businessLedgerDialog.form.client_phone" maxlength="64"></el-input>
+          </el-form-item>
+          <el-form-item label="来源">
+            <el-select
+              v-model="businessLedgerDialog.form.source"
+              class="full-width"
+              clearable
+              :disabled="businessLedgerDialog.mode === 'edit' && !canManageBusinessLedger"
+            >
+              <el-option
+                v-for="option in clientInquirySourceOptions.slice(1)"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              ></el-option>
+            </el-select>
+          </el-form-item>
+          <el-form-item label="阶段">
+            <el-select v-model="businessLedgerDialog.form.stage" class="full-width">
+              <el-option
+                v-for="option in businessLedgerStageOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              ></el-option>
+            </el-select>
+          </el-form-item>
+          <el-form-item label="下次跟进">
+            <el-date-picker
+              v-model="businessLedgerDialog.form.next_followup_at"
+              class="full-width"
+              type="datetime"
+              value-format="YYYY-MM-DDTHH:mm:ss"
+              format="YYYY-MM-DD HH:mm"
+            ></el-date-picker>
+          </el-form-item>
+          <el-form-item v-if="canManageBusinessLedger" label="负责人">
+            <el-select v-model="businessLedgerDialog.form.responder_id" class="full-width" filterable>
+              <el-option
+                v-for="user in businessLedgerResponderOptions"
+                :key="user.id"
+                :label="user.username"
+                :value="user.id"
+              ></el-option>
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item label="备注">
+          <el-input
+            v-model="businessLedgerDialog.form.notes"
+            type="textarea"
+            :rows="4"
+            maxlength="2000"
+            show-word-limit
+          ></el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="businessLedgerDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="submitBusinessLedger">
+          保存
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="businessLedgerDrawer.visible" size="620px" title="商务台账详情">
+      <div v-if="businessLedgerDrawer.loading" class="center-state">
+        <el-icon class="spin"><Refresh /></el-icon>
+        <span>加载中</span>
+      </div>
+      <template v-else-if="businessLedgerDrawer.ledger">
+        <div class="detail-grid">
+          <div>
+            <small>客户</small>
+            <strong>{{ businessLedgerDrawer.ledger.client_name || '-' }}</strong>
+          </div>
+          <div>
+            <small>联系方式</small>
+            <strong>{{ businessLedgerDrawer.ledger.client_phone || '-' }}</strong>
+          </div>
+          <div>
+            <small>来源</small>
+            <strong>{{ businessLedgerDrawer.ledger.source || '-' }}</strong>
+          </div>
+          <div>
+            <small>阶段</small>
+            <strong>{{ businessLedgerDrawer.ledger.stage || '-' }}</strong>
+          </div>
+          <div>
+            <small>负责人</small>
+            <strong>{{ businessLedgerDrawer.ledger.responder_username || '-' }}</strong>
+          </div>
+          <div>
+            <small>下次跟进</small>
+            <strong>{{ formatDate(businessLedgerDrawer.ledger.next_followup_at) }}</strong>
+          </div>
+          <div>
+            <small>创建时间</small>
+            <strong>{{ formatDate(businessLedgerDrawer.ledger.created_at) }}</strong>
+          </div>
+          <div>
+            <small>更新时间</small>
+            <strong>{{ formatDate(businessLedgerDrawer.ledger.updated_at) }}</strong>
+          </div>
+        </div>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Document /></el-icon>
+            <span>备注</span>
+          </div>
+          <p class="detail-text">{{ businessLedgerDrawer.ledger.notes || '-' }}</p>
+        </section>
+        <section v-if="businessLedgerDrawer.ledger.cancelled_at" class="drawer-section">
+          <div class="section-title">
+            <el-icon><Delete /></el-icon>
+            <span>作废记录</span>
+          </div>
+          <p class="detail-text">
+            {{ formatDate(businessLedgerDrawer.ledger.cancelled_at) }} ·
+            {{ businessLedgerDrawer.ledger.cancelled_by_username || '-' }} ·
+            {{ businessLedgerDrawer.ledger.cancel_reason || '-' }}
+          </p>
+        </section>
+      </template>
+    </el-drawer>
 
     <el-dialog v-model="grantDialog.visible" title="授予角色" width="420px">
       <el-form label-position="top" :model="grantDialog">
@@ -1007,6 +1425,62 @@
       </template>
     </el-drawer>
 
+    <el-dialog v-model="meetingDialog.visible" title="录入会议纪要" width="680px">
+      <el-form label-position="top" :model="meetingDialog.form">
+        <el-form-item label="会议纪要">
+          <el-input
+            v-model="meetingDialog.form.content"
+            type="textarea"
+            :rows="10"
+            maxlength="10000"
+            show-word-limit
+            placeholder="粘贴手动整理后的会议纪要，系统会生成待确认任务草稿"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="meetingDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="createMeetingNote">生成草稿</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="manualDraftDialog.visible" title="人工补充任务草稿" width="520px">
+      <el-form label-position="top" :model="manualDraftDialog.form">
+        <el-form-item label="任务标题">
+          <el-input v-model="manualDraftDialog.form.title" maxlength="120" show-word-limit />
+        </el-form-item>
+        <el-form-item label="负责人">
+          <el-select v-model="manualDraftDialog.form.assignee_id" class="full-width" filterable>
+            <el-option
+              v-for="user in executionAssigneeOptions"
+              :key="user.id"
+              :label="user.username"
+              :value="user.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="截止时间">
+          <el-date-picker
+            v-model="manualDraftDialog.form.due_at"
+            class="full-width"
+            type="datetime"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            format="YYYY-MM-DD HH:mm"
+          />
+        </el-form-item>
+        <el-form-item label="依据">
+          <el-input v-model="manualDraftDialog.form.source_sentence" maxlength="500" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="manualDraftDialog.form.notes" type="textarea" :rows="3" maxlength="500" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="manualDraftDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="addManualDraft">保存草稿</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="executionDialog.visible" title="新建执行任务" width="520px">
       <el-form label-position="top" :model="executionDialog.form">
         <el-form-item label="任务标题">
@@ -1116,6 +1590,93 @@
         </section>
       </template>
     </el-drawer>
+
+    <el-drawer v-model="meetingDrawer.visible" size="760px" title="会议纪要详情">
+      <div v-if="meetingDrawer.loading" class="center-state">
+        <el-icon class="spin"><Refresh /></el-icon>
+        <span>加载中</span>
+      </div>
+      <template v-else-if="meetingDrawer.note">
+        <div class="detail-grid">
+          <div>
+            <small>状态</small>
+            <strong>{{ meetingStatusLabel(meetingDrawer.note.status) }}</strong>
+          </div>
+          <div>
+            <small>提取状态</small>
+            <strong>{{ meetingAiStatusLabel(meetingDrawer.note.ai_status) }}</strong>
+          </div>
+          <div>
+            <small>录入人</small>
+            <strong>{{ meetingDrawer.note.created_by_username || '-' }}</strong>
+          </div>
+          <div>
+            <small>确认时间</small>
+            <strong>{{ formatDate(meetingDrawer.note.confirmed_at) }}</strong>
+          </div>
+        </div>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Tickets /></el-icon>
+            <span>会议纪要</span>
+          </div>
+          <p class="detail-text">{{ meetingDrawer.note.content || '-' }}</p>
+        </section>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Document /></el-icon>
+            <span>任务草稿</span>
+            <small>{{ meetingDrawer.note.pending_draft_count || 0 }} 条待确认</small>
+            <el-button size="small" type="primary" plain @click="openManualDraft">人工补充</el-button>
+          </div>
+          <div class="draft-list">
+            <div
+              v-for="draft in meetingDrawer.note.drafts || []"
+              :key="draft.id"
+              class="draft-item"
+            >
+              <div class="draft-source">
+                <el-tag size="small" :type="draftStatusTag(draft.status)" effect="plain">
+                  {{ draftStatusLabel(draft.status) }}
+                </el-tag>
+                <span>{{ draft.source_sentence }}</span>
+              </div>
+              <div v-if="draft.status === 'pending_review'" class="draft-confirm-grid">
+                <el-input v-model="draft.confirm_title" size="small" maxlength="120" />
+                <el-select v-model="draft.confirm_assignee_id" size="small" filterable placeholder="负责人">
+                  <el-option
+                    v-for="user in executionAssigneeOptions"
+                    :key="user.id"
+                    :label="user.username"
+                    :value="user.id"
+                  />
+                </el-select>
+                <el-date-picker
+                  v-model="draft.confirm_due_at"
+                  size="small"
+                  type="datetime"
+                  value-format="YYYY-MM-DDTHH:mm:ss"
+                  format="YYYY-MM-DD HH:mm"
+                  placeholder="截止时间"
+                />
+                <el-input v-model="draft.confirm_notes" size="small" placeholder="确认备注" />
+                <div class="row-actions">
+                  <el-button size="small" type="primary" plain @click="confirmDraft(draft)">确认</el-button>
+                  <el-button size="small" type="danger" plain @click="rejectDraft(draft)">驳回</el-button>
+                </div>
+              </div>
+              <div v-else class="draft-result">
+                <span>负责人：{{ draft.confirmed_assignee_username || draft.suggested_assignee_username || '-' }}</span>
+                <span>截止：{{ formatDate(draft.confirmed_due_at || draft.suggested_due_at) }}</span>
+                <span v-if="draft.accepted_task_id">任务 #{{ draft.accepted_task_id }}</span>
+                <span v-if="draft.rejection_reason">原因：{{ draft.rejection_reason }}</span>
+              </div>
+            </div>
+            <el-empty v-if="!meetingDrawer.note.drafts?.length" description="暂无任务草稿，可人工补充" />
+          </div>
+        </section>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -1210,6 +1771,24 @@ const executionSourceOptions = [
   { value: 'meeting', label: '会议纪要' },
 ]
 
+const meetingStatusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'draft', label: '草稿' },
+  { value: 'confirmed', label: '已确认' },
+  { value: 'revised', label: '有更正' },
+  { value: 'cancelled', label: '已作废' },
+]
+
+const businessLedgerStageOptions = [
+  { value: '初步接触', label: '初步接触' },
+  { value: '需求确认', label: '需求确认' },
+  { value: '报价中', label: '报价中' },
+  { value: '跟进议价', label: '跟进议价' },
+  { value: '成单', label: '成单' },
+  { value: '丢单', label: '丢单' },
+]
+const businessLedgerTerminalStages = new Set(['成单', '丢单'])
+
 const loginForm = reactive({ username: '', password: '' })
 const session = reactive({ user: null })
 const users = ref([])
@@ -1229,6 +1808,15 @@ const executionTasks = ref([])
 const executionTaskTotal = ref(0)
 const executionTaskPage = ref(1)
 const executionTaskPageSize = 20
+const meetings = ref([])
+const meetingTotal = ref(0)
+const meetingPage = ref(1)
+const meetingPageSize = 20
+const businessLedgers = ref([])
+const businessLedgerTotal = ref(0)
+const businessLedgerPage = ref(1)
+const businessLedgerPageSize = 20
+const businessLedgerLoading = ref(false)
 const clientInquiryFilters = reactive({
   source: '',
   keyword: '',
@@ -1245,10 +1833,25 @@ const executionTaskFilters = reactive({
   source: '',
   keyword: '',
 })
+const meetingFilters = reactive({
+  status: '',
+  keyword: '',
+})
+const businessLedgerFilters = reactive({
+  stage: [],
+  source: '',
+  responder_id: null,
+  dateRange: [],
+  keyword: '',
+  overdue_only: false,
+})
 const dashboardRange = ref('last_30_days')
 const dashboardTab = ref('quote')
+const executionPageTab = ref('tasks')
 const dashboardFeature = reactive({ quoteDisabled: false, responseDisabled: false, executionDisabled: false })
 const executionFeatureDisabled = ref(false)
+const meetingFeatureDisabled = ref(false)
+const businessLedgerFeatureDisabled = ref(false)
 const state = reactive({ loading: false, submitting: false, error: '' })
 const routeName = ref(routeFromPath(window.location.pathname))
 
@@ -1284,10 +1887,55 @@ const executionDialog = reactive({
   },
 })
 
+const meetingDialog = reactive({
+  visible: false,
+  form: {
+    content: '',
+  },
+})
+
+const manualDraftDialog = reactive({
+  visible: false,
+  form: {
+    title: '',
+    assignee_id: null,
+    due_at: '',
+    source_sentence: '',
+    notes: '',
+  },
+})
+
 const executionDrawer = reactive({
   visible: false,
   loading: false,
   task: null,
+})
+
+const meetingDrawer = reactive({
+  visible: false,
+  loading: false,
+  note: null,
+})
+
+const businessLedgerDialog = reactive({
+  visible: false,
+  mode: 'create',
+  inquiryId: '',
+  form: {
+    source: '',
+    client_name: '',
+    client_phone: '',
+    stage: '初步接触',
+    next_followup_at: '',
+    responder_id: null,
+    notes: '',
+  },
+})
+
+const businessLedgerDrawer = reactive({
+  visible: false,
+  loading: false,
+  ledger: null,
 })
 
 const roles = computed(() => session.user?.roles || [])
@@ -1297,6 +1945,9 @@ const canViewDashboard = computed(() => canAccessPermissions.value || roles.valu
 const canViewQuoteOperations = computed(() => canAccessPermissions.value)
 const canViewExecution = computed(() => canAccessPermissions.value || roles.value.includes('staff') || roles.value.includes('manager'))
 const canCreateExecutionTask = computed(() => canAccessPermissions.value)
+const canCreateMeetingNote = computed(() => canViewExecution.value)
+const canViewBusinessLedger = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
+const canManageBusinessLedger = computed(() => canAccessPermissions.value)
 const canOpenLegacyQuote = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
 const visibleDailyTrends = computed(() => (quoteDashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
@@ -1304,14 +1955,27 @@ const visibleResponseSources = computed(() => (responseDashboard.value?.by_sourc
 const visibleResponseResponders = computed(() => (responseDashboard.value?.by_responder || []).slice(0, 12))
 const visibleExecutionTrends = computed(() => (executionDashboard.value?.daily_trends || []).filter((item) => item.task_count > 0).slice(-12))
 const visibleExecutionAssignees = computed(() => (executionDashboard.value?.by_assignee || []).slice(0, 12))
-const executionAssigneeOptions = computed(() =>
-  users.value.filter((user) => user.is_active !== false && user.roles?.some((role) => ['system_admin', 'admin', 'staff', 'manager'].includes(role))),
-)
+const executionAssigneeOptions = computed(() => {
+  const source = users.value.length ? users.value : (session.user ? [session.user] : [])
+  return source.filter((user) => {
+    if (user.is_active === false) return false
+    if (!user.roles?.length) return user.id === session.user?.id
+    return user.roles.some((role) => ['system_admin', 'admin', 'staff', 'manager'].includes(role))
+  })
+})
+const businessLedgerResponderOptions = computed(() => {
+  const source = users.value.length ? users.value : (session.user ? [session.user] : [])
+  return source.filter((user) => user.is_active !== false)
+})
+const businessLedgerDialogTitle = computed(() => (
+  businessLedgerDialog.mode === 'edit' ? '编辑商务台账' : '新建商务台账'
+))
 
 function routeFromPath(path) {
   if (path === '/login') return 'login'
   if (path === '/admin/dashboard') return 'dashboard'
   if (path === '/admin/execution') return 'execution'
+  if (path === '/admin/business-ledger') return 'businessLedger'
   return 'permissions'
 }
 
@@ -1414,6 +2078,65 @@ function executionStatusTag(status) {
   return 'primary'
 }
 
+function meetingStatusLabel(status) {
+  const labels = {
+    draft: '草稿',
+    confirmed: '已确认',
+    revised: '有更正',
+    cancelled: '已作废',
+  }
+  return labels[status] || status
+}
+
+function meetingStatusTag(status) {
+  if (status === 'confirmed') return 'success'
+  if (status === 'cancelled') return 'info'
+  if (status === 'revised') return 'warning'
+  return 'primary'
+}
+
+function meetingAiStatusLabel(status) {
+  const labels = {
+    pending: '待提取',
+    extracted: '已生成草稿',
+    no_tasks: '无明确任务',
+    failed: '提取失败',
+  }
+  return labels[status] || status || '-'
+}
+
+function draftStatusLabel(status) {
+  const labels = {
+    pending_review: '待确认',
+    accepted: '已确认',
+    rejected: '已驳回',
+  }
+  return labels[status] || status
+}
+
+function draftStatusTag(status) {
+  if (status === 'accepted') return 'success'
+  if (status === 'rejected') return 'info'
+  return 'warning'
+}
+
+function meetingPreview(row) {
+  const content = row.content || row.extraction_error || `会议纪要 #${row.id}`
+  return content.length > 48 ? `${content.slice(0, 48)}...` : content
+}
+
+function toDatePickerValue(value) {
+  if (!value) return ''
+  return value.replace(' ', 'T').slice(0, 19)
+}
+
+function toTimestamp(value) {
+  if (!value) return null
+  const parsed = new Date(String(value).replace(' ', 'T'))
+  const time = parsed.getTime()
+  return Number.isNaN(time) ? null : time
+}
+
 function formatAmount(value) {
   if (value === null || value === undefined) return '-'
   return Number(value).toLocaleString('zh-CN', {
@@ -1434,6 +2157,42 @@ function canRetryQuoteJob(row) {
 
 function canCancelQuoteJob(row) {
   return ['queued', 'running'].includes(row.status)
+}
+
+function businessStageTag(stage) {
+  if (stage === '成单') return 'success'
+  if (stage === '丢单') return 'danger'
+  if (stage === '报价中' || stage === '跟进议价') return 'warning'
+  return 'primary'
+}
+
+function isBusinessTerminal(stage) {
+  return businessLedgerTerminalStages.has(stage)
+}
+
+function isBusinessLedgerOverdue(row) {
+  const followupTime = toTimestamp(row.next_followup_at)
+  if (!followupTime || row.cancelled_at || isBusinessTerminal(row.stage)) return false
+  return followupTime < Date.now()
+}
+
+function businessLedgerRowClass({ row }) {
+  return isBusinessLedgerOverdue(row) ? 'ledger-overdue-row' : ''
+}
+
+function businessLedgerPreview(row) {
+  const content = row.notes || row.source || row.inquiry_id || ''
+  return content.length > 42 ? `${content.slice(0, 42)}...` : content || '-'
+}
+
+function canEditBusinessLedger(row) {
+  if (!row || row.cancelled_at || isBusinessTerminal(row.stage)) return false
+  if (canManageBusinessLedger.value) return true
+  return row.responder_id === session.user?.id
+}
+
+function canCancelBusinessLedger(row) {
+  return canManageBusinessLedger.value && row && !row.cancelled_at && !isBusinessTerminal(row.stage)
 }
 
 function landingPath(user) {
@@ -1490,6 +2249,10 @@ async function loadUsers() {
 
 function isFeatureDisabled(error) {
   return error.response?.data?.detail === 'FEATURE_DISABLED'
+}
+
+function isBusinessLedgerDisabled(error) {
+  return error.response?.status === 404 && error.response?.data?.detail === 'NOT_FOUND'
 }
 
 async function loadClientInquiries() {
@@ -1635,6 +2398,64 @@ async function loadExecutionUsers() {
   }
 }
 
+async function loadBusinessLedgerUsers() {
+  if (!canManageBusinessLedger.value || users.value.length) return
+  try {
+    const response = await api.get('/admin/users')
+    users.value = responseData(response)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '负责人加载失败'))
+  }
+}
+
+async function loadBusinessLedgers() {
+  if (!canViewBusinessLedger.value) return
+  businessLedgerFeatureDisabled.value = false
+  businessLedgerLoading.value = true
+  const params = {
+    page: businessLedgerPage.value,
+    page_size: businessLedgerPageSize,
+  }
+  if (businessLedgerFilters.stage.length) params.stage = businessLedgerFilters.stage.join(',')
+  if (businessLedgerFilters.source) params.source = businessLedgerFilters.source
+  if (canManageBusinessLedger.value && businessLedgerFilters.responder_id) {
+    params.responder_id = businessLedgerFilters.responder_id
+  }
+  const [dateFrom, dateTo] = businessLedgerFilters.dateRange || []
+  if (dateFrom) params.date_from = dateFrom
+  if (dateTo) params.date_to = dateTo
+  const keyword = businessLedgerFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
+  if (businessLedgerFilters.overdue_only) params.overdue_only = true
+  try {
+    const response = await api.get('/business-ledger', { params })
+    businessLedgers.value = responseData(response) || []
+    businessLedgerTotal.value = response.data?.total ?? businessLedgers.value.length
+  } catch (error) {
+    businessLedgers.value = []
+    businessLedgerTotal.value = 0
+    if (isBusinessLedgerDisabled(error)) {
+      businessLedgerFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '商务台账加载失败'))
+  } finally {
+    businessLedgerLoading.value = false
+  }
+}
+
+function applyBusinessLedgerFilters() {
+  businessLedgerPage.value = 1
+  loadBusinessLedgers()
+}
+
+async function refreshExecutionPage() {
+  await loadExecutionTasks()
+  await loadMeetings()
+}
+
 async function loadExecutionTasks() {
   executionFeatureDisabled.value = false
   const params = {
@@ -1667,6 +2488,160 @@ function applyExecutionTaskFilters() {
   loadExecutionTasks()
 }
 
+async function loadMeetings() {
+  meetingFeatureDisabled.value = false
+  const params = {
+    page: meetingPage.value,
+    page_size: meetingPageSize,
+  }
+  if (meetingFilters.status) params.status = meetingFilters.status
+  const keyword = meetingFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
+  try {
+    const response = await api.get('/meetings', { params })
+    meetings.value = responseData(response) || []
+    meetingTotal.value = response.data?.total ?? meetings.value.length
+  } catch (error) {
+    meetings.value = []
+    meetingTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      meetingFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '会议纪要加载失败'))
+  }
+}
+
+function applyMeetingFilters() {
+  meetingPage.value = 1
+  loadMeetings()
+}
+
+function resetBusinessLedgerForm(mode = 'create') {
+  businessLedgerDialog.mode = mode
+  businessLedgerDialog.inquiryId = ''
+  businessLedgerDialog.form.source = ''
+  businessLedgerDialog.form.client_name = ''
+  businessLedgerDialog.form.client_phone = ''
+  businessLedgerDialog.form.stage = '初步接触'
+  businessLedgerDialog.form.next_followup_at = ''
+  businessLedgerDialog.form.responder_id = session.user?.id ?? null
+  businessLedgerDialog.form.notes = ''
+}
+
+function fillBusinessLedgerForm(row) {
+  businessLedgerDialog.inquiryId = row.inquiry_id
+  businessLedgerDialog.form.source = row.source || ''
+  businessLedgerDialog.form.client_name = row.client_name || ''
+  businessLedgerDialog.form.client_phone = row.client_phone || ''
+  businessLedgerDialog.form.stage = row.stage || '初步接触'
+  businessLedgerDialog.form.next_followup_at = toDatePickerValue(row.next_followup_at)
+  businessLedgerDialog.form.responder_id = row.responder_id || session.user?.id || null
+  businessLedgerDialog.form.notes = row.notes || ''
+}
+
+async function openBusinessLedgerCreate() {
+  await loadBusinessLedgerUsers()
+  resetBusinessLedgerForm('create')
+  businessLedgerDialog.visible = true
+}
+
+async function openBusinessLedgerEdit(row) {
+  if (!canEditBusinessLedger(row)) return
+  await loadBusinessLedgerUsers()
+  businessLedgerDialog.mode = 'edit'
+  try {
+    const response = await api.get(`/business-ledger/${row.inquiry_id}`)
+    fillBusinessLedgerForm(responseData(response))
+    businessLedgerDialog.visible = true
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '台账详情加载失败'))
+  }
+}
+
+async function openBusinessLedgerDetail(row) {
+  businessLedgerDrawer.visible = true
+  businessLedgerDrawer.loading = true
+  businessLedgerDrawer.ledger = null
+  try {
+    const response = await api.get(`/business-ledger/${row.inquiry_id}`)
+    businessLedgerDrawer.ledger = responseData(response)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '台账详情加载失败'))
+  } finally {
+    businessLedgerDrawer.loading = false
+  }
+}
+
+function businessLedgerSubmitPayload() {
+  const form = businessLedgerDialog.form
+  const payload = {
+    client_phone: form.client_phone,
+    stage: form.stage,
+    next_followup_at: form.next_followup_at || null,
+    notes: form.notes,
+  }
+  if (businessLedgerDialog.mode === 'create' || canManageBusinessLedger.value) {
+    payload.source = form.source
+    payload.client_name = form.client_name
+  }
+  if (canManageBusinessLedger.value && form.responder_id) {
+    payload.responder_id = form.responder_id
+  }
+  return payload
+}
+
+async function submitBusinessLedger() {
+  state.submitting = true
+  try {
+    if (businessLedgerDialog.mode === 'edit') {
+      await api.patch(`/business-ledger/${businessLedgerDialog.inquiryId}`, businessLedgerSubmitPayload())
+      ElMessage.success('已更新商务台账')
+    } else {
+      await api.post('/business-ledger', businessLedgerSubmitPayload())
+      ElMessage.success('已创建商务台账')
+    }
+    businessLedgerDialog.visible = false
+    await loadBusinessLedgers()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '保存失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function cancelBusinessLedger(row) {
+  if (!canCancelBusinessLedger(row)) return
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt('请输入作废原因', '作废商务台账', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '作废原因不能为空',
+      confirmButtonText: '确认作废',
+      cancelButtonText: '返回',
+      type: 'warning',
+    })
+    reason = result.value
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/business-ledger/${row.inquiry_id}/cancel`, { reason })
+    ElMessage.success('已作废商务台账')
+    await loadBusinessLedgers()
+    if (businessLedgerDrawer.ledger?.inquiry_id === row.inquiry_id) {
+      businessLedgerDrawer.visible = false
+    }
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '作废失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
 async function openExecutionCreate() {
   await loadExecutionUsers()
   executionDialog.form.title = ''
@@ -1676,6 +2651,11 @@ async function openExecutionCreate() {
   executionDialog.form.source_ref_id = ''
   executionDialog.form.notes = ''
   executionDialog.visible = true
+}
+
+function openMeetingCreate() {
+  meetingDialog.form.content = ''
+  meetingDialog.visible = true
 }
 
 async function createExecutionTask() {
@@ -1699,6 +2679,25 @@ async function createExecutionTask() {
     if (routeName.value === 'dashboard') await loadDashboards()
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '创建任务失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function createMeetingNote() {
+  if (!meetingDialog.form.content.trim()) {
+    ElMessage.warning('请填写会议纪要')
+    return
+  }
+  state.submitting = true
+  try {
+    const response = await api.post('/meetings', { content: meetingDialog.form.content })
+    meetingDialog.visible = false
+    ElMessage.success('已生成任务草稿')
+    await loadMeetings()
+    await openMeetingDetail(responseData(response))
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '会议纪要保存失败'))
   } finally {
     state.submitting = false
   }
@@ -1756,6 +2755,159 @@ async function openExecutionDetail(row) {
     ElMessage.error(apiErrorMessage(error, '任务详情加载失败'))
   } finally {
     executionDrawer.loading = false
+  }
+}
+
+function prepareMeetingDetail(note) {
+  const fallbackAssignee = executionAssigneeOptions.value[0]?.id ?? session.user?.id ?? null
+  return {
+    ...note,
+    drafts: (note.drafts || []).map((draft) => ({
+      ...draft,
+      confirm_title: draft.title,
+      confirm_assignee_id: draft.confirmed_assignee_id || draft.suggested_assignee_id || fallbackAssignee,
+      confirm_due_at: toDatePickerValue(draft.confirmed_due_at || draft.suggested_due_at),
+      confirm_notes: draft.notes || '',
+    })),
+  }
+}
+
+async function openMeetingDetail(row) {
+  await loadExecutionUsers()
+  meetingDrawer.visible = true
+  meetingDrawer.loading = true
+  meetingDrawer.note = null
+  try {
+    const response = await api.get(`/meetings/${row.id}`)
+    meetingDrawer.note = prepareMeetingDetail(responseData(response))
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '会议纪要详情加载失败'))
+  } finally {
+    meetingDrawer.loading = false
+  }
+}
+
+function openManualDraft() {
+  if (!meetingDrawer.note) return
+  const fallbackAssignee = executionAssigneeOptions.value[0]?.id ?? session.user?.id ?? null
+  manualDraftDialog.form.title = ''
+  manualDraftDialog.form.assignee_id = fallbackAssignee
+  manualDraftDialog.form.due_at = ''
+  manualDraftDialog.form.source_sentence = '人工补充'
+  manualDraftDialog.form.notes = ''
+  manualDraftDialog.visible = true
+}
+
+async function addManualDraft() {
+  if (!meetingDrawer.note || !manualDraftDialog.form.title.trim()) {
+    ElMessage.warning('请填写任务标题')
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/meetings/${meetingDrawer.note.id}/drafts`, {
+      title: manualDraftDialog.form.title,
+      assignee_id: manualDraftDialog.form.assignee_id,
+      due_at: manualDraftDialog.form.due_at,
+      source_sentence: manualDraftDialog.form.source_sentence,
+      notes: manualDraftDialog.form.notes,
+    })
+    manualDraftDialog.visible = false
+    ElMessage.success('已补充任务草稿')
+    await openMeetingDetail(meetingDrawer.note)
+    await loadMeetings()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '补充草稿失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function confirmDraft(draft) {
+  if (!meetingDrawer.note) return
+  if (!draft.confirm_title?.trim() || !draft.confirm_assignee_id || !draft.confirm_due_at) {
+    ElMessage.warning('请补齐标题、负责人和截止时间')
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/meetings/${meetingDrawer.note.id}/confirm-tasks`, {
+      drafts: [
+        {
+          draft_id: draft.id,
+          action: 'accept',
+          title: draft.confirm_title,
+          assignee_id: draft.confirm_assignee_id,
+          due_at: draft.confirm_due_at,
+          notes: draft.confirm_notes,
+        },
+      ],
+    })
+    ElMessage.success('已写入执行任务')
+    await openMeetingDetail(meetingDrawer.note)
+    await loadMeetings()
+    await loadExecutionTasks()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '确认草稿失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function rejectDraft(draft) {
+  if (!meetingDrawer.note) return
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt('请输入驳回原因', '驳回任务草稿', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '驳回原因不能为空',
+      confirmButtonText: '确认驳回',
+      cancelButtonText: '返回',
+      type: 'warning',
+    })
+    reason = result.value
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/meetings/${meetingDrawer.note.id}/confirm-tasks`, {
+      drafts: [{ draft_id: draft.id, action: 'reject', rejection_reason: reason }],
+    })
+    ElMessage.success('已驳回草稿')
+    await openMeetingDetail(meetingDrawer.note)
+    await loadMeetings()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '驳回草稿失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function cancelMeeting(row) {
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt('请输入作废原因', '作废会议纪要', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '作废原因不能为空',
+      confirmButtonText: '确认作废',
+      cancelButtonText: '返回',
+      type: 'warning',
+    })
+    reason = result.value
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/meetings/${row.id}/cancel`, { reason })
+    ElMessage.success('已作废会议纪要')
+    await loadMeetings()
+    if (meetingDrawer.note?.id === row.id) await openMeetingDetail(row)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '作废失败'))
+  } finally {
+    state.submitting = false
   }
 }
 
@@ -1861,6 +3013,19 @@ async function bootstrap() {
       }
       await loadExecutionTasks()
       await loadExecutionUsers()
+      await loadMeetings()
+      if (executionFeatureDisabled.value && !meetingFeatureDisabled.value) {
+        executionPageTab.value = 'meetings'
+      }
+      return
+    }
+    if (routeName.value === 'businessLedger') {
+      if (!canViewBusinessLedger.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadBusinessLedgerUsers()
+      await loadBusinessLedgers()
       return
     }
     if (!canAccessPermissions.value) {

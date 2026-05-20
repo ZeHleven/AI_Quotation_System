@@ -59,3 +59,6 @@ ai-web/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+.codex-pet-runs/
+hatch_runs/

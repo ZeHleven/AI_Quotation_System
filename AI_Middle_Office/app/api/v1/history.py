@@ -1,12 +1,13 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user
-from app.models.client_inquiry import ClientInquiry
+from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
 from app.models.quote_history import QuoteHistory, QuoteHistoryItem
 from app.models.quote_job import QuoteJob
 from app.models.user import User
@@ -50,7 +51,13 @@ def _client_inquiry_map(db: Session, records: list[QuoteHistory]) -> dict[str, C
         return {}
     rows = (
         db.query(QuoteJob.job_id, ClientInquiry)
-        .join(ClientInquiry, QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id)
+        .join(
+            ClientInquiry,
+            and_(
+                QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id,
+                ClientInquiry.direction == DIRECTION_INBOUND,
+            ),
+        )
         .filter(QuoteJob.job_id.in_(job_ids))
         .all()
     )

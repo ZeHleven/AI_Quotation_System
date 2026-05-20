@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -16,7 +16,7 @@ from app.core.database import SessionLocal, get_db
 from app.core.logging import get_trace_id
 from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user, require_admin
-from app.models.client_inquiry import ClientInquiry
+from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
 from app.models.file_object import FileObject
 from app.models.quote_history import QuoteHistory
 from app.models.quote_job import QuoteJob, QuoteJobEvent
@@ -85,7 +85,15 @@ def _quote_job_context_maps(
     histories_by_job_id: dict[str, QuoteHistory] = {}
 
     if inquiry_ids:
-        inquiries = db.query(ClientInquiry).filter(ClientInquiry.inquiry_id.in_(inquiry_ids)).all()
+        # defensive: QuoteJob.client_inquiry_id should only bind inbound inquiries.
+        inquiries = (
+            db.query(ClientInquiry)
+            .filter(
+                ClientInquiry.inquiry_id.in_(inquiry_ids),
+                ClientInquiry.direction == DIRECTION_INBOUND,
+            )
+            .all()
+        )
         inquiries_by_id = {inquiry.inquiry_id: inquiry for inquiry in inquiries}
 
     if job_ids:
@@ -345,7 +353,13 @@ async def list_quote_jobs(
         query = query.filter(QuoteJob.created_at <= end)
 
     if source:
-        query = query.outerjoin(ClientInquiry, QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id)
+        query = query.outerjoin(
+            ClientInquiry,
+            and_(
+                QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id,
+                ClientInquiry.direction == DIRECTION_INBOUND,
+            ),
+        )
         joined_inquiry = True
         query = query.filter(ClientInquiry.source == source.strip())
 
@@ -353,7 +367,13 @@ async def list_quote_jobs(
         keyword_value = keyword.strip()
         if keyword_value:
             if not joined_inquiry:
-                query = query.outerjoin(ClientInquiry, QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id)
+                query = query.outerjoin(
+                    ClientInquiry,
+                    and_(
+                        QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id,
+                        ClientInquiry.direction == DIRECTION_INBOUND,
+                    ),
+                )
                 joined_inquiry = True
             pattern = f"%{keyword_value}%"
             query = query.filter(

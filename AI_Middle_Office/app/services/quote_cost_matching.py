@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.cost_item import COST_STATUS_ACTIVE, CostItem
 from app.services.quote_history import extract_project_payload, parse_amount
+from app.services.quote_omission_detection import detect_quote_omissions
 
 
 logger = logging.getLogger(__name__)
@@ -390,6 +391,7 @@ def enrich_quote_payload_with_cost_refs(db: Session, payload: Any) -> Any:
                 row["cost_reference"] = _no_match_reference(row)
         target["project_details"] = rows
         target["cost_reference_summary"] = _reference_summary(rows, len(active_items))
+        target.update(detect_quote_omissions(rows, active_items))
         return enriched if _contains_project_details_object(enriched) else target
 
     if isinstance(target, list):

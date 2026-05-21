@@ -59,7 +59,22 @@ def test_normalize_quote_request_text_flattens_numbered_lists():
     assert "拆除复合木地板，35平方米；拆除木脚线，42米；拆砖墙（120厚砖墙），8平方米" in normalized
 
 
+def test_normalize_quote_request_text_flattens_plain_multiline_quote_items():
+    text = "拆除复合木地板 20㎡\n拆除复合木地板 20㎡，拆除木脚线 30m\n窗帘盒/灯槽拆除 18m"
+
+    normalized = normalize_quote_request_text(text)
+
+    assert normalized == "拆除复合木地板 20㎡；拆除复合木地板 20㎡，拆除木脚线 30m；窗帘盒/灯槽拆除 18m"
+    assert "\n" not in normalized
+
+
 def test_normalize_quote_request_text_keeps_plain_text_unchanged():
     text = "请生成报价明细：拆除复合木地板35平方米；拆除木脚线42米"
+
+    assert normalize_quote_request_text(text) == text
+
+
+def test_normalize_quote_request_text_keeps_non_quote_multiline_text_unchanged():
+    text = "请按现场照片预估\n垃圾清运是否包含由现场确认"
 
     assert normalize_quote_request_text(text) == text

@@ -209,6 +209,13 @@
     }
     .learning-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .learning-meta { font-size: 12px; color: var(--slate); }
+    .omission-panel {
+      display: grid; gap: 8px; padding: 10px 12px;
+      border: 1px solid #f2c078; border-radius: 6px; background: #fff8ec;
+    }
+    .omission-item { display: grid; gap: 4px; color: var(--dark); }
+    .omission-item strong { font-size: 13px; }
+    .omission-item span { font-size: 12px; color: var(--slate); }
     .cost-reference-cell { display: grid; gap: 4px; align-items: start; }
     .cost-reference-price { font-size: 13px; font-weight: 700; color: var(--dark); }
     .cost-reference-delta { font-size: 12px; color: var(--slate); }
@@ -477,6 +484,22 @@
             show-icon
             :closable="false"
           ></el-alert>
+          <el-alert
+            v-if="omissionSuggestions.length"
+            :title="omissionSummaryText"
+            type="warning"
+            show-icon
+            :closable="false"
+          ></el-alert>
+          <div v-if="omissionSuggestions.length" class="omission-panel">
+            <div v-for="item in omissionSuggestions.slice(0, 3)" :key="item.rule_id || item.cost_item_id" class="omission-item">
+              <strong>第 {{ item.trigger_row_no || '-' }} 行可能漏项：{{ item.suggested_label || item.suggested_item_name }}</strong>
+              <span>{{ item.reason }}</span>
+              <span v-if="item.reference_price !== null && item.reference_price !== undefined">
+                成本库参考：{{ item.suggested_item_name }}，¥ {{ formatMoney(item.reference_price) }} / {{ item.unit || '-' }}
+              </span>
+            </div>
+          </div>
           <el-alert v-if="previewRiskItems.length" :title="riskSummaryText" :type="highRiskCount > 0 ? 'error' : 'warning'" show-icon :closable="false"></el-alert>
           <div class="learning-panel">
             <div class="learning-row">
@@ -608,6 +631,8 @@
         const showPreviewDialog = ref(false);
         const previewData       = ref([]);
         const previewOriginalData = ref([]);
+        const omissionSuggestions = ref([]);
+        const omissionSummary = ref({});
         const globalNotes       = ref('');
         const pushing           = ref(false);
         const pushError         = ref('');
@@ -849,6 +874,14 @@
           return { total, matched, unmatched: Math.max(0, total - matched) };
         });
 
+        const omissionSummaryText = computed(() => {
+          const count = omissionSuggestions.value.length;
+          if (!count) return '';
+          const ruleCount = Number(omissionSummary.value.rule_count || 0);
+          const suffix = ruleCount ? `，已执行 ${ruleCount} 条保守规则` : '';
+          return `疑似漏项提示：发现 ${count} 条需确认的配套项目${suffix}`;
+        });
+
         const costReferenceLabel = (row = {}) => {
           const reference = costReference(row);
           if (!reference.matched) return '无底价参考';
@@ -980,6 +1013,7 @@
           rawData = rawData || {};
           let extractedArray = [];
           let extractedNotes = '无';
+          let extractedPayload = null;
 
           const unwrapPayload = (value, depth = 0) => {
             if (!value || depth > 5 || typeof value !== 'object' || Array.isArray(value)) return value;
@@ -1024,8 +1058,10 @@
                 if (nestedPayload.project_details && Array.isArray(nestedPayload.project_details)) {
                   extractedArray = nestedPayload.project_details;
                   extractedNotes = nestedPayload.customer_questions_answered || nestedPayload.notes || '无';
+                  extractedPayload = nestedPayload;
                 } else if (Array.isArray(nestedPayload)) {
                   extractedArray = nestedPayload;
+                  extractedPayload = { project_details: nestedPayload };
                 }
               }
             } catch(e) { console.error('JSON反序列化出错:', e); }
@@ -1036,16 +1072,20 @@
             if (nestedPayload.project_details && Array.isArray(nestedPayload.project_details)) {
               extractedArray = nestedPayload.project_details;
               extractedNotes = nestedPayload.customer_questions_answered || nestedPayload.notes || '无';
+              extractedPayload = nestedPayload;
             } else if (Array.isArray(rawData)) {
               extractedArray = rawData;
+              extractedPayload = { project_details: rawData };
             } else if (rawData.data && Array.isArray(rawData.data)) {
               extractedArray = rawData.data;
+              extractedPayload = { project_details: rawData.data };
             } else if (rawData.result && Array.isArray(rawData.result)) {
               extractedArray = rawData.result;
+              extractedPayload = { project_details: rawData.result };
             }
           }
 
-          return { rows: Array.isArray(extractedArray) ? extractedArray : [], notes: extractedNotes };
+          return { rows: Array.isArray(extractedArray) ? extractedArray : [], notes: extractedNotes, payload: extractedPayload || rawData };
         };
 
         const openPreviewFromPayload = (rawData, context = {}) => {
@@ -1053,6 +1093,10 @@
           if (!parsed.rows.length) return false;
           previewOriginalData.value = cloneRows(parsed.rows);
           previewData.value = cloneRows(parsed.rows);
+          omissionSuggestions.value = Array.isArray(parsed.payload?.omission_suggestions)
+            ? parsed.payload.omission_suggestions
+            : [];
+          omissionSummary.value = parsed.payload?.omission_summary || {};
           globalNotes.value = parsed.notes;
           previewContext.value = {
             quoteJobId: context.quoteJobId || context.jobId || rawData?.quote_job_id || rawData?.job_id || '',
@@ -1476,6 +1520,8 @@
             }
           }
           previewOriginalData.value = [];
+          omissionSuggestions.value = [];
+          omissionSummary.value = {};
           messageHistory.value.push({ role: 'assistant', content: '⏸️ 人工审核不通过，流程已打回。您可以修改参数后重新输入指令。' });
           scrollToBottom();
         };
@@ -1508,6 +1554,8 @@
             });
             previewContext.value = { quoteJobId: '', traceId: '', quoteId: '', rawPayload: null };
             previewOriginalData.value = [];
+            omissionSuggestions.value = [];
+            omissionSummary.value = {};
             ElMessage.success('🎉 确认成功！最终报价单已推送到钉钉！');
             showPreviewDialog.value = false;
             sending.value = false;
@@ -1551,6 +1599,7 @@
           showPreviewDialog, previewData, previewOriginalData, pushing, pushError, finalTotalAmount,
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
+          omissionSuggestions, omissionSummary, omissionSummaryText,
           costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText, costReferenceTagType,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,

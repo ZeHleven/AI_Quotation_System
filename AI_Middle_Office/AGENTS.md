@@ -43,10 +43,11 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - AI 平台升级 BIZ Track BIZ-2b 报价时材料底价查询已完成代码层验证（2026-05-21）：新增报价结果成本参考匹配服务，接入同步 `/chat` 与异步 `quote_jobs` preview 结果；仅匹配 `active` 成本条目，优先 `item_name + spec` 精确匹配，其次 `item_name` 模糊匹配；旧 `index.html` 预审弹窗已展示“成本库参考价 vs AI 生成价”和价差提示。不新增 Alembic；当前环境成本库 `active=190`，已具备真实运行态成本参考匹配数据基础。
 - AI 平台升级 BIZ Track BIZ-2c 成本库主库化 + active RAG 同步已完成当前环境验证（2026-05-21）：新增 active 成本条目 RAG 同步服务、`POST /api/v1/admin/cost-items/sync-rag` 管理员接口、Alembic `20260520_0019` 同步记录表 `cost_rag_sync_runs`、`GET /api/v1/admin/cost-items/sync-rag/runs` 和 Vite `/admin/cost-db`“同步 active 到 RAG / 同步记录”窗口；同步源只取 `cost_items.active`。旧 `materials` 作为报价/RAG 源已退役，70 条测试数据已备份后清空，旧 materials 写入/回滚、旧 `/admin/sync_milvus` 和旧知识候选 approve 均返回 410。
 - AI 平台升级 BIZ Track BIZ-2d 成本库参考价命中率优化已完成代码层验证（2026-05-21）：补强 `quote_cost_matching` 的中文名称归一化、符号/连接词处理、词序无关 token 匹配、单位族兼容和动作词误命中保护；“窗帘盒/灯槽拆除”类写法可命中 active 成本库底价；编号换行清单在发送 N8N 前会自动清洗成分号清单，避免 `1. / 2. / 3.` 多行需求触发空响应。不新增 Alembic，不启动漏项检测。
+- AI 平台升级 BIZ Track BIZ-2e 漏项检测已完成代码层验证（2026-05-21）：新增保守规则式漏项检测服务，复用同步 `/chat` 与异步 `quote_jobs` preview 成本库 enrichment；仅基于 `cost_items.active` 生成 `omission_summary` / `omission_suggestions`，旧 `index.html` 预审弹窗展示疑似漏项、触发行、原因和成本库参考价；不自动新增报价行、不改变合计、不新增 Alembic。
 - 产品边界：系统完善前不正式投入生产使用；后续阶段先按内网开发/验证推进，最后统一准备正式生产 Runbook。
 - 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
 - 当前数据库迁移 head：`20260520_0019`；内网验证数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账、BIZ-2a 成本数据库和 BIZ-2c RAG 同步记录。
-- 最新验证（2026-05-21，BIZ-2d 成本库参考价命中率优化）：`python -m alembic current` 显示 `20260520_0019 (head)`；`FEATURE_COST_DB=true`、`PUBLIC_ACCESS_ENABLED=false`；成本库当前 `total=197 / active=190 / archived=7`；真实库 smoke 已确认“窗帘盒灯槽拆除”命中 active `cost_item_id=180`、参考价 `6.0`；编号换行清单预清洗已覆盖同步 `/chat` 与异步 `quote_jobs`；`python -m compileall app tests` 通过；`python -m pytest` 为 `153 passed`；`cmd /c npm.cmd run build` 通过。当前不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d，不启动漏项检测。
+- 最新验证（2026-05-21，BIZ-2e 漏项检测）：`python -m alembic current` 显示 `20260520_0019 (head)`；`FEATURE_COST_DB=true`、`PUBLIC_ACCESS_ENABLED=false`；成本库当前 `total=197 / active=190 / archived=7`；漏项检测不新增数据库结构，聚焦木地板拆除→踢脚线拆除、防水→防水保护层、墙地砖/吊顶拆除→垃圾清运等保守提示；“窗帘盒/灯槽拆除”保持不误报；`python -m pytest` 为 `156 passed`，`cmd /c npm.cmd run build` 通过。当前不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
 
 ## 关键模块
 
@@ -63,6 +64,7 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - `app/api/v1/users.py`：用户配额管理、Phase 0 角色授权/撤销和权限历史。
 - `app/api/v1/quote_jobs.py`：新版异步报价任务 API，创建、查询、事件流、取消、重试、超时标记。
 - `app/services/quote_cost_matching.py`：BIZ-2b/BIZ-2d 报价结果成本底价参考匹配，给 preview 明细附加 `cost_reference` 与匹配汇总，并处理中文符号、单位族和词序差异。
+- `app/services/quote_omission_detection.py`：BIZ-2e 保守规则式漏项检测，基于当前报价行和 `cost_items.active` 生成 `omission_summary` / `omission_suggestions`。
 - `app/services/quote_helpers.py`：报价通用工具，包含 N8N 签名、报价文件名和编号换行清单输入清洗。
 - `app/services/cost_rag_sync.py`：BIZ-2c active 成本条目 RAG 同步，将 `cost_items.active` 转换为 RAG `/admin/reload` 兼容 payload。
 - `app/api/v1/execution_tasks.py`：Phase 3 执行任务 API，创建、列表、详情、进度更新和取消。

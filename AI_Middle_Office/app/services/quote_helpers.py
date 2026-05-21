@@ -8,16 +8,23 @@ from app.core.config import settings
 
 
 NUMBERED_LIST_ITEM = re.compile(r"^\s*(?:[\(（]?\d+[\)）\.．、]|[一二三四五六七八九十]+[、\.．])\s*(?P<item>.+?)\s*$")
+QUOTE_ITEM_LINE = re.compile(
+    r"\d+(?:\.\d+)?\s*(?:㎡|m2|m²|平方米|平米|平方|m|米|延米|延长米|项|个|套|处|立方米|m3|m³|方|kg|公斤|吨|t)",
+    re.IGNORECASE,
+)
 
 
 def normalize_quote_request_text(text: str | None) -> str:
-    """Flatten numbered quote lists before sending them to n8n/Dify."""
+    """Flatten quote item lists before sending them to n8n/Dify."""
     if not text:
         return ""
 
     normalized = str(text).replace("\r\n", "\n").replace("\r", "\n")
     lines = [line.strip() for line in normalized.split("\n")]
+    non_empty_lines = [line for line in lines if line]
     if not any(NUMBERED_LIST_ITEM.match(line) for line in lines if line):
+        if len(non_empty_lines) >= 2 and sum(1 for line in non_empty_lines if QUOTE_ITEM_LINE.search(line)) >= 2:
+            return "；".join(line.strip("；;") for line in non_empty_lines).strip()
         return normalized.strip()
 
     prefix_parts: list[str] = []

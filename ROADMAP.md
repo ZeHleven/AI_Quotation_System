@@ -18,6 +18,7 @@
 > BIZ-2a 成本数据库状态机补强已完成代码层验证（2026-05-21）：新增“撤回启用”和批量状态流转能力，支持单条/批量 `draft -> active`、`active -> draft` 并写入 `cost_item_history`，`draft` 恢复幂等，`archived` 仍作为作废冻结态不可撤回；Vite `/admin/cost-db` 增加“撤回启用”“批量核定 active”“批量恢复 draft”入口。
 > AI 平台升级 BIZ Track BIZ-2c 成本库主库化 + active RAG 同步已完成当前环境验证（2026-05-21）：新增 `app/services/cost_rag_sync.py`、`POST /api/v1/admin/cost-items/sync-rag`、Alembic `20260520_0019` 的 `cost_rag_sync_runs`、`GET /api/v1/admin/cost-items/sync-rag/runs` 和 Vite `/admin/cost-db`“同步 active 到 RAG / 同步记录”窗口；同步源只取 `cost_items.active` 并转换为 RAG `/admin/reload` 兼容 payload。旧 `materials` 已退役并清空 70 条测试数据，旧 `/admin/sync_milvus`、旧 materials 写入/回滚和旧知识候选 approve 均返回 410。当前环境 active 190 条已同步可检索。
 > AI 平台升级 BIZ Track BIZ-2d 成本库参考价命中率优化已完成代码层验证（2026-05-21）：补强 `quote_cost_matching` 的中文名称归一化、符号/连接词处理、词序无关 token 匹配、单位族兼容和动作词误命中保护；已验证“窗帘盒/灯槽拆除”与“窗帘盒灯槽拆除/延米/米”等写法能命中 active 成本库底价；补充编号换行清单输入清洗，避免 `1. / 2. / 3.` 多行需求触发 N8N 空响应。不新增 Alembic，不启动漏项检测。
+> AI 平台升级 BIZ Track BIZ-2e 漏项检测已完成代码层验证（2026-05-21）：新增保守规则式漏项检测服务，复用报价预审成本库 enrichment，仅基于 `cost_items.active` 给出“疑似漏项”提示；旧 `index.html` 预审弹窗展示提示、触发行和成本库参考价，不自动新增报价行、不改变合计、不新增 Alembic。
 > 商务/市场部提效路线阶段性收束（2026-05-20）：BIZ-1a 台账已完成，但后续提醒、流水等低收益延展暂不继续推进；真正高价值方向调整为"外部项目源自动搜索/收集 + 公司标准筛选 + 联系方式输出"，因外部项目搜索引擎调用成功率未知、外部项目收集平台合作和 API 权限尚未确定，标记为待定。
 
 ---
@@ -38,6 +39,7 @@
 - **AI 平台升级 BIZ Track BIZ-2b 报价时材料底价查询已完成代码层验证**：已新增报价结果成本参考匹配服务，接入同步 `/chat` 与异步 `quote_jobs` preview 结果；预审弹窗展示“成本库参考价 vs AI 生成价”、匹配类型、价差与偏离底价风险；全量测试通过，Vite build 通过。当前环境成本库 `active=190`，已具备真实运行态成本参考匹配数据基础。
 - **AI 平台升级 BIZ Track BIZ-2c 成本库主库化 + active RAG 同步已完成当前环境验证**：已新增 active 成本条目 RAG 同步服务、`/api/v1/admin/cost-items/sync-rag` 管理员接口、`cost_rag_sync_runs` 同步记录表和 `/api/v1/admin/cost-items/sync-rag/runs` 查询接口，Vite `/admin/cost-db` 可手动同步 active 成本条目到 RAG 并查看同步记录；报价成本主库明确为 `cost_items.active`，`draft` / `archived` 不参与报价和有效 RAG 同步；旧 `materials` 作为报价/RAG 源已退役，70 条测试数据已备份后清空，旧 materials 写入/回滚、旧 `/admin/sync_milvus` 和旧知识候选 approve 均返回 410。当前环境 Alembic 已升级到 `20260520_0019 (head)`；全量测试 `145 passed`，Vite build 通过。
 - **AI 平台升级 BIZ Track BIZ-2d 成本库参考价命中率优化已完成代码层验证**：已补强成本参考匹配服务，支持中文符号差异、连接词差异、词序变化和 `m`/`米`/`延米` 等单位族兼容，并通过动作词与单位兼容校验降低误命中；真实库 smoke 已确认“窗帘盒灯槽拆除”命中 active `cost_item_id=180`、参考价 `6.0`；已补充编号换行清单输入清洗，发送 N8N 前自动转成分号清单；不新增数据库结构，不启动漏项检测。
+- **AI 平台升级 BIZ Track BIZ-2e 漏项检测已完成代码层验证**：已新增 `app/services/quote_omission_detection.py`，在同步 `/chat` 和异步 `quote_jobs` preview 的成本库 enrichment 后追加 `omission_summary` / `omission_suggestions`；首批规则覆盖木地板拆除→踢脚线拆除、防水→防水保护层、墙地砖/吊顶拆除→垃圾清运等保守提示，并内置“窗帘盒/灯槽拆除”不误报验收；只提示、不自动改总价、不新增数据库结构。
 - **商务/市场部路线阶段性暂停**：BIZ-1a 台账属于信息沉淀工具，对核心效率提升有限；BIZ-1b 跟进提醒、BIZ-1c 跟进流水和传统 CRM 式延展暂不启动。后续只保留高价值待定方向：调用外部项目搜索引擎或外部项目收集平台，结合公司内部筛选项目标准，自动筛选合格项目并提供联系方式；待外部平台合作、API 权限和搜索可行性明确后再重新立项。
 - **正式生产策略**：系统整体完善前不正式投入生产使用；不再为单一阶段单独做正式生产上线闭环。
 - **维护策略**：进入问题驱动维护阶段，优先投入报价准确率、知识库质量、RAG 评测和真实用户体验问题。
@@ -253,9 +255,20 @@ cost_item_history
 
 #### BIZ-2e 漏项检测（BIZ-2c 后评估）
 
-- AI 报价生成后，与成本库高频出现的配套条目对比
-- 检测疑似漏项并在预审弹窗中给出提示（"通常还包含：XXX"）
-- 初期基于规则（同类项目历史共现），后期可接 RAG 增强
+**当前状态**：已完成代码层验证（2026-05-21）。本阶段采用保守规则式漏项检测，不新增数据库结构；同步 `/chat` 和异步 `quote_jobs` preview 都会在成本库参考价匹配后追加 `omission_summary` / `omission_suggestions`，旧 `index.html` 预审弹窗只展示“疑似漏项”提示，不自动新增报价行、不改变系统合计。
+
+- AI 报价生成后，基于当前报价行和 `cost_items.active` 检测常见配套漏项
+- 首批规则覆盖木地板拆除→踢脚线拆除、防水→防水保护层、墙地砖/吊顶拆除→垃圾清运等低风险提示
+- 如果配套项已在报价明细或备注中出现，则自动静默
+- 如果成本库中找不到 active 的配套成本条目，则不提示
+- “窗帘盒/灯槽拆除”等明确单项拆除不做泛化误报
+
+**代码层验收标准**：
+- [x] 仅使用 `cost_items.active` 作为漏项提示候选源
+- [x] 预审弹窗展示疑似漏项、触发行、原因和成本库参考价
+- [x] 已包含配套项时不重复提示
+- [x] “窗帘盒/灯槽拆除”不误报漏项
+- [x] 不自动新增报价行、不改变合计、不新增 Alembic revision
 
 #### BIZ-2f 知识库深度治理（并入 BIZ-2，持续维护）
 
@@ -315,10 +328,10 @@ cost_item_history
 
 **第三阶段（第二阶段稳定后）**
 
-| 子项 | 内容 |
-|------|------|
-| BIZ-2e | 漏项检测 |
-| BIZ-3 | 经营驾驶舱（合同/回款/成本/毛利） |
+| 子项 | 内容 | 状态 |
+|------|------|------|
+| BIZ-2e | 漏项检测 | 已完成代码层验证（2026-05-21）；保守规则提示，不新增 Alembic |
+| BIZ-3 | 经营驾驶舱（合同/回款/成本/毛利） | 未启动 |
 
 **暂缓评估（触发条件明确后再启动）**
 

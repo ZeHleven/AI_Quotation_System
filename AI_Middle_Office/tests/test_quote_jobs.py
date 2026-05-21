@@ -442,3 +442,34 @@ def test_quote_job_runner_normalizes_numbered_text_before_gateway(monkeypatch):
     assert "\n" not in content
     assert "1." not in content
     assert "拆除复合木地板，35平方米；拆除木脚线，42米；拆砖墙（120厚砖墙），8平方米" in content
+
+
+def test_quote_job_runner_normalizes_plain_multiline_quote_items_before_gateway(monkeypatch):
+    gateway_calls = []
+
+    async def fake_post_json_via_gateway(**kwargs):
+        gateway_calls.append(kwargs)
+        return httpx.Response(
+            200,
+            json={"project_details": [{"project_name": "窗帘盒/灯槽拆除", "unit_price": 6, "total_price": 108}]},
+        )
+
+    monkeypatch.setattr(quote_job_runner, "post_json_via_gateway", fake_post_json_via_gateway)
+
+    async def collect_events():
+        return [
+            event
+            async for event in quote_job_runner._iter_quote_events(
+                username="runner",
+                message="拆除复合木地板 20㎡\n拆除复合木地板 20㎡，拆除木脚线 30m\n窗帘盒/灯槽拆除 18m",
+                file_content=None,
+                mime_type=None,
+                filename=None,
+            )
+        ]
+
+    events = asyncio.run(collect_events())
+
+    assert events[-1][0] == "preview"
+    content = gateway_calls[0]["json_payload"]["text"]["content"]
+    assert content == "拆除复合木地板 20㎡；拆除复合木地板 20㎡，拆除木脚线 30m；窗帘盒/灯槽拆除 18m"

@@ -88,6 +88,15 @@
           <el-icon><Tickets /></el-icon>
           <span>商务台账</span>
         </button>
+        <button
+          v-if="canViewCostDb"
+          :class="['nav-item', { active: routeName === 'costDb' }]"
+          type="button"
+          @click="navigate('/admin/cost-db')"
+        >
+          <el-icon><Document /></el-icon>
+          <span>成本数据库</span>
+        </button>
         <button v-if="canOpenLegacyQuote" class="nav-item" type="button" @click="openLegacy('/index.html')">
           <el-icon><Document /></el-icon>
           <span>旧报价工作台</span>
@@ -1059,6 +1068,194 @@
           </template>
         </template>
 
+        <template v-else-if="routeName === 'costDb'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">BIZ-2a</p>
+              <h2>成本数据库</h2>
+            </div>
+            <div class="heading-actions">
+              <el-button
+                v-if="canManageCostDb"
+                :icon="Document"
+                plain
+                :disabled="costDbFeatureDisabled"
+                @click="openCostImportDialog"
+              >
+                导入 Excel
+              </el-button>
+              <el-button
+                v-if="canManageCostDb"
+                :icon="Plus"
+                type="primary"
+                :disabled="costDbFeatureDisabled"
+                @click="openCostItemCreate"
+              >
+                新建条目
+              </el-button>
+              <el-button :icon="Refresh" plain @click="loadCostItems">刷新</el-button>
+            </div>
+          </div>
+
+          <el-alert
+            v-if="costDbFeatureDisabled"
+            class="dashboard-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="成本数据库功能尚未开启"
+          ></el-alert>
+          <template v-else>
+            <div class="cost-db-filters">
+              <el-input
+                v-model="costItemFilters.category"
+                size="small"
+                clearable
+                placeholder="类别/子类"
+                @keyup.enter="applyCostItemFilters"
+                @clear="applyCostItemFilters"
+              ></el-input>
+              <el-select
+                v-model="costItemFilters.status"
+                size="small"
+                multiple
+                collapse-tags
+                collapse-tags-tooltip
+                clearable
+                placeholder="状态"
+                @change="applyCostItemFilters"
+              >
+                <el-option
+                  v-for="option in costStatusOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                ></el-option>
+              </el-select>
+              <el-select
+                v-model="costItemFilters.price_type"
+                size="small"
+                clearable
+                placeholder="价格类型"
+                @change="applyCostItemFilters"
+              >
+                <el-option
+                  v-for="option in costPriceTypeOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                ></el-option>
+              </el-select>
+              <el-input
+                v-model="costItemFilters.keyword"
+                size="small"
+                clearable
+                placeholder="名称/特征/类别/备注"
+                @keyup.enter="applyCostItemFilters"
+                @clear="applyCostItemFilters"
+              ></el-input>
+              <el-button size="small" type="primary" plain @click="applyCostItemFilters">查询</el-button>
+            </div>
+
+            <el-table
+              v-loading="costDbLoading"
+              :data="costItems"
+              row-key="id"
+              class="users-table cost-db-table"
+              empty-text="暂无成本条目"
+            >
+              <el-table-column label="成本项/特征" min-width="260" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <strong>{{ row.item_name || '-' }}</strong>
+                    <small>{{ row.spec || '-' }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="类别" min-width="160" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <strong>{{ row.category || '-' }}</strong>
+                    <small>{{ row.subcategory || '-' }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="unit" label="单位" width="80" />
+              <el-table-column label="状态" width="96">
+                <template #default="{ row }">
+                  <el-tag :type="costStatusTag(row.status)" effect="plain">
+                    {{ costStatusLabel(row.status) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="类型" width="96">
+                <template #default="{ row }">{{ costPriceTypeLabel(row.price_type) }}</template>
+              </el-table-column>
+              <el-table-column label="价格" min-width="210">
+                <template #default="{ row }">
+                  <div class="price-stack">
+                    <span>主参考：{{ formatPrice(row.price) }}</span>
+                    <small>对甲：{{ formatPrice(row.client_tax_excluded_price) }}</small>
+                    <small>劳务：{{ formatPrice(row.subcontract_composite_price) }}</small>
+                    <small>班组：{{ formatPrice(row.crew_benchmark_price) }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="来源" width="100">
+                <template #default="{ row }">{{ costSourceLabel(row.source) }}</template>
+              </el-table-column>
+              <el-table-column label="更新时间" min-width="160">
+                <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="300" fixed="right">
+                <template #default="{ row }">
+                  <div class="row-actions">
+                    <el-button size="small" :icon="Document" plain @click="openCostItemDetail(row)">详情</el-button>
+                    <el-button
+                      v-if="canManageCostDb"
+                      size="small"
+                      plain
+                      :disabled="row.status === 'archived'"
+                      @click="openCostItemEdit(row)"
+                    >
+                      编辑
+                    </el-button>
+                    <el-button
+                      v-if="canManageCostDb"
+                      size="small"
+                      type="success"
+                      plain
+                      :disabled="row.status !== 'draft'"
+                      @click="activateCostItem(row)"
+                    >
+                      启用
+                    </el-button>
+                    <el-button
+                      v-if="canManageCostDb"
+                      size="small"
+                      type="danger"
+                      plain
+                      :disabled="row.status === 'archived'"
+                      @click="archiveCostItem(row)"
+                    >
+                      归档
+                    </el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-pagination
+              v-if="costItemTotal > costItemPageSize"
+              v-model:current-page="costItemPage"
+              :page-size="costItemPageSize"
+              :total="costItemTotal"
+              layout="total, prev, pager, next"
+              small
+              @current-change="loadCostItems"
+            ></el-pagination>
+          </template>
+        </template>
+
         <template v-else>
           <div class="content-heading">
             <div>
@@ -1266,6 +1463,312 @@
             {{ businessLedgerDrawer.ledger.cancelled_by_username || '-' }} ·
             {{ businessLedgerDrawer.ledger.cancel_reason || '-' }}
           </p>
+        </section>
+      </template>
+    </el-drawer>
+
+    <el-dialog v-model="costItemDialog.visible" :title="costItemDialogTitle" width="720px">
+      <el-form label-position="top" :model="costItemDialog.form">
+        <div class="ledger-form-grid">
+          <el-form-item label="类别">
+            <el-input v-model="costItemDialog.form.category" maxlength="128"></el-input>
+          </el-form-item>
+          <el-form-item label="子类">
+            <el-input v-model="costItemDialog.form.subcategory" maxlength="128"></el-input>
+          </el-form-item>
+          <el-form-item label="项目名称">
+            <el-input v-model="costItemDialog.form.item_name" maxlength="255"></el-input>
+          </el-form-item>
+          <el-form-item label="计量单位">
+            <el-input v-model="costItemDialog.form.unit" maxlength="32"></el-input>
+          </el-form-item>
+          <el-form-item label="价格类型">
+            <el-select v-model="costItemDialog.form.price_type" class="full-width">
+              <el-option
+                v-for="option in costPriceTypeOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              ></el-option>
+            </el-select>
+          </el-form-item>
+          <el-form-item label="生效日期">
+            <el-date-picker
+              v-model="costItemDialog.form.effective_date"
+              class="full-width"
+              type="date"
+              value-format="YYYY-MM-DD"
+              format="YYYY-MM-DD"
+            ></el-date-picker>
+          </el-form-item>
+          <el-form-item label="对甲税前综合单价">
+            <el-input v-model="costItemDialog.form.client_tax_excluded_price" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="对甲人工费">
+            <el-input v-model="costItemDialog.form.client_labor_price" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="对甲主材费">
+            <el-input v-model="costItemDialog.form.client_main_material_price" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="对甲辅材费">
+            <el-input v-model="costItemDialog.form.client_auxiliary_material_price" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="对甲直接费小计">
+            <el-input v-model="costItemDialog.form.client_direct_fee" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="对甲管理费利润">
+            <el-input v-model="costItemDialog.form.client_management_profit" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="劳务发包综合单价">
+            <el-input v-model="costItemDialog.form.subcontract_composite_price" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="劳务人工费">
+            <el-input v-model="costItemDialog.form.subcontract_labor_price" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="劳务主材费">
+            <el-input v-model="costItemDialog.form.subcontract_main_material_price" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="劳务辅材费">
+            <el-input v-model="costItemDialog.form.subcontract_auxiliary_material_price" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="班组标底税前价">
+            <el-input v-model="costItemDialog.form.crew_benchmark_price" inputmode="decimal"></el-input>
+          </el-form-item>
+          <el-form-item label="主参考价">
+            <el-input v-model="costItemDialog.form.price" inputmode="decimal" placeholder="留空时按劳务、班组、对甲顺序自动取值"></el-input>
+          </el-form-item>
+        </div>
+        <el-form-item label="项目特征">
+          <el-input
+            v-model="costItemDialog.form.spec"
+            type="textarea"
+            :rows="3"
+            maxlength="2000"
+            show-word-limit
+          ></el-input>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input
+            v-model="costItemDialog.form.notes"
+            type="textarea"
+            :rows="3"
+            maxlength="2000"
+            show-word-limit
+          ></el-input>
+        </el-form-item>
+        <el-form-item v-if="costItemDialog.mode === 'edit'" label="变更原因">
+          <el-input
+            v-model="costItemDialog.form.change_reason"
+            maxlength="500"
+            placeholder="价格调整、资料修正等"
+          ></el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="costItemDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="submitCostItem">
+          保存
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="costImportDialog.visible" title="导入成本 Excel" width="720px">
+      <div class="cost-import-panel">
+        <el-upload
+          action="#"
+          :auto-upload="false"
+          :limit="1"
+          :on-change="handleCostImportFile"
+          :on-remove="clearCostImportFile"
+        >
+          <el-button :icon="Document" plain>选择 Excel</el-button>
+        </el-upload>
+        <div v-if="costImportDialog.preview" class="cost-import-summary">
+          <div>
+            <small>批次</small>
+            <strong>{{ costImportDialog.preview.batch_id }}</strong>
+          </div>
+          <div>
+            <small>可导入</small>
+            <strong>{{ costImportDialog.preview.item_count }}</strong>
+          </div>
+          <div>
+            <small>跳过行</small>
+            <strong>{{ costImportDialog.preview.skipped_rows?.length || 0 }}</strong>
+          </div>
+          <div>
+            <small>重复提示</small>
+            <strong>{{ costImportDialog.preview.duplicate_warnings?.length || 0 }}</strong>
+          </div>
+        </div>
+        <el-alert
+          v-if="costImportDialog.preview?.duplicate_warnings?.length"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="dashboard-alert"
+          :title="`发现 ${costImportDialog.preview.duplicate_warnings.length} 条重复提示，确认导入时现有启用记录会跳过，草稿记录会更新。`"
+        ></el-alert>
+        <el-table
+          v-if="costImportDialog.preview"
+          :data="(costImportDialog.preview.items || []).slice(0, 8)"
+          class="users-table"
+          size="small"
+          empty-text="暂无可导入条目"
+        >
+          <el-table-column prop="item_name" label="项目名称" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="unit" label="单位" width="72" />
+          <el-table-column prop="category" label="类别" min-width="150" show-overflow-tooltip />
+          <el-table-column label="主参考价" width="120">
+            <template #default="{ row }">{{ formatPrice(row.price) }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="costImportDialog.visible = false">关闭</el-button>
+        <el-button plain :loading="costImportDialog.loading" @click="previewCostImport">预览</el-button>
+        <el-button
+          type="primary"
+          :disabled="!costImportDialog.preview?.batch_id"
+          :loading="state.submitting"
+          @click="confirmCostImport"
+        >
+          确认导入
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="costItemDrawer.visible" size="680px" title="成本条目详情">
+      <div v-if="costItemDrawer.loading" class="center-state">
+        <el-icon class="spin"><Refresh /></el-icon>
+        <span>加载中</span>
+      </div>
+      <template v-else-if="costItemDrawer.item">
+        <div class="detail-grid">
+          <div>
+            <small>项目名称</small>
+            <strong>{{ costItemDrawer.item.item_name || '-' }}</strong>
+          </div>
+          <div>
+            <small>类别</small>
+            <strong>{{ costItemDrawer.item.category || '-' }}</strong>
+          </div>
+          <div>
+            <small>状态</small>
+            <strong>{{ costStatusLabel(costItemDrawer.item.status) }}</strong>
+          </div>
+          <div>
+            <small>价格类型</small>
+            <strong>{{ costPriceTypeLabel(costItemDrawer.item.price_type) }}</strong>
+          </div>
+          <div>
+            <small>主参考价</small>
+            <strong>{{ formatPrice(costItemDrawer.item.price) }}</strong>
+          </div>
+          <div>
+            <small>单位</small>
+            <strong>{{ costItemDrawer.item.unit || '-' }}</strong>
+          </div>
+          <div>
+            <small>来源</small>
+            <strong>{{ costSourceLabel(costItemDrawer.item.source) }}</strong>
+          </div>
+          <div>
+            <small>更新时间</small>
+            <strong>{{ formatDate(costItemDrawer.item.updated_at) }}</strong>
+          </div>
+        </div>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Document /></el-icon>
+            <span>项目特征</span>
+          </div>
+          <p class="detail-text">{{ costItemDrawer.item.spec || '-' }}</p>
+        </section>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Histogram /></el-icon>
+            <span>价格明细</span>
+          </div>
+          <div class="detail-grid">
+            <div>
+              <small>对甲税前综合单价</small>
+              <strong>{{ formatPrice(costItemDrawer.item.client_tax_excluded_price) }}</strong>
+            </div>
+            <div>
+              <small>对甲人工费</small>
+              <strong>{{ formatPrice(costItemDrawer.item.client_labor_price) }}</strong>
+            </div>
+            <div>
+              <small>对甲主材费</small>
+              <strong>{{ formatPrice(costItemDrawer.item.client_main_material_price) }}</strong>
+            </div>
+            <div>
+              <small>对甲辅材费</small>
+              <strong>{{ formatPrice(costItemDrawer.item.client_auxiliary_material_price) }}</strong>
+            </div>
+            <div>
+              <small>对甲直接费小计</small>
+              <strong>{{ formatPrice(costItemDrawer.item.client_direct_fee) }}</strong>
+            </div>
+            <div>
+              <small>对甲管理费利润</small>
+              <strong>{{ formatPrice(costItemDrawer.item.client_management_profit) }}</strong>
+            </div>
+            <div>
+              <small>劳务发包综合单价</small>
+              <strong>{{ formatPrice(costItemDrawer.item.subcontract_composite_price) }}</strong>
+            </div>
+            <div>
+              <small>劳务人工费</small>
+              <strong>{{ formatPrice(costItemDrawer.item.subcontract_labor_price) }}</strong>
+            </div>
+            <div>
+              <small>劳务主材费</small>
+              <strong>{{ formatPrice(costItemDrawer.item.subcontract_main_material_price) }}</strong>
+            </div>
+            <div>
+              <small>劳务辅材费</small>
+              <strong>{{ formatPrice(costItemDrawer.item.subcontract_auxiliary_material_price) }}</strong>
+            </div>
+            <div>
+              <small>班组标底税前价</small>
+              <strong>{{ formatPrice(costItemDrawer.item.crew_benchmark_price) }}</strong>
+            </div>
+            <div>
+              <small>生效日期</small>
+              <strong>{{ costItemDrawer.item.effective_date || '-' }}</strong>
+            </div>
+          </div>
+        </section>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Tickets /></el-icon>
+            <span>备注</span>
+          </div>
+          <p class="detail-text">{{ costItemDrawer.item.notes || '-' }}</p>
+        </section>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Clock /></el-icon>
+            <span>变更历史</span>
+          </div>
+          <el-timeline>
+            <el-timeline-item
+              v-for="event in costItemDrawer.item.history || []"
+              :key="event.id"
+              :timestamp="formatDate(event.changed_at)"
+              placement="top"
+            >
+              <div class="event-row">
+                <strong>{{ costHistoryTypeLabel(event.change_type) }}</strong>
+                <el-tag size="small" effect="plain">{{ event.changed_by_username || '-' }}</el-tag>
+              </div>
+              <p>{{ costHistoryText(event) }}</p>
+              <small>{{ event.change_reason || '-' }}</small>
+            </el-timeline-item>
+          </el-timeline>
+          <el-empty v-if="!costItemDrawer.item.history?.length" description="暂无变更历史" />
         </section>
       </template>
     </el-drawer>
@@ -1789,6 +2292,24 @@ const businessLedgerStageOptions = [
 ]
 const businessLedgerTerminalStages = new Set(['成单', '丢单'])
 
+const costStatusOptions = [
+  { value: 'draft', label: '草稿' },
+  { value: 'active', label: '启用' },
+  { value: 'archived', label: '归档' },
+]
+
+const costPriceTypeOptions = [
+  { value: 'labor', label: '人工' },
+  { value: 'material', label: '材料' },
+  { value: 'combined', label: '综合' },
+]
+
+const costSourceOptions = [
+  { value: 'manual', label: '手工' },
+  { value: 'imported', label: '导入' },
+  { value: 'ai_suggested', label: 'AI 建议' },
+]
+
 const loginForm = reactive({ username: '', password: '' })
 const session = reactive({ user: null })
 const users = ref([])
@@ -1817,6 +2338,11 @@ const businessLedgerTotal = ref(0)
 const businessLedgerPage = ref(1)
 const businessLedgerPageSize = 20
 const businessLedgerLoading = ref(false)
+const costItems = ref([])
+const costItemTotal = ref(0)
+const costItemPage = ref(1)
+const costItemPageSize = 20
+const costDbLoading = ref(false)
 const clientInquiryFilters = reactive({
   source: '',
   keyword: '',
@@ -1845,6 +2371,12 @@ const businessLedgerFilters = reactive({
   keyword: '',
   overdue_only: false,
 })
+const costItemFilters = reactive({
+  category: '',
+  status: [],
+  price_type: '',
+  keyword: '',
+})
 const dashboardRange = ref('last_30_days')
 const dashboardTab = ref('quote')
 const executionPageTab = ref('tasks')
@@ -1852,6 +2384,7 @@ const dashboardFeature = reactive({ quoteDisabled: false, responseDisabled: fals
 const executionFeatureDisabled = ref(false)
 const meetingFeatureDisabled = ref(false)
 const businessLedgerFeatureDisabled = ref(false)
+const costDbFeatureDisabled = ref(false)
 const state = reactive({ loading: false, submitting: false, error: '' })
 const routeName = ref(routeFromPath(window.location.pathname))
 
@@ -1938,6 +2471,48 @@ const businessLedgerDrawer = reactive({
   ledger: null,
 })
 
+const costItemDialog = reactive({
+  visible: false,
+  mode: 'create',
+  itemId: null,
+  form: {
+    category: '',
+    subcategory: '',
+    item_name: '',
+    spec: '',
+    unit: '',
+    price: '',
+    client_tax_excluded_price: '',
+    client_labor_price: '',
+    client_main_material_price: '',
+    client_auxiliary_material_price: '',
+    client_direct_fee: '',
+    client_management_profit: '',
+    subcontract_composite_price: '',
+    subcontract_labor_price: '',
+    subcontract_main_material_price: '',
+    subcontract_auxiliary_material_price: '',
+    crew_benchmark_price: '',
+    price_type: 'combined',
+    effective_date: '',
+    notes: '',
+    change_reason: '',
+  },
+})
+
+const costImportDialog = reactive({
+  visible: false,
+  file: null,
+  preview: null,
+  loading: false,
+})
+
+const costItemDrawer = reactive({
+  visible: false,
+  loading: false,
+  item: null,
+})
+
 const roles = computed(() => session.user?.roles || [])
 const canMutateRoles = computed(() => roles.value.includes('system_admin'))
 const canAccessPermissions = computed(() => roles.value.includes('system_admin') || roles.value.includes('admin'))
@@ -1948,6 +2523,8 @@ const canCreateExecutionTask = computed(() => canAccessPermissions.value)
 const canCreateMeetingNote = computed(() => canViewExecution.value)
 const canViewBusinessLedger = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canManageBusinessLedger = computed(() => canAccessPermissions.value)
+const canViewCostDb = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
+const canManageCostDb = computed(() => canAccessPermissions.value)
 const canOpenLegacyQuote = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
 const visibleDailyTrends = computed(() => (quoteDashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
@@ -1970,12 +2547,16 @@ const businessLedgerResponderOptions = computed(() => {
 const businessLedgerDialogTitle = computed(() => (
   businessLedgerDialog.mode === 'edit' ? '编辑商务台账' : '新建商务台账'
 ))
+const costItemDialogTitle = computed(() => (
+  costItemDialog.mode === 'edit' ? '编辑成本条目' : '新建成本条目'
+))
 
 function routeFromPath(path) {
   if (path === '/login') return 'login'
   if (path === '/admin/dashboard') return 'dashboard'
   if (path === '/admin/execution') return 'execution'
   if (path === '/admin/business-ledger') return 'businessLedger'
+  if (path === '/admin/cost-db') return 'costDb'
   return 'permissions'
 }
 
@@ -2144,6 +2725,67 @@ function formatAmount(value) {
     currency: 'CNY',
     maximumFractionDigits: 0,
   })
+}
+
+function formatPrice(value) {
+  if (value === null || value === undefined || value === '') return '-'
+  return Number(value).toLocaleString('zh-CN', {
+    style: 'currency',
+    currency: 'CNY',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function costStatusLabel(status) {
+  const option = costStatusOptions.find((item) => item.value === status)
+  return option?.label || status || '-'
+}
+
+function costStatusTag(status) {
+  if (status === 'active') return 'success'
+  if (status === 'archived') return 'info'
+  return 'warning'
+}
+
+function costPriceTypeLabel(type) {
+  const option = costPriceTypeOptions.find((item) => item.value === type)
+  return option?.label || type || '-'
+}
+
+function costSourceLabel(source) {
+  const option = costSourceOptions.find((item) => item.value === source)
+  return option?.label || source || '-'
+}
+
+function costHistoryTypeLabel(type) {
+  if (type === 'price_change') return '价格变更'
+  if (type === 'status_change') return '状态变更'
+  return type || '-'
+}
+
+function costHistoryText(event) {
+  if (event.change_type === 'status_change') {
+    return `${costStatusLabel(event.old_status)} -> ${costStatusLabel(event.new_status)}`
+  }
+  return [
+    `主参考 ${formatPrice(event.old_price)} -> ${formatPrice(event.new_price)}`,
+    `对甲 ${formatPrice(event.old_client_tax_excluded_price)} -> ${formatPrice(event.new_client_tax_excluded_price)}`,
+    `对甲人工 ${formatPrice(event.old_client_labor_price)} -> ${formatPrice(event.new_client_labor_price)}`,
+    `对甲主材 ${formatPrice(event.old_client_main_material_price)} -> ${formatPrice(event.new_client_main_material_price)}`,
+    `对甲辅材 ${formatPrice(event.old_client_auxiliary_material_price)} -> ${formatPrice(event.new_client_auxiliary_material_price)}`,
+    `劳务 ${formatPrice(event.old_subcontract_composite_price)} -> ${formatPrice(event.new_subcontract_composite_price)}`,
+    `劳务人工 ${formatPrice(event.old_subcontract_labor_price)} -> ${formatPrice(event.new_subcontract_labor_price)}`,
+    `劳务主材 ${formatPrice(event.old_subcontract_main_material_price)} -> ${formatPrice(event.new_subcontract_main_material_price)}`,
+    `劳务辅材 ${formatPrice(event.old_subcontract_auxiliary_material_price)} -> ${formatPrice(event.new_subcontract_auxiliary_material_price)}`,
+    `班组 ${formatPrice(event.old_crew_benchmark_price)} -> ${formatPrice(event.new_crew_benchmark_price)}`,
+  ].join('；')
+}
+
+function parseCostNumber(value) {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? null : parsed
 }
 
 function pushStatusLabel(history) {
@@ -2449,6 +3091,326 @@ async function loadBusinessLedgers() {
 function applyBusinessLedgerFilters() {
   businessLedgerPage.value = 1
   loadBusinessLedgers()
+}
+
+async function loadCostItems() {
+  if (!canViewCostDb.value) return
+  costDbFeatureDisabled.value = false
+  costDbLoading.value = true
+  const params = {
+    page: costItemPage.value,
+    page_size: costItemPageSize,
+  }
+  const category = costItemFilters.category.trim()
+  if (category) params.category = category
+  if (costItemFilters.status.length) params.status = costItemFilters.status.join(',')
+  if (costItemFilters.price_type) params.price_type = costItemFilters.price_type
+  const keyword = costItemFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
+  try {
+    const response = await api.get('/admin/cost-items', { params })
+    costItems.value = responseData(response) || []
+    costItemTotal.value = response.data?.total ?? costItems.value.length
+  } catch (error) {
+    costItems.value = []
+    costItemTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      costDbFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '成本数据库加载失败'))
+  } finally {
+    costDbLoading.value = false
+  }
+}
+
+function applyCostItemFilters() {
+  costItemPage.value = 1
+  loadCostItems()
+}
+
+function resetCostItemForm(mode = 'create') {
+  costItemDialog.mode = mode
+  costItemDialog.itemId = null
+  costItemDialog.form.category = ''
+  costItemDialog.form.subcategory = ''
+  costItemDialog.form.item_name = ''
+  costItemDialog.form.spec = ''
+  costItemDialog.form.unit = ''
+  costItemDialog.form.price = ''
+  costItemDialog.form.client_tax_excluded_price = ''
+  costItemDialog.form.client_labor_price = ''
+  costItemDialog.form.client_main_material_price = ''
+  costItemDialog.form.client_auxiliary_material_price = ''
+  costItemDialog.form.client_direct_fee = ''
+  costItemDialog.form.client_management_profit = ''
+  costItemDialog.form.subcontract_composite_price = ''
+  costItemDialog.form.subcontract_labor_price = ''
+  costItemDialog.form.subcontract_main_material_price = ''
+  costItemDialog.form.subcontract_auxiliary_material_price = ''
+  costItemDialog.form.crew_benchmark_price = ''
+  costItemDialog.form.price_type = 'combined'
+  costItemDialog.form.effective_date = ''
+  costItemDialog.form.notes = ''
+  costItemDialog.form.change_reason = ''
+}
+
+function fillCostItemForm(row) {
+  costItemDialog.itemId = row.id
+  costItemDialog.form.category = row.category || ''
+  costItemDialog.form.subcategory = row.subcategory || ''
+  costItemDialog.form.item_name = row.item_name || ''
+  costItemDialog.form.spec = row.spec || ''
+  costItemDialog.form.unit = row.unit || ''
+  costItemDialog.form.price = row.price ?? ''
+  costItemDialog.form.client_tax_excluded_price = row.client_tax_excluded_price ?? ''
+  costItemDialog.form.client_labor_price = row.client_labor_price ?? ''
+  costItemDialog.form.client_main_material_price = row.client_main_material_price ?? ''
+  costItemDialog.form.client_auxiliary_material_price = row.client_auxiliary_material_price ?? ''
+  costItemDialog.form.client_direct_fee = row.client_direct_fee ?? ''
+  costItemDialog.form.client_management_profit = row.client_management_profit ?? ''
+  costItemDialog.form.subcontract_composite_price = row.subcontract_composite_price ?? ''
+  costItemDialog.form.subcontract_labor_price = row.subcontract_labor_price ?? ''
+  costItemDialog.form.subcontract_main_material_price = row.subcontract_main_material_price ?? ''
+  costItemDialog.form.subcontract_auxiliary_material_price = row.subcontract_auxiliary_material_price ?? ''
+  costItemDialog.form.crew_benchmark_price = row.crew_benchmark_price ?? ''
+  costItemDialog.form.price_type = row.price_type || 'combined'
+  costItemDialog.form.effective_date = row.effective_date || ''
+  costItemDialog.form.notes = row.notes || ''
+  costItemDialog.form.change_reason = ''
+}
+
+function costItemSubmitPayload() {
+  const form = costItemDialog.form
+  const payload = {
+    category: form.category.trim(),
+    subcategory: form.subcategory.trim() || null,
+    item_name: form.item_name.trim(),
+    spec: form.spec.trim() || null,
+    unit: form.unit.trim(),
+    price: parseCostNumber(form.price),
+    client_tax_excluded_price: parseCostNumber(form.client_tax_excluded_price),
+    client_labor_price: parseCostNumber(form.client_labor_price),
+    client_main_material_price: parseCostNumber(form.client_main_material_price),
+    client_auxiliary_material_price: parseCostNumber(form.client_auxiliary_material_price),
+    client_direct_fee: parseCostNumber(form.client_direct_fee),
+    client_management_profit: parseCostNumber(form.client_management_profit),
+    subcontract_composite_price: parseCostNumber(form.subcontract_composite_price),
+    subcontract_labor_price: parseCostNumber(form.subcontract_labor_price),
+    subcontract_main_material_price: parseCostNumber(form.subcontract_main_material_price),
+    subcontract_auxiliary_material_price: parseCostNumber(form.subcontract_auxiliary_material_price),
+    crew_benchmark_price: parseCostNumber(form.crew_benchmark_price),
+    price_type: form.price_type,
+    effective_date: form.effective_date || null,
+    notes: form.notes.trim() || null,
+  }
+  if (costItemDialog.mode === 'edit') {
+    payload.change_reason = form.change_reason.trim() || null
+  }
+  return payload
+}
+
+function validateCostItemForm() {
+  const form = costItemDialog.form
+  if (!form.category.trim() || !form.item_name.trim() || !form.unit.trim()) {
+    ElMessage.warning('请填写类别、项目名称和计量单位')
+    return false
+  }
+  const priceFields = [
+    ['主参考价', form.price],
+    ['对甲税前综合单价', form.client_tax_excluded_price],
+    ['对甲人工费', form.client_labor_price],
+    ['对甲主材费', form.client_main_material_price],
+    ['对甲辅材费', form.client_auxiliary_material_price],
+    ['对甲直接费小计', form.client_direct_fee],
+    ['对甲管理费利润', form.client_management_profit],
+    ['劳务发包综合单价', form.subcontract_composite_price],
+    ['劳务人工费', form.subcontract_labor_price],
+    ['劳务主材费', form.subcontract_main_material_price],
+    ['劳务辅材费', form.subcontract_auxiliary_material_price],
+    ['班组标底税前价', form.crew_benchmark_price],
+  ]
+  for (const [label, value] of priceFields) {
+    if (value !== '' && value !== null && value !== undefined && Number.isNaN(Number(value))) {
+      ElMessage.warning(`${label} 必须是数字`)
+      return false
+    }
+  }
+  return true
+}
+
+function openCostItemCreate() {
+  if (!canManageCostDb.value) return
+  resetCostItemForm('create')
+  costItemDialog.visible = true
+}
+
+async function openCostItemEdit(row) {
+  if (!canManageCostDb.value || row.status === 'archived') return
+  resetCostItemForm('edit')
+  costItemDialog.mode = 'edit'
+  try {
+    const response = await api.get(`/admin/cost-items/${row.id}`)
+    fillCostItemForm(responseData(response))
+    costItemDialog.visible = true
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '成本条目详情加载失败'))
+  }
+}
+
+async function openCostItemDetail(row) {
+  costItemDrawer.visible = true
+  costItemDrawer.loading = true
+  costItemDrawer.item = null
+  try {
+    const response = await api.get(`/admin/cost-items/${row.id}`)
+    costItemDrawer.item = responseData(response)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '成本条目详情加载失败'))
+  } finally {
+    costItemDrawer.loading = false
+  }
+}
+
+async function submitCostItem() {
+  if (!validateCostItemForm()) return
+  state.submitting = true
+  try {
+    if (costItemDialog.mode === 'edit') {
+      await api.patch(`/admin/cost-items/${costItemDialog.itemId}`, costItemSubmitPayload())
+      ElMessage.success('已更新成本条目')
+    } else {
+      await api.post('/admin/cost-items', costItemSubmitPayload())
+      ElMessage.success('已创建成本条目')
+    }
+    costItemDialog.visible = false
+    await loadCostItems()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '保存失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function activateCostItem(row) {
+  if (!canManageCostDb.value || row.status !== 'draft') return
+  try {
+    await ElMessageBox.confirm('确认启用这条成本数据？', '启用成本条目', {
+      type: 'warning',
+      confirmButtonText: '确认启用',
+      cancelButtonText: '返回',
+    })
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/admin/cost-items/${row.id}/activate`)
+    ElMessage.success('已启用成本条目')
+    await loadCostItems()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '启用失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function archiveCostItem(row) {
+  if (!canManageCostDb.value || row.status === 'archived') return
+  let reason = ''
+  if (row.status === 'active') {
+    try {
+      const result = await ElMessageBox.prompt('请输入归档原因', '归档成本条目', {
+        inputPattern: /\S+/,
+        inputErrorMessage: '启用记录归档原因不能为空',
+        confirmButtonText: '确认归档',
+        cancelButtonText: '返回',
+        type: 'warning',
+      })
+      reason = result.value
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确认归档这条草稿成本数据？', '归档成本条目', {
+        type: 'warning',
+        confirmButtonText: '确认归档',
+        cancelButtonText: '返回',
+      })
+    } catch {
+      return
+    }
+  }
+  state.submitting = true
+  try {
+    await api.post(`/admin/cost-items/${row.id}/archive`, { reason })
+    ElMessage.success('已归档成本条目')
+    await loadCostItems()
+    if (costItemDrawer.item?.id === row.id) costItemDrawer.visible = false
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '归档失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+function openCostImportDialog() {
+  if (!canManageCostDb.value) return
+  costImportDialog.file = null
+  costImportDialog.preview = null
+  costImportDialog.loading = false
+  costImportDialog.visible = true
+}
+
+function handleCostImportFile(uploadFile) {
+  costImportDialog.file = uploadFile.raw
+  costImportDialog.preview = null
+}
+
+function clearCostImportFile() {
+  costImportDialog.file = null
+  costImportDialog.preview = null
+}
+
+async function previewCostImport() {
+  if (!costImportDialog.file) {
+    ElMessage.warning('请选择 Excel 文件')
+    return
+  }
+  costImportDialog.loading = true
+  costImportDialog.preview = null
+  try {
+    const formData = new FormData()
+    formData.append('file', costImportDialog.file)
+    const response = await api.post('/admin/cost-items/import/preview', formData)
+    costImportDialog.preview = responseData(response)
+    ElMessage.success(`已解析 ${costImportDialog.preview.item_count || 0} 条成本数据`)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '导入预览失败'))
+  } finally {
+    costImportDialog.loading = false
+  }
+}
+
+async function confirmCostImport() {
+  if (!costImportDialog.preview?.batch_id) return
+  state.submitting = true
+  try {
+    const response = await api.post('/admin/cost-items/import/confirm', {
+      batch_id: costImportDialog.preview.batch_id,
+    })
+    const data = responseData(response)
+    ElMessage.success(`导入完成：新增 ${data.created_count || 0}，更新 ${data.updated_count || 0}，跳过 ${data.skipped_count || 0}`)
+    costImportDialog.visible = false
+    await loadCostItems()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '确认导入失败'))
+  } finally {
+    state.submitting = false
+  }
 }
 
 async function refreshExecutionPage() {
@@ -3026,6 +3988,14 @@ async function bootstrap() {
       }
       await loadBusinessLedgerUsers()
       await loadBusinessLedgers()
+      return
+    }
+    if (routeName.value === 'costDb') {
+      if (!canViewCostDb.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadCostItems()
       return
     }
     if (!canAccessPermissions.value) {

@@ -138,7 +138,7 @@ revised -> confirmed
 - 负责人字段：`outbound` 记录复用已有 `responder_id` 字段表示台账负责人；不新增 `assignee_id`，避免与 `inbound` 场景的"首响应人"语义混淆。
 - `outbound` 创建时：`inquiry_time` 自动设为 `created_at`；`first_response_time` 设为 `NULL`（主动开拓无"首响应"概念）。
 - 历史 `inbound` 数据迁移默认：现有记录通过 Alembic revision 的 `UPDATE` 语句将 `direction` 默认填充为 `'inbound'`。
-- BIZ-1a 前置：`client_inquiries` 表已存在（Alembic `20260514_0012`），新增 `direction`、`stage`、`next_followup_at`、`cancelled_at`、`cancelled_by_id`、`cancel_reason` 字段，以及新建 `client_inquiry_events` 表，均须通过新 Alembic revision（接在 `20260514_0015` 之后）。
+- BIZ-1a 当前实现：`client_inquiries` 已存在（Alembic `20260514_0012`），`direction`、`stage`、`next_followup_at`、`cancelled_at`、`cancelled_by_id`、`cancel_reason` 和 `client_inquiry_events` 已通过 Alembic `20260520_0016` 落地。
 
 ## cost_items（BIZ-2a 成本数据库）
 
@@ -157,11 +157,11 @@ active -> archived
 - `archived` 表示已停用，不再进入报价参考；已停用条目不可恢复，如需重新启用须创建新条目。
 - `draft -> active`（核定）/ `draft -> archived`（直接停用）/ `active -> archived`（停用正式条目）仅允许 `admin` / `system_admin` 执行。
 - `active -> archived` 必须提交 `reason`，不依赖 `business_events`（BIZ-3 表，尚未存在）。
-- 所有状态变更和价格修改同步写入 `cost_item_history`，字段包含：`old_price`、`new_price`、`old_status`、`new_status`、`change_type`（`price_change` / `status_change`）、`changed_by`、`change_reason`、`changed_at`。状态变更时 `old_price` / `new_price` 可为 `NULL`；价格修改时 `old_status` / `new_status` 可为 `NULL`。
+- 所有状态变更和价格修改同步写入 `cost_item_history`，字段包含：`old_price`、`new_price`、三类最终价格及人工/主材/辅材等拆分价的 `old_*` / `new_*` 快照、`old_status`、`new_status`、`change_type`（`price_change` / `status_change`）、`changed_by`、`change_reason`、`changed_at`。状态变更时价格快照可为 `NULL`；价格修改时 `old_status` / `new_status` 可为 `NULL`。
 - 已 `active` 再次核定返回 `200 + 当前对象`。
 - 已 `archived` 再次停用返回 `200 + 当前对象`。
 - 已 `archived` 后核定返回 `409 CONFLICT`。
-- BIZ-2a 前置：`cost_items` / `cost_item_history` 表须通过新 Alembic revision 创建（接在 `20260514_0015` 之后，与 BIZ-1a `direction` 字段 revision 独立排期）。
+- BIZ-2a 当前实现：`cost_items` / `cost_item_history` 已通过 Alembic `20260520_0017` 创建，并通过 `20260520_0018` 补充人工费、主材费、辅材费等拆分价字段，接在 BIZ-1a `20260520_0016` 之后；`scripts\biz2a_cost_db_smoke.ps1` 已验证 `draft -> active -> archived`、`active -> archived` 必填原因、`archived -> active` 返回 `409 STATE_CONFLICT`、拆分价导入映射，以及价格变更写入 `cost_item_history`。
 
 ## contract_adjustments
 

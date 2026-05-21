@@ -1,6 +1,6 @@
 # API-CONTRACTS｜升级路线新增接口契约骨架
 > 创建日期：2026-05-15
-> 状态：Phase 0 接口已完成当前环境验证；Phase 1 报价速度看板已完成当前环境运行态验收；Phase 2 响应速度接口已完成当前环境运行态验收；Phase 4a 会议纪要与草稿确认接口已完成当前环境运行态验收；BIZ-1a 商务台账和 BIZ-2a 成本数据库接口契约已预定义，开发尚未开始。系统完善前不正式投入生产使用。
+> 状态：Phase 0 接口已完成当前环境验证；Phase 1 报价速度看板已完成当前环境运行态验收；Phase 2 响应速度接口已完成当前环境运行态验收；Phase 4a 会议纪要与草稿确认接口已完成当前环境运行态验收；BIZ-1a 商务台账和 BIZ-2a 成本数据库已完成当前环境验证。系统完善前不正式投入生产使用。
 > 关联主文档：[2026-05-14-ai-platform-upgrade-design.md](2026-05-14-ai-platform-upgrade-design.md)
 
 ## 目标
@@ -266,9 +266,9 @@ Phase 4a 当前实现说明：
 - 当前环境运行态验收已通过：`FEATURE_MEETING_AI=true`、`PUBLIC_ACCESS_ENABLED=false`；`scripts\phase4a_meeting_smoke.ps1` 已验证自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 200。
 - Phase 4b `transcribe*` 与 Phase 4c `import-dingtalk` 仍未实现，接口不得提前开放。
 
-## BIZ-1a：商务台账（待开发）
+## BIZ-1a：商务台账（当前环境已验证）
 
-> 功能开关：`FEATURE_BUSINESS_LEDGER`；Alembic revision 在 `20260514_0015` 之后，与 BIZ-2a 独立排期。
+> 功能开关：`FEATURE_BUSINESS_LEDGER`；Alembic `20260520_0016` 已完成，BIZ-2a 接在其后。
 
 | 接口 | 方法 | 权限 | 功能开关 | 说明 |
 |------|------|------|----------|------|
@@ -314,9 +314,9 @@ Phase 4a 当前实现说明：
 - `stage` 已为终态（`成单`/`丢单`）时 PATCH 返回 `409 STATE_CONFLICT`。
 - 已作废记录 PATCH 返回 `409 STATE_CONFLICT`。
 
-## BIZ-2a：成本数据库（待开发）
+## BIZ-2a：成本数据库（当前环境已验证）
 
-> 功能开关：`FEATURE_COST_DB`；Alembic revision 在 `20260514_0015` 之后，与 BIZ-1a 独立排期。
+> 功能开关：`FEATURE_COST_DB`；Alembic `20260520_0017` 创建 `cost_items` / `cost_item_history`，`20260520_0018` 补充人工费、主材费、辅材费等拆分价字段，接在 BIZ-1a `20260520_0016` 之后。
 
 | 接口 | 方法 | 权限 | 功能开关 | 说明 |
 |------|------|------|----------|------|
@@ -336,18 +336,31 @@ Phase 4a 当前实现说明：
 - `item_name`（条目名，必填）
 - `spec`（规格）
 - `unit`（单位，必填）
-- `price`（单价，必填）
+- `price`（主参考价，可选；为空时后端按 `subcontract_composite_price -> crew_benchmark_price -> client_tax_excluded_price` 自动派生）
+- `client_tax_excluded_price`（对甲税前综合单价，可选）
+- `client_labor_price`（对甲人工费，可选）
+- `client_main_material_price`（对甲主材费，可选）
+- `client_auxiliary_material_price`（对甲辅材费，可选）
+- `client_direct_fee`（对甲直接费小计，可选）
+- `client_management_profit`（对甲管理费利润，可选）
+- `subcontract_composite_price`（劳务发包综合单价，可选）
+- `subcontract_labor_price`（劳务人工费，可选）
+- `subcontract_main_material_price`（劳务主材费，可选）
+- `subcontract_auxiliary_material_price`（劳务辅材费，可选）
+- `crew_benchmark_price`（班组标底税前价，可选）
 - `price_type`（`labor` 劳务 / `material` 材料 / `combined` 综合，必填）
 - `source`（`manual` 手动 / `imported` 导入 / `ai_suggested` AI 建议，默认 `manual`）
 - `effective_date`（生效日期）
 - `notes`（备注）
 
+价格字段校验：`price` 和三类最终价格字段至少需提供一个正数；人工费、主材费、辅材费、直接费、管理费利润等拆分价可为 0 或正数，用于保留 Excel 成本结构，不单独派生主参考价。三类最终价格可同时保留，`price` 作为本阶段主参考价用于列表和后续 BIZ-2b 初始匹配。
+
 `GET /api/v1/admin/cost-items` 查询参数：
 
-- `category` / `subcategory`
+- `category` / `subcategory`（模糊匹配；`category` 会同时匹配大类和子类，便于输入“楼地面”等短词）
 - `status`（`draft` / `active` / `archived`，多选）
 - `price_type`
-- `keyword`（`item_name` / `spec` 模糊搜索）
+- `keyword`（`item_name` / `spec` / `category` / `subcategory` / `notes` 模糊搜索）
 - `page` / `page_size`
 
 `POST /api/v1/admin/cost-items/{id}/archive` 请求字段（`active -> archived` 时必填）：
@@ -359,6 +372,7 @@ Phase 4a 当前实现说明：
 - `POST /import/preview`：解析上传的 Excel，返回 `{ batch_id, items: [...], duplicate_warnings: [...] }`。`batch_id` 为服务端生成的 UUID，与本次解析结果绑定，有效期 30 分钟。
 - `POST /import/confirm`：请求体必须携带 `batch_id`（来自 preview 响应）。服务端按 `batch_id` 查找缓存的解析结果并落库为 `draft`。`batch_id` 过期（>30 分钟）返回 `410 BATCH_EXPIRED`。重复 confirm 同一 `batch_id` 返回 `200 + 已确认结果`，不重复落库。
 - 重复条目判定规则：`category + subcategory + item_name + spec + unit` 五字段完全匹配时，在 preview 响应的 `duplicate_warnings` 中标记，confirm 时默认跳过已有 `active` 记录；已有 `draft` 记录时覆盖更新。
+- `POST /import/confirm` 响应字段包括 `created_count`、`updated_count`、`skipped_count`、`created_ids`、`updated_ids`、`skipped_ids`；当前 smoke 已验证旧 Excel 可解析 191 条，人工/主材/辅材拆分价映射正确，重复 confirm 幂等。
 
 重复调用语义：
 

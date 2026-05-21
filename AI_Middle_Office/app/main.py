@@ -21,6 +21,7 @@ from app.api.v1 import (
     auth,
     business_ledger,
     client_inquiries,
+    cost_items,
     dashboard,
     execution_tasks,
     files,
@@ -46,6 +47,7 @@ from app.models import prompt_regression as prompt_regression_model  # noqa: F40
 from app.models import knowledge_candidate as knowledge_candidate_model  # noqa: F401 — 触发知识候选表建表
 from app.models import client_inquiry as client_inquiry_model  # noqa: F401 — 触发客户咨询表建表
 from app.models import client_inquiry_event as client_inquiry_event_model  # noqa: F401 — 触发商务台账事件表建表
+from app.models import cost_item as cost_item_model  # noqa: F401 — 触发成本库表建表
 from app.models import execution_task as execution_task_model  # noqa: F401 — 触发执行任务表建表
 from app.models import meeting as meeting_model  # noqa: F401 — 触发会议纪要与草稿表建表
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
@@ -167,6 +169,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
 app.include_router(client_inquiries.router, prefix="/api/v1", tags=["Client Inquiries"])
 app.include_router(business_ledger.router, prefix="/api/v1", tags=["Business Ledger"])
+app.include_router(cost_items.router, prefix="/api/v1", tags=["Cost Items"])
 app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
 app.include_router(users.router, prefix="/api/v1", tags=["Users"])
@@ -319,6 +322,13 @@ def serve_vite_business():
 
 @app.get("/admin/business-ledger", include_in_schema=False)
 def serve_vite_business_ledger():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/cost-db", include_in_schema=False)
+def serve_vite_cost_db():
     if not settings.feature_vite_frontend:
         raise HTTPException(status_code=404, detail="Not Found")
     return _serve_vite_index()

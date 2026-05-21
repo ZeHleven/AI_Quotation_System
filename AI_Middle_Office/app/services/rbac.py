@@ -122,6 +122,15 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_execution or settings.feature_meeting_ai else "pending",
             }
         )
+    if {"system_admin", "admin", "staff"} & roles:
+        modules.append(
+            {
+                "key": "cost_db",
+                "name": "成本数据库",
+                "path": "/admin/cost-db",
+                "status": "available" if settings.feature_cost_db else "pending",
+            }
+        )
     if {"system_admin", "admin", "viewer"} & roles:
         dashboard_enabled = (
             settings.feature_dashboard_quote

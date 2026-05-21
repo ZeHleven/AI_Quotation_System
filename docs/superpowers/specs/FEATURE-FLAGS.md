@@ -1,13 +1,13 @@
 # FEATURE-FLAGS｜功能开关与阶段依赖矩阵
 > 创建日期：2026-05-15
-> 状态：Phase 0/1/2/2.5/3 已完成当前环境验证；Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收；BIZ-1a / BIZ-2a 功能开关已预定义，开发尚未开始；系统完善前不正式投入生产使用。
+> 状态：Phase 0/1/2/2.5/3 已完成当前环境验证；Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收；BIZ-1a 商务台账和 BIZ-2a 成本数据库已完成当前环境验证；系统完善前不正式投入生产使用。
 > 关联主文档：[2026-05-14-ai-platform-upgrade-design.md](2026-05-14-ai-platform-upgrade-design.md)
 
 ## 目标
 
 本文件固定功能开关、Schema 依赖、运行前置条件和 Vite 路由开放阶段。功能开关控制入口和行为，不得替代数据库迁移顺序。
 
-当前环境状态（2026-05-19，非正式生产上线）：
+当前环境状态（2026-05-20，非正式生产上线）：
 
 - `FEATURE_VITE_FRONTEND=true` 已打开。
 - `PUBLIC_ACCESS_ENABLED=false` 保持关闭。
@@ -16,7 +16,7 @@
 - `FEATURE_EXECUTION` / `FEATURE_DASHBOARD_EXECUTION` 已完成当前环境验证；正式生产启用仍待系统整体完善后统一 Runbook。
 - `FEATURE_MEETING_AI` 已完成 Phase 4a 当前环境运行态验收；默认关闭，当前环境已打开，正式生产启用仍待系统整体完善后统一 Runbook。
 - Phase 4b/4c 的语音转写、钉钉会议导入，以及 Phase 6 经营功能开关未启动。
-- `FEATURE_BUSINESS_LEDGER`（BIZ-1a）和 `FEATURE_COST_DB`（BIZ-2a）已预定义，对应 Alembic revision 和开发尚未开始。
+- `FEATURE_BUSINESS_LEDGER`（BIZ-1a）已完成当前环境验证；`FEATURE_COST_DB`（BIZ-2a）已完成当前环境验证并在当前环境打开。
 
 ## 功能开关矩阵
 
@@ -30,8 +30,8 @@
 | `FEATURE_DASHBOARD_EXECUTION` | 3（当前环境已验证） | `execution_tasks` | Alembic `20260514_0013` 已执行，执行速度聚合接口可用，取消数量展示已验证 | 执行速度看板显示功能未开启 |
 | `FEATURE_MEETING_AI` | 4a（当前环境已验证） | `execution_tasks`、`meeting_notes`、`task_drafts`、`meeting_note_revisions` | Alembic `20260514_0014` / `20260514_0015` 已执行；手动纪要、草稿确认、人工补充、取消和 revision 流程运行态 smoke 通过 | 会议 AI 页面显示功能未开启 |
 | `FEATURE_AUDIO_TRANSCRIPTION` | 4b（暂缓） | `FEATURE_MEETING_AI`、`quote_jobs.job_type`、`quote_jobs.timeout_at`、对象存储 | 转写服务账号、额度、回调/轮询可用 | 上传录音入口隐藏 |
-| `FEATURE_BUSINESS_LEDGER` | BIZ-1a | `client_inquiries`（需 `direction`/`stage`/`next_followup_at`/`cancelled_at`/`cancelled_by_id`/`cancel_reason` 字段，将 `first_response_time` 调整为 nullable，复用已有 `responder_id`，新 Alembic revision）、`client_inquiry_events`（新 Alembic revision 同步建表） | `direction` 等字段、`first_response_time` nullable 改造及 `client_inquiry_events` Alembic 执行，商务台账 CRUD 和 Vite `/admin/business-ledger` 冒烟通过 | 商务台账入口隐藏；`outbound` 记录不创建；`inbound` 历史数据不受影响 |
-| `FEATURE_COST_DB` | BIZ-2a | `cost_items` / `cost_item_history`（新 Alembic revision） | `cost_items` / `cost_item_history` Alembic 执行，成本库 CRUD 和 Vite `/admin/cost-db` 冒烟通过 | 成本库入口隐藏；报价预审不展示底价对比；BIZ-2b/2c/2d 依赖本开关 |
+| `FEATURE_BUSINESS_LEDGER` | BIZ-1a（当前环境已验证） | `client_inquiries`（`direction`/`stage`/`next_followup_at`/`cancelled_at`/`cancelled_by_id`/`cancel_reason` 字段，`first_response_time` nullable）、`client_inquiry_events`，Alembic `20260520_0016` | 商务台账 CRUD 和 Vite `/admin/business-ledger` smoke 通过 | 商务台账入口隐藏；`outbound` 记录不创建；`inbound` 历史数据不受影响 |
+| `FEATURE_COST_DB` | BIZ-2a（当前环境已验证） | `cost_items` / `cost_item_history`，Alembic `20260520_0017` / `20260520_0018` | 成本库 CRUD、Excel 导入、人工/主材/辅材拆分价映射、状态机和 Vite `/admin/cost-db` smoke 通过 | 成本库入口隐藏；报价预审不展示底价对比；BIZ-2b/2c/2d 依赖本开关 |
 | `FEATURE_DASHBOARD_BUSINESS` | BIZ-3（原 Phase 6） | 经营数据表、`contracts`/`payments`/`project_costs`、导入审计表 | BIZ-1 数据稳定，导入模板、权限脱敏、导出水印通过 | 经营驾驶舱显示功能未开启 |
 | `FEATURE_IMAGE_QUOTE` | 附录 A | `file_objects`、`quote_image_analyses` | 图片识别 mock 和降级路径通过 | 样板图入口隐藏 |
 | `FEATURE_IMAGE_QUOTE_GLM` | 附录 A | `FEATURE_IMAGE_QUOTE`、GLM-4V 配置或 `model_gateway` | true 时直连智谱 GLM-4V；false 时必须配置 `IMAGE_QUOTE_MODEL_PROVIDER` / `IMAGE_QUOTE_MODEL_ENDPOINT` / `IMAGE_QUOTE_MODEL_NAME` | 关闭直连 GLM-4V，改走 `model_gateway`；依赖缺失时健康检查 degraded |
@@ -84,8 +84,8 @@ Schema 层强依赖，Feature Flag 层解耦：
 | `/admin/users` | Phase 0（当前环境已验证） | `FEATURE_VITE_FRONTEND` | 用户列表和角色分配 |
 | `/admin/dashboard` | Phase 1-3（Phase 3 当前环境已验证） | `FEATURE_DASHBOARD_QUOTE` / `FEATURE_DASHBOARD_RESPONSE` / `FEATURE_DASHBOARD_EXECUTION` | 所有看板开关均关闭时显示“功能未开启”，不得作为 Phase 0 默认落地页 |
 | `/admin/execution` | Phase 3 / 4a | `FEATURE_EXECUTION` / `FEATURE_MEETING_AI` | Phase 3 为任务管理；Phase 4a 接入手动会议纪要和草稿确认 |
-| `/admin/business-ledger` | BIZ-1a | `FEATURE_BUSINESS_LEDGER` | 商务台账（项目/客户跟进）；BIZ-1a 完成后开放 |
-| `/admin/cost-db` | BIZ-2a | `FEATURE_COST_DB` | 成本数据库管理；BIZ-2a 完成后开放 |
+| `/admin/business-ledger` | BIZ-1a（当前环境已验证） | `FEATURE_BUSINESS_LEDGER` | 商务台账（项目/客户跟进） |
+| `/admin/cost-db` | BIZ-2a（当前环境已验证） | `FEATURE_COST_DB` | 成本数据库管理 |
 | `/admin/business` | BIZ-3（原 Phase 6） | `FEATURE_DASHBOARD_BUSINESS` | 经营驾驶舱；依赖 BIZ-1 数据稳定后启动 |
 | `/quote` | 后续迁移 | 待定 | 旧 `/index.html` 保留到迁移完成 |
 | `/admin/knowledge` | 后续迁移 | 待定 | 旧 `/admin.html` 保留到迁移完成 |

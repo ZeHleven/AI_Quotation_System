@@ -82,6 +82,7 @@ class Settings:
     feature_meeting_ai: bool = _env_bool("FEATURE_MEETING_AI", False)
     feature_audio_transcription: bool = _env_bool("FEATURE_AUDIO_TRANSCRIPTION", False)
     feature_business_ledger: bool = _env_bool("FEATURE_BUSINESS_LEDGER", False)
+    feature_cost_db: bool = _env_bool("FEATURE_COST_DB", False)
     response_sla_minutes: int = _env_int("RESPONSE_SLA_MINUTES", 30)
     public_access_enabled: bool = _env_bool("PUBLIC_ACCESS_ENABLED", False)
 

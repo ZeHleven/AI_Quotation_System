@@ -324,6 +324,14 @@ textarea {
   margin-bottom: 10px;
 }
 
+.cost-db-filters {
+  display: grid;
+  grid-template-columns: 160px 170px 140px minmax(220px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
 .inquiry-filters .el-select,
 .inquiry-filters .el-input,
 .operation-filters .el-select,
@@ -332,7 +340,9 @@ textarea {
 .meeting-filters .el-input,
 .business-ledger-filters .el-select,
 .business-ledger-filters .el-input,
-.business-ledger-filters .el-date-editor {
+.business-ledger-filters .el-date-editor,
+.cost-db-filters .el-select,
+.cost-db-filters .el-input {
   width: 100%;
 }
 
@@ -418,6 +428,22 @@ textarea {
 
 .business-ledger-table .ledger-overdue-row .el-table__cell {
   background: #fff1f0;
+}
+
+.price-stack {
+  display: grid;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.price-stack span {
+  color: #1f2a44;
+  font-weight: 650;
+}
+
+.price-stack small {
+  color: #667085;
+  font-size: 12px;
 }
 
 .ledger-form-grid {
@@ -558,6 +584,39 @@ textarea {
   border-top: 1px solid #d9e0ea;
 }
 
+.cost-import-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.cost-import-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cost-import-summary > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+}
+
+.cost-import-summary small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.cost-import-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #1f2a44;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -611,6 +670,11 @@ textarea {
     grid-template-columns: 1fr 1fr;
   }
 
+  .cost-db-filters,
+  .cost-import-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .draft-confirm-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -657,6 +721,8 @@ textarea {
   .operation-filters,
   .meeting-filters,
   .business-ledger-filters,
+  .cost-db-filters,
+  .cost-import-summary,
   .detail-grid,
   .draft-confirm-grid,
   .ledger-form-grid {

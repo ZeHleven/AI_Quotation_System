@@ -21,10 +21,13 @@ from app.services.knowledge_candidates import (
     reject_candidate,
     summarize_candidates,
 )
-from app.services.material_sync import sync_materials_to_rag
 
 
 router = APIRouter()
+LEGACY_KNOWLEDGE_APPROVAL_RETIRED_MESSAGE = (
+    "Legacy knowledge candidate approval writes to retired materials. Review candidates only; "
+    "create or update Cost Database draft items instead."
+)
 
 
 @router.post("/admin/knowledge_candidates/build", summary="Build knowledge candidates from quote feedback")
@@ -102,6 +105,8 @@ async def approve_knowledge_candidate(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    raise HTTPException(status_code=410, detail=LEGACY_KNOWLEDGE_APPROVAL_RETIRED_MESSAGE)
+
     payload = payload or KnowledgeCandidateApproveRequest()
     candidate = db.query(KnowledgeCandidate).filter(KnowledgeCandidate.id == candidate_id).first()
     if not candidate:

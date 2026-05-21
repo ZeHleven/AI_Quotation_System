@@ -18,6 +18,7 @@ from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.file_storage import get_object_bytes
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
+from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
 from app.services.quote_feedback import safe_record_ai_preview
 from app.services.quote_job_readability import (
     apply_job_duration,
@@ -25,7 +26,7 @@ from app.services.quote_job_readability import (
     apply_job_result_summary,
     create_job_event_from_payload,
 )
-from app.services.quote_helpers import sign_payload
+from app.services.quote_helpers import normalize_quote_request_text, sign_payload
 
 
 logger = logging.getLogger(__name__)
@@ -206,6 +207,7 @@ async def _iter_quote_events(
         )
         return
 
+    final_query = normalize_quote_request_text(final_query)
     yield (
         "processing",
         "[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...",
@@ -338,6 +340,9 @@ async def run_quote_job_async(job_id: str) -> None:
                 return
 
             job.stage = extra.get("stage", job.stage)
+            if status_name == "preview":
+                extra = dict(extra)
+                extra["data"] = safe_enrich_quote_payload_with_cost_refs(db, extra.get("data"))
             append_job_event(job, status_name, message, trace_id=job.trace_id, **extra)
 
             if status_name == "preview":

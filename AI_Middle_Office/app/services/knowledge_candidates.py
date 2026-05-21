@@ -525,6 +525,8 @@ def approve_candidate(
     username: str,
     request: KnowledgeCandidateApproveRequest,
 ) -> dict:
+    raise ValueError("legacy knowledge candidate approval writes to retired materials")
+
     if candidate.status != "pending":
         raise ValueError("candidate is not pending")
 

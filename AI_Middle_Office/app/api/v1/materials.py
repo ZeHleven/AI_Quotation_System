@@ -33,6 +33,10 @@ DEFAULT_UNIT = "\u9879"
 DEFAULT_SOURCE = "manual"
 STATUS_ACTIVE = "active"
 STATUS_DRAFT = "draft"
+LEGACY_MATERIALS_RETIRED_MESSAGE = (
+    "Legacy materials module has been retired. Use Cost Database active items and "
+    "/api/v1/admin/cost-items/sync-rag instead."
+)
 MATERIAL_DIFF_FIELDS = [
     "item_name",
     "unit_price",
@@ -204,6 +208,10 @@ def _serialize_material(material: Material) -> dict:
 
 
 def _ensure_legacy_file_imported(db: Session) -> None:
+    # BIZ-2b/c: cost_items is now the formal pricing source. Do not re-import
+    # retired rag_materials.json test data when the legacy materials table is empty.
+    return
+
     if db.query(Material.id).first() is not None:
         return
 
@@ -462,6 +470,8 @@ async def save_materials(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    raise HTTPException(status_code=410, detail=LEGACY_MATERIALS_RETIRED_MESSAGE)
+
     before_data = load_data(db)
     data = [item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in items]
     snapshot = create_material_snapshot(
@@ -492,6 +502,8 @@ async def rollback_materials(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    raise HTTPException(status_code=410, detail=LEGACY_MATERIALS_RETIRED_MESSAGE)
+
     snapshot = load_material_snapshot(snapshot_id, db)
     current_snapshot = create_material_snapshot(
         username=current_user.username,
@@ -594,6 +606,8 @@ async def sync_to_milvus(
     db: Session = Depends(get_db),
 ):
     """将数据库物料数据 POST 至 CentOS RAG 服务的 /admin/reload，由其完成向量化和蓝绿切换。"""
+    raise HTTPException(status_code=410, detail=LEGACY_MATERIALS_RETIRED_MESSAGE)
+
     if not load_data(db):
         raise HTTPException(status_code=400, detail="本地知识库为空，无法同步")
 

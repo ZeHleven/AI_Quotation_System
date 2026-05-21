@@ -39,11 +39,14 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - AI 平台架构升级 Phase 3 执行速度追踪已完成当前环境验证（2026-05-19）：新增 `execution_tasks`、`execution_task_events`、`FEATURE_EXECUTION`、`FEATURE_DASHBOARD_EXECUTION`、执行任务 CRUD/取消接口、执行速度聚合接口、`/admin/execution` 任务页和 `/admin/dashboard` 执行速度标签页；当前环境已打开开关并验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已显示取消数量。
 - AI 平台架构升级 Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收（2026-05-19）：新增 `meeting_notes`、`task_drafts`、`meeting_note_revisions`、`FEATURE_MEETING_AI`、会议纪要接口和 `/admin/execution` 会议纪要标签页；当前环境已打开 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`，内网 smoke 已验证纪要提取草稿、确认写入 `execution_tasks`、人工补充后作废、revision 补充任务和 `/admin/execution` 访问。当前不启动 Phase 4b/4c/6，不迁移旧 `index.html` / `admin.html`。
 - AI 平台升级 BIZ Track BIZ-1a 商务台账 v1 已完成当前环境验证（2026-05-20）：新增 `FEATURE_BUSINESS_LEDGER`、Alembic `20260520_0016`、商务台账接口和 `/admin/business-ledger` 页面；商务/市场部后续 BIZ-1b/BIZ-1c 暂停，BIZ-1d 外部项目源自动筛选与联系方式获取待定。
-- AI 平台升级 BIZ Track BIZ-2a 成本数据库初始化已完成当前环境验证（2026-05-20）：新增 `FEATURE_COST_DB`、Alembic `20260520_0017` / `20260520_0018`、`cost_items`、`cost_item_history`、成本库接口、旧 Excel 导入预览/确认和 `/admin/cost-db` 页面；保留对甲税前综合单价、劳务发包综合单价、班组标底税前价三类价格，并补充人工费、主材费、辅材费等拆分价。
+- AI 平台升级 BIZ Track BIZ-2a 成本数据库初始化已完成当前环境验证（2026-05-20）：新增 `FEATURE_COST_DB`、Alembic `20260520_0017` / `20260520_0018`、`cost_items`、`cost_item_history`、成本库接口、旧 Excel 导入预览/确认和 `/admin/cost-db` 页面；保留对甲税前综合单价、劳务发包综合单价、班组标底税前价三类价格，并补充人工费、主材费、辅材费等拆分价；2026-05-21 补充“撤回启用”和批量状态流转能力，支持单条/批量 `draft -> active`、`active -> draft` 并写入状态历史，`archived` 仍冻结不可撤回。
+- AI 平台升级 BIZ Track BIZ-2b 报价时材料底价查询已完成代码层验证（2026-05-21）：新增报价结果成本参考匹配服务，接入同步 `/chat` 与异步 `quote_jobs` preview 结果；仅匹配 `active` 成本条目，优先 `item_name + spec` 精确匹配，其次 `item_name` 模糊匹配；旧 `index.html` 预审弹窗已展示“成本库参考价 vs AI 生成价”和价差提示。不新增 Alembic；当前环境成本库 `active=190`，已具备真实运行态成本参考匹配数据基础。
+- AI 平台升级 BIZ Track BIZ-2c 成本库主库化 + active RAG 同步已完成当前环境验证（2026-05-21）：新增 active 成本条目 RAG 同步服务、`POST /api/v1/admin/cost-items/sync-rag` 管理员接口、Alembic `20260520_0019` 同步记录表 `cost_rag_sync_runs`、`GET /api/v1/admin/cost-items/sync-rag/runs` 和 Vite `/admin/cost-db`“同步 active 到 RAG / 同步记录”窗口；同步源只取 `cost_items.active`。旧 `materials` 作为报价/RAG 源已退役，70 条测试数据已备份后清空，旧 materials 写入/回滚、旧 `/admin/sync_milvus` 和旧知识候选 approve 均返回 410。
+- AI 平台升级 BIZ Track BIZ-2d 成本库参考价命中率优化已完成代码层验证（2026-05-21）：补强 `quote_cost_matching` 的中文名称归一化、符号/连接词处理、词序无关 token 匹配、单位族兼容和动作词误命中保护；“窗帘盒/灯槽拆除”类写法可命中 active 成本库底价；编号换行清单在发送 N8N 前会自动清洗成分号清单，避免 `1. / 2. / 3.` 多行需求触发空响应。不新增 Alembic，不启动漏项检测。
 - 产品边界：系统完善前不正式投入生产使用；后续阶段先按内网开发/验证推进，最后统一准备正式生产 Runbook。
 - 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
-- 当前数据库迁移 head：`20260520_0018`；内网验证数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账和 BIZ-2a 成本数据库。
-- 最新验证（2026-05-20，BIZ-2a 当前环境收尾）：`python -m alembic current` 显示 `20260520_0018 (head)`；`scripts\biz2a_cost_db_smoke.ps1` 通过，覆盖 admin/staff 权限、成本条目创建/查询、价格变更历史、`draft -> active -> archived` 状态机、旧 Excel 解析 191 条、人工/主材/辅材拆分价映射和重复导入幂等；`python -m compileall app scripts` 通过；`python -m pytest` 为 `131 passed`；`cmd /c npm.cmd run build` 通过。当前不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d，`PUBLIC_ACCESS_ENABLED=false` 边界保持不变。
+- 当前数据库迁移 head：`20260520_0019`；内网验证数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账、BIZ-2a 成本数据库和 BIZ-2c RAG 同步记录。
+- 最新验证（2026-05-21，BIZ-2d 成本库参考价命中率优化）：`python -m alembic current` 显示 `20260520_0019 (head)`；`FEATURE_COST_DB=true`、`PUBLIC_ACCESS_ENABLED=false`；成本库当前 `total=197 / active=190 / archived=7`；真实库 smoke 已确认“窗帘盒灯槽拆除”命中 active `cost_item_id=180`、参考价 `6.0`；编号换行清单预清洗已覆盖同步 `/chat` 与异步 `quote_jobs`；`python -m compileall app tests` 通过；`python -m pytest` 为 `153 passed`；`cmd /c npm.cmd run build` 通过。当前不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d，不启动漏项检测。
 
 ## 关键模块
 
@@ -55,10 +58,13 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - `app/api/v1/quote_feedback.py`：报价反馈闭环与 admin 反馈分析接口，包括 summary / list / detail。
 - `app/api/v1/prompt_regression.py`：Prompt 回归评测接口，包括黄金案例 build/list 和回归报告 run/latest/history。
 - `app/api/v1/knowledge_candidates.py`：知识库治理接口，包括候选 build/list/summary、RAG trace 洞察、approve/reject。
-- `app/api/v1/materials.py`：物料库 CRUD、快照、回滚、CSV 导入和 RAG reload。
+- `app/api/v1/materials.py`：旧 materials 只读/退役保护；写入、回滚、旧 sync_milvus 已废弃。
 - `app/api/v1/history.py`：报价历史记录。
 - `app/api/v1/users.py`：用户配额管理、Phase 0 角色授权/撤销和权限历史。
 - `app/api/v1/quote_jobs.py`：新版异步报价任务 API，创建、查询、事件流、取消、重试、超时标记。
+- `app/services/quote_cost_matching.py`：BIZ-2b/BIZ-2d 报价结果成本底价参考匹配，给 preview 明细附加 `cost_reference` 与匹配汇总，并处理中文符号、单位族和词序差异。
+- `app/services/quote_helpers.py`：报价通用工具，包含 N8N 签名、报价文件名和编号换行清单输入清洗。
+- `app/services/cost_rag_sync.py`：BIZ-2c active 成本条目 RAG 同步，将 `cost_items.active` 转换为 RAG `/admin/reload` 兼容 payload。
 - `app/api/v1/execution_tasks.py`：Phase 3 执行任务 API，创建、列表、详情、进度更新和取消。
 - `app/api/v1/meetings.py`：Phase 4a 会议纪要 API，创建/查询/详情/草稿阶段更正、人工补充草稿、取消、确认草稿和纪要 revision。
 - `app/services/execution_tasks.py` / `app/services/execution_dashboard.py`：执行任务状态机、事件审计和执行速度看板聚合。
@@ -100,9 +106,10 @@ RAG 服务当前使用离线 HuggingFace 模型路径，挂载：
 - `RAG_VECTOR_ENABLED=true`
 - RAG 混合检索为向量 + BM25 + RRF
 - Milvus alias `enterprise_quotation_rag` 指向 `quotation_blue`
-- 正式知识库条数为 70 条
-- 物料库主存储为 MySQL `materials` / `material_snapshots`
-- `LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅作为旧 `rag_materials.json` 空库导入源
+- 正式 RAG/报价成本源为 `cost_items.active`，当前环境 active 190 条
+- 正式报价成本价格主库为 MySQL `cost_items` 的 `active` 条目
+- `materials` 已清空并退役，不再作为报价/RAG 源；`material_snapshots` 仅作旧审计回溯
+- `LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 不再自动导入旧 `rag_materials.json`
 - RAG 评测报告目录由 `RAG_EVAL_REPORT_DIR` 控制
 
 ## 启动方式
@@ -129,5 +136,5 @@ cd /opt/rag_service && docker compose up -d
 
 ## Backend Refactor Notes
 
-- Main material storage is MySQL `materials` / `material_snapshots`; `LEGACY_MATERIALS_FILE` and the older `MATERIALS_FILE` env var are only used to import an existing `rag_materials.json` into an empty database.
+- Formal pricing/RAG source is `cost_items.active`; legacy MySQL `materials` is retired and no longer auto-imports `rag_materials.json`.
 - RAG eval report output is controlled by `RAG_EVAL_REPORT_DIR` and no longer depends on the legacy material JSON file path.

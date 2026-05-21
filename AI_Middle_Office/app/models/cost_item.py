@@ -98,3 +98,26 @@ class CostItemHistory(Base):
     changed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     cost_item = relationship("CostItem", back_populates="history")
+
+
+class CostRagSyncRun(Base):
+    __tablename__ = "cost_rag_sync_runs"
+    __table_args__ = (
+        Index("ix_cost_rag_sync_runs_started_at", "started_at"),
+        Index("ix_cost_rag_sync_runs_status_started_at", "status", "started_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    source = Column(String(64), index=True, nullable=False, default="cost_items.active", server_default="cost_items.active")
+    status = Column(String(24), index=True, nullable=False, default="running", server_default="running")
+    requested_count = Column(Integer, nullable=False, default=0, server_default="0")
+    synced_count = Column(Integer, nullable=False, default=0, server_default="0")
+    message = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    rag_service_url = Column(String(255), nullable=True)
+    http_status = Column(Integer, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    triggered_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    triggered_by_username = Column(String(64), nullable=True)
+    started_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    finished_at = Column(DateTime(timezone=True), nullable=True)

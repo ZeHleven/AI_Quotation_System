@@ -169,12 +169,7 @@ def _seed_feedback_materials() -> dict:
         db.close()
 
 
-def test_build_approve_reject_and_rag_insights(client, monkeypatch):
-    async def fake_sync(db, username):
-        return {"success": True, "message": "ok", "eval_triggered": False, "eval_report_id": None, "error": None}
-
-    monkeypatch.setattr("app.api.v1.knowledge_candidates.sync_materials_to_rag", fake_sync)
-
+def test_build_reject_and_rag_insights_while_approval_is_retired(client):
     admin_username, headers = _create_admin_headers(client)
     seeded = _seed_feedback_materials()
 
@@ -224,18 +219,8 @@ def test_build_approve_reject_and_rag_insights(client, monkeypatch):
         headers=headers,
         json={"review_note": "accepted correction", "as_draft": True},
     )
-    assert approve_response.status_code == 200
-    approved = approve_response.json()["data"]
-    assert approved["candidate"]["status"] == "approved"
-    assert approved["material"]["id"] == seeded["material_id"]
-    assert approved["material"]["unit_price"] == 80
-    assert approved["material"]["source"] == "knowledge_candidate"
-    assert approved["material"]["status"] == "draft"
-    assert approved["material"]["last_verified_at"]
-    assert approved["snapshot"]["action"] == "knowledge_candidate_approve"
-    assert approved["snapshot"]["added_count"] == 0
-    assert approved["snapshot"]["updated_count"] == 1
-    assert approved["snapshot"]["diff_summary"]["updated"][0]["id"] == seeded["material_id"]
+    assert approve_response.status_code == 410
+    assert "retired materials" in approve_response.json()["detail"]
 
     reject_response = client.post(
         f"/api/v1/admin/knowledge_candidates/{rejected_candidate.id}/reject",
@@ -249,12 +234,10 @@ def test_build_approve_reject_and_rag_insights(client, monkeypatch):
     db = SessionLocal()
     try:
         material = db.query(Material).filter(Material.material_id == seeded["material_id"]).one()
-        assert material.unit_price == 80
-        assert material.is_draft is True
-        assert material.source == "knowledge_candidate"
-        assert material.status == "draft"
-        assert material.last_verified_at is not None
-        assert db.query(MaterialSnapshot).filter(MaterialSnapshot.action == "knowledge_candidate_approve").count() >= 1
+        assert material.unit_price == 50
+        assert material.source == "manual"
+        assert db.query(KnowledgeCandidate).filter(KnowledgeCandidate.id == price_candidate.id).one().status == "pending"
+        assert db.query(MaterialSnapshot).filter(MaterialSnapshot.action == "knowledge_candidate_approve").count() == 0
     finally:
         db.close()
 
@@ -266,7 +249,7 @@ def test_build_approve_reject_and_rag_insights(client, monkeypatch):
     assert target[0]["needs_review"] is True
 
 
-def test_approve_response_includes_sync_fields(client, monkeypatch):
+def test_approve_endpoint_is_retired(client):
     _, headers = _create_admin_headers(client)
     seeded = _seed_feedback_materials()
     client.post("/api/v1/admin/knowledge_candidates/build", headers=headers, json={"limit": 50})
@@ -281,25 +264,16 @@ def test_approve_response_includes_sync_fields(client, monkeypatch):
     finally:
         db.close()
 
-    async def fake_sync_ok(db, username):
-        return {"success": True, "message": "ok", "eval_triggered": False, "eval_report_id": None, "error": None}
-
-    monkeypatch.setattr("app.api.v1.knowledge_candidates.sync_materials_to_rag", fake_sync_ok)
-
     response = client.post(
         f"/api/v1/admin/knowledge_candidates/{candidate.id}/approve",
         headers=headers,
         json={},
     )
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["sync_triggered"] is True
-    assert data["sync_status"] == "success"
-    assert data["sync_error"] is None
-    assert data["candidate"]["status"] == "approved"
+    assert response.status_code == 410
+    assert "retired materials" in response.json()["detail"]
 
 
-def test_approve_sync_failure_does_not_rollback_approve(client, monkeypatch):
+def test_retired_approve_does_not_write_material_or_sync(client):
     _, headers = _create_admin_headers(client)
     seeded = _seed_feedback_materials()
     client.post("/api/v1/admin/knowledge_candidates/build", headers=headers, json={"limit": 50})
@@ -315,27 +289,26 @@ def test_approve_sync_failure_does_not_rollback_approve(client, monkeypatch):
     finally:
         db.close()
 
-    async def fake_sync_fail(db, username):
-        return {"success": False, "message": "err", "eval_triggered": False, "eval_report_id": None, "error": "RAG timeout"}
-
-    monkeypatch.setattr("app.api.v1.knowledge_candidates.sync_materials_to_rag", fake_sync_fail)
-
     response = client.post(
         f"/api/v1/admin/knowledge_candidates/{candidate_id}/approve",
         headers=headers,
         json={},
     )
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["sync_triggered"] is True
-    assert data["sync_status"] == "failed"
-    assert data["sync_error"] == "RAG timeout"
-    # approve and material write are not rolled back
-    assert data["candidate"]["status"] == "approved"
-    assert data["material"]["unit_price"] == 80
+    assert response.status_code == 410
+    assert "retired materials" in response.json()["detail"]
+
+    db = SessionLocal()
+    try:
+        candidate = db.query(KnowledgeCandidate).filter(KnowledgeCandidate.id == candidate_id).one()
+        material = db.query(Material).filter(Material.material_id == seeded["material_id"]).one()
+        assert candidate.status == "pending"
+        assert material.unit_price == 50
+        assert material.source == "manual"
+    finally:
+        db.close()
 
 
-def test_approving_non_pending_candidate_is_rejected(client):
+def test_approving_non_pending_candidate_still_uses_retired_response(client):
     _, headers = _create_admin_headers(client)
     seeded = _seed_feedback_materials()
 
@@ -357,8 +330,8 @@ def test_approving_non_pending_candidate_is_rejected(client):
         db.close()
 
     first = client.post(f"/api/v1/admin/knowledge_candidates/{candidate.id}/approve", headers=headers, json={})
-    assert first.status_code == 200
+    assert first.status_code == 410
 
     second = client.post(f"/api/v1/admin/knowledge_candidates/{candidate.id}/approve", headers=headers, json={})
-    assert second.status_code == 400
-    assert "not pending" in second.json()["detail"]
+    assert second.status_code == 410
+    assert "retired materials" in second.json()["detail"]

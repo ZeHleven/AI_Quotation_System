@@ -5,6 +5,7 @@ import re
 
 from app.api.v1.chat import _attach_quote_filename, _build_quote_filename, _sign_payload
 from app.core.config import settings
+from app.services.quote_helpers import normalize_quote_request_text
 
 
 def test_build_quote_filename_is_ascii_and_stable():
@@ -39,3 +40,26 @@ def test_sign_payload_keeps_secret_header_and_adds_hmac_signature():
 
     assert headers["X-Webhook-Secret"] == settings.webhook_secret
     assert headers["X-Webhook-Signature"] == expected_signature
+
+
+def test_normalize_quote_request_text_flattens_numbered_lists():
+    text = (
+        "请生成报价明细，只包含以下三项：\n"
+        "1. 拆除复合木地板，35平方米\n"
+        "2. 拆除木脚线，42米\n"
+        "3. 拆砖墙（120厚砖墙），8平方米"
+    )
+
+    normalized = normalize_quote_request_text(text)
+
+    assert "\n" not in normalized
+    assert "1." not in normalized
+    assert "2." not in normalized
+    assert "3." not in normalized
+    assert "拆除复合木地板，35平方米；拆除木脚线，42米；拆砖墙（120厚砖墙），8平方米" in normalized
+
+
+def test_normalize_quote_request_text_keeps_plain_text_unchanged():
+    text = "请生成报价明细：拆除复合木地板35平方米；拆除木脚线42米"
+
+    assert normalize_quote_request_text(text) == text

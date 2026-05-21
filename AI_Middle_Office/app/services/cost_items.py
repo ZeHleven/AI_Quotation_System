@@ -479,6 +479,89 @@ def activate_cost_item(db: Session, user: User, item_id: int) -> CostItem:
     return item
 
 
+def bulk_update_cost_item_status(
+    db: Session,
+    user: User,
+    item_ids: list[int],
+    target_status: str,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    require_cost_db_manager(user)
+    seen: set[int] = set()
+    normalized_ids: list[int] = []
+    for item_id in item_ids:
+        if item_id <= 0:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="INVALID_ITEM_ID")
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        normalized_ids.append(item_id)
+    if not normalized_ids:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ITEM_IDS_REQUIRED")
+    if target_status not in {COST_STATUS_ACTIVE, COST_STATUS_DRAFT}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="INVALID_TARGET_STATUS")
+
+    cleaned_reason = clean_text(reason, 2000)
+    if target_status == COST_STATUS_DRAFT and not cleaned_reason:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="REASON_REQUIRED")
+
+    items = db.query(CostItem).filter(CostItem.id.in_(normalized_ids)).all()
+    item_by_id = {item.id: item for item in items}
+    changed_ids: list[int] = []
+    skipped: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    not_found: list[int] = []
+
+    for item_id in normalized_ids:
+        item = item_by_id.get(item_id)
+        if item is None:
+            not_found.append(item_id)
+            continue
+        if item.status == COST_STATUS_ARCHIVED:
+            conflicts.append({"id": item.id, "status": item.status, "reason": "archived_locked"})
+            continue
+        if item.status == target_status:
+            skipped.append({"id": item.id, "status": item.status, "reason": f"already_{target_status}"})
+            continue
+
+        old_status = item.status
+        item.status = target_status
+        change_reason = cleaned_reason or ("bulk activated" if target_status == COST_STATUS_ACTIVE else "bulk restored to draft")
+        _write_status_history(db, item, user, old_status, change_reason)
+        changed_ids.append(item.id)
+
+    db.flush()
+    return {
+        "target_status": target_status,
+        "requested_count": len(normalized_ids),
+        "changed_count": len(changed_ids),
+        "skipped_count": len(skipped),
+        "conflict_count": len(conflicts),
+        "not_found_count": len(not_found),
+        "changed_ids": changed_ids,
+        "skipped": skipped,
+        "conflicts": conflicts,
+        "not_found": not_found,
+    }
+
+
+def withdraw_cost_item_activation(db: Session, user: User, item_id: int, reason: str | None = None) -> CostItem:
+    require_cost_db_manager(user)
+    item = _get_item(db, item_id)
+    if item.status == COST_STATUS_DRAFT:
+        return item
+    if item.status == COST_STATUS_ARCHIVED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="STATE_CONFLICT")
+    cleaned_reason = clean_text(reason, 2000)
+    if not cleaned_reason:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="REASON_REQUIRED")
+    old_status = item.status
+    item.status = COST_STATUS_DRAFT
+    db.flush()
+    _write_status_history(db, item, user, old_status, cleaned_reason)
+    return item
+
+
 def archive_cost_item(db: Session, user: User, item_id: int, reason: str | None = None) -> CostItem:
     require_cost_db_manager(user)
     item = _get_item(db, item_id)

@@ -85,6 +85,45 @@ def test_chat_sse_text_quote_reaches_preview_and_decrements_quota(client, monkey
         db.close()
 
 
+def test_chat_sse_normalizes_numbered_text_before_gateway(client, monkeypatch):
+    _, headers = _create_user_headers(client, quota=3)
+    gateway_calls = []
+
+    async def fake_post_json_via_gateway(**kwargs):
+        gateway_calls.append(kwargs)
+        return httpx.Response(
+            200,
+            json={
+                "project_details": [
+                    {"project_name": "拆除复合木地板", "unit_price": 7, "total_price": 245},
+                    {"project_name": "拆除木脚线", "unit_price": 1, "total_price": 42},
+                ]
+            },
+        )
+
+    monkeypatch.setattr("app.api.v1.quote.post_json_via_gateway", fake_post_json_via_gateway)
+
+    response = client.post(
+        "/api/v1/chat",
+        data={
+            "message": (
+                "请生成报价明细，只包含以下两项：\n"
+                "1. 拆除复合木地板，35平方米\n"
+                "2. 拆除木脚线，42米"
+            )
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    events = _sse_events(response.text)
+    assert events[-1]["status"] == "preview"
+    content = gateway_calls[0]["json_payload"]["text"]["content"]
+    assert "\n" not in content
+    assert "1." not in content
+    assert "拆除复合木地板，35平方米；拆除木脚线，42米" in content
+
+
 def test_chat_sse_rejects_pdf_before_gateway_call(client, monkeypatch):
     _, headers = _create_user_headers(client)
     gateway_called = False

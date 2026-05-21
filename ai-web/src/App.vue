@@ -1086,6 +1086,57 @@
               </el-button>
               <el-button
                 v-if="canManageCostDb"
+                :icon="DataAnalysis"
+                plain
+                :loading="costRagSyncing"
+                :disabled="costDbFeatureDisabled || costRagSyncing"
+                @click="syncActiveCostItemsToRag"
+              >
+                同步 active 到 RAG
+              </el-button>
+              <el-button
+                v-if="canManageCostDb"
+                :icon="Clock"
+                plain
+                :disabled="costDbFeatureDisabled"
+                @click="openCostRagSyncDialog"
+              >
+                同步记录
+              </el-button>
+              <el-button
+                v-if="canManageCostDb"
+                :icon="Select"
+                plain
+                :loading="costAllSelecting"
+                :disabled="costDbFeatureDisabled || costDbLoading || costAllSelecting || costItemTotal === 0"
+                @click="toggleSelectAllCostItems"
+              >
+                {{ selectedCostItemIds.length ? '取消全选' : '全选全部' }}
+              </el-button>
+              <el-button
+                v-if="canManageCostDb"
+                :icon="Tickets"
+                type="success"
+                plain
+                :loading="costBulkSubmitting"
+                :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedDraftCostItemCount === 0"
+                @click="bulkActivateCostItems"
+              >
+                批量核定 active
+              </el-button>
+              <el-button
+                v-if="canManageCostDb"
+                :icon="Refresh"
+                type="warning"
+                plain
+                :loading="costBulkSubmitting"
+                :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedActiveCostItemCount === 0"
+                @click="bulkRestoreCostItemsToDraft"
+              >
+                批量恢复 draft
+              </el-button>
+              <el-button
+                v-if="canManageCostDb"
                 :icon="Plus"
                 type="primary"
                 :disabled="costDbFeatureDisabled"
@@ -1158,12 +1209,20 @@
             </div>
 
             <el-table
+              ref="costItemsTable"
               v-loading="costDbLoading"
               :data="costItems"
               row-key="id"
               class="users-table cost-db-table"
               empty-text="暂无成本条目"
+              @selection-change="handleCostItemSelectionChange"
             >
+              <el-table-column
+                v-if="canManageCostDb"
+                type="selection"
+                width="48"
+                :selectable="costItemSelectable"
+              ></el-table-column>
               <el-table-column label="成本项/特征" min-width="260" show-overflow-tooltip>
                 <template #default="{ row }">
                   <div class="operation-client">
@@ -1207,7 +1266,7 @@
               <el-table-column label="更新时间" min-width="160">
                 <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
               </el-table-column>
-              <el-table-column label="操作" width="300" fixed="right">
+              <el-table-column label="操作" width="390" fixed="right">
                 <template #default="{ row }">
                   <div class="row-actions">
                     <el-button size="small" :icon="Document" plain @click="openCostItemDetail(row)">详情</el-button>
@@ -1229,6 +1288,16 @@
                       @click="activateCostItem(row)"
                     >
                       启用
+                    </el-button>
+                    <el-button
+                      v-if="canManageCostDb"
+                      size="small"
+                      type="warning"
+                      plain
+                      :disabled="row.status !== 'active'"
+                      @click="withdrawCostItem(row)"
+                    >
+                      撤回启用
                     </el-button>
                     <el-button
                       v-if="canManageCostDb"
@@ -1773,6 +1842,54 @@
       </template>
     </el-drawer>
 
+    <el-dialog v-model="costRagSyncDialog.visible" title="RAG 同步记录" width="920px">
+      <div class="dialog-toolbar">
+        <span>记录每次 active 成本库同步到 RAG 的时间、数量和结果</span>
+        <el-button :icon="Refresh" plain :loading="costRagSyncDialog.loading" @click="loadCostRagSyncRuns">
+          刷新
+        </el-button>
+      </div>
+      <el-table
+        v-loading="costRagSyncDialog.loading"
+        :data="costRagSyncRuns"
+        class="users-table"
+        empty-text="暂无同步记录"
+      >
+        <el-table-column label="状态" width="96">
+          <template #default="{ row }">
+            <el-tag :type="costRagSyncStatusTag(row.status)" effect="light">
+              {{ costRagSyncStatusLabel(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="开始时间（北京时间）" min-width="180">
+          <template #default="{ row }">{{ formatShanghaiDate(row.started_at) }}</template>
+        </el-table-column>
+        <el-table-column label="结束时间（北京时间）" min-width="180">
+          <template #default="{ row }">{{ formatShanghaiDate(row.finished_at) }}</template>
+        </el-table-column>
+        <el-table-column label="数量" width="120">
+          <template #default="{ row }">{{ row.synced_count || 0 }} / {{ row.requested_count || 0 }}</template>
+        </el-table-column>
+        <el-table-column label="耗时" width="100">
+          <template #default="{ row }">{{ formatMs(row.duration_ms) }}</template>
+        </el-table-column>
+        <el-table-column prop="triggered_by_username" label="操作人" width="110" />
+        <el-table-column label="结果" min-width="240" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.error || row.message || '-' }}</template>
+        </el-table-column>
+      </el-table>
+      <el-pagination
+        v-if="costRagSyncTotal > costRagSyncPageSize"
+        v-model:current-page="costRagSyncPage"
+        :page-size="costRagSyncPageSize"
+        :total="costRagSyncTotal"
+        layout="total, prev, pager, next"
+        small
+        @current-change="loadCostRagSyncRuns"
+      ></el-pagination>
+    </el-dialog>
+
     <el-dialog v-model="grantDialog.visible" title="授予角色" width="420px">
       <el-form label-position="top" :model="grantDialog">
         <el-form-item label="用户">
@@ -2184,7 +2301,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -2196,6 +2313,7 @@ import {
   Lock,
   Plus,
   Refresh,
+  Select,
   Setting,
   SwitchButton,
   Tickets,
@@ -2343,6 +2461,16 @@ const costItemTotal = ref(0)
 const costItemPage = ref(1)
 const costItemPageSize = 20
 const costDbLoading = ref(false)
+const costRagSyncing = ref(false)
+const costBulkSubmitting = ref(false)
+const costAllSelecting = ref(false)
+const costSelectionSyncing = ref(false)
+const costItemsTable = ref(null)
+const selectedCostItems = ref([])
+const costRagSyncRuns = ref([])
+const costRagSyncTotal = ref(0)
+const costRagSyncPage = ref(1)
+const costRagSyncPageSize = 10
 const clientInquiryFilters = reactive({
   source: '',
   keyword: '',
@@ -2513,6 +2641,11 @@ const costItemDrawer = reactive({
   item: null,
 })
 
+const costRagSyncDialog = reactive({
+  visible: false,
+  loading: false,
+})
+
 const roles = computed(() => session.user?.roles || [])
 const canMutateRoles = computed(() => roles.value.includes('system_admin'))
 const canAccessPermissions = computed(() => roles.value.includes('system_admin') || roles.value.includes('admin'))
@@ -2527,6 +2660,10 @@ const canViewCostDb = computed(() => canAccessPermissions.value || roles.value.i
 const canManageCostDb = computed(() => canAccessPermissions.value)
 const canOpenLegacyQuote = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
+const selectedCostItemIds = computed(() => selectedCostItems.value.map((item) => item.id).filter(Boolean))
+const selectableCostItems = computed(() => costItems.value.filter((item) => costItemSelectable(item)))
+const selectedDraftCostItemCount = computed(() => selectedCostItems.value.filter((item) => item.status === 'draft').length)
+const selectedActiveCostItemCount = computed(() => selectedCostItems.value.filter((item) => item.status === 'active').length)
 const visibleDailyTrends = computed(() => (quoteDashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
 const visibleResponseSources = computed(() => (responseDashboard.value?.by_source || []).slice(0, 12))
 const visibleResponseResponders = computed(() => (responseDashboard.value?.by_responder || []).slice(0, 12))
@@ -2595,6 +2732,26 @@ function roleTagType(role) {
 function formatDate(value) {
   if (!value) return '-'
   return value.replace('T', ' ').slice(0, 19)
+}
+
+function formatShanghaiDate(value) {
+  if (!value) return '-'
+  const text = String(value)
+  const utcText = /(?:Z|[+-]\d{2}:\d{2})$/.test(text) ? text : `${text}Z`
+  const date = new Date(utcText)
+  if (Number.isNaN(date.getTime())) return formatDate(value)
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`
 }
 
 function formatMs(value) {
@@ -2756,6 +2913,22 @@ function costPriceTypeLabel(type) {
 function costSourceLabel(source) {
   const option = costSourceOptions.find((item) => item.value === source)
   return option?.label || source || '-'
+}
+
+function costRagSyncStatusLabel(status) {
+  const labels = {
+    running: '同步中',
+    success: '成功',
+    failed: '失败',
+  }
+  return labels[status] || status || '-'
+}
+
+function costRagSyncStatusTag(status) {
+  if (status === 'success') return 'success'
+  if (status === 'failed') return 'danger'
+  if (status === 'running') return 'warning'
+  return 'info'
 }
 
 function costHistoryTypeLabel(type) {
@@ -3097,23 +3270,17 @@ async function loadCostItems() {
   if (!canViewCostDb.value) return
   costDbFeatureDisabled.value = false
   costDbLoading.value = true
-  const params = {
-    page: costItemPage.value,
-    page_size: costItemPageSize,
-  }
-  const category = costItemFilters.category.trim()
-  if (category) params.category = category
-  if (costItemFilters.status.length) params.status = costItemFilters.status.join(',')
-  if (costItemFilters.price_type) params.price_type = costItemFilters.price_type
-  const keyword = costItemFilters.keyword.trim()
-  if (keyword) params.keyword = keyword
+  const params = buildCostItemQueryParams(costItemPage.value, costItemPageSize)
   try {
     const response = await api.get('/admin/cost-items', { params })
+    costSelectionSyncing.value = true
     costItems.value = responseData(response) || []
     costItemTotal.value = response.data?.total ?? costItems.value.length
+    await syncCurrentCostPageSelection()
   } catch (error) {
     costItems.value = []
     costItemTotal.value = 0
+    selectedCostItems.value = []
     if (isFeatureDisabled(error)) {
       costDbFeatureDisabled.value = true
       return
@@ -3126,8 +3293,237 @@ async function loadCostItems() {
   }
 }
 
+function buildCostItemQueryParams(page, pageSize) {
+  const params = {
+    page,
+    page_size: pageSize,
+  }
+  const category = costItemFilters.category.trim()
+  if (category) params.category = category
+  if (costItemFilters.status.length) params.status = costItemFilters.status.join(',')
+  if (costItemFilters.price_type) params.price_type = costItemFilters.price_type
+  const keyword = costItemFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
+  return params
+}
+
+function dedupeCostItems(items) {
+  const itemMap = new Map()
+  items.forEach((item) => {
+    if (item?.id) itemMap.set(item.id, item)
+  })
+  return Array.from(itemMap.values())
+}
+
+function handleCostItemSelectionChange(selection) {
+  if (costSelectionSyncing.value) return
+  const currentPageIds = new Set(costItems.value.map((item) => item.id))
+  const offPageSelection = selectedCostItems.value.filter((item) => !currentPageIds.has(item.id))
+  selectedCostItems.value = dedupeCostItems([...offPageSelection, ...(selection || [])])
+}
+
+function costItemSelectable(row) {
+  return row.status !== 'archived'
+}
+
+function clearCostItemSelection() {
+  selectedCostItems.value = []
+  costItemsTable.value?.clearSelection?.()
+}
+
+async function syncCurrentCostPageSelection() {
+  await nextTick()
+  const table = costItemsTable.value
+  if (!table) {
+    costSelectionSyncing.value = false
+    return
+  }
+  const selectedIds = new Set(selectedCostItemIds.value)
+  costSelectionSyncing.value = true
+  try {
+    table.clearSelection()
+    selectableCostItems.value.forEach((item) => {
+      if (selectedIds.has(item.id)) table.toggleRowSelection(item, true)
+    })
+    await nextTick()
+  } finally {
+    costSelectionSyncing.value = false
+  }
+}
+
+async function fetchAllSelectableCostItems() {
+  const pageSize = 100
+  let page = 1
+  let total = 0
+  const allItems = []
+
+  do {
+    const response = await api.get('/admin/cost-items', {
+      params: buildCostItemQueryParams(page, pageSize),
+    })
+    const pageItems = responseData(response) || []
+    total = response.data?.total ?? pageItems.length
+    if (!pageItems.length) break
+    allItems.push(...pageItems)
+    page += 1
+  } while (allItems.length < total)
+
+  return dedupeCostItems(allItems.filter(costItemSelectable))
+}
+
+async function toggleSelectAllCostItems() {
+  if (selectedCostItemIds.value.length) {
+    clearCostItemSelection()
+    return
+  }
+
+  costAllSelecting.value = true
+  try {
+    const allSelectableItems = await fetchAllSelectableCostItems()
+    selectedCostItems.value = allSelectableItems
+    await syncCurrentCostPageSelection()
+    if (!allSelectableItems.length) {
+      ElMessage.info('没有可选择的成本条目')
+    } else {
+      ElMessage.success(`已全选 ${allSelectableItems.length} 条可操作成本条目`)
+    }
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '全选成本条目失败'))
+  } finally {
+    costAllSelecting.value = false
+  }
+}
+
+function costBulkResultMessage(actionLabel, data) {
+  const parts = [`${actionLabel}：已更新 ${data.changed_count || 0} 条`]
+  if (data.skipped_count) parts.push(`跳过 ${data.skipped_count} 条`)
+  if (data.conflict_count) parts.push(`冻结 ${data.conflict_count} 条`)
+  if (data.not_found_count) parts.push(`未找到 ${data.not_found_count} 条`)
+  return parts.join('，')
+}
+
+async function loadCostRagSyncRuns() {
+  if (!canManageCostDb.value || costDbFeatureDisabled.value) return
+  costRagSyncDialog.loading = true
+  try {
+    const response = await api.get('/admin/cost-items/sync-rag/runs', {
+      params: {
+        page: costRagSyncPage.value,
+        page_size: costRagSyncPageSize,
+      },
+    })
+    costRagSyncRuns.value = responseData(response) || []
+    costRagSyncTotal.value = response.data?.total ?? costRagSyncRuns.value.length
+  } catch (error) {
+    costRagSyncRuns.value = []
+    costRagSyncTotal.value = 0
+    ElMessage.error(apiErrorMessage(error, '同步记录加载失败'))
+  } finally {
+    costRagSyncDialog.loading = false
+  }
+}
+
+function openCostRagSyncDialog() {
+  costRagSyncDialog.visible = true
+  costRagSyncPage.value = 1
+  loadCostRagSyncRuns()
+}
+
+async function syncActiveCostItemsToRag() {
+  if (!canManageCostDb.value || costDbFeatureDisabled.value) return
+  try {
+    await ElMessageBox.confirm('确认将 active 成本条目同步到 RAG？这会让成本数据库成为报价检索主源。', '同步成本库到 RAG', {
+      type: 'warning',
+      confirmButtonText: '确认同步',
+      cancelButtonText: '返回',
+    })
+  } catch {
+    return
+  }
+  costRagSyncing.value = true
+  try {
+    const response = await api.post('/admin/cost-items/sync-rag')
+    const data = responseData(response) || {}
+    ElMessage.success(response.data?.message || `已同步 ${data.synced_count || 0} 条 active 成本条目`)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '同步 active 成本条目失败'))
+  } finally {
+    costRagSyncing.value = false
+    if (costRagSyncDialog.visible) await loadCostRagSyncRuns()
+  }
+}
+
+async function bulkActivateCostItems() {
+  if (!canManageCostDb.value || !selectedDraftCostItemCount.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确认将选中条目中的 ${selectedDraftCostItemCount.value} 条 draft 批量核定为 active？`,
+      '批量核定 active',
+      {
+        type: 'warning',
+        confirmButtonText: '确认核定',
+        cancelButtonText: '返回',
+      },
+    )
+  } catch {
+    return
+  }
+  costBulkSubmitting.value = true
+  try {
+    const response = await api.post('/admin/cost-items/bulk-status', {
+      item_ids: selectedCostItemIds.value,
+      target_status: 'active',
+      reason: '批量核定',
+    })
+    ElMessage.success(costBulkResultMessage('批量核定完成', responseData(response) || {}))
+    clearCostItemSelection()
+    await loadCostItems()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '批量核定失败'))
+  } finally {
+    costBulkSubmitting.value = false
+  }
+}
+
+async function bulkRestoreCostItemsToDraft() {
+  if (!canManageCostDb.value || !selectedActiveCostItemCount.value) return
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt(
+      `确认将选中条目中的 ${selectedActiveCostItemCount.value} 条 active 批量恢复为 draft？请输入恢复原因`,
+      '批量恢复 draft',
+      {
+        inputPattern: /\S+/,
+        inputErrorMessage: '恢复原因不能为空',
+        confirmButtonText: '确认恢复',
+        cancelButtonText: '返回',
+        type: 'warning',
+      },
+    )
+    reason = result.value
+  } catch {
+    return
+  }
+  costBulkSubmitting.value = true
+  try {
+    const response = await api.post('/admin/cost-items/bulk-status', {
+      item_ids: selectedCostItemIds.value,
+      target_status: 'draft',
+      reason,
+    })
+    ElMessage.success(costBulkResultMessage('批量恢复完成', responseData(response) || {}))
+    clearCostItemSelection()
+    await loadCostItems()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '批量恢复失败'))
+  } finally {
+    costBulkSubmitting.value = false
+  }
+}
+
 function applyCostItemFilters() {
   costItemPage.value = 1
+  clearCostItemSelection()
   loadCostItems()
 }
 
@@ -3286,6 +3682,7 @@ async function submitCostItem() {
       ElMessage.success('已创建成本条目')
     }
     costItemDialog.visible = false
+    clearCostItemSelection()
     await loadCostItems()
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '保存失败'))
@@ -3309,9 +3706,42 @@ async function activateCostItem(row) {
   try {
     await api.post(`/admin/cost-items/${row.id}/activate`)
     ElMessage.success('已启用成本条目')
+    clearCostItemSelection()
     await loadCostItems()
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '启用失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function withdrawCostItem(row) {
+  if (!canManageCostDb.value || row.status !== 'active') return
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt('请输入撤回启用原因', '撤回启用', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '撤回原因不能为空',
+      confirmButtonText: '确认撤回',
+      cancelButtonText: '返回',
+      type: 'warning',
+    })
+    reason = result.value
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/admin/cost-items/${row.id}/withdraw`, { reason })
+    ElMessage.success('已撤回启用，条目回到待核定')
+    clearCostItemSelection()
+    await loadCostItems()
+    if (costItemDrawer.item?.id === row.id) {
+      const response = await api.get(`/admin/cost-items/${row.id}`)
+      costItemDrawer.item = responseData(response)
+    }
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '撤回启用失败'))
   } finally {
     state.submitting = false
   }
@@ -3348,6 +3778,7 @@ async function archiveCostItem(row) {
   try {
     await api.post(`/admin/cost-items/${row.id}/archive`, { reason })
     ElMessage.success('已归档成本条目')
+    clearCostItemSelection()
     await loadCostItems()
     if (costItemDrawer.item?.id === row.id) costItemDrawer.visible = false
   } catch (error) {

@@ -3,6 +3,8 @@ import uuid
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+import httpx
+
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.client_inquiry import ClientInquiry
@@ -402,3 +404,41 @@ def test_quote_job_runner_records_runtime_duration(monkeypatch):
         assert user.quota == 4
     finally:
         db.close()
+
+
+def test_quote_job_runner_normalizes_numbered_text_before_gateway(monkeypatch):
+    gateway_calls = []
+
+    async def fake_post_json_via_gateway(**kwargs):
+        gateway_calls.append(kwargs)
+        return httpx.Response(
+            200,
+            json={"project_details": [{"project_name": "拆除复合木地板", "unit_price": 7, "total_price": 245}]},
+        )
+
+    monkeypatch.setattr(quote_job_runner, "post_json_via_gateway", fake_post_json_via_gateway)
+
+    async def collect_events():
+        return [
+            event
+            async for event in quote_job_runner._iter_quote_events(
+                username="runner",
+                message=(
+                    "请生成报价明细，只包含以下三项：\n"
+                    "1. 拆除复合木地板，35平方米\n"
+                    "2. 拆除木脚线，42米\n"
+                    "3. 拆砖墙（120厚砖墙），8平方米"
+                ),
+                file_content=None,
+                mime_type=None,
+                filename=None,
+            )
+        ]
+
+    events = asyncio.run(collect_events())
+
+    assert events[-1][0] == "preview"
+    content = gateway_calls[0]["json_payload"]["text"]["content"]
+    assert "\n" not in content
+    assert "1." not in content
+    assert "拆除复合木地板，35平方米；拆除木脚线，42米；拆砖墙（120厚砖墙），8平方米" in content

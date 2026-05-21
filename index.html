@@ -209,6 +209,9 @@
     }
     .learning-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .learning-meta { font-size: 12px; color: var(--slate); }
+    .cost-reference-cell { display: grid; gap: 4px; align-items: start; }
+    .cost-reference-price { font-size: 13px; font-weight: 700; color: var(--dark); }
+    .cost-reference-delta { font-size: 12px; color: var(--slate); }
 
     .cursor {
       display: inline-block; width: 6px; height: 15px; background: var(--slate);
@@ -455,7 +458,7 @@
       </el-dialog>
 
       <!-- 人在回路预审弹窗 -->
-      <el-dialog v-model="showPreviewDialog" title="🧐 AI 报价明细预审 (支持手工干预)" width="850px" :close-on-click-modal="false" :show-close="false">
+      <el-dialog v-model="showPreviewDialog" title="🧐 AI 报价明细预审 (支持手工干预)" width="1040px" :close-on-click-modal="false" :show-close="false">
 
         <!-- 优化5：置顶摘要栏 -->
         <div class="preview-summary-bar">
@@ -467,6 +470,13 @@
         <el-alert v-if="pushing" class="push-status" title="正在生成 Excel 并推送到钉钉，请勿关闭或重复提交。" type="info" show-icon></el-alert>
         <el-alert v-if="pushError" class="push-status" :title="pushError" type="error" show-icon :closable="false"></el-alert>
         <div class="review-hints">
+          <el-alert
+            v-if="costReferenceSummary.total"
+            :title="`成本库参考：${costReferenceSummary.matched} 行已匹配，${costReferenceSummary.unmatched} 行无底价参考`"
+            :type="costReferenceSummary.unmatched ? 'warning' : 'success'"
+            show-icon
+            :closable="false"
+          ></el-alert>
           <el-alert v-if="previewRiskItems.length" :title="riskSummaryText" :type="highRiskCount > 0 ? 'error' : 'warning'" show-icon :closable="false"></el-alert>
           <div class="learning-panel">
             <div class="learning-row">
@@ -497,6 +507,19 @@
           <el-table-column prop="unit_price" label="AI 建议单价(元)" width="130">
             <template #default="scope">
               <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing"></el-input-number>
+            </template>
+          </el-table-column>
+          <el-table-column label="成本库参考" width="190">
+            <template #default="scope">
+              <div class="cost-reference-cell">
+                <el-tag :type="costReferenceTagType(scope.row)" size="small" effect="plain">
+                  {{ costReferenceLabel(scope.row) }}
+                </el-tag>
+                <span class="cost-reference-price">{{ costReferencePriceText(scope.row) }}</span>
+                <span v-if="costReferenceDeltaText(scope.row)" class="cost-reference-delta">
+                  {{ costReferenceDeltaText(scope.row) }}
+                </span>
+              </div>
             </template>
           </el-table-column>
           <el-table-column prop="total_price" label="系统合计(元)" width="130">
@@ -817,6 +840,44 @@
 
         const previewHasChanges = computed(() => previewChangeSummary.value.changedRows > 0);
 
+        const costReference = (row = {}) => row.cost_reference || row.costReference || {};
+
+        const costReferenceSummary = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          const total = rows.length;
+          const matched = rows.filter(row => costReference(row).matched).length;
+          return { total, matched, unmatched: Math.max(0, total - matched) };
+        });
+
+        const costReferenceLabel = (row = {}) => {
+          const reference = costReference(row);
+          if (!reference.matched) return '无底价参考';
+          return reference.match_type === 'exact_item_spec' ? '精确匹配' : '名称匹配';
+        };
+
+        const costReferencePriceText = (row = {}) => {
+          const price = parseMoney(costReference(row).reference_price);
+          return price === null ? '—' : `¥ ${formatMoney(price)}`;
+        };
+
+        const costReferenceDeltaText = (row = {}) => {
+          const reference = costReference(row);
+          if (!reference.matched) return '';
+          const delta = parseMoney(reference.price_delta);
+          const rate = Number(reference.price_delta_rate);
+          const deltaText = delta === null ? '' : `${delta >= 0 ? '+' : ''}${formatMoney(delta)}`;
+          const rateText = Number.isFinite(rate) ? `${rate >= 0 ? '+' : ''}${(rate * 100).toFixed(1)}%` : '';
+          return [deltaText, rateText].filter(Boolean).join(' / ');
+        };
+
+        const costReferenceTagType = (row = {}) => {
+          const reference = costReference(row);
+          if (!reference.matched) return 'info';
+          const rate = Math.abs(Number(reference.price_delta_rate));
+          if (Number.isFinite(rate) && rate >= 0.2) return 'warning';
+          return 'success';
+        };
+
         const rowRisk = (row = {}, index = 0) => {
           const risks = [];
           const original = comparableRow(previewOriginalData.value[index] || {});
@@ -829,6 +890,9 @@
             const ratio = Math.abs(current.total_price - original.total_price) / original.total_price;
             if (ratio >= 0.25) risks.push('改动较大');
           }
+          const reference = costReference(row);
+          const refRate = Math.abs(Number(reference.price_delta_rate));
+          if (reference.matched && Number.isFinite(refRate) && refRate >= 0.2) risks.push('偏离底价');
           if (!risks.length) return { label: '正常', type: 'success', reasons: [] };
           const high = risks.some(item => ['缺少项目', '单价异常', '合计异常'].includes(item));
           return { label: high ? '高风险' : '需复核', type: high ? 'danger' : 'warning', reasons: risks };
@@ -1487,6 +1551,7 @@
           showPreviewDialog, previewData, previewOriginalData, pushing, pushError, finalTotalAmount,
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
+          costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText, costReferenceTagType,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           canSubmit, selectedFileSummary,

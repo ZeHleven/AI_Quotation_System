@@ -571,6 +571,13 @@
               </div>
             </div>
           </template>
+          <el-alert
+            title="知识候选审核暂不再写入旧 materials。请将有效候选转入成本数据库 draft 后再核定 active。"
+            type="warning"
+            show-icon
+            :closable="false"
+            style="margin-bottom:12px;"
+          ></el-alert>
           <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
             <el-pagination v-model:current-page="candidatePage" :page-size="15" :total="candidateTotal"
               layout="total, prev, pager, next" @current-change="fetchCandidates" small />
@@ -593,7 +600,9 @@
             <el-table-column prop="created_at" label="生成时间" width="155"></el-table-column>
             <el-table-column label="操作" width="200" align="center" fixed="right">
               <template #default="scope">
-                <el-button size="small" type="success" plain :disabled="scope.row.status !== 'pending'" @click="openApproveDialog(scope.row)">批准</el-button>
+                <el-tooltip content="旧 materials 写入链路已退役，请在成本数据库中创建或更新 draft 条目" placement="top">
+                  <el-button size="small" type="success" plain disabled>批准</el-button>
+                </el-tooltip>
                 <el-button size="small" type="danger" plain :disabled="scope.row.status !== 'pending'" @click="openRejectDialog(scope.row)">拒绝</el-button>
                 <el-button size="small" plain @click="openCandidateDetail(scope.row)">详情</el-button>
               </template>
@@ -643,7 +652,21 @@
 
         <!-- 知识库面板 -->
         <div id="section-knowledge">
-          <el-row :gutter="20">
+          <el-card class="box-card" shadow="never">
+            <template #header>
+              <div class="panel-title">
+                <span class="panel-accent"></span>
+                <span>旧知识库已退役</span>
+              </div>
+            </template>
+            <el-alert
+              title="核心施工物料基准单价库、旧 Milvus 一键热更新和旧知识库回滚已下线。正式报价检索请使用“成本数据库”的 active 条目，并通过“同步 active 到 RAG”更新 Milvus。"
+              type="warning"
+              show-icon
+              :closable="false"
+            ></el-alert>
+          </el-card>
+          <el-row v-if="false" :gutter="20">
             <!-- 左侧状态 + 快照 -->
             <el-col :span="6">
               <el-card class="box-card" shadow="never">

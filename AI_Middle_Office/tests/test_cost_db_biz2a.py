@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
-from app.models.cost_item import CHANGE_TYPE_PRICE, CHANGE_TYPE_STATUS, COST_STATUS_ACTIVE, COST_STATUS_ARCHIVED, COST_STATUS_DRAFT, CostItem
+from app.models.cost_item import CHANGE_TYPE_PRICE, CHANGE_TYPE_STATUS, COST_STATUS_ACTIVE, COST_STATUS_ARCHIVED, COST_STATUS_DRAFT, CostItem, CostItemHistory
 from app.models.user import User, UserRole
 
 
@@ -218,6 +218,174 @@ def test_activate_and_archive_follow_state_machine(client):
     assert archived.json()["data"]["status"] == COST_STATUS_ARCHIVED
     assert reactivate.status_code == 409
     assert reactivate.json()["detail"] == "STATE_CONFLICT"
+
+
+def test_withdraw_activation_returns_active_item_to_draft_and_writes_history(client):
+    _, headers = _headers(client, "admin")
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        item = _create_item(client, headers)
+        activated = client.post(f"/api/v1/admin/cost-items/{item['id']}/activate", headers=headers)
+        missing_reason = client.post(f"/api/v1/admin/cost-items/{item['id']}/withdraw", headers=headers, json={})
+        withdrawn = client.post(
+            f"/api/v1/admin/cost-items/{item['id']}/withdraw",
+            headers=headers,
+            json={"reason": "价格误启用，退回待核定"},
+        )
+        withdrawn_again = client.post(
+            f"/api/v1/admin/cost-items/{item['id']}/withdraw",
+            headers=headers,
+            json={"reason": "重复撤回幂等"},
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+
+    assert activated.status_code == 200
+    assert missing_reason.status_code == 422
+    assert withdrawn.status_code == 200
+    data = withdrawn.json()["data"]
+    assert data["status"] == COST_STATUS_DRAFT
+    assert data["history"][-1]["change_type"] == CHANGE_TYPE_STATUS
+    assert data["history"][-1]["old_status"] == COST_STATUS_ACTIVE
+    assert data["history"][-1]["new_status"] == COST_STATUS_DRAFT
+    assert data["history"][-1]["change_reason"] == "价格误启用，退回待核定"
+    assert withdrawn_again.status_code == 200
+    assert withdrawn_again.json()["data"]["status"] == COST_STATUS_DRAFT
+
+
+def test_withdraw_activation_rejects_staff_and_archived_items(client):
+    _, admin_headers = _headers(client, "admin")
+    _, staff_headers = _headers(client, "staff")
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        item = _create_item(client, admin_headers)
+        active = client.post(f"/api/v1/admin/cost-items/{item['id']}/activate", headers=admin_headers)
+        staff_withdraw = client.post(
+            f"/api/v1/admin/cost-items/{item['id']}/withdraw",
+            headers=staff_headers,
+            json={"reason": "staff should not withdraw"},
+        )
+        archived_item = _create_item(client, admin_headers)
+        archived = client.post(f"/api/v1/admin/cost-items/{archived_item['id']}/archive", headers=admin_headers, json={})
+        archived_withdraw = client.post(
+            f"/api/v1/admin/cost-items/{archived_item['id']}/withdraw",
+            headers=admin_headers,
+            json={"reason": "归档后不可撤回"},
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+
+    assert active.status_code == 200
+    assert staff_withdraw.status_code == 403
+    assert staff_withdraw.json()["detail"] == "PERMISSION_DENIED"
+    assert archived.status_code == 200
+    assert archived_withdraw.status_code == 409
+    assert archived_withdraw.json()["detail"] == "STATE_CONFLICT"
+
+
+def test_bulk_status_activate_and_restore_draft_write_history(client):
+    _, headers = _headers(client, "admin")
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        draft_one = _create_item(client, headers, item_name=f"bulk-draft-1-{uuid.uuid4().hex[:6]}")
+        draft_two = _create_item(client, headers, item_name=f"bulk-draft-2-{uuid.uuid4().hex[:6]}")
+        active_item = _create_item(client, headers, item_name=f"bulk-active-{uuid.uuid4().hex[:6]}")
+        archived_item = _create_item(client, headers, item_name=f"bulk-archived-{uuid.uuid4().hex[:6]}")
+        assert client.post(f"/api/v1/admin/cost-items/{active_item['id']}/activate", headers=headers).status_code == 200
+        assert client.post(f"/api/v1/admin/cost-items/{archived_item['id']}/archive", headers=headers, json={}).status_code == 200
+
+        activate_response = client.post(
+            "/api/v1/admin/cost-items/bulk-status",
+            headers=headers,
+            json={
+                "item_ids": [draft_one["id"], draft_two["id"], active_item["id"], archived_item["id"], 999999999, draft_one["id"]],
+                "target_status": COST_STATUS_ACTIVE,
+                "reason": "批量核定",
+            },
+        )
+        missing_reason = client.post(
+            "/api/v1/admin/cost-items/bulk-status",
+            headers=headers,
+            json={"item_ids": [active_item["id"]], "target_status": COST_STATUS_DRAFT},
+        )
+        restore_response = client.post(
+            "/api/v1/admin/cost-items/bulk-status",
+            headers=headers,
+            json={
+                "item_ids": [draft_one["id"], draft_two["id"], active_item["id"], archived_item["id"]],
+                "target_status": COST_STATUS_DRAFT,
+                "reason": "批量恢复待核定",
+            },
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+
+    assert activate_response.status_code == 200
+    activate_data = activate_response.json()["data"]
+    assert activate_data["requested_count"] == 5
+    assert activate_data["changed_count"] == 2
+    assert activate_data["skipped_count"] == 1
+    assert activate_data["conflict_count"] == 1
+    assert activate_data["not_found_count"] == 1
+    assert set(activate_data["changed_ids"]) == {draft_one["id"], draft_two["id"]}
+    assert activate_data["conflicts"][0]["id"] == archived_item["id"]
+    assert missing_reason.status_code == 422
+    assert missing_reason.json()["detail"] == "REASON_REQUIRED"
+    assert restore_response.status_code == 200
+    restore_data = restore_response.json()["data"]
+    assert restore_data["changed_count"] == 3
+    assert restore_data["conflict_count"] == 1
+    assert set(restore_data["changed_ids"]) == {draft_one["id"], draft_two["id"], active_item["id"]}
+
+    db = SessionLocal()
+    try:
+        rows = db.query(CostItem).filter(CostItem.id.in_([draft_one["id"], draft_two["id"], active_item["id"], archived_item["id"]])).all()
+        status_by_id = {row.id: row.status for row in rows}
+        assert status_by_id[draft_one["id"]] == COST_STATUS_DRAFT
+        assert status_by_id[draft_two["id"]] == COST_STATUS_DRAFT
+        assert status_by_id[active_item["id"]] == COST_STATUS_DRAFT
+        assert status_by_id[archived_item["id"]] == COST_STATUS_ARCHIVED
+        active_histories = (
+            db.query(CostItemHistory)
+            .filter(
+                CostItemHistory.cost_item_id.in_([draft_one["id"], draft_two["id"]]),
+                CostItemHistory.new_status == COST_STATUS_ACTIVE,
+                CostItemHistory.change_reason == "批量核定",
+            )
+            .count()
+        )
+        draft_histories = (
+            db.query(CostItemHistory)
+            .filter(
+                CostItemHistory.cost_item_id.in_([draft_one["id"], draft_two["id"], active_item["id"]]),
+                CostItemHistory.new_status == COST_STATUS_DRAFT,
+                CostItemHistory.change_reason == "批量恢复待核定",
+            )
+            .count()
+        )
+    finally:
+        db.close()
+
+    assert active_histories == 2
+    assert draft_histories == 3
+
+
+def test_bulk_status_rejects_staff(client):
+    _, admin_headers = _headers(client, "admin")
+    _, staff_headers = _headers(client, "staff")
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        item = _create_item(client, admin_headers, item_name=f"bulk-staff-{uuid.uuid4().hex[:6]}")
+        response = client.post(
+            "/api/v1/admin/cost-items/bulk-status",
+            headers=staff_headers,
+            json={"item_ids": [item["id"]], "target_status": COST_STATUS_ACTIVE},
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "PERMISSION_DENIED"
 
 
 def test_import_preview_and_confirm_are_idempotent(client):

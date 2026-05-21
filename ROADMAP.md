@@ -1,6 +1,6 @@
 # 系统升级路线图
 
-> 最后更新：2026-05-20
+> 最后更新：2026-05-21
 
 > 业务优化 P4 更新：真实用户体验优化代码层已落地，`index.html` 新增失败原因建议、预审风险提示和人工修改沉淀知识入口；本阶段不新增 Alembic revision。
 > P4 运行态手工验收已完成（2026-05-08）：22/22 项全部通过，详见 `AI_Middle_Office/P4_ACCEPTANCE.md`。
@@ -14,14 +14,18 @@
 > 业务提效路线（BIZ Track）已加入（2026-05-19）：基于商务部和成本报价部实地访谈，新增 BIZ-1 商务获客情报、BIZ-2 报价系统增强、BIZ-3 经营驾驶舱、BIZ-4 知识库治理四条业务线；Phase 4b/4c 同步暂缓；`client_inquiries` 已改造为双向模型以支持主动开拓。详见"业务提效路线（BIZ Track）"章节。
 > AI 平台升级 BIZ Track BIZ-1a 商务台账 v1 已完成当前环境验证（2026-05-20）：新增 Alembic `20260520_0016`，`client_inquiries` 已支持 `direction='outbound'`、阶段、下次跟进、作废字段和 `client_inquiry_events` 审计；新增 `FEATURE_BUSINESS_LEDGER`、5 个 `/api/v1/business-ledger` 接口和 Vite `/admin/business-ledger` 页面；后端 `124 passed`、前端 build 通过，`scripts/biz1a_business_ledger_smoke.ps1` 已在当前 9000 环境验证创建、筛选、PATCH、作废、Phase 2 隔离和 XFF 审计。
 > AI 平台升级 BIZ Track BIZ-2a 成本数据库初始化已完成当前环境验证（2026-05-20）：新增 Alembic `20260520_0017` / `20260520_0018`，创建并补全 `cost_items` / `cost_item_history`；新增 `FEATURE_COST_DB`、8 个 `/api/v1/admin/cost-items*` 接口、旧 Excel 预览/确认导入、Vite `/admin/cost-db` 页面和 `scripts/biz2a_cost_db_smoke.ps1`；保留对甲税前综合单价、劳务发包综合单价、班组标底税前价三类价格，并补充对甲人工/主材/辅材/直接费/管理费利润与劳务人工/主材/辅材拆分价。
+> AI 平台升级 BIZ Track BIZ-2b 报价时材料底价查询已完成代码层验证（2026-05-21）：新增 `quote_cost_matching` 服务并接入同步 `/chat` 与异步 `quote_jobs` preview；仅匹配 `active` 成本条目，按 `item_name + spec` 精确优先、`item_name` 模糊兜底，旧 `index.html` 预审弹窗展示成本库参考价、匹配类型、AI 价差和偏离底价风险。不新增 Alembic；当前环境 `cost_items active=190`，报价匹配和 RAG 同步已进入成本库 active 数据运行态。
+> BIZ-2a 成本数据库状态机补强已完成代码层验证（2026-05-21）：新增“撤回启用”和批量状态流转能力，支持单条/批量 `draft -> active`、`active -> draft` 并写入 `cost_item_history`，`draft` 恢复幂等，`archived` 仍作为作废冻结态不可撤回；Vite `/admin/cost-db` 增加“撤回启用”“批量核定 active”“批量恢复 draft”入口。
+> AI 平台升级 BIZ Track BIZ-2c 成本库主库化 + active RAG 同步已完成当前环境验证（2026-05-21）：新增 `app/services/cost_rag_sync.py`、`POST /api/v1/admin/cost-items/sync-rag`、Alembic `20260520_0019` 的 `cost_rag_sync_runs`、`GET /api/v1/admin/cost-items/sync-rag/runs` 和 Vite `/admin/cost-db`“同步 active 到 RAG / 同步记录”窗口；同步源只取 `cost_items.active` 并转换为 RAG `/admin/reload` 兼容 payload。旧 `materials` 已退役并清空 70 条测试数据，旧 `/admin/sync_milvus`、旧 materials 写入/回滚和旧知识候选 approve 均返回 410。当前环境 active 190 条已同步可检索。
+> AI 平台升级 BIZ Track BIZ-2d 成本库参考价命中率优化已完成代码层验证（2026-05-21）：补强 `quote_cost_matching` 的中文名称归一化、符号/连接词处理、词序无关 token 匹配、单位族兼容和动作词误命中保护；已验证“窗帘盒/灯槽拆除”与“窗帘盒灯槽拆除/延米/米”等写法能命中 active 成本库底价；补充编号换行清单输入清洗，避免 `1. / 2. / 3.` 多行需求触发 N8N 空响应。不新增 Alembic，不启动漏项检测。
 > 商务/市场部提效路线阶段性收束（2026-05-20）：BIZ-1a 台账已完成，但后续提醒、流水等低收益延展暂不继续推进；真正高价值方向调整为"外部项目源自动搜索/收集 + 公司标准筛选 + 联系方式输出"，因外部项目搜索引擎调用成功率未知、外部项目收集平台合作和 API 权限尚未确定，标记为待定。
 
 ---
 
-## 当前冻结状态（2026-05-20）
+## 当前冻结状态（2026-05-21）
 
 - **后端基础设施优化已收束**：后端重构 P0-P3、补充一致性优化、运维告警收敛、Alembic 迁移纪律均已落地；后续不再做无触发的基础设施打磨。
-- **数据库规范**：当前代码迁移 head 为 `20260520_0018`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账和 BIZ-2a 成本数据库。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
+- **数据库规范**：当前代码迁移 head 为 `20260520_0019`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账、BIZ-2a 成本数据库和 BIZ-2c RAG 同步记录。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
 - **业务优化 P0-P4 已完成到代码层**：P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理、P4 真实用户体验优化均已落地。
 - **前端优化 P0-P3 已完成**：已完成 `FRONTEND_ACCEPTANCE.md`、`static/js/shared.js`、`admin.html` 模块拆分，以及报价进度、失败恢复、上传/推送状态优化。
 - **AI 平台升级 Phase 0 已完成开发与当前环境验证**：Vite 壳、登录鉴权统一、RBAC 与 SPA fallback 已通过；旧 `index.html` / `admin.html` / `app.html` 继续保留，后续按设计文档逐步收拢入口。正式生产上线待单独 Runbook。
@@ -30,7 +34,10 @@
 - **AI 平台升级 Phase 3 执行速度追踪已完成当前环境验证**：已新增执行任务 schema、任务接口、事件记录、执行速度聚合和 Vite 执行任务页面；当前环境已打开 `FEATURE_EXECUTION=true`、`FEATURE_DASHBOARD_EXECUTION=true` 且 `PUBLIC_ACCESS_ENABLED=false`，已验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已补充取消数量。
 - **AI 平台升级 Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收**：已新增会议纪要、纪要更正、任务草稿 schema、会议接口、固定 JSON Schema 提取器和 Vite 会议纪要标签页；当前环境已打开 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`，确认草稿可写入既有 `execution_tasks`，不依赖 `FEATURE_EXECUTION=true`；内网 smoke 已验证自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 访问。当前不启动语音转写、钉钉会议导入、经营驾驶舱或旧 HTML 迁移。
 - **AI 平台升级 BIZ Track BIZ-1a 商务台账 v1 已完成当前环境验证**：已新增 `FEATURE_BUSINESS_LEDGER`、`client_inquiries.direction/stage/next_followup_at/cancelled_*`、`client_inquiry_events`、商务台账 service/schema/API、Vite `/admin/business-ledger` 内联页面和 `scripts/biz1a_business_ledger_smoke.ps1`；当前环境 smoke 已验证 admin/staff 权限、逾期筛选、作废、Phase 2 数据隔离、response-speed 口径不变和 XFF 审计。BIZ-1a v1 已落地字段为 `client_name` / `client_phone`；项目名 / 公司名暂由 `notes` 承载，后续是否拆字段待真实台账数据积累后评估。
-- **AI 平台升级 BIZ Track BIZ-2a 成本数据库初始化已完成当前环境验证**：已新增 `FEATURE_COST_DB`、`cost_items`、`cost_item_history`、成本库 service/schema/API、Excel 导入预览/确认、Vite `/admin/cost-db` 页面和 `scripts/biz2a_cost_db_smoke.ps1`；当前环境 Alembic 已升级到 `20260520_0018 (head)`，smoke 已验证 admin/staff 权限、价格变更历史、`draft -> active -> archived` 状态机、归档原因校验、重复 activate/archive 幂等、旧 Excel 解析 191 条、人工/主材/辅材拆分价映射和重复 confirm 幂等。初始 Excel 路径为 `AI_Middle_Office/data/imports/cost_seed_readable.xlsx`。
+- **AI 平台升级 BIZ Track BIZ-2a 成本数据库初始化已完成当前环境验证**：已新增 `FEATURE_COST_DB`、`cost_items`、`cost_item_history`、成本库 service/schema/API、Excel 导入预览/确认、Vite `/admin/cost-db` 页面和 `scripts/biz2a_cost_db_smoke.ps1`；当前环境 Alembic 已升级到 `20260520_0018 (head)`，smoke 已验证 admin/staff 权限、价格变更历史、`draft -> active -> archived` 状态机、归档原因校验、重复 activate/archive 幂等、旧 Excel 解析 191 条、人工/主材/辅材拆分价映射和重复 confirm 幂等。2026-05-21 已补充“撤回启用”和批量状态流转，支持单条/批量 `draft -> active`、`active -> draft`、原因审计和 `archived` 冻结保护。初始 Excel 路径为 `AI_Middle_Office/data/imports/cost_seed_readable.xlsx`。
+- **AI 平台升级 BIZ Track BIZ-2b 报价时材料底价查询已完成代码层验证**：已新增报价结果成本参考匹配服务，接入同步 `/chat` 与异步 `quote_jobs` preview 结果；预审弹窗展示“成本库参考价 vs AI 生成价”、匹配类型、价差与偏离底价风险；全量测试通过，Vite build 通过。当前环境成本库 `active=190`，已具备真实运行态成本参考匹配数据基础。
+- **AI 平台升级 BIZ Track BIZ-2c 成本库主库化 + active RAG 同步已完成当前环境验证**：已新增 active 成本条目 RAG 同步服务、`/api/v1/admin/cost-items/sync-rag` 管理员接口、`cost_rag_sync_runs` 同步记录表和 `/api/v1/admin/cost-items/sync-rag/runs` 查询接口，Vite `/admin/cost-db` 可手动同步 active 成本条目到 RAG 并查看同步记录；报价成本主库明确为 `cost_items.active`，`draft` / `archived` 不参与报价和有效 RAG 同步；旧 `materials` 作为报价/RAG 源已退役，70 条测试数据已备份后清空，旧 materials 写入/回滚、旧 `/admin/sync_milvus` 和旧知识候选 approve 均返回 410。当前环境 Alembic 已升级到 `20260520_0019 (head)`；全量测试 `145 passed`，Vite build 通过。
+- **AI 平台升级 BIZ Track BIZ-2d 成本库参考价命中率优化已完成代码层验证**：已补强成本参考匹配服务，支持中文符号差异、连接词差异、词序变化和 `m`/`米`/`延米` 等单位族兼容，并通过动作词与单位兼容校验降低误命中；真实库 smoke 已确认“窗帘盒灯槽拆除”命中 active `cost_item_id=180`、参考价 `6.0`；已补充编号换行清单输入清洗，发送 N8N 前自动转成分号清单；不新增数据库结构，不启动漏项检测。
 - **商务/市场部路线阶段性暂停**：BIZ-1a 台账属于信息沉淀工具，对核心效率提升有限；BIZ-1b 跟进提醒、BIZ-1c 跟进流水和传统 CRM 式延展暂不启动。后续只保留高价值待定方向：调用外部项目搜索引擎或外部项目收集平台，结合公司内部筛选项目标准，自动筛选合格项目并提供联系方式；待外部平台合作、API 权限和搜索可行性明确后再重新立项。
 - **正式生产策略**：系统整体完善前不正式投入生产使用；不再为单一阶段单独做正式生产上线闭环。
 - **维护策略**：进入问题驱动维护阶段，优先投入报价准确率、知识库质量、RAG 评测和真实用户体验问题。
@@ -188,24 +195,73 @@ cost_item_history
 - [x] 旧 Excel 可通过导入脚本解析并落库，状态为 `draft`
 - [x] 管理台可查看、筛选、编辑、核定（draft→active）和停用（active→archived）成本条目
 - [x] 价格变更自动写入 `cost_item_history`
+- [x] 可撤回启用（active→draft），撤回原因写入 `cost_item_history`，archived 不可撤回
+- [x] 可批量核定 active、批量恢复 draft，批量状态变更逐条写入 `cost_item_history`，archived 跳过且保持冻结
 
 #### BIZ-2b 报价时材料底价查询（BIZ-2a 完成后）
+
+**当前状态**：已完成代码层验证（2026-05-21）。已新增 `app/services/quote_cost_matching.py`，同步 `/chat` 与异步 `quote_jobs` preview 结果都会为 `project_details` 附加 `cost_reference`；旧 `index.html` 预审弹窗已展示成本库参考价、匹配类型、AI 单价价差和“偏离底价”风险。不新增数据库结构。当前环境成本库 `active=190`，已具备真实运行态成本参考匹配数据基础。2026-05-21 BIZ-2d 已对命中率做补强，覆盖符号、连接词、词序和单位族兼容。
 
 - 报价员在输入工料单时，AI 报价流程自动匹配 `cost_items`（active 状态）中的参考底价
 - 在预审弹窗中展示"成本库参考价 vs AI 生成价"对比
 - 匹配逻辑：优先精确匹配 `item_name + spec`，其次模糊匹配 `item_name`，无匹配时显示"无底价参考"
 
-#### BIZ-2c 漏项检测（BIZ-2b 后评估）
+**代码层验收标准**：
+- [x] 同步 `/chat` 和异步 `quote_jobs` preview 结果均附加成本库参考信息
+- [x] 仅匹配 `active` 成本条目，`draft` / `archived` 不参与报价参考
+- [x] 支持 `item_name + spec` 精确匹配、`item_name` 模糊匹配和无匹配兜底
+- [x] 预审弹窗展示参考价、匹配类型、价差和偏离底价风险
+- [x] 不新增 Alembic revision
+
+#### BIZ-2c 成本库主库化 + active RAG 同步（BIZ-2b 后）
+
+**当前状态**：已完成当前环境验证（2026-05-21）。已新增 `app/services/cost_rag_sync.py`，将 `cost_items.active` 转为 RAG `/admin/reload` 兼容 payload；新增 `POST /api/v1/admin/cost-items/sync-rag` 管理员接口；新增 Alembic `20260520_0019` 和 `cost_rag_sync_runs` 记录每次同步的时间、状态、数量、耗时和结果；新增 `GET /api/v1/admin/cost-items/sync-rag/runs` 与 Vite `/admin/cost-db`“同步记录”窗口。当前环境成本库 `active=190 / archived=7`，RAG 检索已确认可命中 active 成本条目。
+
+- `cost_items.active` 成为正式报价成本价格主库
+- `draft` 不参与报价，不同步 RAG
+- `archived` 作为作废冻结态，不参与报价，不同步 RAG
+- RAG 同步只使用 active 成本条目，旧 `materials` 已退役并禁止继续写入/同步
+- 同步仍复用 CentOS RAG `/admin/reload` 蓝绿切换能力，不改 RAG 服务协议
+- 每次同步写入 `cost_rag_sync_runs`，用于后台窗口监控同步成功/失败、时间、数量和错误信息
+
+**代码层验收标准**：
+- [x] 管理员可从 `/admin/cost-db` 手动同步 active 成本条目到 RAG
+- [x] 后端同步接口只允许 admin/system_admin 调用
+- [x] 同步 payload 只包含 `cost_items.active`，并带入主参考价、对甲价、劳务价、班组价和拆分价 notes
+- [x] active 为空时拒绝同步并给出明确错误
+- [x] 同步记录窗口可查看同步状态、开始/结束时间、数量、耗时、操作人和错误信息
+- [x] 新增数据库结构已走 Alembic revision，不启动漏项检测
+
+#### BIZ-2d 成本库参考价命中率优化（BIZ-2b 补强）
+
+**当前状态**：已完成代码层验证（2026-05-21）。本阶段聚焦预审弹窗“成本库参考价”无法命中真实 active 成本条目的问题，只增强匹配算法，不新增页面、不新增数据库结构、不启动漏项检测。当前真实库 smoke 已确认“窗帘盒灯槽拆除”命中 active `cost_item_id=180`、参考价 `6.0`；编号换行清单会在发送 N8N 前自动清洗成分号分隔，避免多行 `1. / 2. / 3.` 需求返回空 body。
+
+- 统一中文标点、斜杠、括号、引号、空格、全半角和连接词归一化，提升“窗帘盒/灯槽拆除”与“窗帘盒灯槽拆除”等写法的命中率
+- 增加词序无关 token 匹配，支持“拆除 窗帘盒灯槽”和“窗帘盒灯槽拆除”等顺序差异
+- 增加单位族兼容，支持 `m`、`米`、`延米`、`延长米` 等等价单位互认，面积、体积、重量单位保持族内匹配
+- 增加动作词和单位兼容保护，避免“安装”误命中“拆除”、`㎡` 单价误命中 `m` 单价
+- 增加报价需求文本预清洗，检测到编号换行清单时自动改写为分号分隔的一句话
+- 继续只匹配 `cost_items.active`，`draft` / `archived` 不参与报价参考
+
+**代码层验收标准**：
+- [x] “窗帘盒/灯槽拆除”类符号差异和单位差异可命中 active 成本条目
+- [x] 同类条目词序变化可命中
+- [x] 单位不兼容时不返回成本参考
+- [x] 动作词不同且 archived 兜底不可用时不误命中
+- [x] 编号换行清单在同步 `/chat` 和异步 `quote_jobs` 调用 N8N 前自动清洗
+- [x] 不新增 Alembic revision，不启动漏项检测
+
+#### BIZ-2e 漏项检测（BIZ-2c 后评估）
 
 - AI 报价生成后，与成本库高频出现的配套条目对比
 - 检测疑似漏项并在预审弹窗中给出提示（"通常还包含：XXX"）
 - 初期基于规则（同类项目历史共现），后期可接 RAG 增强
 
-#### BIZ-2d 知识库联动（并入 BIZ-2，持续维护）
+#### BIZ-2f 知识库深度治理（并入 BIZ-2，持续维护）
 
-- `cost_items` 中 `active` 状态的材料价格作为 RAG 知识库的补充来源
-- 知识库热更新时同步从 `cost_items` 抽取最新价格，不依赖手动维护 `rag_materials.json`
-- 原 Phase 5（知识库历史数据治理导入）的目标通过 BIZ-2a 导入和 BIZ-2d 联动覆盖，不单独排期
+- BIZ-2c 已覆盖 active 成本条目同步进 RAG 的主路径
+- 后续如需同时保留工艺知识、历史资料和成本主库，需要设计多源 RAG 合并策略
+- 原 Phase 5（知识库历史数据治理导入）的目标通过 BIZ-2a 导入和 BIZ-2c 联动覆盖，不单独排期
 
 ---
 
@@ -231,7 +287,7 @@ cost_item_history
 
 已并入 BIZ-2，不单独排期。覆盖：
 - 旧 Excel 导入（BIZ-2a）
-- 成本库联动 RAG（BIZ-2d）
+- 成本库联动 RAG（BIZ-2c）
 - 知识候选从真实反馈生成（已在 P3 落地）
 
 ---
@@ -251,16 +307,17 @@ cost_item_history
 
 **第二阶段（BIZ-2a 完成后）**
 
-| 子项 | 内容 |
-|------|------|
-| BIZ-2b | 报价时材料底价查询 + 预审价格对比 |
-| BIZ-2d | 成本库联动 RAG 热更新 |
+| 子项 | 内容 | 状态 |
+|------|------|------|
+| BIZ-2b | 报价时材料底价查询 + 预审价格对比 | 已完成代码层验证（2026-05-21）；当前 active=190 可参与运行态匹配 |
+| BIZ-2c | 成本库主库化 + active RAG 同步 | 已完成当前环境验证（2026-05-21）；同步记录窗口已落地 |
+| BIZ-2d | 成本库参考价命中率优化 | 已完成代码层验证（2026-05-21）；不新增 Alembic |
 
 **第三阶段（第二阶段稳定后）**
 
 | 子项 | 内容 |
 |------|------|
-| BIZ-2c | 漏项检测 |
+| BIZ-2e | 漏项检测 |
 | BIZ-3 | 经营驾驶舱（合同/回款/成本/毛利） |
 
 **暂缓评估（触发条件明确后再启动）**
@@ -302,7 +359,7 @@ cost_item_history
 - [x] **P1 验证结果**：`python -m compileall app` 通过，`python -m pytest` 为 `60 passed`；`node --check static/js/admin/feedback.js` 通过。
 - [x] **P2 验证结果**：`python -m compileall app` 通过，`python -m alembic heads` 显示 `20260507_0005 (head)`，`python -m pytest` 为 `62 passed`。
 - [x] **P2 Prompt 回归评测**：新增 `prompt_regression_cases` / `prompt_regression_runs`，可从真实反馈固化黄金案例，并生成按 prompt 版本统计的总价偏差、明细遗漏率、格式错误率、打回率、人工修改率和综合分。
-- [x] **P3 知识库质量治理**：新增 `knowledge_candidates`，可从真实反馈、字段级修正和打回原因生成候选；admin approve 前自动快照，再新增或更新 `materials`；新增 RAG trace 聚合洞察接口。
+- [x] **P3 知识库质量治理**：新增 `knowledge_candidates`，可从真实反馈、字段级修正和打回原因生成候选；旧 admin approve 写入 `materials` 已退役并返回 410，后续有效候选需转入成本数据库 draft；新增 RAG trace 聚合洞察接口。
 - [x] **P3 验证结果**：`python -m compileall app` 通过，`python -m alembic heads` 显示 `20260507_0006 (head)`，`python -m pytest` 为 `64 passed`。
 - [x] **P4 真实用户体验优化**：失败可操作原因、预审高风险标记、人工修改一键沉淀知识入口。
 - [x] **P4 验收清单**：新增 `AI_Middle_Office/P4_ACCEPTANCE.md`，包含前置确认、金路径、打回路径、失败提示、trace_id 一致性 5 个章节共 22 项检查点。
@@ -448,7 +505,7 @@ cost_item_history
 ### ~~后端重构 P1：confirm_push schema + 物料库入库~~（✅ 2026-05-06 已完成）
 - **Pydantic schema**：新增 `app/schemas/quote.py`，`confirm_push` 请求体字段类型与必填约束明确，消除裸 `dict` 传递
 - **物料库入库**：新增 `app/models/material.py`，知识库条目持久化至 MySQL `materials` 表
-- **旧 JSON 兼容**：`LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 仅作为旧 `rag_materials.json` 自动导入源保留，RAG 评测报告目录独立为 `RAG_EVAL_REPORT_DIR`
+- **旧 JSON 兼容**：`LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 不再自动导入旧 `rag_materials.json`，RAG 评测报告目录独立为 `RAG_EVAL_REPORT_DIR`
 
 ### ~~后端重构 P2：requests → httpx~~（✅ 2026-05-06 已完成）
 - 所有对外 HTTP 调用（`quote.py`、`materials.py`、`rag_eval.py` 等）改为 `httpx.AsyncClient`，消除异步路由中的同步阻塞
@@ -459,7 +516,7 @@ cost_item_history
 
 ### ~~后端重构收尾：配置语义清理 + 验收闭环~~（✅ 2026-05-06 已完成）
 - **配置清理**：`MATERIALS_FILE` 保留为兼容 alias，新增 `LEGACY_MATERIALS_FILE` 明确旧 JSON 导入语义，新增 `RAG_EVAL_REPORT_DIR` 独立控制评测报告目录
-- **运行态验收**：FastAPI `/health/ready`、Celery worker、RAG 服务均已确认 ready；旧 `rag_materials.json` 已导入数据库 70 条，RAG eval `quality_ok=True`
+- **运行态验收**：FastAPI `/health/ready`、Celery worker、RAG 服务均已确认 ready；旧 `rag_materials.json` 曾导入数据库 70 条，后续在 BIZ-2c 收敛中已退役并清空。
 - **测试闭环**：`python -m compileall app` 通过，`python -m pytest` 为 `55 passed`
 - **Git 状态**：最新后端重构收尾提交 `6e54c09 clarify legacy materials config` 已推送到 GitHub `main`
 

@@ -19,9 +19,10 @@ from app.models.user import User
 from app.schemas.quote import ConfirmPushRequest
 from app.services.excel_service import build_excel_base64
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
+from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
 from app.services.quote_feedback import record_ai_preview, record_confirmed_quote
 from app.services.quote_history import create_quote_history_record
-from app.services.quote_helpers import attach_quote_filename, sign_payload
+from app.services.quote_helpers import attach_quote_filename, normalize_quote_request_text, sign_payload
 from app.services.rbac import has_admin_role
 
 
@@ -104,6 +105,7 @@ async def process_chat(
                 yield _sse_event("error", "❌ 请输入业务指令或上传清单图片", trace_id=request_trace_id)
                 return
 
+            final_query = normalize_quote_request_text(final_query)
             yield _sse_event("processing", "[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...\n(后台算力执行中，预计静候 15~30 秒，完成后将弹出核对面板)", trace_id=request_trace_id)
 
             payload = {"text": {"content": final_query}, "conversationId": str(uuid.uuid4())}
@@ -127,6 +129,7 @@ async def process_chat(
                     logger.exception("n8n_response_parse_failed", extra={"username": current_user.username, "event": "n8n_response_parse_failed"})
                     yield _sse_event("error", f"❌ [n8n Workflow] 响应体解析失败（HTTP 200）\n实际返回内容：{body_preview}\n→ 请确认 N8N budget-calc 工作流末尾有 Respond to Webhook 节点且 Response Body 设为 JSON", trace_id=request_trace_id)
                     return
+                calc_result = safe_enrich_quote_payload_with_cost_refs(db, calc_result)
                 current_user.quota -= 1
                 db.commit()
                 try:

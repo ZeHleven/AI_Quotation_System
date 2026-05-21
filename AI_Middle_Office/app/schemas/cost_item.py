@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -62,6 +62,20 @@ class CostItemUpdateIn(BaseModel):
 class CostItemArchiveIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    reason: Optional[str] = Field(None, max_length=2000)
+
+
+class CostItemWithdrawIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=1, max_length=2000)
+
+
+class CostItemBulkStatusIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_ids: list[int] = Field(..., min_length=1, max_length=5000)
+    target_status: Literal["active", "draft"]
     reason: Optional[str] = Field(None, max_length=2000)
 
 

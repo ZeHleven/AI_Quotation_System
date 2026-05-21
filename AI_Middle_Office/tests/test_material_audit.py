@@ -61,7 +61,27 @@ def _material_core(item):
     }
 
 
-def test_materials_import_legacy_json_on_first_read(client):
+def _seed_materials(rows):
+    db = SessionLocal()
+    try:
+        for row in rows:
+            db.add(
+                Material(
+                    material_id=row["id"],
+                    item_name=row["item_name"],
+                    unit_price=row["unit_price"],
+                    unit=row["unit"],
+                    notes=row["notes"],
+                    status="draft" if row.get("is_draft") else "active",
+                    is_draft=bool(row.get("is_draft")),
+                )
+            )
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_materials_legacy_json_is_not_imported_after_retirement(client):
     _reset_material_store()
     headers = _create_admin_headers(client)
     legacy = [
@@ -71,58 +91,37 @@ def test_materials_import_legacy_json_on_first_read(client):
 
     response = client.get("/api/v1/admin/materials", headers=headers)
     assert response.status_code == 200
-    material = response.json()["data"][0]
-    assert _material_core(material) == legacy[0]
-    assert material["source"] == "manual"
-    assert material["status"] == "active"
-    assert material["usage_count"] == 0
+    assert response.json()["data"] == []
 
     db = SessionLocal()
     try:
-        assert db.query(Material).count() == 1
+        assert db.query(Material).count() == 0
     finally:
         db.close()
 
 
-def test_material_save_creates_snapshot_and_rollback_restores_it(client):
+def test_material_write_and_rollback_endpoints_are_retired(client):
     _reset_material_store()
     headers = _create_admin_headers(client)
 
-    original = [
-        {"id": "m1", "item_name": "Original item", "unit_price": 10.0, "unit": "m2", "notes": "old", "is_draft": False}
-    ]
     updated = [
         {"id": "m2", "item_name": "Updated item", "unit_price": 25.0, "unit": "m2", "notes": "new", "is_draft": False}
     ]
-    settings.materials_file.write_text(json.dumps(original, ensure_ascii=False, indent=2), encoding="utf-8")
 
     save_response = client.post("/api/v1/admin/materials", json=updated, headers=headers)
-    assert save_response.status_code == 200
-    snapshot = save_response.json()["snapshot"]
-    assert snapshot["action"] == "save_before_overwrite"
-    assert snapshot["item_count"] == 1
-    assert snapshot["added_count"] == 1
-    assert snapshot["updated_count"] == 0
-    assert snapshot["deleted_count"] == 1
-    assert snapshot["diff_summary"]["added"][0]["id"] == "m2"
-    assert snapshot["diff_summary"]["deleted"][0]["id"] == "m1"
-
-    audit_response = client.get("/api/v1/admin/materials/audit", headers=headers)
-    assert audit_response.status_code == 200
-    assert audit_response.json()["data"][0]["snapshot_id"] == snapshot["snapshot_id"]
+    assert save_response.status_code == 410
+    assert "retired" in save_response.json()["detail"]
 
     rollback_response = client.post(
-        f"/api/v1/admin/materials/rollback/{snapshot['snapshot_id']}",
+        "/api/v1/admin/materials/rollback/20260505_120000_abcdef12",
         headers=headers,
     )
-    assert rollback_response.status_code == 200
-    assert rollback_response.json()["restored_snapshot"]["snapshot_id"] == snapshot["snapshot_id"]
-    assert rollback_response.json()["current_snapshot"]["added_count"] == 1
-    assert rollback_response.json()["current_snapshot"]["deleted_count"] == 1
+    assert rollback_response.status_code == 410
+    assert "retired" in rollback_response.json()["detail"]
 
     materials_response = client.get("/api/v1/admin/materials", headers=headers)
     assert materials_response.status_code == 200
-    assert [_material_core(item) for item in materials_response.json()["data"]] == original
+    assert materials_response.json()["data"] == []
 
 
 def test_material_rollback_rejects_unsafe_snapshot_id(client):
@@ -135,16 +134,15 @@ def test_material_rollback_rejects_unsafe_snapshot_id(client):
 
     response = client.post("/api/v1/admin/materials/rollback/20260505_bad", headers=headers)
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid snapshot id"
+    assert response.status_code == 410
+    assert "retired" in response.json()["detail"]
 
 
 def test_upload_csv_extracts_new_and_changed_items(client):
     _reset_material_store()
     headers = _create_admin_headers(client)
-    client.post(
-        "/api/v1/admin/materials",
-        json=[
+    _seed_materials(
+        [
             {
                 "id": "existing",
                 "item_name": "既有项目",
@@ -153,8 +151,7 @@ def test_upload_csv_extracts_new_and_changed_items(client):
                 "notes": "旧价格",
                 "is_draft": False,
             }
-        ],
-        headers=headers,
+        ]
     )
     csv_text = "\n".join(
         [
@@ -198,16 +195,9 @@ def test_upload_csv_rejects_renamed_excel_file(client):
     assert "直接修改了 Excel 文件的后缀名" in response.json()["detail"]
 
 
-def test_sync_milvus_uses_async_httpx(client, monkeypatch):
+def test_sync_milvus_endpoint_is_retired(client, monkeypatch):
     _reset_material_store()
     headers = _create_admin_headers(client)
-    client.post(
-        "/api/v1/admin/materials",
-        json=[
-            {"id": "m1", "item_name": "Sync item", "unit_price": 10.0, "unit": "m2", "notes": "", "is_draft": False}
-        ],
-        headers=headers,
-    )
     calls = []
 
     class FakeAsyncClient:
@@ -228,10 +218,6 @@ def test_sync_milvus_uses_async_httpx(client, monkeypatch):
 
     response = client.post("/api/v1/admin/sync_milvus", headers=headers)
 
-    assert response.status_code == 200
-    assert response.json()["code"] == 200
-    assert calls[0]["client_kwargs"]["timeout"] == 120
-    assert calls[0]["url"].endswith("/admin/reload")
-    assert calls[0]["post_kwargs"]["json"]["materials"][0]["item_name"] == "Sync item"
-    assert calls[0]["post_kwargs"]["json"]["materials"][0]["source"] == "manual"
-    assert calls[0]["post_kwargs"]["json"]["materials"][0]["status"] == "active"
+    assert response.status_code == 410
+    assert "retired" in response.json()["detail"]
+    assert calls == []

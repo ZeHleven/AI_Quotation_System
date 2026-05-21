@@ -92,6 +92,7 @@ class Settings:
     n8n_webhook_url_calc: str = _env("N8N_WEBHOOK_URL_CALC", "http://192.168.88.128:5678/webhook/budget-calc")
     n8n_webhook_url_push: str = _env("N8N_WEBHOOK_URL_PUSH", "http://192.168.88.128:5678/webhook/budget-push")
     rag_service_url: str = _env("RAG_SERVICE_URL", "http://192.168.88.128:8001")
+    rag_reload_timeout_seconds: float = _env_float("RAG_RELOAD_TIMEOUT_SECONDS", 300.0)
     dify_app_version: str = _env("DIFY_APP_VERSION", "")
     dify_workflow_version: str = _env("DIFY_WORKFLOW_VERSION", "")
     dify_prompt_version: str = _env("DIFY_PROMPT_VERSION", "")

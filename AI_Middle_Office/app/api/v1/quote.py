@@ -19,7 +19,7 @@ from app.models.user import User
 from app.schemas.quote import ConfirmPushRequest
 from app.services.excel_service import build_excel_base64
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
-from app.services.quote_cost_context import safe_append_quote_cost_context
+from app.services.quote_cost_context import build_cost_context_fallback_quote, safe_append_quote_cost_context
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
 from app.services.quote_excel_parser import (
     QuoteExcelParseError,
@@ -164,6 +164,49 @@ async def process_chat(
                     calc_result = response.json()
                 except Exception:
                     body_preview = response.text[:500].strip() if response.text else "<empty>"
+                    fallback_result = None
+                    if not (response.text or "").strip():
+                        fallback_result = build_cost_context_fallback_quote(cost_context, reason="n8n_empty_response")
+                    if fallback_result:
+                        logger.warning(
+                            "n8n_empty_response_cost_context_fallback",
+                            extra={
+                                "username": current_user.username,
+                                "event": "n8n_empty_response_cost_context_fallback",
+                                "matched_count": cost_context.matched_count,
+                            },
+                        )
+                        calc_result = safe_enrich_quote_payload_with_cost_refs(
+                            db,
+                            fallback_result,
+                            source_rows=excel_source_rows,
+                        )
+                        current_user.quota -= 1
+                        db.commit()
+                        try:
+                            record_ai_preview(
+                                db,
+                                username=current_user.username,
+                                ai_payload=calc_result,
+                                quote_id=request_trace_id,
+                                trace_id=request_trace_id,
+                                source="sync_chat",
+                                query_text=final_query,
+                            )
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+                            logger.exception(
+                                "quote_feedback_preview_record_failed",
+                                extra={"event": "quote_feedback_preview_record_failed"},
+                            )
+                        yield _sse_event(
+                            "preview",
+                            "[Cost DB] N8N 返回空响应，已用成本库 active 底价生成预审报价，请人工复核。",
+                            trace_id=request_trace_id,
+                            data=calc_result,
+                        )
+                        return
                     logger.exception("n8n_response_parse_failed", extra={"username": current_user.username, "event": "n8n_response_parse_failed"})
                     yield _sse_event("error", f"❌ [n8n Workflow] 响应体解析失败（HTTP 200）\n实际返回内容：{body_preview}\n→ 请确认 N8N budget-calc 工作流末尾有 Respond to Webhook 节点且 Response Body 设为 JSON", trace_id=request_trace_id)
                     return

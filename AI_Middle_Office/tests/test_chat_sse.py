@@ -268,3 +268,40 @@ def test_chat_sse_attaches_biz2h_cost_context_before_gateway(client, monkeypatch
     assert "数量: 18" in content
     assert "匹配类型: fuzzy_item_name" in content
     assert "reference_unit_price: 6.00 元/m" in content
+
+
+def test_chat_sse_falls_back_to_cost_context_when_n8n_returns_empty(client, monkeypatch):
+    _, headers = _create_user_headers(client, quota=3)
+    gateway_calls = []
+
+    async def fake_post_json_via_gateway(**kwargs):
+        gateway_calls.append(kwargs)
+        return httpx.Response(200, content=b"")
+
+    monkeypatch.setattr("app.api.v1.quote.post_json_via_gateway", fake_post_json_via_gateway)
+
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2h empty n8n fallback {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        _seed_cost_item(db, item_name=item_name, unit="m", price=6.0)
+        response = client.post(
+            "/api/v1/chat",
+            data={"message": f"{item_name} 18m"},
+            headers=headers,
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    assert response.status_code == 200
+    assert gateway_calls
+    events = _sse_events(response.text)
+    assert events[-1]["status"] == "preview"
+    assert events[-1]["message"].startswith("[Cost DB]")
+    row = events[-1]["data"]["project_details"][0]
+    assert row["project_name"] == item_name
+    assert row["quantity"] == "18"
+    assert row["unit_price"] == 6
+    assert row["total_price"] == 108

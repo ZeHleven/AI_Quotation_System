@@ -84,6 +84,12 @@ def _display_number(value: float | None) -> str:
     return f"{value:.2f}".rstrip("0").rstrip(".")
 
 
+def _round_money(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), 2)
+
+
 def _infer_row_from_text(segment: str) -> dict[str, Any] | None:
     text = _clean_text(segment)
     if len(text) < 2:
@@ -226,3 +232,51 @@ def safe_append_quote_cost_context(
     except Exception:
         logger.exception("quote_cost_context_build_failed")
         return query_text, EMPTY_COST_CONTEXT
+
+
+def build_cost_context_fallback_quote(context: QuoteCostContext, *, reason: str) -> dict[str, Any] | None:
+    if not context.references or context.unmatched_count:
+        return None
+
+    project_details: list[dict[str, Any]] = []
+    for ref in context.references:
+        quantity = parse_amount(ref.get("quantity"))
+        unit_price = parse_amount(ref.get("reference_unit_price"))
+        if quantity is None or quantity <= 0 or unit_price is None or unit_price <= 0:
+            return None
+        total_price = parse_amount(ref.get("reference_total"))
+        if total_price is None:
+            total_price = round(quantity * unit_price, 2)
+
+        project_details.append(
+            {
+                "project_name": ref.get("cost_item_name") or ref.get("demand_item") or "成本库参考项",
+                "quantity": _display_number(quantity),
+                "unit": ref.get("cost_unit") or ref.get("unit") or "",
+                "unit_price": _round_money(unit_price),
+                "total_price": _round_money(total_price),
+                "notes": "N8N 返回空响应，已按 cost_items.active 成本库底价生成预审报价，需人工复核。",
+                "cost_context_fallback": {
+                    "applied": True,
+                    "reason": reason,
+                    "demand_item": ref.get("demand_item"),
+                    "match_type": ref.get("match_type"),
+                    "cost_item_id": ref.get("cost_item_id"),
+                    "reference_price_source": ref.get("reference_price_source"),
+                },
+            }
+        )
+
+    if not project_details:
+        return None
+
+    return {
+        "project_details": project_details,
+        "customer_questions_answered": "N8N 返回空响应，本次预审由成本库 active 底价兜底生成。",
+        "cost_context_fallback_summary": {
+            "applied": True,
+            "reason": reason,
+            "matched_count": len(project_details),
+            "active_cost_item_count": context.active_cost_item_count,
+        },
+    }

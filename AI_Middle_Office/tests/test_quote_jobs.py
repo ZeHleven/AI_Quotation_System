@@ -593,3 +593,49 @@ def test_quote_job_runner_attaches_biz2h_cost_context_before_gateway(monkeypatch
     assert "数量: 18" in content
     assert "匹配类型: fuzzy_item_name" in content
     assert "reference_unit_price: 6.00 元/m" in content
+
+
+def test_quote_job_runner_falls_back_to_cost_context_when_n8n_returns_empty(monkeypatch):
+    gateway_calls = []
+
+    async def fake_post_json_via_gateway(**kwargs):
+        gateway_calls.append(kwargs)
+        return httpx.Response(200, content=b"")
+
+    monkeypatch.setattr(quote_job_runner, "post_json_via_gateway", fake_post_json_via_gateway)
+
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2h empty n8n fallback {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        _seed_cost_item(db, item_name=item_name, unit="m", price=6.0)
+
+        async def collect_events():
+            return [
+                event
+                async for event in quote_job_runner._iter_quote_events(
+                    username="runner",
+                    message=f"{item_name} 18m",
+                    file_content=None,
+                    mime_type=None,
+                    filename=None,
+                    db=db,
+                )
+            ]
+
+        events = asyncio.run(collect_events())
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    assert gateway_calls
+    assert events[-1][0] == "preview"
+    assert events[-1][1].startswith("[Cost DB]")
+    payload = events[-1][2]["data"]
+    assert payload["cost_context_fallback_summary"]["reason"] == "n8n_empty_response"
+    row = payload["project_details"][0]
+    assert row["project_name"] == item_name
+    assert row["quantity"] == "18"
+    assert row["unit_price"] == 6
+    assert row["total_price"] == 108

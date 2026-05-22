@@ -19,7 +19,7 @@ from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.file_storage import get_object_bytes
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
-from app.services.quote_cost_context import safe_append_quote_cost_context
+from app.services.quote_cost_context import build_cost_context_fallback_quote, safe_append_quote_cost_context
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
 from app.services.quote_excel_parser import (
     QuoteExcelParseError,
@@ -307,6 +307,24 @@ async def _iter_quote_events(
         calc_result = response.json()
     except Exception:
         body_preview = response.text[:500].strip() if response.text else "<empty>"
+        fallback_result = None
+        if not (response.text or "").strip():
+            fallback_result = build_cost_context_fallback_quote(cost_context, reason="n8n_empty_response")
+        if fallback_result:
+            logger.warning(
+                "n8n_empty_response_cost_context_fallback",
+                extra={
+                    "username": username,
+                    "event": "n8n_empty_response_cost_context_fallback",
+                    "matched_count": cost_context.matched_count,
+                },
+            )
+            yield (
+                "preview",
+                "[Cost DB] N8N 返回空响应，已用成本库 active 底价生成预审报价，请人工复核。",
+                {"stage": "completed", "data": fallback_result, "source_rows": excel_source_rows},
+            )
+            return
         logger.exception(
             "n8n_response_parse_failed",
             extra={"username": username, "event": "n8n_response_parse_failed"},

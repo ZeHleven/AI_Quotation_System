@@ -3,7 +3,11 @@ import uuid
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.cost_item import COST_STATUS_ACTIVE, COST_STATUS_DRAFT, CostItem
-from app.services.quote_cost_context import append_quote_cost_context, build_quote_cost_context
+from app.services.quote_cost_context import (
+    append_quote_cost_context,
+    build_cost_context_fallback_quote,
+    build_quote_cost_context,
+)
 
 
 def _set_flag(name: str, value):
@@ -103,3 +107,28 @@ def test_biz2h_keeps_query_unchanged_when_feature_disabled(client):
     assert query == "BIZ2h 未启用成本库 1m"
     assert context.matched_count == 0
     assert context.text == ""
+
+
+def test_biz2h_builds_preview_payload_from_complete_cost_context(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2h empty n8n fallback {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        cost_item = _seed_cost_item(db, item_name=item_name, unit="m", price=6.0)
+        context = build_quote_cost_context(db, f"{item_name} 18m")
+        payload = build_cost_context_fallback_quote(context, reason="n8n_empty_response")
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    assert payload is not None
+    assert payload["cost_context_fallback_summary"]["applied"] is True
+    assert payload["cost_context_fallback_summary"]["matched_count"] == 1
+    row = payload["project_details"][0]
+    assert row["project_name"] == item_name
+    assert row["quantity"] == "18"
+    assert row["unit"] == "m"
+    assert row["unit_price"] == 6
+    assert row["total_price"] == 108
+    assert row["cost_context_fallback"]["cost_item_id"] == cost_item.id

@@ -46,6 +46,13 @@ ACTION_TERMS = (
 )
 MIN_TOKEN_MATCH_SCORE = 360
 
+PRICE_SOURCE_LABELS = {
+    "client_tax_excluded_price": "对甲税前综合单价",
+    "subcontract_composite_price": "劳务发包综合单价",
+    "crew_benchmark_price": "班组标底税前价",
+    "price": "主参考价",
+}
+
 
 def _clean_text(value: Any) -> str:
     if value is None:
@@ -144,7 +151,19 @@ def _row_value(row: dict[str, Any], *keys: str) -> Any:
 
 
 def _row_name(row: dict[str, Any]) -> str:
-    return _clean_text(_row_value(row, "item_name", "project_name", "name", "material", "material_name"))
+    return _clean_text(
+        _row_value(
+            row,
+            "project_name",
+            "item_name",
+            "item",
+            "name",
+            "project",
+            "project_title",
+            "material",
+            "material_name",
+        )
+    )
 
 
 def _row_spec(row: dict[str, Any]) -> str:
@@ -160,6 +179,22 @@ def _row_quantity(row: dict[str, Any]) -> float | None:
     if quantity is None or quantity <= 0:
         return None
     return quantity
+
+
+def _normalize_quote_row_aliases(row: dict[str, Any]) -> dict[str, Any]:
+    normalized = copy.deepcopy(row)
+
+    if not _clean_text(normalized.get("project_name")):
+        project_name = _row_name(normalized)
+        if project_name:
+            normalized["project_name"] = project_name
+
+    if not _clean_text(normalized.get("notes")):
+        notes = _row_value(normalized, "remark", "remarks", "note", "description", "craft")
+        if notes not in (None, ""):
+            normalized["notes"] = _clean_text(notes)
+
+    return normalized
 
 
 def _apply_source_row_metadata(row: dict[str, Any], source_row: dict[str, Any] | None) -> None:
@@ -207,6 +242,10 @@ def _price_source(item: CostItem) -> str:
         if value is not None and round(float(value), 6) == reference:
             return field_name
     return "price"
+
+
+def _price_source_label(source: Any) -> str:
+    return PRICE_SOURCE_LABELS.get(_clean_text(source), _clean_text(source) or "主参考价")
 
 
 def _round_money(value: float | None) -> float | None:
@@ -313,6 +352,112 @@ def _apply_cost_reference_fallback(row: dict[str, Any], reference: dict[str, Any
     )
 
 
+def _match_type_label(match_type: Any) -> str:
+    return "精确匹配" if match_type == "exact_item_spec" else "名称匹配"
+
+
+def _cost_item_url(item: CostItem) -> str:
+    return f"/admin/cost-db?cost_item_id={item.id}"
+
+
+def _price_breakdown(item: CostItem) -> dict[str, dict[str, Any]]:
+    fields = (
+        "client_tax_excluded_price",
+        "client_labor_price",
+        "client_main_material_price",
+        "client_auxiliary_material_price",
+        "client_direct_fee",
+        "client_management_profit",
+        "subcontract_composite_price",
+        "subcontract_labor_price",
+        "subcontract_main_material_price",
+        "subcontract_auxiliary_material_price",
+        "crew_benchmark_price",
+        "price",
+    )
+    labels = {
+        **PRICE_SOURCE_LABELS,
+        "client_labor_price": "对甲人工费",
+        "client_main_material_price": "对甲主材费",
+        "client_auxiliary_material_price": "对甲辅材费",
+        "client_direct_fee": "对甲直接费小计",
+        "client_management_profit": "对甲管理费利润",
+        "subcontract_labor_price": "劳务人工费",
+        "subcontract_main_material_price": "劳务主材费",
+        "subcontract_auxiliary_material_price": "劳务辅材费",
+    }
+    return {
+        field: {
+            "label": labels.get(field, field),
+            "value": _round_money(getattr(item, field)),
+        }
+        for field in fields
+    }
+
+
+def _attach_quote_explanation(row: dict[str, Any], item: CostItem, reference: dict[str, Any]) -> None:
+    row_name = _row_name(row)
+    row_unit = _row_unit(row)
+    quantity = _row_quantity(row)
+    ai_unit_price = parse_amount(row.get("unit_price"))
+    ai_total_price = parse_amount(row.get("total_price"))
+    reference_price = parse_amount(reference.get("reference_price"))
+    source = _clean_text(reference.get("reference_price_source"))
+    source_label = _price_source_label(source)
+    delta = parse_amount(reference.get("price_delta"))
+    delta_rate = reference.get("price_delta_rate")
+
+    reference["reference_price_source_label"] = source_label
+    reference["cost_item_url"] = _cost_item_url(item)
+    reference["evidence_url"] = _cost_item_url(item)
+    reference["evidence_api_url"] = f"/api/v1/admin/cost-items/{item.id}"
+    reference["match_type_label"] = _match_type_label(reference.get("match_type"))
+    reference["match_reason"] = (
+        f"报价行“{row_name or '-'}”与成本库 active 条目“{item.item_name}”{reference['match_type_label']}，"
+        f"报价单位“{row_unit or '-'}”与成本库单位“{item.unit or '-'}”兼容。"
+    )
+    reference["price_source_reason"] = (
+        f"参考价取自成本库 #{item.id} 的“{source_label}”字段，当前值为 {reference_price or 0:.2f} 元/{item.unit or '-'}。"
+    )
+    reference["source_cost_item"] = {
+        "id": item.id,
+        "item_name": item.item_name,
+        "spec": item.spec,
+        "unit": item.unit,
+        "category": item.category,
+        "subcategory": item.subcategory,
+        "price_type": item.price_type,
+        "status": item.status,
+        "notes": item.notes,
+    }
+    reference["price_breakdown"] = _price_breakdown(item)
+
+    if reference_price is not None and ai_unit_price is not None:
+        if round(float(ai_unit_price), 2) == round(float(reference_price), 2):
+            comparison = "AI 单价与成本库参考价一致。"
+        else:
+            rate_text = ""
+            if delta_rate is not None:
+                rate_text = f"（{float(delta_rate) * 100:+.1f}%）"
+            comparison = f"AI 单价相对成本库参考价偏差 {float(delta or 0):+.2f} 元{rate_text}，需人工复核。"
+    else:
+        comparison = "AI 单价或成本库参考价缺失，需人工复核。"
+
+    row["quote_explanation"] = {
+        "ai_unit_price": _round_money(ai_unit_price),
+        "ai_total_price": _round_money(ai_total_price),
+        "quantity": _round_money(quantity),
+        "unit": row_unit,
+        "ai_basis": "AI 工作流原始返回的单价与备注；系统不会臆测模型内部推理，只展示可审计输入和结果。",
+        "cost_context_basis": (
+            f"报价请求进入 N8N/Dify 前，FastAPI 已把成本库 active 命中条目 #{item.id} "
+            f"“{item.item_name}”及参考价 {reference_price or 0:.2f} 元/{item.unit or '-'} 作为强参考上下文传给 AI。"
+        ),
+        "comparison": comparison,
+        "cost_item_url": _cost_item_url(item),
+    }
+
+
 def _name_match_score(row_name: str, cost_name: str) -> int:
     row_key = _searchable_name_key(row_name)
     cost_key = _searchable_name_key(cost_name)
@@ -335,8 +480,18 @@ def _has_action_conflict(row_name: str, item: CostItem) -> bool:
     return bool(row_actions and item_actions and row_actions.isdisjoint(item_actions))
 
 
+def _has_exclusion_conflict(row_name: str, cost_name: str) -> bool:
+    row_key = _searchable_name_key(row_name)
+    cost_key = _searchable_name_key(cost_name)
+    if len(row_key) < 3 or len(cost_key) < 5:
+        return False
+    return any(f"{prefix}{row_key}" in cost_key for prefix in ("不含", "不包含", "不包括", "不计", "不做"))
+
+
 def _token_match_score(row_name: str, item: CostItem) -> int:
     if _has_action_conflict(row_name, item):
+        return 0
+    if _has_exclusion_conflict(row_name, item.item_name):
         return 0
 
     row_tokens = _match_tokens(row_name)
@@ -411,6 +566,8 @@ def _find_cost_match(row: dict[str, Any], active_items: list[CostItem]) -> tuple
         if not _unit_compatible(row_unit, item):
             continue
         if _has_action_conflict(row_name, item):
+            continue
+        if _has_exclusion_conflict(row_name, item.item_name):
             continue
         score = _name_match_score(row_name, item.item_name)
         token_score = _token_match_score(row_name, item)
@@ -494,7 +651,7 @@ def enrich_quote_payload_with_cost_refs(db: Session, payload: Any, *, source_row
     source_rows = [row for row in (source_rows or []) if isinstance(row, dict)]
 
     if isinstance(target, dict) and isinstance(target.get("project_details"), list):
-        rows = [copy.deepcopy(item) for item in target["project_details"] if isinstance(item, dict)]
+        rows = [_normalize_quote_row_aliases(item) for item in target["project_details"] if isinstance(item, dict)]
         for index, row in enumerate(rows):
             _apply_source_row_metadata(row, _source_row_for_index(row, index, source_rows))
             item, match_type = _find_cost_match(row, active_items)
@@ -505,6 +662,7 @@ def enrich_quote_payload_with_cost_refs(db: Session, payload: Any, *, source_row
                     ai_unit_price=parse_amount(row.get("unit_price")),
                 )
                 _apply_cost_reference_fallback(row, reference)
+                _attach_quote_explanation(row, item, reference)
                 row["cost_reference"] = reference
             else:
                 row["cost_reference"] = _no_match_reference(row)
@@ -514,7 +672,7 @@ def enrich_quote_payload_with_cost_refs(db: Session, payload: Any, *, source_row
         return enriched if _contains_project_details_object(enriched) else target
 
     if isinstance(target, list):
-        rows = [copy.deepcopy(item) for item in target if isinstance(item, dict)]
+        rows = [_normalize_quote_row_aliases(item) for item in target if isinstance(item, dict)]
         for index, row in enumerate(rows):
             _apply_source_row_metadata(row, _source_row_for_index(row, index, source_rows))
             item, match_type = _find_cost_match(row, active_items)
@@ -525,6 +683,7 @@ def enrich_quote_payload_with_cost_refs(db: Session, payload: Any, *, source_row
                     ai_unit_price=parse_amount(row.get("unit_price")),
                 )
                 _apply_cost_reference_fallback(row, reference)
+                _attach_quote_explanation(row, item, reference)
                 row["cost_reference"] = reference
             else:
                 row["cost_reference"] = _no_match_reference(row)

@@ -4427,6 +4427,10 @@ async function bootstrap() {
         return
       }
       await loadCostItems()
+      const costItemId = Number(new URLSearchParams(window.location.search).get('cost_item_id'))
+      if (Number.isFinite(costItemId) && costItemId > 0) {
+        await openCostItemDetail({ id: costItemId })
+      }
       return
     }
     if (!canAccessPermissions.value) {

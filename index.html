@@ -220,6 +220,8 @@
     .cost-reference-price { font-size: 13px; font-weight: 700; color: var(--dark); }
     .cost-reference-delta { font-size: 12px; color: var(--slate); }
     .cost-reference-fallback { font-size: 12px; color: #b45309; }
+    .cost-reference-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .quote-evidence-message .el-message-box__message { white-space: pre-line; line-height: 1.6; }
 
     .cursor {
       display: inline-block; width: 6px; height: 15px; background: var(--slate);
@@ -533,7 +535,7 @@
               <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing"></el-input-number>
             </template>
           </el-table-column>
-          <el-table-column label="成本库参考" width="190">
+          <el-table-column label="成本库参考" width="220">
             <template #default="scope">
               <div class="cost-reference-cell">
                 <el-tag :type="costReferenceTagType(scope.row)" size="small" effect="plain">
@@ -546,6 +548,10 @@
                 <span v-if="costReferenceFallbackText(scope.row)" class="cost-reference-fallback">
                   {{ costReferenceFallbackText(scope.row) }}
                 </span>
+                <div class="cost-reference-actions" v-if="costReference(scope.row).matched || scope.row.quote_explanation">
+                  <el-button type="primary" link size="small" @click="showCostReferenceEvidence(scope.row)">查看依据</el-button>
+                  <el-button v-if="costReference(scope.row).cost_item_id" type="primary" link size="small" @click="openCostReferenceDetail(scope.row)">成本库详情</el-button>
+                </div>
               </div>
             </template>
           </el-table-column>
@@ -581,7 +587,7 @@
 
   <script>
     const { createApp, ref, computed, nextTick, onMounted, onBeforeUnmount } = Vue;
-    const { ElMessage } = ElementPlus;
+    const { ElMessage, ElMessageBox } = ElementPlus;
 
     const STAGES_WITH_IMAGE = [
       { id: 'created', icon: '🧾', label: '创建任务' },
@@ -910,6 +916,70 @@
         const costReferenceFallbackText = (row = {}) => {
           const reference = costReference(row);
           return reference.fallback_applied ? '已用成本库底价兜底' : '';
+        };
+
+        const costReferenceDetailUrl = (row = {}) => {
+          const reference = costReference(row);
+          if (!reference.cost_item_id) return '';
+          return reference.evidence_url || reference.cost_item_url || `/admin/cost-db?cost_item_id=${reference.cost_item_id}`;
+        };
+
+        const costReferenceEvidenceText = (row = {}) => {
+          const reference = costReference(row);
+          const explanation = row.quote_explanation || {};
+          const sourceItem = reference.source_cost_item || {};
+          const breakdown = reference.price_breakdown || {};
+          const sourceLabel = reference.reference_price_source_label || reference.reference_price_source || '主参考价';
+          const quantity = row.quantity ?? explanation.quantity ?? '-';
+          const unit = row.unit || explanation.unit || '-';
+          const aiUnitPrice = parseMoney(row.unit_price);
+          const aiTotalPrice = parseMoney(row.total_price);
+          const referencePrice = parseMoney(reference.reference_price);
+          const delta = parseMoney(reference.price_delta);
+          const rate = Number(reference.price_delta_rate);
+          const deltaText = delta === null
+            ? '暂无'
+            : `${delta >= 0 ? '+' : ''}${formatMoney(delta)}${Number.isFinite(rate) ? ` / ${rate >= 0 ? '+' : ''}${(rate * 100).toFixed(1)}%` : ''}`;
+          const breakdownText = [
+            ['对甲税前综合单价', breakdown.client_tax_excluded_price?.value ?? reference.client_tax_excluded_price],
+            ['劳务发包综合单价', breakdown.subcontract_composite_price?.value ?? reference.subcontract_composite_price],
+            ['班组标底税前价', breakdown.crew_benchmark_price?.value ?? reference.crew_benchmark_price],
+          ]
+            .filter(([, value]) => parseMoney(value) !== null)
+            .map(([label, value]) => `${label}：¥ ${formatMoney(parseMoney(value))}`)
+            .join('；');
+          const evidenceUrl = costReferenceDetailUrl(row);
+          return [
+            `施工项目：${row.project_name || row.item || '-'}`,
+            `AI 报价：¥ ${aiUnitPrice === null ? '-' : formatMoney(aiUnitPrice)} / ${unit} × ${quantity} = ¥ ${aiTotalPrice === null ? '-' : formatMoney(aiTotalPrice)}`,
+            `AI 报价依据：${explanation.ai_basis || 'AI 工作流原始返回的单价与备注；系统展示可审计输入和结果，不臆测模型内部推理。'}`,
+            row.notes ? `AI 工艺备注：${row.notes}` : '',
+            explanation.cost_context_basis ? `前置成本库上下文：${explanation.cost_context_basis}` : '',
+            reference.matched ? `成本库命中：#${reference.cost_item_id} ${sourceItem.item_name || reference.item_name || '-'}（${sourceItem.category || reference.category || '-'}）` : '成本库命中：无',
+            reference.matched ? `匹配原因：${reference.match_reason || costReferenceLabel(row)}` : '',
+            reference.matched ? `成本库参考价：¥ ${referencePrice === null ? '-' : formatMoney(referencePrice)} / ${reference.unit || sourceItem.unit || '-'}，取自“${sourceLabel}”。` : '',
+            reference.price_source_reason || '',
+            breakdownText ? `成本库价格拆分：${breakdownText}` : '',
+            reference.matched ? `AI 与成本库价差：${deltaText}` : '',
+            explanation.comparison || '',
+            evidenceUrl ? `成本库详情链接：${window.location.origin}${evidenceUrl}` : '',
+          ].filter(Boolean).join('\n');
+        };
+
+        const showCostReferenceEvidence = (row = {}) => {
+          ElMessageBox.alert(costReferenceEvidenceText(row), '报价依据与成本库证据链', {
+            confirmButtonText: '知道了',
+            customClass: 'quote-evidence-message',
+          });
+        };
+
+        const openCostReferenceDetail = (row = {}) => {
+          const url = costReferenceDetailUrl(row);
+          if (!url) {
+            ElMessage.info('当前行没有关联成本库条目');
+            return;
+          }
+          window.open(url, '_blank', 'noopener,noreferrer');
         };
 
         const costReferenceTagType = (row = {}) => {
@@ -1611,7 +1681,8 @@
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
           omissionSuggestions, omissionSummary, omissionSummaryText,
-          costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText, costReferenceFallbackText, costReferenceTagType,
+          costReference, costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText,
+          costReferenceFallbackText, costReferenceTagType, showCostReferenceEvidence, openCostReferenceDetail,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           canSubmit, selectedFileSummary,

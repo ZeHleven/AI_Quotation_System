@@ -78,6 +78,79 @@ def test_enrich_quote_payload_uses_exact_item_and_spec_match(client):
     assert enriched["cost_reference_summary"]["matched_count"] == 1
 
 
+def test_enrich_quote_payload_normalizes_n8n_item_and_remark_aliases(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2b alias row {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        cost_item = _seed_cost_item(db, item_name=item_name, unit="m", price=6.0)
+        payload = {
+            "project_details": [
+                {
+                    "item": item_name,
+                    "quantity": 18,
+                    "unit": "m",
+                    "unit_price": 6,
+                    "total_price": 108,
+                    "remark": "keep original craft note",
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    assert row["project_name"] == item_name
+    assert row["notes"] == "keep original craft note"
+    assert row["cost_reference"]["matched"] is True
+    assert row["cost_reference"]["cost_item_id"] == cost_item.id
+    assert row["cost_reference"]["reference_price_source_label"] == "劳务发包综合单价"
+    assert row["cost_reference"]["evidence_url"] == f"/admin/cost-db?cost_item_id={cost_item.id}"
+    assert row["cost_reference"]["source_cost_item"]["item_name"] == item_name
+    assert "AI 工作流原始返回" in row["quote_explanation"]["ai_basis"]
+    assert f"#{cost_item.id}" in row["quote_explanation"]["cost_context_basis"]
+    assert enriched["cost_reference_summary"]["matched_count"] == 1
+    assert enriched["cost_reference_summary"]["unmatched_count"] == 0
+
+
+def test_enrich_quote_payload_ignores_excluded_context_match(client):
+    suffix = uuid.uuid4().hex[:8]
+    target_name = f"楼地面水泥砂浆找平 {suffix}"
+    excluded_name = f"地面人字铺贴实木木地板基层（不含地面找平 {suffix}）"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        target_item = _seed_cost_item(db, item_name=target_name, unit="㎡", price=20.76)
+        excluded_item = _seed_cost_item(db, item_name=excluded_name, unit="㎡", price=51.84)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": f"地面找平 {suffix}",
+                    "quantity": 35,
+                    "unit": "㎡",
+                    "unit_price": 30,
+                    "total_price": 1050,
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    reference = enriched["project_details"][0]["cost_reference"]
+    assert reference["matched"] is True
+    assert reference["cost_item_id"] == target_item.id
+    assert reference["cost_item_id"] != excluded_item.id
+    assert reference["reference_price"] == 20.76
+    assert "不含" not in reference["item_name"]
+
+
 def test_enrich_quote_payload_uses_active_fuzzy_match_and_ignores_draft(client):
     suffix = uuid.uuid4().hex[:8]
     draft_name = f"BIZ2b 草稿底价 {suffix}"

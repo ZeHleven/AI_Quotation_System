@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
+from app.models.quote_cost_evidence import QuoteCostEvidence
 from app.models.quote_feedback import QuoteCorrection, QuoteFeedback, QuoteRagTrace
 from app.models.quote_job import QuoteJob
 from app.models.user import User
@@ -147,6 +148,45 @@ def _create_feedback_record(username: str) -> int:
                 match_reason="appears in final quote",
             )
         )
+        db.add(
+            QuoteCostEvidence(
+                feedback_id=feedback.id,
+                quote_id=feedback.quote_id,
+                quote_job_id=feedback.quote_job_id,
+                trace_id=feedback.trace_id,
+                username=username,
+                source="async_job",
+                status="confirmed",
+                item_index=0,
+                project_name="paint",
+                quantity=10,
+                unit="m2",
+                ai_unit_price=10,
+                ai_total_price=100,
+                final_unit_price=13,
+                final_total_price=130,
+                line_total_price=130,
+                line_total_source="manual_final",
+                quote_total_price=130,
+                quote_total_source="manual_final",
+                quote_reference_total_price=110,
+                manual_modified=True,
+                adopted_cost_reference=False,
+                cost_item_id=9001,
+                cost_item_name_snapshot="paint base",
+                reference_price=11,
+                reference_price_source_label="主参考价",
+                match_type="name",
+                match_type_label="名称匹配",
+                match_reason="matched by name",
+                price_delta=-1,
+                price_delta_rate=-0.0909,
+                ai_basis="AI returned the preview price.",
+                cost_context_basis="Cost item #9001 was sent before quoting.",
+                comparison="AI price differs from cost reference.",
+                cost_item_url="/admin/cost-db?cost_item_id=9001",
+            )
+        )
         db.commit()
         return feedback.id
     finally:
@@ -157,7 +197,43 @@ def test_confirm_push_records_feedback_corrections_and_rag_trace(client, monkeyp
     username, headers = _create_user_headers(client)
     ai_result = {
         "project_details": [
-            {"project_name": "wall paint", "unit_price": 20, "total_price": 200, "notes": "standard"}
+            {
+                "project_name": "wall paint",
+                "quantity": 10,
+                "unit": "m2",
+                "unit_price": 20,
+                "total_price": 200,
+                "notes": "standard",
+                "cost_reference": {
+                    "matched": True,
+                    "cost_item_id": 9101,
+                    "item_name": "wall paint base",
+                    "unit": "m2",
+                    "reference_price": 18,
+                    "reference_price_source": "price",
+                    "reference_price_source_label": "主参考价",
+                    "match_type": "name",
+                    "match_type_label": "名称匹配",
+                    "match_reason": "报价行与成本库 active 条目名称匹配。",
+                    "price_delta": 2,
+                    "price_delta_rate": 0.1111,
+                    "cost_item_url": "/admin/cost-db?cost_item_id=9101",
+                    "source_cost_item": {
+                        "id": 9101,
+                        "item_name": "wall paint base",
+                        "category": "paint",
+                        "subcategory": "wall",
+                        "unit": "m2",
+                        "status": "active",
+                    },
+                },
+                "quote_explanation": {
+                    "ai_basis": "AI returned the preview price.",
+                    "cost_context_basis": "Cost item #9101 was sent before quoting.",
+                    "comparison": "AI price differs from cost reference.",
+                    "cost_item_url": "/admin/cost-db?cost_item_id=9101",
+                },
+            }
         ],
         "rag_traces": [
             {"material_id": "mat-001", "item_name": "wall paint base", "rank": 1, "score": 0.91}
@@ -175,6 +251,8 @@ def test_confirm_push_records_feedback_corrections_and_rag_trace(client, monkeyp
         return FakeResponse()
 
     monkeypatch.setattr("app.api.v1.quote.post_json_via_gateway", fake_post_json_via_gateway)
+    final_detail = dict(ai_result["project_details"][0])
+    final_detail.update({"unit_price": 22, "total_price": 220, "notes": "upgraded"})
 
     response = client.post(
         "/api/v1/confirm_push",
@@ -182,9 +260,7 @@ def test_confirm_push_records_feedback_corrections_and_rag_trace(client, monkeyp
         json={
             "quote_job_id": job.job_id,
             "trace_id": job.trace_id,
-            "project_details": [
-                {"project_name": "wall paint", "unit_price": 22, "total_price": 220, "notes": "upgraded"}
-            ],
+            "project_details": [final_detail],
             "feedback_reason_category": "unit_price_adjustment",
             "feedback_reason": "manual correction",
         },
@@ -230,6 +306,28 @@ def test_confirm_push_records_feedback_corrections_and_rag_trace(client, monkeyp
         assert trace.sent_to_prompt is True
         assert trace.used_in_final_quote is True
         assert trace.adopted_by_user is True
+
+        evidence = db.query(QuoteCostEvidence).filter(QuoteCostEvidence.feedback_id == feedback.id).one()
+        assert evidence.status == "confirmed"
+        assert evidence.quote_job_id == job.job_id
+        assert evidence.project_name == "wall paint"
+        assert evidence.quantity == 10
+        assert evidence.ai_unit_price == 20
+        assert evidence.final_unit_price == 22
+        assert evidence.line_total_price == 220
+        assert evidence.line_total_source == "manual_final"
+        assert evidence.quote_total_price == 220
+        assert evidence.quote_total_source == "manual_final"
+        assert evidence.quote_reference_total_price == 180
+        assert evidence.cost_item_id == 9101
+        assert evidence.cost_item_name_snapshot == "wall paint base"
+        assert evidence.reference_price == 18
+        assert evidence.reference_total == 180
+        assert evidence.price_delta == 2
+        assert evidence.manual_modified is True
+        assert evidence.adopted_cost_reference is False
+        assert evidence.ai_basis == "AI returned the preview price."
+        assert evidence.cost_item_url == "/admin/cost-db?cost_item_id=9101"
     finally:
         db.close()
 
@@ -280,8 +378,10 @@ def test_admin_quote_feedback_summary_list_and_detail(client):
     assert summary["modified_count"] == 1
     assert summary["correction_count"] == 1
     assert summary["rag_trace_count"] == 1
+    assert summary["cost_evidence_count"] == 1
     assert summary["top_correction_fields"][0]["field_path"] == "project_details[0].total_price"
     assert summary["top_rag_materials"][0]["material_id"] == "mat-admin-001"
+    assert summary["top_cost_items"][0]["cost_item_id"] == 9001
 
     list_response = client.get(
         f"/api/v1/admin/quote_feedback?username={username}",
@@ -293,6 +393,7 @@ def test_admin_quote_feedback_summary_list_and_detail(client):
     assert items[0]["id"] == feedback_id
     assert items[0]["correction_count"] == 1
     assert items[0]["rag_trace_count"] == 1
+    assert items[0]["cost_evidence_count"] == 1
     assert items[0]["request_text"] == "paint quote request"
     assert items[0]["project_summary"] == "paint; total_items=1"
     assert items[0]["change_summary"].startswith("1 field changes")
@@ -310,4 +411,21 @@ def test_admin_quote_feedback_summary_list_and_detail(client):
     assert detail["rag_traces"][0]["project_name"] == "paint"
     assert detail["rag_traces"][0]["used_in_final_quote"] is True
     assert detail["rag_traces"][0]["match_reason"] == "appears in final quote"
+    assert detail["cost_evidence"][0]["cost_item_id"] == 9001
+    assert detail["cost_evidence"][0]["cost_item_url"] == "/admin/cost-db?cost_item_id=9001"
+    assert detail["cost_evidence"][0]["manual_modified"] is True
+    assert detail["cost_evidence"][0]["line_total_price"] == 130
+    assert detail["cost_evidence"][0]["line_total_source"] == "manual_final"
+    assert detail["cost_evidence"][0]["quote_total_price"] == 130
+    assert detail["cost_evidence"][0]["quote_total_source"] == "manual_final"
     assert detail["ai_payload"]["project_details"][0]["total_price"] == 100
+
+    evidence_response = client.get(
+        "/api/v1/admin/quote-cost-evidence?cost_item_id=9001",
+        headers=admin_headers,
+    )
+    assert evidence_response.status_code == 200
+    evidence_items = evidence_response.json()["data"]
+    assert len(evidence_items) == 1
+    assert evidence_items[0]["feedback_id"] == feedback_id
+    assert evidence_items[0]["match_reason"] == "matched by name"

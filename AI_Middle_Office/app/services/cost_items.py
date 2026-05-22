@@ -250,6 +250,25 @@ def _format_date(value: date | None) -> str | None:
     return value.isoformat()
 
 
+def _price_values_equal(left: Any, right: Any) -> bool:
+    if left is None and right is None:
+        return True
+    if left is None or right is None:
+        return False
+    try:
+        return round(float(left), 6) == round(float(right), 6)
+    except (TypeError, ValueError):
+        return left == right
+
+
+def _changed_price_fields(history: CostItemHistory) -> list[str]:
+    changed: list[str] = []
+    for field in PRICE_FIELDS:
+        if not _price_values_equal(getattr(history, f"old_{field}"), getattr(history, f"new_{field}")):
+            changed.append(field)
+    return changed
+
+
 def _history_snapshot(history: CostItemHistory) -> dict[str, Any]:
     return {
         "id": history.id,
@@ -284,6 +303,7 @@ def _history_snapshot(history: CostItemHistory) -> dict[str, Any]:
         "changed_by": history.changed_by,
         "change_reason": history.change_reason,
         "changed_at": _format_dt(history.changed_at),
+        "changed_fields": _changed_price_fields(history) if history.change_type == CHANGE_TYPE_PRICE else [],
     }
 
 
@@ -322,7 +342,7 @@ def serialize_cost_item(item: CostItem, *, include_history: bool = False) -> dic
 
 
 def _write_price_history(db: Session, item: CostItem, user: User, old_values: dict[str, Any], reason: str | None) -> None:
-    changed = any(old_values[field] != getattr(item, field) for field in PRICE_FIELDS)
+    changed = any(not _price_values_equal(old_values[field], getattr(item, field)) for field in PRICE_FIELDS)
     if not changed:
         return
     db.add(

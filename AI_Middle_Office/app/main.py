@@ -43,6 +43,7 @@ from app.models import material, user, quote_history, quote_job, model_call_log 
 from app.models import file_object  # noqa: F401 — 触发文件对象表建表
 from app.models import rag_eval_report  # noqa: F401 — 触发 rag_eval_reports 表建表
 from app.models import quote_feedback as quote_feedback_model  # noqa: F401 — 触发报价反馈表建表
+from app.models import quote_cost_evidence as quote_cost_evidence_model  # noqa: F401 — 触发报价成本证据表建表
 from app.models import prompt_regression as prompt_regression_model  # noqa: F401 — 触发 Prompt 回归表建表
 from app.models import knowledge_candidate as knowledge_candidate_model  # noqa: F401 — 触发知识候选表建表
 from app.models import client_inquiry as client_inquiry_model  # noqa: F401 — 触发客户咨询表建表

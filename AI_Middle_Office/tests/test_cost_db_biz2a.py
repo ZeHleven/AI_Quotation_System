@@ -193,7 +193,29 @@ def test_patch_price_writes_history(client):
     assert data["history"][-1]["new_price"] == 22.5
     assert data["history"][-1]["old_subcontract_labor_price"] == item["subcontract_labor_price"]
     assert data["history"][-1]["new_subcontract_labor_price"] == 13.5
+    assert set(data["history"][-1]["changed_fields"]) == {"price", "subcontract_composite_price", "subcontract_labor_price"}
     assert data["history"][-1]["change_reason"] == "供应商报价更新"
+
+
+def test_patch_same_prices_does_not_write_noop_history(client):
+    _, headers = _headers(client, "admin")
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        item = _create_item(client, headers)
+        response = client.patch(
+            f"/api/v1/admin/cost-items/{item['id']}",
+            headers=headers,
+            json={
+                "subcontract_composite_price": item["subcontract_composite_price"],
+                "subcontract_labor_price": item["subcontract_labor_price"],
+                "change_reason": "无价格变化",
+            },
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+
+    assert response.status_code == 200
+    assert response.json()["data"]["history"] == []
 
 
 def test_activate_and_archive_follow_state_machine(client):

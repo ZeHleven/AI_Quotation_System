@@ -12,6 +12,11 @@ from app.core.config import settings
 from app.models.material import MaterialSnapshot
 from app.models.quote_feedback import QuoteCorrection, QuoteFeedback, QuoteRagTrace
 from app.models.quote_job import QuoteJob
+from app.services.quote_cost_evidence import (
+    safe_record_confirmed_cost_evidence,
+    safe_record_preview_cost_evidence,
+    safe_record_rejected_cost_evidence,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -568,6 +573,7 @@ def record_ai_preview(
     _apply_runtime_metadata(feedback, db, ai_payload)
     db.flush()
     _replace_rag_traces(db, feedback=feedback, source_payload=ai_payload, query_text=query_text)
+    safe_record_preview_cost_evidence(db, feedback=feedback, payload=ai_payload)
     return feedback
 
 
@@ -663,6 +669,12 @@ def record_confirmed_quote(
         }
     )
     _mark_rag_trace_usage(db, feedback=feedback, final_payload=clean_final_payload)
+    safe_record_confirmed_cost_evidence(
+        db,
+        feedback=feedback,
+        ai_payload=ai_payload,
+        final_payload=clean_final_payload,
+    )
     return feedback
 
 
@@ -715,6 +727,10 @@ def record_rejected_quote(
     _apply_feedback_context(feedback, job=job)
     feedback.rejected_at = _utcnow()
     _apply_runtime_metadata(feedback, db)
+    ai_payload = _json_loads(feedback.ai_payload_json)
+    if ai_payload is None and job and job.result_json:
+        ai_payload = _json_loads(job.result_json)
+    safe_record_rejected_cost_evidence(db, feedback=feedback, ai_payload=ai_payload)
     return feedback
 
 

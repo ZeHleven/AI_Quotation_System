@@ -4,16 +4,18 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user, require_admin
+from app.models.quote_cost_evidence import QuoteCostEvidence
 from app.models.quote_feedback import QuoteCorrection, QuoteFeedback, QuoteRagTrace
 from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.schemas.quote_feedback import QuoteFeedbackRejectRequest
+from app.services.quote_cost_evidence import serialize_cost_evidence
 from app.services.quote_feedback import record_rejected_quote
 from app.services.rbac import has_admin_role
 
@@ -81,7 +83,13 @@ def _count_by_feedback_id(db: Session, model, feedback_ids: list[int]) -> dict[i
     }
 
 
-def _feedback_row(feedback: QuoteFeedback, correction_counts: dict[int, int], rag_counts: dict[int, int]) -> dict:
+def _feedback_row(
+    feedback: QuoteFeedback,
+    correction_counts: dict[int, int],
+    rag_counts: dict[int, int],
+    cost_evidence_counts: Optional[dict[int, int]] = None,
+) -> dict:
+    cost_evidence_counts = cost_evidence_counts or {}
     return {
         "id": feedback.id,
         "quote_id": feedback.quote_id,
@@ -115,6 +123,7 @@ def _feedback_row(feedback: QuoteFeedback, correction_counts: dict[int, int], ra
         "material_snapshot_id": feedback.material_snapshot_id,
         "correction_count": correction_counts.get(feedback.id, 0),
         "rag_trace_count": rag_counts.get(feedback.id, 0),
+        "cost_evidence_count": cost_evidence_counts.get(feedback.id, 0),
         "created_at": _format_dt(feedback.created_at),
         "confirmed_at": _format_dt(feedback.confirmed_at),
         "rejected_at": _format_dt(feedback.rejected_at),
@@ -134,7 +143,18 @@ def _feedback_detail(db: Session, feedback: QuoteFeedback) -> dict:
         .order_by(QuoteRagTrace.rank.asc(), QuoteRagTrace.id.asc())
         .all()
     )
-    data = _feedback_row(feedback, {feedback.id: len(corrections)}, {feedback.id: len(rag_traces)})
+    cost_evidence = (
+        db.query(QuoteCostEvidence)
+        .filter(QuoteCostEvidence.feedback_id == feedback.id)
+        .order_by(QuoteCostEvidence.item_index.asc(), QuoteCostEvidence.id.asc())
+        .all()
+    )
+    data = _feedback_row(
+        feedback,
+        {feedback.id: len(corrections)},
+        {feedback.id: len(rag_traces)},
+        {feedback.id: len(cost_evidence)},
+    )
     data.update(
         {
             "correction_summary": _load_json(feedback.correction_summary_json),
@@ -181,6 +201,7 @@ def _feedback_detail(db: Session, feedback: QuoteFeedback) -> dict:
                 }
                 for item in rag_traces
             ],
+            "cost_evidence": [serialize_cost_evidence(item) for item in cost_evidence],
         }
     )
     return data
@@ -258,10 +279,17 @@ async def get_quote_feedback_summary(
 
     correction_count = 0
     rag_trace_count = 0
+    cost_evidence_count = 0
     if feedback_ids:
         correction_count = (
             db.query(func.count(QuoteCorrection.id))
             .filter(QuoteCorrection.feedback_id.in_(feedback_ids))
+            .scalar()
+            or 0
+        )
+        cost_evidence_count = (
+            db.query(func.count(QuoteCostEvidence.id))
+            .filter(QuoteCostEvidence.feedback_id.in_(feedback_ids))
             .scalar()
             or 0
         )
@@ -281,6 +309,12 @@ async def get_quote_feedback_summary(
         feedback_ids,
         [QuoteRagTrace.material_id, QuoteRagTrace.item_name],
     )
+    top_cost_items = _top_rows(
+        db,
+        QuoteCostEvidence,
+        feedback_ids,
+        [QuoteCostEvidence.cost_item_id, QuoteCostEvidence.cost_item_name_snapshot],
+    )
 
     data = {
         "days": days,
@@ -296,6 +330,7 @@ async def get_quote_feedback_summary(
         "avg_delta_ratio": _round(sum(ratios) / len(ratios), 6) if ratios else 0.0,
         "correction_count": correction_count,
         "rag_trace_count": rag_trace_count,
+        "cost_evidence_count": cost_evidence_count,
         "by_status": [{"status": key, "count": count} for key, count in status_counts.items()],
         "by_prompt_version": [
             {"prompt_version": key, "count": count}
@@ -309,8 +344,64 @@ async def get_quote_feedback_summary(
             item for item in top_reason_categories if item.get("reason_category")
         ],
         "top_rag_materials": top_rag_materials,
+        "top_cost_items": [item for item in top_cost_items if item.get("cost_item_id")],
     }
     return api_ok(data)
+
+
+@router.get("/admin/quote-cost-evidence", summary="报价成本证据审计列表")
+async def list_quote_cost_evidence(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    feedback_id: Optional[int] = None,
+    quote_id: Optional[str] = None,
+    quote_job_id: Optional[str] = None,
+    quote_history_id: Optional[int] = None,
+    cost_item_id: Optional[int] = None,
+    username: Optional[str] = None,
+    status: Optional[str] = None,
+    min_abs_delta_rate: Optional[float] = Query(None, ge=0),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(QuoteCostEvidence)
+    if feedback_id is not None:
+        query = query.filter(QuoteCostEvidence.feedback_id == feedback_id)
+    if quote_id:
+        query = query.filter(QuoteCostEvidence.quote_id == quote_id)
+    if quote_job_id:
+        query = query.filter(QuoteCostEvidence.quote_job_id == quote_job_id)
+    if quote_history_id is not None:
+        query = query.filter(QuoteCostEvidence.quote_history_id == quote_history_id)
+    if cost_item_id is not None:
+        query = query.filter(QuoteCostEvidence.cost_item_id == cost_item_id)
+    if username:
+        query = query.filter(QuoteCostEvidence.username == username)
+    if status:
+        statuses = [item.strip() for item in status.split(",") if item.strip()]
+        if statuses:
+            query = query.filter(QuoteCostEvidence.status.in_(statuses))
+    if min_abs_delta_rate is not None:
+        query = query.filter(
+            or_(
+                QuoteCostEvidence.price_delta_rate >= min_abs_delta_rate,
+                QuoteCostEvidence.price_delta_rate <= -min_abs_delta_rate,
+            )
+        )
+
+    total = query.count()
+    rows = (
+        query.order_by(QuoteCostEvidence.created_at.desc(), QuoteCostEvidence.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return api_page(
+        [serialize_cost_evidence(item) for item in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/admin/quote_feedback", summary="报价反馈记录列表")
@@ -334,8 +425,9 @@ async def list_quote_feedback(
     feedback_ids = [item.id for item in rows]
     correction_counts = _count_by_feedback_id(db, QuoteCorrection, feedback_ids)
     rag_counts = _count_by_feedback_id(db, QuoteRagTrace, feedback_ids)
+    cost_evidence_counts = _count_by_feedback_id(db, QuoteCostEvidence, feedback_ids)
     return api_page(
-        [_feedback_row(item, correction_counts, rag_counts) for item in rows],
+        [_feedback_row(item, correction_counts, rag_counts, cost_evidence_counts) for item in rows],
         total=total,
         page=page,
         page_size=page_size,

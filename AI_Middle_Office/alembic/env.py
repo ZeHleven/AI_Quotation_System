@@ -18,6 +18,7 @@ from app.models import (  # noqa: F401,E402
     material,
     model_call_log,
     prompt_regression,
+    quote_cost_evidence,
     quote_feedback,
     quote_history,
     quote_job,

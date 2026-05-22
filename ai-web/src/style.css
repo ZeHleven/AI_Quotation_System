@@ -422,6 +422,13 @@ textarea {
   line-height: 1.4;
 }
 
+.muted-inline {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .ledger-followup-cell {
   display: flex;
   align-items: center;

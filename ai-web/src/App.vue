@@ -1824,7 +1824,7 @@
           </div>
           <el-timeline>
             <el-timeline-item
-              v-for="event in costItemDrawer.item.history || []"
+              v-for="event in visibleCostHistory(costItemDrawer.item.history)"
               :key="event.id"
               :timestamp="formatDate(event.changed_at)"
               placement="top"
@@ -1837,7 +1837,7 @@
               <small>{{ event.change_reason || '-' }}</small>
             </el-timeline-item>
           </el-timeline>
-          <el-empty v-if="!costItemDrawer.item.history?.length" description="暂无变更历史" />
+          <el-empty v-if="!visibleCostHistory(costItemDrawer.item.history).length" description="暂无变更历史" />
         </section>
       </template>
     </el-drawer>
@@ -2013,6 +2013,76 @@
             <span>需求摘要</span>
           </div>
           <p class="detail-text">{{ quoteJobDrawer.job.request_summary || quoteJobDrawer.job.message_preview || '-' }}</p>
+        </section>
+        <section class="drawer-section" v-if="quoteJobDrawer.costEvidence?.length">
+          <div class="section-title">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>成本证据</span>
+          </div>
+          <el-table
+            :data="quoteJobDrawer.costEvidence"
+            row-key="id"
+            class="users-table"
+            empty-text="暂无成本证据"
+          >
+            <el-table-column label="施工项目" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div class="operation-client">
+                  <strong>{{ row.project_name || '-' }}</strong>
+                  <small>{{ row.quantity ?? '-' }} {{ row.unit || '' }}</small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="AI 单价" width="96">
+              <template #default="{ row }">{{ formatPrice(row.ai_unit_price) }}</template>
+            </el-table-column>
+            <el-table-column label="行合计" width="130">
+              <template #default="{ row }">
+                <div class="operation-client">
+                  <strong>{{ formatPrice(row.line_total_price ?? row.ai_total_price) }}</strong>
+                  <small>{{ totalSourceLabel(row.line_total_source) }}</small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="成本参考" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div class="operation-client">
+                  <strong>{{ formatPrice(row.reference_price) }}</strong>
+                  <small>参考合计 {{ formatPrice(row.reference_total) }}</small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="整单合计" width="150">
+              <template #default="{ row }">
+                <div class="operation-client">
+                  <strong>{{ formatPrice(row.quote_total_price) }}</strong>
+                  <small>{{ totalSourceLabel(row.quote_total_source) }}</small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="偏差" width="110">
+              <template #default="{ row }">
+                <span>{{ formatPrice(row.price_delta) }}</span>
+                <small class="muted-inline">{{ formatRate(row.price_delta_rate) }}</small>
+              </template>
+            </el-table-column>
+            <el-table-column label="依据" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.comparison || row.match_reason || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="110" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  size="small"
+                  :icon="Document"
+                  plain
+                  :disabled="!row.cost_item_id"
+                  @click="openCostEvidenceItem(row)"
+                >
+                  成本条目
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
         </section>
         <section class="drawer-section" v-if="quoteJobDrawer.job.error_message">
           <div class="section-title">
@@ -2534,6 +2604,7 @@ const quoteJobDrawer = reactive({
   visible: false,
   loading: false,
   job: null,
+  costEvidence: [],
 })
 
 const executionDialog = reactive({
@@ -2937,22 +3008,63 @@ function costHistoryTypeLabel(type) {
   return type || '-'
 }
 
+const costHistoryPriceFields = [
+  { key: 'price', label: '主参考' },
+  { key: 'client_tax_excluded_price', label: '对甲' },
+  { key: 'client_labor_price', label: '对甲人工' },
+  { key: 'client_main_material_price', label: '对甲主材' },
+  { key: 'client_auxiliary_material_price', label: '对甲辅材' },
+  { key: 'client_direct_fee', label: '对甲直接费' },
+  { key: 'client_management_profit', label: '对甲管理费利润' },
+  { key: 'subcontract_composite_price', label: '劳务' },
+  { key: 'subcontract_labor_price', label: '劳务人工' },
+  { key: 'subcontract_main_material_price', label: '劳务主材' },
+  { key: 'subcontract_auxiliary_material_price', label: '劳务辅材' },
+  { key: 'crew_benchmark_price', label: '班组' },
+]
+
+function sameCostHistoryValue(left, right) {
+  if ((left === null || left === undefined || left === '') && (right === null || right === undefined || right === '')) return true
+  const leftNumber = Number(left)
+  const rightNumber = Number(right)
+  if (!Number.isNaN(leftNumber) && !Number.isNaN(rightNumber)) {
+    return Math.round(leftNumber * 1000000) === Math.round(rightNumber * 1000000)
+  }
+  return left === right
+}
+
+function costHistoryChangedFields(event) {
+  if (Array.isArray(event.changed_fields) && event.changed_fields.length) {
+    return costHistoryPriceFields.filter((field) => event.changed_fields.includes(field.key))
+  }
+  return costHistoryPriceFields.filter(
+    (field) => !sameCostHistoryValue(event[`old_${field.key}`], event[`new_${field.key}`]),
+  )
+}
+
+function visibleCostHistory(history = []) {
+  return history.filter((event) => event.change_type !== 'price_change' || costHistoryChangedFields(event).length > 0)
+}
+
 function costHistoryText(event) {
   if (event.change_type === 'status_change') {
     return `${costStatusLabel(event.old_status)} -> ${costStatusLabel(event.new_status)}`
   }
-  return [
-    `主参考 ${formatPrice(event.old_price)} -> ${formatPrice(event.new_price)}`,
-    `对甲 ${formatPrice(event.old_client_tax_excluded_price)} -> ${formatPrice(event.new_client_tax_excluded_price)}`,
-    `对甲人工 ${formatPrice(event.old_client_labor_price)} -> ${formatPrice(event.new_client_labor_price)}`,
-    `对甲主材 ${formatPrice(event.old_client_main_material_price)} -> ${formatPrice(event.new_client_main_material_price)}`,
-    `对甲辅材 ${formatPrice(event.old_client_auxiliary_material_price)} -> ${formatPrice(event.new_client_auxiliary_material_price)}`,
-    `劳务 ${formatPrice(event.old_subcontract_composite_price)} -> ${formatPrice(event.new_subcontract_composite_price)}`,
-    `劳务人工 ${formatPrice(event.old_subcontract_labor_price)} -> ${formatPrice(event.new_subcontract_labor_price)}`,
-    `劳务主材 ${formatPrice(event.old_subcontract_main_material_price)} -> ${formatPrice(event.new_subcontract_main_material_price)}`,
-    `劳务辅材 ${formatPrice(event.old_subcontract_auxiliary_material_price)} -> ${formatPrice(event.new_subcontract_auxiliary_material_price)}`,
-    `班组 ${formatPrice(event.old_crew_benchmark_price)} -> ${formatPrice(event.new_crew_benchmark_price)}`,
-  ].join('；')
+  const changedFields = costHistoryChangedFields(event)
+  if (!changedFields.length) return '无有效价格变化'
+  return changedFields
+    .map((field) => `${field.label} ${formatPrice(event[`old_${field.key}`])} -> ${formatPrice(event[`new_${field.key}`])}`)
+    .join('；')
+}
+
+function totalSourceLabel(source) {
+  const labels = {
+    ai_quote: 'AI报价计算',
+    cost_reference_fallback: '成本库兜底计算',
+    manual_final: '人工确认价',
+    mixed: '混合来源',
+  }
+  return labels[source] || '-'
 }
 
 function parseCostNumber(value) {
@@ -3138,14 +3250,36 @@ async function openQuoteJobDetail(row) {
   quoteJobDrawer.visible = true
   quoteJobDrawer.loading = true
   quoteJobDrawer.job = null
+  quoteJobDrawer.costEvidence = []
   try {
     const response = await api.get(`/quote/jobs/${row.job_id}`)
     quoteJobDrawer.job = responseData(response)
+    const evidenceCount = Math.max(
+      Number(row.cost_evidence_count || 0),
+      Number(quoteJobDrawer.job?.cost_evidence_count || 0),
+    )
+    if (canAccessPermissions.value && evidenceCount > 0) {
+      try {
+        const evidenceResponse = await api.get('/admin/quote-cost-evidence', {
+          params: { quote_job_id: row.job_id, page_size: 100 },
+        })
+        quoteJobDrawer.costEvidence = responseData(evidenceResponse) || []
+      } catch (error) {
+        if (error.response?.status !== 404) {
+          ElMessage.warning(apiErrorMessage(error, '成本证据加载失败'))
+        }
+      }
+    }
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '任务详情加载失败'))
   } finally {
     quoteJobDrawer.loading = false
   }
+}
+
+function openCostEvidenceItem(row) {
+  if (!row?.cost_item_id) return
+  openCostItemDetail({ id: row.cost_item_id })
 }
 
 async function retryQuoteJob(row) {

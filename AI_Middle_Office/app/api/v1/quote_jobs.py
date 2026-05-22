@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -18,6 +18,7 @@ from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user, require_admin
 from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
 from app.models.file_object import FileObject
+from app.models.quote_cost_evidence import QuoteCostEvidence
 from app.models.quote_history import QuoteHistory
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
@@ -78,11 +79,12 @@ def _serialize_history_summary(record: Optional[QuoteHistory]) -> Optional[dict]
 def _quote_job_context_maps(
     db: Session,
     jobs: list[QuoteJob],
-) -> tuple[dict[str, ClientInquiry], dict[str, QuoteHistory]]:
+) -> tuple[dict[str, ClientInquiry], dict[str, QuoteHistory], dict[str, int]]:
     job_ids = [job.job_id for job in jobs]
     inquiry_ids = [job.client_inquiry_id for job in jobs if job.client_inquiry_id]
     inquiries_by_id: dict[str, ClientInquiry] = {}
     histories_by_job_id: dict[str, QuoteHistory] = {}
+    evidence_counts_by_job_id: dict[str, int] = {}
 
     if inquiry_ids:
         # defensive: QuoteJob.client_inquiry_id should only bind inbound inquiries.
@@ -107,7 +109,18 @@ def _quote_job_context_maps(
             if history.quote_job_id and history.quote_job_id not in histories_by_job_id:
                 histories_by_job_id[history.quote_job_id] = history
 
-    return inquiries_by_id, histories_by_job_id
+        evidence_counts_by_job_id = {
+            quote_job_id: count
+            for quote_job_id, count in (
+                db.query(QuoteCostEvidence.quote_job_id, func.count(QuoteCostEvidence.id))
+                .filter(QuoteCostEvidence.quote_job_id.in_(job_ids))
+                .group_by(QuoteCostEvidence.quote_job_id)
+                .all()
+            )
+            if quote_job_id
+        }
+
+    return inquiries_by_id, histories_by_job_id, evidence_counts_by_job_id
 
 
 def _serialize_job(
@@ -116,6 +129,7 @@ def _serialize_job(
     include_result: bool = True,
     client_inquiry: Optional[ClientInquiry] = None,
     history: Optional[QuoteHistory] = None,
+    cost_evidence_count: int = 0,
 ) -> dict:
     data = {
         "job_id": job.job_id,
@@ -143,6 +157,7 @@ def _serialize_job(
         "error_message": job.error_message,
         "client_inquiry": serialize_client_inquiry(client_inquiry) if client_inquiry else None,
         "history": _serialize_history_summary(history),
+        "cost_evidence_count": cost_evidence_count,
     }
     if include_events:
         data["events"] = [serialize_event_row(item) for item in job.events] or event_rows_from_json(job.events_json)
@@ -167,13 +182,14 @@ def _serialize_job_with_context(
     include_events: bool = True,
     include_result: bool = True,
 ) -> dict:
-    inquiries_by_id, histories_by_job_id = _quote_job_context_maps(db, [job])
+    inquiries_by_id, histories_by_job_id, evidence_counts_by_job_id = _quote_job_context_maps(db, [job])
     return _serialize_job(
         job,
         include_events=include_events,
         include_result=include_result,
         client_inquiry=inquiries_by_id.get(job.client_inquiry_id),
         history=histories_by_job_id.get(job.job_id),
+        cost_evidence_count=evidence_counts_by_job_id.get(job.job_id, 0),
     )
 
 
@@ -397,7 +413,7 @@ async def list_quote_jobs(
         .limit(page_size)
         .all()
     )
-    inquiries_by_id, histories_by_job_id = _quote_job_context_maps(db, jobs)
+    inquiries_by_id, histories_by_job_id, evidence_counts_by_job_id = _quote_job_context_maps(db, jobs)
     return api_page(
         [
             _serialize_job(
@@ -406,6 +422,7 @@ async def list_quote_jobs(
                 include_result=False,
                 client_inquiry=inquiries_by_id.get(job.client_inquiry_id),
                 history=histories_by_job_id.get(job.job_id),
+                cost_evidence_count=evidence_counts_by_job_id.get(job.job_id, 0),
             )
             for job in jobs
         ],

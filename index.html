@@ -262,10 +262,23 @@
       color: var(--slate); background: var(--bg); font-size: 12px;
     }
     .evidence-dialog-footer { display: flex; justify-content: flex-end; gap: 10px; }
+    .cost-switch-current {
+      display: grid; gap: 4px; margin-bottom: 12px; padding: 10px 12px;
+      border: 1px solid var(--steel); border-radius: 8px; background: var(--bg);
+    }
+    .cost-switch-current strong { color: var(--dark); }
+    .cost-switch-current span { color: var(--slate); font-size: 13px; }
+    .cost-switch-toolbar {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; margin-bottom: 12px;
+    }
+    .cost-switch-price-stack { display: grid; gap: 3px; }
+    .cost-switch-price-stack strong { color: var(--dark); }
+    .cost-switch-price-stack small { color: var(--slate); line-height: 1.35; }
     @media (max-width: 780px) {
       .evidence-hero { display: grid; }
       .evidence-metrics { grid-template-columns: 1fr 1fr; }
       .evidence-kv { grid-template-columns: 1fr; }
+      .cost-switch-toolbar { grid-template-columns: 1fr; }
     }
 
     .cursor {
@@ -602,9 +615,10 @@
                 <span v-if="costReferenceFallbackText(scope.row)" class="cost-reference-fallback">
                   {{ costReferenceFallbackText(scope.row) }}
                 </span>
-                <div class="cost-reference-actions" v-if="costReference(scope.row).matched || scope.row.quote_explanation">
+                <div class="cost-reference-actions">
                   <el-button type="primary" link size="small" @click="showCostReferenceEvidence(scope.row, scope.$index)">查看依据</el-button>
                   <el-button v-if="costReference(scope.row).cost_item_id" type="primary" link size="small" @click="openCostReferenceDetail(scope.row)">成本库详情</el-button>
+                  <el-button type="warning" link size="small" @click="openCostSwitchDialog(scope.row, scope.$index)">切换条目</el-button>
                 </div>
               </div>
             </template>
@@ -722,6 +736,65 @@
         </template>
       </el-dialog>
 
+      <el-dialog
+        v-model="showCostSwitchDialog"
+        title="切换成本库条目"
+        width="920px"
+        append-to-body
+      >
+        <div class="cost-switch-current">
+          <strong>{{ costSwitchCurrentTitle }}</strong>
+          <span>请选择与当前施工项目规格最匹配的 active 成本条目。切换后仅更新本行成本库参考证据，不覆盖 AI 已给出的报价。</span>
+        </div>
+        <div class="cost-switch-toolbar">
+          <el-input
+            v-model="costSwitchKeyword"
+            clearable
+            placeholder="搜索成本条目名称、规格、分类"
+            @keyup.enter="loadCostSwitchCandidates"
+            @clear="loadCostSwitchCandidates"
+          ></el-input>
+          <el-button type="primary" :loading="costSwitchLoading" @click="loadCostSwitchCandidates">搜索</el-button>
+        </div>
+        <el-table
+          :data="costSwitchRows"
+          v-loading="costSwitchLoading"
+          border
+          stripe
+          height="360"
+          empty-text="暂无可选 active 成本条目"
+        >
+          <el-table-column label="条目" min-width="210" show-overflow-tooltip>
+            <template #default="scope">
+              <div class="cost-switch-price-stack">
+                <strong>#{{ scope.row.id }} {{ scope.row.item_name }}</strong>
+                <small>{{ scope.row.category || '-' }} {{ scope.row.subcategory || '' }}</small>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="spec" label="规格/特征" min-width="220" show-overflow-tooltip></el-table-column>
+          <el-table-column prop="unit" label="单位" width="80" align="center"></el-table-column>
+          <el-table-column label="参考价" width="150">
+            <template #default="scope">
+              <div class="cost-switch-price-stack">
+                <strong>{{ costItemReferencePriceText(scope.row) }}</strong>
+                <small>{{ costItemPriceSourceLabel(scope.row) }}</small>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100" fixed="right" align="center">
+            <template #default="scope">
+              <el-button type="primary" size="small" @click="applyCostSwitch(scope.row)">选用</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="showCostSwitchDialog = false">关闭</el-button>
+          </span>
+        </template>
+      </el-dialog>
+
     </el-container>
   </div>
 
@@ -785,6 +858,7 @@
 
         const showPreviewDialog = ref(false);
         const showEvidenceDialog = ref(false);
+        const showCostSwitchDialog = ref(false);
         const emptyEvidenceDialog = () => ({
           projectName: '-',
           quantityText: '-',
@@ -811,6 +885,11 @@
           detailUrl: '',
         });
         const evidenceDialogData = ref(emptyEvidenceDialog());
+        const costSwitchRows = ref([]);
+        const costSwitchLoading = ref(false);
+        const costSwitchKeyword = ref('');
+        const costSwitchRowIndex = ref(-1);
+        const costSwitchCurrentTitle = ref('');
         const previewData       = ref([]);
         const previewOriginalData = ref([]);
         const omissionSuggestions = ref([]);
@@ -1139,6 +1218,7 @@
         const costReferenceLabel = (row = {}) => {
           const reference = costReference(row);
           if (!reference.matched) return '无底价参考';
+          if (reference.match_type === 'manual_selected') return '人工选择';
           return reference.match_type === 'exact_item_spec' ? '精确匹配' : '名称匹配';
         };
 
@@ -1168,9 +1248,212 @@
           return reference.evidence_url || reference.cost_item_url || `/admin/cost-db?cost_item_id=${reference.cost_item_id}`;
         };
 
+        const COST_PRICE_SOURCE_LABELS = {
+          price: '主参考价',
+          subcontract_composite_price: '劳务发包综合单价',
+          crew_benchmark_price: '班组标底税前价',
+          client_tax_excluded_price: '对甲税前综合单价',
+        };
+
+        const roundMoneyValue = (value) => {
+          const amount = parseMoney(value);
+          return amount === null ? null : Math.round(amount * 100) / 100;
+        };
+
         const moneyText = (value) => {
           const amount = parseMoney(value);
           return amount === null ? '-' : `¥ ${formatMoney(amount)}`;
+        };
+
+        const costItemPriceSource = (item = {}) => {
+          const reference = roundMoneyValue(item.price);
+          const fields = ['subcontract_composite_price', 'crew_benchmark_price', 'client_tax_excluded_price'];
+          if (reference !== null) {
+            for (const field of fields) {
+              const value = roundMoneyValue(item[field]);
+              if (value !== null && Math.abs(value - reference) < 0.005) return field;
+            }
+          }
+          return 'price';
+        };
+
+        const costItemPriceSourceLabel = (item = {}) => COST_PRICE_SOURCE_LABELS[costItemPriceSource(item)] || '主参考价';
+
+        const costItemReferencePriceText = (item = {}) => {
+          const price = parseMoney(item.price);
+          return price === null ? '-' : `¥ ${formatMoney(price)} / ${item.unit || '-'}`;
+        };
+
+        const costItemBreakdown = (item = {}) => {
+          const fields = [
+            ['client_tax_excluded_price', '对甲税前综合单价'],
+            ['client_labor_price', '对甲人工费'],
+            ['client_main_material_price', '对甲主材费'],
+            ['client_auxiliary_material_price', '对甲辅材费'],
+            ['client_direct_fee', '对甲直接费小计'],
+            ['client_management_profit', '对甲管理费利润'],
+            ['subcontract_composite_price', '劳务发包综合单价'],
+            ['subcontract_labor_price', '劳务人工费'],
+            ['subcontract_main_material_price', '劳务主材费'],
+            ['subcontract_auxiliary_material_price', '劳务辅材费'],
+            ['crew_benchmark_price', '班组标底税前价'],
+            ['price', '主参考价'],
+          ];
+          return fields.reduce((acc, [field, label]) => {
+            acc[field] = { label, value: roundMoneyValue(item[field]) };
+            return acc;
+          }, {});
+        };
+
+        const buildManualCostReference = (row = {}, item = {}) => {
+          const referencePrice = roundMoneyValue(item.price);
+          const aiUnitPrice = roundMoneyValue(row.unit_price);
+          let delta = null;
+          let deltaRate = null;
+          if (aiUnitPrice !== null && referencePrice !== null && referencePrice !== 0) {
+            delta = Math.round((aiUnitPrice - referencePrice) * 100) / 100;
+            deltaRate = Math.round((delta / referencePrice) * 10000) / 10000;
+          }
+          const source = costItemPriceSource(item);
+          const sourceLabel = costItemPriceSourceLabel(item);
+          const priceBreakdown = costItemBreakdown(item);
+          return {
+            matched: true,
+            match_type: 'manual_selected',
+            match_type_label: '人工选择',
+            cost_item_id: item.id,
+            item_name: item.item_name,
+            spec: item.spec,
+            unit: item.unit,
+            category: item.category,
+            subcategory: item.subcategory,
+            price_type: item.price_type,
+            reference_price: referencePrice,
+            reference_price_source: source,
+            reference_price_source_label: sourceLabel,
+            ai_unit_price: aiUnitPrice,
+            price_delta: delta,
+            price_delta_rate: deltaRate,
+            client_tax_excluded_price: roundMoneyValue(item.client_tax_excluded_price),
+            client_labor_price: roundMoneyValue(item.client_labor_price),
+            client_main_material_price: roundMoneyValue(item.client_main_material_price),
+            client_auxiliary_material_price: roundMoneyValue(item.client_auxiliary_material_price),
+            client_direct_fee: roundMoneyValue(item.client_direct_fee),
+            client_management_profit: roundMoneyValue(item.client_management_profit),
+            subcontract_composite_price: roundMoneyValue(item.subcontract_composite_price),
+            subcontract_labor_price: roundMoneyValue(item.subcontract_labor_price),
+            subcontract_main_material_price: roundMoneyValue(item.subcontract_main_material_price),
+            subcontract_auxiliary_material_price: roundMoneyValue(item.subcontract_auxiliary_material_price),
+            crew_benchmark_price: roundMoneyValue(item.crew_benchmark_price),
+            cost_item_url: `/admin/cost-db?cost_item_id=${item.id}`,
+            evidence_url: `/admin/cost-db?cost_item_id=${item.id}`,
+            evidence_api_url: `/api/v1/admin/cost-items/${item.id}`,
+            source_cost_item: {
+              id: item.id,
+              item_name: item.item_name,
+              category: item.category,
+              subcategory: item.subcategory,
+              spec: item.spec,
+              unit: item.unit,
+              status: item.status,
+              price_type: item.price_type,
+              notes: item.notes,
+            },
+            price_breakdown: priceBreakdown,
+            match_reason: '业务员在预审阶段手动选择该 active 成本条目。',
+            price_source_reason: `参考价取自成本库 #${item.id} 的“${sourceLabel}”字段，当前值为 ${referencePrice === null ? '-' : formatMoney(referencePrice)} 元/${item.unit || '-'}。`,
+          };
+        };
+
+        const costSwitchKeywordForRow = (row = {}) => {
+          const name = String(row.project_name || row.item_name || row.item || '').trim();
+          return name || String(row.spec || row.feature || '').trim();
+        };
+
+        const loadCostSwitchCandidates = async () => {
+          costSwitchLoading.value = true;
+          try {
+            const response = await axios.get(`${API_BASE_URL}/admin/cost-items`, {
+              headers: authHeaders(),
+              params: {
+                status: 'active',
+                keyword: costSwitchKeyword.value.trim() || undefined,
+                page: 1,
+                page_size: 20,
+              },
+            });
+            costSwitchRows.value = apiData(response, []);
+          } catch (error) {
+            if (error.response?.status === 401) handleUnauthorized();
+            ElMessage.error(apiErrorMessage(error, '成本库条目查询失败'));
+            costSwitchRows.value = [];
+          } finally {
+            costSwitchLoading.value = false;
+          }
+        };
+
+        const openCostSwitchDialog = async (row = {}, index = 0) => {
+          costSwitchRowIndex.value = index;
+          costSwitchKeyword.value = costSwitchKeywordForRow(row);
+          const quantity = row.quantity ?? row.quote_explanation?.quantity ?? '-';
+          const unit = row.unit || row.quote_explanation?.unit || '-';
+          costSwitchCurrentTitle.value = `${row.project_name || row.item || '-'}｜数量 ${quantity} ${unit}`;
+          costSwitchRows.value = [];
+          showCostSwitchDialog.value = true;
+          await loadCostSwitchCandidates();
+        };
+
+        const applyCostSwitch = (item = {}) => {
+          const index = costSwitchRowIndex.value;
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          const row = rows[index];
+          if (!row || !item.id) {
+            ElMessage.warning('未找到可更新的报价行');
+            return;
+          }
+
+          const previousReference = costReference(row);
+          const reference = buildManualCostReference(row, item);
+          const quantity = rowQuantityValue(row);
+          const referencePrice = parseMoney(reference.reference_price);
+          const shouldRecalculateFallback = Boolean(previousReference.fallback_applied || row.cost_reference_fallback);
+          if (shouldRecalculateFallback && quantity !== null && referencePrice !== null && referencePrice > 0) {
+            const previousUnitPrice = roundMoneyValue(row.unit_price);
+            const previousTotalPrice = roundMoneyValue(row.total_price);
+            const fallbackTotal = Math.round(quantity * referencePrice * 100) / 100;
+            row.unit_price = referencePrice;
+            row.total_price = fallbackTotal;
+            row.cost_reference_fallback = {
+              applied: true,
+              reason: 'manual_cost_item_switch',
+              reference_price: referencePrice,
+              quantity,
+              unit_price_before: previousUnitPrice,
+              total_price_before: previousTotalPrice,
+              total_price_after: fallbackTotal,
+            };
+            reference.fallback_applied = true;
+            reference.fallback_reason = 'manual_cost_item_switch';
+            reference.ai_unit_price_before_fallback = previousUnitPrice;
+            reference.total_price_before_fallback = previousTotalPrice;
+            reference.ai_unit_price = referencePrice;
+            reference.price_delta = 0.0;
+            reference.price_delta_rate = 0.0;
+          } else {
+            delete row.cost_reference_fallback;
+          }
+
+          row.cost_reference = reference;
+          row.quote_explanation = {
+            ...(row.quote_explanation || {}),
+            cost_context_basis: `业务员在预审阶段手动选择成本库 active 条目 #${item.id} “${item.item_name}”，参考价 ${referencePrice === null ? '-' : formatMoney(referencePrice)} 元/${item.unit || '-'}。`,
+            comparison: reference.price_delta === null
+              ? '已切换成本库参考条目，请人工复核报价与规格是否一致。'
+              : `当前 AI 单价与手动选择的成本库参考价差为 ${reference.price_delta >= 0 ? '+' : ''}${formatMoney(reference.price_delta)} 元/${item.unit || '-'}。`,
+            cost_item_url: reference.cost_item_url,
+          };
+          showCostSwitchDialog.value = false;
+          ElMessage.success(`已切换为成本条目 #${item.id}`);
         };
 
         const costReferenceEvidenceData = (row = {}, index = 0) => {
@@ -1259,6 +1542,7 @@
         const costReferenceTagType = (row = {}) => {
           const reference = costReference(row);
           if (!reference.matched) return 'info';
+          if (reference.match_type === 'manual_selected') return 'warning';
           if (reference.fallback_applied) return 'warning';
           const rate = Math.abs(Number(reference.price_delta_rate));
           if (Number.isFinite(rate) && rate >= 0.2) return 'warning';
@@ -1953,6 +2237,8 @@
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
           showPreviewDialog, previewData, previewOriginalData, pushing, pushError, finalTotalAmount,
           showEvidenceDialog, evidenceDialogData, openEvidenceCostDetail,
+          showCostSwitchDialog, costSwitchRows, costSwitchLoading, costSwitchKeyword, costSwitchCurrentTitle,
+          loadCostSwitchCandidates, openCostSwitchDialog, applyCostSwitch, costItemReferencePriceText, costItemPriceSourceLabel,
           quoteReferenceTotalAmount, quoteTotalSourceText, lineTotalSourceText,
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,

@@ -227,7 +227,46 @@
     .cost-reference-fallback { font-size: 12px; color: #b45309; }
     .cost-reference-actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .total-price-cell { display: grid; gap: 4px; }
-    .quote-evidence-message .el-message-box__message { white-space: pre-line; line-height: 1.6; }
+
+    .quote-evidence-dialog .el-dialog__body { padding-top: 8px; }
+    .evidence-layout { display: grid; gap: 14px; color: var(--dark); }
+    .evidence-hero {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+      padding: 14px 16px; border: 1px solid var(--steel); border-radius: 8px; background: var(--bg);
+    }
+    .evidence-hero-main { display: grid; gap: 6px; min-width: 0; }
+    .evidence-hero-main h3 { margin: 0; font-size: 18px; line-height: 1.35; color: var(--dark); }
+    .evidence-hero-main p { margin: 0; font-size: 13px; color: var(--slate); }
+    .evidence-metrics {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+    }
+    .evidence-metric {
+      display: grid; gap: 5px; padding: 10px 12px;
+      border: 1px solid var(--steel); border-radius: 8px; background: var(--white);
+    }
+    .evidence-metric small { font-size: 12px; color: var(--slate); }
+    .evidence-metric strong { font-size: 16px; color: var(--dark); word-break: break-word; }
+    .evidence-metric span { font-size: 12px; color: var(--slate); }
+    .evidence-section {
+      display: grid; gap: 8px; padding: 12px 14px;
+      border: 1px solid var(--steel); border-radius: 8px; background: var(--white);
+    }
+    .evidence-section h4 { margin: 0; font-size: 14px; color: var(--dark); }
+    .evidence-section p { margin: 0; color: var(--slate); line-height: 1.7; white-space: pre-line; }
+    .evidence-kv { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 12px; align-items: start; }
+    .evidence-kv span { color: var(--slate); }
+    .evidence-kv strong { color: var(--dark); font-weight: 600; word-break: break-word; white-space: pre-line; }
+    .evidence-breakdown { display: flex; flex-wrap: wrap; gap: 8px; }
+    .evidence-breakdown-item {
+      padding: 5px 8px; border: 1px solid var(--steel); border-radius: 6px;
+      color: var(--slate); background: var(--bg); font-size: 12px;
+    }
+    .evidence-dialog-footer { display: flex; justify-content: flex-end; gap: 10px; }
+    @media (max-width: 780px) {
+      .evidence-hero { display: grid; }
+      .evidence-metrics { grid-template-columns: 1fr 1fr; }
+      .evidence-kv { grid-template-columns: 1fr; }
+    }
 
     .cursor {
       display: inline-block; width: 6px; height: 15px; background: var(--slate);
@@ -595,6 +634,94 @@
         </template>
       </el-dialog>
 
+      <el-dialog
+        v-model="showEvidenceDialog"
+        title="报价依据与成本库证据链"
+        width="760px"
+        class="quote-evidence-dialog"
+        append-to-body
+      >
+        <div class="evidence-layout">
+          <div class="evidence-hero">
+            <div class="evidence-hero-main">
+              <h3>{{ evidenceDialogData.projectName }}</h3>
+              <p>{{ evidenceDialogData.quantityText }}</p>
+            </div>
+            <el-tag :type="evidenceDialogData.matchTagType" effect="plain">
+              {{ evidenceDialogData.matchLabel }}
+            </el-tag>
+          </div>
+
+          <div class="evidence-metrics">
+            <div class="evidence-metric">
+              <small>AI 原始单价</small>
+              <strong>{{ evidenceDialogData.aiUnitPriceText }}</strong>
+              <span>{{ evidenceDialogData.aiTotalText }}</span>
+            </div>
+            <div class="evidence-metric">
+              <small>成本库参考单价</small>
+              <strong>{{ evidenceDialogData.referencePriceText }}</strong>
+              <span>{{ evidenceDialogData.referenceTotalText }}</span>
+            </div>
+            <div class="evidence-metric">
+              <small>系统行合计</small>
+              <strong>{{ evidenceDialogData.lineTotalText }}</strong>
+              <span>{{ evidenceDialogData.lineTotalSourceText }}</span>
+            </div>
+            <div class="evidence-metric">
+              <small>整单系统合计</small>
+              <strong>{{ evidenceDialogData.quoteTotalText }}</strong>
+              <span>{{ evidenceDialogData.quoteTotalSourceText }}</span>
+            </div>
+          </div>
+
+          <section class="evidence-section">
+            <h4>AI 报价依据</h4>
+            <p>{{ evidenceDialogData.aiBasis }}</p>
+            <p v-if="evidenceDialogData.notes">工艺备注：{{ evidenceDialogData.notes }}</p>
+          </section>
+
+          <section class="evidence-section">
+            <h4>成本库参考</h4>
+            <div class="evidence-kv">
+              <span>命中条目</span>
+              <strong>{{ evidenceDialogData.costItemText }}</strong>
+              <span>匹配原因</span>
+              <strong>{{ evidenceDialogData.matchReason }}</strong>
+              <span>取价说明</span>
+              <strong>{{ evidenceDialogData.priceSourceReason }}</strong>
+              <span>前置上下文</span>
+              <strong>{{ evidenceDialogData.costContextBasis }}</strong>
+            </div>
+            <div v-if="evidenceDialogData.priceBreakdown.length" class="evidence-breakdown">
+              <span v-for="item in evidenceDialogData.priceBreakdown" :key="item.label" class="evidence-breakdown-item">
+                {{ item.label }}：{{ item.value }}
+              </span>
+            </div>
+          </section>
+
+          <section class="evidence-section">
+            <h4>合计对照</h4>
+            <div class="evidence-kv">
+              <span>整单参考合计</span>
+              <strong>{{ evidenceDialogData.quoteReferenceTotalText }}</strong>
+              <span>单价偏差</span>
+              <strong>{{ evidenceDialogData.deltaText }}</strong>
+              <span>系统判断</span>
+              <strong>{{ evidenceDialogData.comparison }}</strong>
+            </div>
+          </section>
+        </div>
+        <template #footer>
+          <span class="evidence-dialog-footer">
+            <el-button @click="showEvidenceDialog = false">关闭</el-button>
+            <el-button type="primary" :disabled="!evidenceDialogData.detailUrl" @click="openEvidenceCostDetail">
+              打开成本库详情
+            </el-button>
+          </span>
+        </template>
+      </el-dialog>
+
     </el-container>
   </div>
 
@@ -605,7 +732,7 @@
 
   <script>
     const { createApp, ref, computed, nextTick, onMounted, onBeforeUnmount } = Vue;
-    const { ElMessage, ElMessageBox } = ElementPlus;
+    const { ElMessage } = ElementPlus;
 
     const STAGES_WITH_IMAGE = [
       { id: 'created', icon: '🧾', label: '创建任务' },
@@ -657,6 +784,33 @@
         let delayedStageTimer = null;
 
         const showPreviewDialog = ref(false);
+        const showEvidenceDialog = ref(false);
+        const emptyEvidenceDialog = () => ({
+          projectName: '-',
+          quantityText: '-',
+          matchLabel: '-',
+          matchTagType: 'info',
+          aiUnitPriceText: '-',
+          aiTotalText: '-',
+          referencePriceText: '-',
+          referenceTotalText: '-',
+          lineTotalText: '-',
+          lineTotalSourceText: '-',
+          quoteTotalText: '-',
+          quoteTotalSourceText: '-',
+          aiBasis: '-',
+          notes: '',
+          costItemText: '-',
+          matchReason: '-',
+          priceSourceReason: '-',
+          costContextBasis: '-',
+          priceBreakdown: [],
+          quoteReferenceTotalText: '-',
+          deltaText: '-',
+          comparison: '-',
+          detailUrl: '',
+        });
+        const evidenceDialogData = ref(emptyEvidenceDialog());
         const previewData       = ref([]);
         const previewOriginalData = ref([]);
         const omissionSuggestions = ref([]);
@@ -1014,7 +1168,12 @@
           return reference.evidence_url || reference.cost_item_url || `/admin/cost-db?cost_item_id=${reference.cost_item_id}`;
         };
 
-        const costReferenceEvidenceText = (row = {}, index = 0) => {
+        const moneyText = (value) => {
+          const amount = parseMoney(value);
+          return amount === null ? '-' : `¥ ${formatMoney(amount)}`;
+        };
+
+        const costReferenceEvidenceData = (row = {}, index = 0) => {
           const reference = costReference(row);
           const original = previewOriginalData.value[index] || {};
           const explanation = row.quote_explanation || {};
@@ -1026,7 +1185,6 @@
           const aiUnitPrice = parseMoney(original.unit_price) ?? parseMoney(row.unit_price);
           const aiTotalPrice = parseMoney(original.total_price) ?? parseMoney(row.total_price);
           const lineTotal = parseMoney(row.total_price);
-          const lineSource = lineTotalSource(row, index);
           const referencePrice = parseMoney(reference.reference_price);
           const referenceTotal = costReferenceTotalValue(row);
           const quoteReferenceTotal = quoteReferenceTotalValue.value;
@@ -1035,41 +1193,58 @@
           const deltaText = delta === null
             ? '暂无'
             : `${delta >= 0 ? '+' : ''}${formatMoney(delta)}${Number.isFinite(rate) ? ` / ${rate >= 0 ? '+' : ''}${(rate * 100).toFixed(1)}%` : ''}`;
-          const breakdownText = [
+          const priceBreakdown = [
             ['对甲税前综合单价', breakdown.client_tax_excluded_price?.value ?? reference.client_tax_excluded_price],
             ['劳务发包综合单价', breakdown.subcontract_composite_price?.value ?? reference.subcontract_composite_price],
             ['班组标底税前价', breakdown.crew_benchmark_price?.value ?? reference.crew_benchmark_price],
           ]
             .filter(([, value]) => parseMoney(value) !== null)
-            .map(([label, value]) => `${label}：¥ ${formatMoney(parseMoney(value))}`)
-            .join('；');
-          const evidenceUrl = costReferenceDetailUrl(row);
-          return [
-            `施工项目：${row.project_name || row.item || '-'}`,
-            `AI 原始报价：¥ ${aiUnitPrice === null ? '-' : formatMoney(aiUnitPrice)} / ${unit} × ${quantity} = ¥ ${aiTotalPrice === null ? '-' : formatMoney(aiTotalPrice)}`,
-            `AI 报价依据：${explanation.ai_basis || 'AI 工作流原始返回的单价与备注；系统展示可审计输入和结果，不臆测模型内部推理。'}`,
-            `系统行合计：¥ ${lineTotal === null ? '-' : formatMoney(lineTotal)}（${totalSourceLabel(lineSource)}）`,
-            reference.matched ? `成本库参考合计：¥ ${referenceTotal === null ? '-' : formatMoney(referenceTotal)}（参考单价 × 数量）` : '',
-            `整单系统合计：¥ ${finalTotalAmount.value}（${quoteTotalSourceText.value}）`,
-            `整单成本库参考合计：${quoteReferenceTotal === null ? '—' : `¥ ${formatMoney(quoteReferenceTotal)}`}`,
-            row.notes ? `AI 工艺备注：${row.notes}` : '',
-            explanation.cost_context_basis ? `前置成本库上下文：${explanation.cost_context_basis}` : '',
-            reference.matched ? `成本库命中：#${reference.cost_item_id} ${sourceItem.item_name || reference.item_name || '-'}（${sourceItem.category || reference.category || '-'}）` : '成本库命中：无',
-            reference.matched ? `匹配原因：${reference.match_reason || costReferenceLabel(row)}` : '',
-            reference.matched ? `成本库参考价：¥ ${referencePrice === null ? '-' : formatMoney(referencePrice)} / ${reference.unit || sourceItem.unit || '-'}，取自“${sourceLabel}”。` : '',
-            reference.price_source_reason || '',
-            breakdownText ? `成本库价格拆分：${breakdownText}` : '',
-            reference.matched ? `AI 与成本库价差：${deltaText}` : '',
-            explanation.comparison || '',
-            evidenceUrl ? `成本库详情链接：${window.location.origin}${evidenceUrl}` : '',
-          ].filter(Boolean).join('\n');
+            .map(([label, value]) => ({ label, value: moneyText(value) }));
+          const detailUrl = costReferenceDetailUrl(row);
+          const costUnit = reference.unit || sourceItem.unit || unit || '-';
+          return {
+            projectName: row.project_name || row.item || '-',
+            quantityText: `数量：${quantity} ${unit}`,
+            matchLabel: costReferenceLabel(row),
+            matchTagType: costReferenceTagType(row),
+            aiUnitPriceText: `${moneyText(aiUnitPrice)} / ${unit}`,
+            aiTotalText: `AI 小计 ${moneyText(aiTotalPrice)}`,
+            referencePriceText: reference.matched ? `${moneyText(referencePrice)} / ${costUnit}` : '无底价参考',
+            referenceTotalText: reference.matched ? `参考合计 ${moneyText(referenceTotal)}` : '参考合计 -',
+            lineTotalText: moneyText(lineTotal),
+            lineTotalSourceText: lineTotalSourceText(row, index),
+            quoteTotalText: `¥ ${finalTotalAmount.value}`,
+            quoteTotalSourceText: quoteTotalSourceText.value,
+            aiBasis: explanation.ai_basis || 'AI 工作流原始返回的单价与备注；系统展示可审计输入和结果，不臆测模型内部推理。',
+            notes: row.notes || '',
+            costItemText: reference.matched
+              ? `#${reference.cost_item_id} ${sourceItem.item_name || reference.item_name || '-'}（${sourceItem.category || reference.category || '-'}）`
+              : '未命中 active 成本条目',
+            matchReason: reference.matched ? (reference.match_reason || costReferenceLabel(row)) : '本行暂无成本库命中。',
+            priceSourceReason: reference.matched
+              ? (reference.price_source_reason || `参考价取自成本库“${sourceLabel}”字段。`)
+              : '无成本库参考价。',
+            costContextBasis: explanation.cost_context_basis || '本行未收到前置成本库上下文。',
+            priceBreakdown,
+            quoteReferenceTotalText: quoteReferenceTotal === null ? '—' : moneyText(quoteReferenceTotal),
+            deltaText: reference.matched ? deltaText : '暂无',
+            comparison: explanation.comparison || (reference.matched ? '请结合成本库参考价与现场工艺复核。' : '无成本库参考，需人工判断。'),
+            detailUrl,
+          };
         };
 
         const showCostReferenceEvidence = (row = {}, index = 0) => {
-          ElMessageBox.alert(costReferenceEvidenceText(row, index), '报价依据与成本库证据链', {
-            confirmButtonText: '知道了',
-            customClass: 'quote-evidence-message',
-          });
+          evidenceDialogData.value = costReferenceEvidenceData(row, index);
+          showEvidenceDialog.value = true;
+        };
+
+        const openEvidenceCostDetail = () => {
+          const url = evidenceDialogData.value.detailUrl;
+          if (!url) {
+            ElMessage.info('当前行没有关联成本库条目');
+            return;
+          }
+          window.open(url, '_blank', 'noopener,noreferrer');
         };
 
         const openCostReferenceDetail = (row = {}) => {
@@ -1777,6 +1952,7 @@
         return {
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
           showPreviewDialog, previewData, previewOriginalData, pushing, pushError, finalTotalAmount,
+          showEvidenceDialog, evidenceDialogData, openEvidenceCostDetail,
           quoteReferenceTotalAmount, quoteTotalSourceText, lineTotalSourceText,
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,

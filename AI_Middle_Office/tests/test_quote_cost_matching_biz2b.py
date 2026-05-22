@@ -75,6 +75,9 @@ def test_enrich_quote_payload_uses_exact_item_and_spec_match(client):
     assert reference["reference_price"] == 20
     assert reference["price_delta"] == 5
     assert reference["price_delta_rate"] == 0.25
+    assert reference["ai_price_source"] == "pre_quote_cost_deviated"
+    assert reference["ai_price_source_label"] == "偏离前置成本库"
+    assert enriched["project_details"][0]["quote_explanation"]["ai_price_source"] == "pre_quote_cost_deviated"
     assert enriched["cost_reference_summary"]["matched_count"] == 1
 
 
@@ -111,6 +114,8 @@ def test_enrich_quote_payload_normalizes_n8n_item_and_remark_aliases(client):
     assert row["cost_reference"]["reference_price_source_label"] == "劳务发包综合单价"
     assert row["cost_reference"]["evidence_url"] == f"/admin/cost-db?cost_item_id={cost_item.id}"
     assert row["cost_reference"]["source_cost_item"]["item_name"] == item_name
+    assert row["quote_explanation"]["ai_price_source"] == "pre_quote_cost_adopted"
+    assert row["quote_explanation"]["ai_price_source_label"] == "采纳前置成本库"
     assert "AI 工作流原始返回" in row["quote_explanation"]["ai_basis"]
     assert f"#{cost_item.id}" in row["quote_explanation"]["cost_context_basis"]
     assert enriched["cost_reference_summary"]["matched_count"] == 1
@@ -180,6 +185,8 @@ def test_enrich_quote_payload_uses_active_fuzzy_match_and_ignores_draft(client):
     assert fuzzy_reference["reference_price"] == 18.5
     assert draft_reference["matched"] is False
     assert draft_reference["message"] == "无底价参考"
+    assert enriched["project_details"][1]["quote_explanation"]["ai_price_source"] == "model_estimate"
+    assert enriched["project_details"][1]["quote_explanation"]["ai_price_source_label"] == "无成本库参考，AI估算"
 
 
 def test_biz2d_matches_symbol_and_unit_variants(client):
@@ -271,6 +278,7 @@ def test_biz2d_rejects_unit_incompatible_match(client):
 
     reference = enriched["project_details"][0]["cost_reference"]
     assert reference["matched"] is False
+    assert enriched["project_details"][0]["quote_explanation"]["ai_price_source"] == "model_estimate"
 
 
 def test_biz2d_rejects_different_action_and_archived_rows(client):
@@ -300,6 +308,7 @@ def test_biz2d_rejects_different_action_and_archived_rows(client):
 
     reference = enriched["project_details"][0]["cost_reference"]
     assert reference["matched"] is False
+    assert enriched["project_details"][0]["quote_explanation"]["ai_price_source"] == "model_estimate"
 
 
 def test_biz2g_applies_cost_reference_fallback_for_zero_ai_price(client):
@@ -339,6 +348,8 @@ def test_biz2g_applies_cost_reference_fallback_for_zero_ai_price(client):
     assert reference["ai_unit_price"] == 6
     assert reference["price_delta"] == 0
     assert reference["price_delta_rate"] == 0
+    assert reference["ai_price_source"] == "cost_reference_fallback"
+    assert row["quote_explanation"]["ai_price_source_label"] == "成本库兜底"
     assert enriched["cost_reference_summary"]["fallback_applied_count"] == 1
 
 

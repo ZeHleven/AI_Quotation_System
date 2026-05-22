@@ -53,6 +53,19 @@ PRICE_SOURCE_LABELS = {
     "price": "主参考价",
 }
 
+AI_PRICE_SOURCE_COST_ADOPTED = "pre_quote_cost_adopted"
+AI_PRICE_SOURCE_COST_DEVIATED = "pre_quote_cost_deviated"
+AI_PRICE_SOURCE_MODEL_ESTIMATE = "model_estimate"
+AI_PRICE_SOURCE_COST_FALLBACK = "cost_reference_fallback"
+AI_PRICE_SOURCE_UNKNOWN = "unknown"
+AI_PRICE_SOURCE_LABELS = {
+    AI_PRICE_SOURCE_COST_ADOPTED: "采纳前置成本库",
+    AI_PRICE_SOURCE_COST_DEVIATED: "偏离前置成本库",
+    AI_PRICE_SOURCE_MODEL_ESTIMATE: "无成本库参考，AI估算",
+    AI_PRICE_SOURCE_COST_FALLBACK: "成本库兜底",
+    AI_PRICE_SOURCE_UNKNOWN: "来源不足",
+}
+
 
 def _clean_text(value: Any) -> str:
     if value is None:
@@ -248,6 +261,43 @@ def _price_source_label(source: Any) -> str:
     return PRICE_SOURCE_LABELS.get(_clean_text(source), _clean_text(source) or "主参考价")
 
 
+def _ai_price_source_label(source: Any) -> str:
+    return AI_PRICE_SOURCE_LABELS.get(_clean_text(source), AI_PRICE_SOURCE_LABELS[AI_PRICE_SOURCE_UNKNOWN])
+
+
+def _ai_price_source_for_reference(
+    item: CostItem,
+    reference: dict[str, Any],
+    *,
+    ai_unit_price: float | None,
+    reference_price: float | None,
+) -> tuple[str, str]:
+    if reference.get("fallback_applied"):
+        source = AI_PRICE_SOURCE_COST_FALLBACK
+        reason = (
+            f"AI 原始单价为空或为 0，系统已使用成本库 #{item.id} “{item.item_name}”"
+            f" 的参考价 {reference_price or 0:.2f} 元/{item.unit or '-'} 兜底生成报价。"
+        )
+        return source, reason
+    if ai_unit_price is None or reference_price in (None, 0):
+        source = AI_PRICE_SOURCE_UNKNOWN
+        return source, "AI 单价或成本库参考价缺失，无法判断报价来源。"
+    if round(float(ai_unit_price), 2) == round(float(reference_price), 2):
+        source = AI_PRICE_SOURCE_COST_ADOPTED
+        reason = (
+            f"报价请求进入 AI 前，FastAPI 已传入成本库 #{item.id} “{item.item_name}”"
+            f" 的参考价 {reference_price:.2f} 元/{item.unit or '-'}；AI 返回单价与该参考价一致。"
+        )
+        return source, reason
+    source = AI_PRICE_SOURCE_COST_DEVIATED
+    reason = (
+        f"报价请求进入 AI 前，FastAPI 已传入成本库 #{item.id} “{item.item_name}”"
+        f" 的参考价 {reference_price:.2f} 元/{item.unit or '-'}；AI 返回单价 {ai_unit_price:.2f} 元，"
+        "与前置成本库参考价不一致，需人工复核偏离原因。"
+    )
+    return source, reason
+
+
 def _round_money(value: float | None) -> float | None:
     if value is None:
         return None
@@ -406,8 +456,17 @@ def _attach_quote_explanation(row: dict[str, Any], item: CostItem, reference: di
     source_label = _price_source_label(source)
     delta = parse_amount(reference.get("price_delta"))
     delta_rate = reference.get("price_delta_rate")
+    ai_price_source, ai_price_source_reason = _ai_price_source_for_reference(
+        item,
+        reference,
+        ai_unit_price=ai_unit_price,
+        reference_price=reference_price,
+    )
 
     reference["reference_price_source_label"] = source_label
+    reference["ai_price_source"] = ai_price_source
+    reference["ai_price_source_label"] = _ai_price_source_label(ai_price_source)
+    reference["ai_price_source_reason"] = ai_price_source_reason
     reference["cost_item_url"] = _cost_item_url(item)
     reference["evidence_url"] = _cost_item_url(item)
     reference["evidence_api_url"] = f"/api/v1/admin/cost-items/{item.id}"
@@ -448,6 +507,9 @@ def _attach_quote_explanation(row: dict[str, Any], item: CostItem, reference: di
         "ai_total_price": _round_money(ai_total_price),
         "quantity": _round_money(quantity),
         "unit": row_unit,
+        "ai_price_source": ai_price_source,
+        "ai_price_source_label": _ai_price_source_label(ai_price_source),
+        "ai_price_source_reason": ai_price_source_reason,
         "ai_basis": "AI 工作流原始返回的单价与备注；系统不会臆测模型内部推理，只展示可审计输入和结果。",
         "cost_context_basis": (
             f"报价请求进入 N8N/Dify 前，FastAPI 已把成本库 active 命中条目 #{item.id} "
@@ -455,6 +517,31 @@ def _attach_quote_explanation(row: dict[str, Any], item: CostItem, reference: di
         ),
         "comparison": comparison,
         "cost_item_url": _cost_item_url(item),
+    }
+
+
+def _attach_no_match_quote_explanation(row: dict[str, Any]) -> None:
+    row_name = _row_name(row)
+    row_unit = _row_unit(row)
+    quantity = _row_quantity(row)
+    ai_unit_price = parse_amount(row.get("unit_price"))
+    ai_total_price = parse_amount(row.get("total_price"))
+    source = AI_PRICE_SOURCE_MODEL_ESTIMATE
+    reason = (
+        f"报价行“{row_name or '-'}”未命中 cost_items.active 成本条目；"
+        "本行 AI 单价来自 N8N/Dify 工作流返回结果，需人工确认是否补录成本库参考。"
+    )
+    row["quote_explanation"] = {
+        "ai_unit_price": _round_money(ai_unit_price),
+        "ai_total_price": _round_money(ai_total_price),
+        "quantity": _round_money(quantity),
+        "unit": row_unit,
+        "ai_price_source": source,
+        "ai_price_source_label": _ai_price_source_label(source),
+        "ai_price_source_reason": reason,
+        "ai_basis": "AI 工作流原始返回的单价与备注；系统未找到可引用的 active 成本库参考。",
+        "cost_context_basis": "本行报价请求进入 N8N/Dify 前未命中 active 成本库条目。",
+        "comparison": "无成本库参考价，需人工复核或补充成本库条目。",
     }
 
 
@@ -666,6 +753,7 @@ def enrich_quote_payload_with_cost_refs(db: Session, payload: Any, *, source_row
                 row["cost_reference"] = reference
             else:
                 row["cost_reference"] = _no_match_reference(row)
+                _attach_no_match_quote_explanation(row)
         target["project_details"] = rows
         target["cost_reference_summary"] = _reference_summary(rows, len(active_items))
         target.update(detect_quote_omissions(rows, active_items))
@@ -687,6 +775,7 @@ def enrich_quote_payload_with_cost_refs(db: Session, payload: Any, *, source_row
                 row["cost_reference"] = reference
             else:
                 row["cost_reference"] = _no_match_reference(row)
+                _attach_no_match_quote_explanation(row)
         return rows
 
     return enriched

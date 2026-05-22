@@ -690,6 +690,16 @@
           </div>
 
           <section class="evidence-section">
+            <h4>AI 报价来源</h4>
+            <div class="evidence-kv">
+              <span>来源判断</span>
+              <strong>{{ evidenceDialogData.aiPriceSourceLabel }}</strong>
+              <span>来源说明</span>
+              <strong>{{ evidenceDialogData.aiPriceSourceReason }}</strong>
+            </div>
+          </section>
+
+          <section class="evidence-section">
             <h4>AI 报价依据</h4>
             <p>{{ evidenceDialogData.aiBasis }}</p>
             <p v-if="evidenceDialogData.notes">工艺备注：{{ evidenceDialogData.notes }}</p>
@@ -744,7 +754,7 @@
       >
         <div class="cost-switch-current">
           <strong>{{ costSwitchCurrentTitle }}</strong>
-          <span>请选择与当前施工项目规格最匹配的 active 成本条目。切换后仅更新本行成本库参考证据，不覆盖 AI 已给出的报价。</span>
+          <span>请选择与当前施工项目规格最匹配的 active 成本条目。选用后会同步采用该条目的参考价重算本行单价和合计。</span>
         </div>
         <div class="cost-switch-toolbar">
           <el-input
@@ -872,6 +882,8 @@
           lineTotalSourceText: '-',
           quoteTotalText: '-',
           quoteTotalSourceText: '-',
+          aiPriceSourceLabel: '-',
+          aiPriceSourceReason: '-',
           aiBasis: '-',
           notes: '',
           costItemText: '-',
@@ -1135,7 +1147,77 @@
           mixed: '混合来源',
         };
 
+        const AI_PRICE_SOURCE_LABELS = {
+          pre_quote_cost_adopted: '采纳前置成本库',
+          pre_quote_cost_deviated: '偏离前置成本库',
+          model_estimate: '无成本库参考，AI估算',
+          cost_reference_fallback: '成本库兜底',
+          manual_selected: '人工切换成本条目',
+          unknown: '来源不足',
+        };
+
         const totalSourceLabel = (source) => TOTAL_SOURCE_LABELS[source] || '-';
+        const aiPriceSourceLabel = (source) => AI_PRICE_SOURCE_LABELS[source] || AI_PRICE_SOURCE_LABELS.unknown;
+
+        const aiPriceSourceInfo = (row = {}) => {
+          const reference = costReference(row);
+          const explanation = row.quote_explanation || {};
+          const explicitSource = explanation.ai_price_source || reference.ai_price_source;
+          const explicitReason = explanation.ai_price_source_reason || reference.ai_price_source_reason;
+          if (explicitSource && explicitSource !== 'unknown') {
+            return {
+              source: explicitSource,
+              label: explanation.ai_price_source_label || reference.ai_price_source_label || aiPriceSourceLabel(explicitSource),
+              reason: explicitReason || '当前报价结果已提供明确来源判断。',
+            };
+          }
+          if (reference.match_type === 'manual_selected') {
+            return {
+              source: 'manual_selected',
+              label: aiPriceSourceLabel('manual_selected'),
+              reason: explicitReason || '业务员在预审阶段手动切换了成本库条目，系统已按切换后的条目重新计算本行报价。',
+            };
+          }
+          if (reference.fallback_applied || row.cost_reference_fallback) {
+            return {
+              source: 'cost_reference_fallback',
+              label: aiPriceSourceLabel('cost_reference_fallback'),
+              reason: explicitReason || 'AI 原始单价为空或为 0，系统使用成本库参考价兜底生成本行报价。',
+            };
+          }
+          if (!reference.matched) {
+            return {
+              source: 'model_estimate',
+              label: aiPriceSourceLabel('model_estimate'),
+              reason: explicitReason || '本行未命中 cost_items.active 成本条目，AI 单价来自 N8N/Dify 工作流返回结果。',
+            };
+          }
+          const aiUnitPrice = parseMoney(row.unit_price ?? row.price ?? explanation.ai_unit_price ?? reference.ai_unit_price);
+          const referencePrice = parseMoney(reference.reference_price);
+          if (aiUnitPrice !== null && referencePrice !== null && referencePrice !== 0) {
+            const sourceItem = reference.source_cost_item || {};
+            const itemName = sourceItem.item_name || reference.item_name || '命中的成本库条目';
+            const itemId = sourceItem.id || reference.cost_item_id;
+            const unit = reference.unit || sourceItem.unit || row.unit || explanation.unit || '-';
+            if (Math.round(aiUnitPrice * 100) === Math.round(referencePrice * 100)) {
+              return {
+                source: 'pre_quote_cost_adopted',
+                label: aiPriceSourceLabel('pre_quote_cost_adopted'),
+                reason: explicitReason || `FastAPI 已在报价请求进入 AI 前传入成本库 ${itemId ? `#${itemId} ` : ''}“${itemName}” 的参考价 ${formatMoney(referencePrice)} 元/${unit}；AI 返回单价与该参考价一致。`,
+              };
+            }
+            return {
+              source: 'pre_quote_cost_deviated',
+              label: aiPriceSourceLabel('pre_quote_cost_deviated'),
+              reason: explicitReason || `FastAPI 已在报价请求进入 AI 前传入成本库 ${itemId ? `#${itemId} ` : ''}“${itemName}” 的参考价 ${formatMoney(referencePrice)} 元/${unit}；AI 返回单价 ${formatMoney(aiUnitPrice)} 元，需人工复核偏离原因。`,
+            };
+          }
+          return {
+            source: explicitSource || 'unknown',
+            label: explanation.ai_price_source_label || reference.ai_price_source_label || aiPriceSourceLabel(explicitSource),
+            reason: explicitReason || '当前结果缺少 AI 单价或成本库参考价，暂无法判断报价来源。',
+          };
+        };
 
         const rowQuantityValue = (row = {}) => {
           const explanation = row.quote_explanation || {};
@@ -1412,44 +1494,34 @@
             return;
           }
 
-          const previousReference = costReference(row);
-          const reference = buildManualCostReference(row, item);
           const quantity = rowQuantityValue(row);
-          const referencePrice = parseMoney(reference.reference_price);
-          const shouldRecalculateFallback = Boolean(previousReference.fallback_applied || row.cost_reference_fallback);
-          if (shouldRecalculateFallback && quantity !== null && referencePrice !== null && referencePrice > 0) {
-            const previousUnitPrice = roundMoneyValue(row.unit_price);
-            const previousTotalPrice = roundMoneyValue(row.total_price);
-            const fallbackTotal = Math.round(quantity * referencePrice * 100) / 100;
+          const referencePrice = roundMoneyValue(item.price);
+          const previousUnitPrice = roundMoneyValue(row.unit_price);
+          const previousTotalPrice = roundMoneyValue(row.total_price);
+          if (referencePrice !== null && referencePrice > 0) {
             row.unit_price = referencePrice;
+          }
+          if (quantity !== null && referencePrice !== null && referencePrice > 0) {
+            const fallbackTotal = Math.round(quantity * referencePrice * 100) / 100;
             row.total_price = fallbackTotal;
-            row.cost_reference_fallback = {
-              applied: true,
-              reason: 'manual_cost_item_switch',
-              reference_price: referencePrice,
-              quantity,
-              unit_price_before: previousUnitPrice,
-              total_price_before: previousTotalPrice,
-              total_price_after: fallbackTotal,
-            };
-            reference.fallback_applied = true;
-            reference.fallback_reason = 'manual_cost_item_switch';
-            reference.ai_unit_price_before_fallback = previousUnitPrice;
-            reference.total_price_before_fallback = previousTotalPrice;
-            reference.ai_unit_price = referencePrice;
-            reference.price_delta = 0.0;
-            reference.price_delta_rate = 0.0;
-          } else {
-            delete row.cost_reference_fallback;
           }
 
+          delete row.cost_reference_fallback;
+          const reference = buildManualCostReference(row, item);
+          reference.switch_price_before = previousUnitPrice;
+          reference.switch_total_before = previousTotalPrice;
+          reference.switch_price_after = roundMoneyValue(row.unit_price);
+          reference.switch_total_after = roundMoneyValue(row.total_price);
           row.cost_reference = reference;
           row.quote_explanation = {
             ...(row.quote_explanation || {}),
-            cost_context_basis: `业务员在预审阶段手动选择成本库 active 条目 #${item.id} “${item.item_name}”，参考价 ${referencePrice === null ? '-' : formatMoney(referencePrice)} 元/${item.unit || '-'}。`,
+            ai_price_source: 'manual_selected',
+            ai_price_source_label: aiPriceSourceLabel('manual_selected'),
+            ai_price_source_reason: `业务员在预审阶段手动切换为成本库 active 条目 #${item.id} “${item.item_name}”，并同步采用该条目参考价重算本行报价。`,
+            cost_context_basis: `业务员在预审阶段手动选择成本库 active 条目 #${item.id} “${item.item_name}”，并同步采用参考价 ${referencePrice === null ? '-' : formatMoney(referencePrice)} 元/${item.unit || '-'} 重算本行报价。`,
             comparison: reference.price_delta === null
               ? '已切换成本库参考条目，请人工复核报价与规格是否一致。'
-              : `当前 AI 单价与手动选择的成本库参考价差为 ${reference.price_delta >= 0 ? '+' : ''}${formatMoney(reference.price_delta)} 元/${item.unit || '-'}。`,
+              : `当前报价单价与手动选择的成本库参考价差为 ${reference.price_delta >= 0 ? '+' : ''}${formatMoney(reference.price_delta)} 元/${item.unit || '-'}。`,
             cost_item_url: reference.cost_item_url,
           };
           showCostSwitchDialog.value = false;
@@ -1485,6 +1557,7 @@
             .map(([label, value]) => ({ label, value: moneyText(value) }));
           const detailUrl = costReferenceDetailUrl(row);
           const costUnit = reference.unit || sourceItem.unit || unit || '-';
+          const aiSourceInfo = aiPriceSourceInfo(row);
           return {
             projectName: row.project_name || row.item || '-',
             quantityText: `数量：${quantity} ${unit}`,
@@ -1498,6 +1571,8 @@
             lineTotalSourceText: lineTotalSourceText(row, index),
             quoteTotalText: `¥ ${finalTotalAmount.value}`,
             quoteTotalSourceText: quoteTotalSourceText.value,
+            aiPriceSourceLabel: aiSourceInfo.label,
+            aiPriceSourceReason: aiSourceInfo.reason,
             aiBasis: explanation.ai_basis || 'AI 工作流原始返回的单价与备注；系统展示可审计输入和结果，不臆测模型内部推理。',
             notes: row.notes || '',
             costItemText: reference.matched

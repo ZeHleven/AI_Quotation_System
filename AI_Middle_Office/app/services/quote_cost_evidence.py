@@ -23,6 +23,15 @@ TOTAL_SOURCE_LABELS = {
     TOTAL_SOURCE_MIXED: "混合来源",
 }
 
+AI_PRICE_SOURCE_LABELS = {
+    "pre_quote_cost_adopted": "采纳前置成本库",
+    "pre_quote_cost_deviated": "偏离前置成本库",
+    "model_estimate": "无成本库参考，AI估算",
+    "cost_reference_fallback": "成本库兜底",
+    "manual_selected": "人工切换成本条目",
+    "unknown": "来源不足",
+}
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -83,6 +92,69 @@ def _cost_reference(row: dict[str, Any]) -> dict[str, Any]:
 def _quote_explanation(row: dict[str, Any]) -> dict[str, Any]:
     explanation = row.get("quote_explanation") or row.get("quoteExplanation") or {}
     return explanation if isinstance(explanation, dict) else {}
+
+
+def _ai_price_source_payload(
+    reference: dict[str, Any],
+    explanation: dict[str, Any],
+    *,
+    ai_unit_price: Any = None,
+    reference_price: Any = None,
+    fallback_applied: bool = False,
+    cost_item_id: Optional[int] = None,
+    cost_item_name: Optional[str] = None,
+    unit: Optional[str] = None,
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    source = text_or_none(explanation.get("ai_price_source") or reference.get("ai_price_source"), 64)
+    if not source and reference.get("match_type") == "manual_selected":
+        source = "manual_selected"
+    reason = text_or_none(explanation.get("ai_price_source_reason") or reference.get("ai_price_source_reason"))
+    if source and source != "unknown":
+        label = text_or_none(
+            explanation.get("ai_price_source_label")
+            or reference.get("ai_price_source_label")
+            or AI_PRICE_SOURCE_LABELS.get(source),
+            64,
+        )
+        return source, label, reason
+
+    if fallback_applied or reference.get("fallback_applied"):
+        source = "cost_reference_fallback"
+        label = AI_PRICE_SOURCE_LABELS[source]
+        reason = reason or "AI 原始单价为空或为 0，系统使用成本库参考价兜底生成报价。"
+        return source, label, reason
+
+    matched = bool(reference.get("matched")) or cost_item_id is not None
+    ai_price = _round_money(ai_unit_price if ai_unit_price is not None else reference.get("ai_unit_price"))
+    ref_price = _round_money(reference_price if reference_price is not None else reference.get("reference_price"))
+    if matched and ai_price is not None and ref_price not in (None, 0):
+        item_text = f"成本库 #{cost_item_id}" if cost_item_id else "命中的成本库条目"
+        if cost_item_name:
+            item_text += f" “{cost_item_name}”"
+        unit_text = unit or reference.get("unit") or "-"
+        if ai_price == ref_price:
+            source = "pre_quote_cost_adopted"
+            label = AI_PRICE_SOURCE_LABELS[source]
+            reason = reason or f"FastAPI 已在报价请求进入 AI 前传入 {item_text} 的参考价 {ref_price:.2f} 元/{unit_text}；AI 返回单价与该参考价一致。"
+            return source, label, reason
+        source = "pre_quote_cost_deviated"
+        label = AI_PRICE_SOURCE_LABELS[source]
+        reason = reason or f"FastAPI 已在报价请求进入 AI 前传入 {item_text} 的参考价 {ref_price:.2f} 元/{unit_text}；AI 返回单价 {ai_price:.2f} 元，需人工复核偏离原因。"
+        return source, label, reason
+
+    if not matched:
+        source = "model_estimate"
+        label = AI_PRICE_SOURCE_LABELS[source]
+        reason = reason or "本行未命中 cost_items.active 成本条目，AI 单价来自 N8N/Dify 工作流返回结果。"
+        return source, label, reason
+
+    label = text_or_none(
+        explanation.get("ai_price_source_label")
+        or reference.get("ai_price_source_label")
+        or AI_PRICE_SOURCE_LABELS.get(source or ""),
+        64,
+    )
+    return source, label, reason
 
 
 def _source_cost_item(reference: dict[str, Any]) -> dict[str, Any]:
@@ -256,6 +328,54 @@ def _evidence_from_ai_row(feedback: QuoteFeedback, index: int, row: dict[str, An
     )
 
 
+def _apply_final_reference_override(evidence: QuoteCostEvidence, final_row: dict[str, Any]) -> None:
+    reference = _cost_reference(final_row)
+    if not reference.get("matched"):
+        return
+
+    source_item = _source_cost_item(reference)
+    final_cost_item_id = source_item.get("id")
+    manual_selected = reference.get("match_type") == "manual_selected"
+    if not manual_selected and (not final_cost_item_id or final_cost_item_id == evidence.cost_item_id):
+        return
+
+    explanation = _quote_explanation(final_row)
+    quantity = _round_money(_row_value(final_row, "quantity", "qty", "count"))
+    if quantity is not None:
+        evidence.quantity = quantity
+    reference_price = _round_money(reference.get("reference_price"))
+    final_unit_price = _round_money(_row_value(final_row, "unit_price", "price"))
+    if final_unit_price is not None and reference_price not in (None, 0):
+        price_delta = round(float(final_unit_price) - float(reference_price), 2)
+        price_delta_rate = round(price_delta / float(reference_price), 4)
+    else:
+        price_delta = _round_money(reference.get("price_delta"))
+        price_delta_rate = parse_amount(reference.get("price_delta_rate"))
+
+    evidence.cost_item_id = final_cost_item_id
+    evidence.cost_item_name_snapshot = text_or_none(source_item.get("item_name"), 255)
+    evidence.cost_item_category_snapshot = text_or_none(source_item.get("category"), 128)
+    evidence.cost_item_subcategory_snapshot = text_or_none(source_item.get("subcategory"), 128)
+    evidence.cost_item_unit_snapshot = text_or_none(source_item.get("unit"), 64)
+    evidence.cost_item_status_snapshot = text_or_none(source_item.get("status"), 24)
+    evidence.reference_price = reference_price
+    evidence.reference_total = _reference_total(evidence.quantity, reference_price)
+    evidence.reference_price_source = text_or_none(reference.get("reference_price_source"), 64)
+    evidence.reference_price_source_label = text_or_none(reference.get("reference_price_source_label"), 64)
+    evidence.match_type = text_or_none(reference.get("match_type"), 64)
+    evidence.match_type_label = text_or_none(reference.get("match_type_label"), 64)
+    evidence.match_reason = text_or_none(reference.get("match_reason"))
+    evidence.price_delta = price_delta
+    evidence.price_delta_rate = price_delta_rate
+    evidence.fallback_applied = bool(reference.get("fallback_applied") or final_row.get("cost_reference_fallback"))
+    evidence.cost_context_basis = text_or_none(explanation.get("cost_context_basis")) or evidence.cost_context_basis
+    evidence.comparison = text_or_none(explanation.get("comparison")) or evidence.comparison
+    evidence.cost_item_url = text_or_none(explanation.get("cost_item_url") or reference.get("cost_item_url"), 255)
+    evidence.cost_reference_json = _json_dumps(reference)
+    evidence.quote_explanation_json = _json_dumps(explanation) if explanation else evidence.quote_explanation_json
+    evidence.cost_item_snapshot_json = _json_dumps(source_item) if any(value is not None for value in source_item.values()) else None
+
+
 def _apply_final_row(
     evidence: QuoteCostEvidence,
     final_row: Optional[dict[str, Any]],
@@ -264,6 +384,7 @@ def _apply_final_row(
     quote_history_id: Optional[int],
 ) -> None:
     if final_row:
+        _apply_final_reference_override(evidence, final_row)
         evidence.final_unit_price = _round_money(_row_value(final_row, "unit_price", "price"))
         evidence.final_total_price = _round_money(_row_value(final_row, "total_price", "amount", "subtotal"))
         fallback_ai_row = {
@@ -412,6 +533,22 @@ def safe_record_rejected_cost_evidence(db: Session, *, feedback: QuoteFeedback, 
 
 
 def serialize_cost_evidence(item: QuoteCostEvidence) -> dict[str, Any]:
+    cost_reference = _load_json(item.cost_reference_json)
+    quote_explanation = _load_json(item.quote_explanation_json)
+    if not isinstance(cost_reference, dict):
+        cost_reference = {}
+    if not isinstance(quote_explanation, dict):
+        quote_explanation = {}
+    ai_price_source, ai_price_source_label, ai_price_source_reason = _ai_price_source_payload(
+        cost_reference,
+        quote_explanation,
+        ai_unit_price=item.ai_unit_price,
+        reference_price=item.reference_price,
+        fallback_applied=bool(item.fallback_applied),
+        cost_item_id=item.cost_item_id,
+        cost_item_name=item.cost_item_name_snapshot,
+        unit=item.cost_item_unit_snapshot or item.unit,
+    )
     return {
         "id": item.id,
         "feedback_id": item.feedback_id,
@@ -455,12 +592,15 @@ def serialize_cost_evidence(item: QuoteCostEvidence) -> dict[str, Any]:
         "price_delta": item.price_delta,
         "price_delta_rate": item.price_delta_rate,
         "fallback_applied": item.fallback_applied,
+        "ai_price_source": ai_price_source,
+        "ai_price_source_label": ai_price_source_label,
+        "ai_price_source_reason": ai_price_source_reason,
         "ai_basis": item.ai_basis,
         "cost_context_basis": item.cost_context_basis,
         "comparison": item.comparison,
         "cost_item_url": item.cost_item_url,
-        "cost_reference": _load_json(item.cost_reference_json),
-        "quote_explanation": _load_json(item.quote_explanation_json),
+        "cost_reference": cost_reference,
+        "quote_explanation": quote_explanation,
         "cost_item_snapshot": _load_json(item.cost_item_snapshot_json),
         "created_at": _format_dt(item.created_at),
         "updated_at": _format_dt(item.updated_at),

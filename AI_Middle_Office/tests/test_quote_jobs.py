@@ -12,6 +12,7 @@ from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.client_inquiry import ClientInquiry
 from app.models.cost_item import COST_STATUS_ACTIVE, CostItem
+from app.models.quote_feedback import QuoteFeedback
 from app.models.quote_history import QuoteHistory
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
@@ -345,6 +346,20 @@ def test_quote_job_detail_reads_structured_events_and_result_summary(client):
                 payload_json=json.dumps({"data": {"ok": True}}, ensure_ascii=False),
             )
         )
+        db.add(
+            QuoteFeedback(
+                quote_id=job_id,
+                quote_job_id=job_id,
+                username=username,
+                trace_id="trace-structured",
+                status="rejected",
+                rejected=True,
+                rejection_reason="报价缺少找平厚度，请补充后重填。",
+                reviewed_by=username,
+                change_summary="Rejected: 报价缺少找平厚度，请补充后重填。",
+                rejected_at=datetime.now(timezone.utc),
+            )
+        )
         db.commit()
     finally:
         db.close()
@@ -358,6 +373,10 @@ def test_quote_job_detail_reads_structured_events_and_result_summary(client):
     assert data["result_item_count"] == 2
     assert data["preview_project_names"] == ["wall paint", "floor tile"]
     assert data["duration_ms"] == 1234
+    assert data["feedback"]["status"] == "rejected"
+    assert data["feedback"]["rejected"] is True
+    assert data["feedback"]["rejection_reason"] == "报价缺少找平厚度，请补充后重填。"
+    assert data["feedback"]["reviewed_by"] == username
     assert data["events"][0]["event_type"] == "preview"
     assert data["events"][0]["payload"]["data"]["ok"] is True
 

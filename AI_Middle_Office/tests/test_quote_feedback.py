@@ -9,6 +9,7 @@ from app.models.quote_cost_evidence import QuoteCostEvidence
 from app.models.quote_feedback import QuoteCorrection, QuoteFeedback, QuoteRagTrace
 from app.models.quote_job import QuoteJob
 from app.models.user import User
+from app.services.quote_cost_evidence import serialize_cost_evidence
 
 
 def _create_user_headers(client):
@@ -185,6 +186,14 @@ def _create_feedback_record(username: str) -> int:
                 cost_context_basis="Cost item #9001 was sent before quoting.",
                 comparison="AI price differs from cost reference.",
                 cost_item_url="/admin/cost-db?cost_item_id=9001",
+                quote_explanation_json=json.dumps(
+                    {
+                        "ai_price_source": "manual_selected",
+                        "ai_price_source_label": "人工切换成本条目",
+                        "ai_price_source_reason": "业务员手动选择成本条目。",
+                    },
+                    ensure_ascii=False,
+                ),
             )
         )
         db.commit()
@@ -332,6 +341,110 @@ def test_confirm_push_records_feedback_corrections_and_rag_trace(client, monkeyp
         db.close()
 
 
+def test_confirm_push_uses_manually_switched_cost_item_evidence(client, monkeypatch):
+    username, headers = _create_user_headers(client)
+    ai_row = {
+        "project_name": "夹板窗帘盒",
+        "quantity": 15,
+        "unit": "m",
+        "unit_price": 43.27,
+        "total_price": 649.05,
+        "notes": "standard",
+        "cost_reference": {
+            "matched": True,
+            "cost_item_id": 46,
+            "item_name": "夹板窗帘盒",
+            "unit": "m",
+            "reference_price": 43.27,
+            "reference_price_source": "subcontract_composite_price",
+            "reference_price_source_label": "劳务发包综合单价",
+            "match_type": "fuzzy_item_name",
+            "match_type_label": "名称匹配",
+            "match_reason": "original auto match",
+            "price_delta": 0,
+            "price_delta_rate": 0,
+            "cost_item_url": "/admin/cost-db?cost_item_id=46",
+            "source_cost_item": {"id": 46, "item_name": "夹板窗帘盒", "unit": "m", "status": "active"},
+        },
+    }
+    job = _create_succeeded_job(username, {"project_details": [ai_row]})
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": True}
+
+    async def fake_post_json_via_gateway(**kwargs):
+        return FakeResponse()
+
+    monkeypatch.setattr("app.api.v1.quote.post_json_via_gateway", fake_post_json_via_gateway)
+    final_row = dict(ai_row)
+    final_row.update(
+        {
+            "unit_price": 49.59,
+            "total_price": 743.85,
+            "cost_reference": {
+                "matched": True,
+                "cost_item_id": 47,
+                "item_name": "夹板窗帘盒",
+                "unit": "m",
+                "reference_price": 49.59,
+                "reference_price_source": "subcontract_composite_price",
+                "reference_price_source_label": "劳务发包综合单价",
+                "match_type": "manual_selected",
+                "match_type_label": "人工选择",
+                "match_reason": "业务员在预审阶段手动选择该 active 成本条目。",
+                "price_delta": 0,
+                "price_delta_rate": 0,
+                "cost_item_url": "/admin/cost-db?cost_item_id=47",
+                "source_cost_item": {
+                    "id": 47,
+                    "item_name": "夹板窗帘盒",
+                    "category": "第三章、天棚工程",
+                    "unit": "m",
+                    "status": "active",
+                },
+            },
+            "quote_explanation": {
+                "cost_context_basis": "业务员在预审阶段手动选择成本库 active 条目 #47。",
+                "comparison": "当前报价单价与手动选择的成本库参考价差为 +0.00 元/m。",
+                "cost_item_url": "/admin/cost-db?cost_item_id=47",
+            },
+        }
+    )
+
+    response = client.post(
+        "/api/v1/confirm_push",
+        headers=headers,
+        json={
+            "quote_job_id": job.job_id,
+            "trace_id": job.trace_id,
+            "project_details": [final_row],
+        },
+    )
+
+    assert response.status_code == 200
+
+    db = SessionLocal()
+    try:
+        evidence = db.query(QuoteCostEvidence).filter(QuoteCostEvidence.quote_job_id == job.job_id).one()
+        assert evidence.cost_item_id == 47
+        assert evidence.cost_item_name_snapshot == "夹板窗帘盒"
+        assert evidence.reference_price == 49.59
+        assert evidence.reference_total == 743.85
+        assert evidence.final_unit_price == 49.59
+        assert evidence.final_total_price == 743.85
+        assert evidence.price_delta == 0
+        assert evidence.price_delta_rate == 0
+        assert evidence.adopted_cost_reference is True
+        assert evidence.match_type == "manual_selected"
+        assert evidence.match_type_label == "人工选择"
+        assert evidence.cost_item_url == "/admin/cost-db?cost_item_id=47"
+    finally:
+        db.close()
+
+
 def test_reject_quote_feedback_records_manual_rejection(client):
     username, headers = _create_user_headers(client)
     job = _create_succeeded_job(
@@ -421,6 +534,8 @@ def test_admin_quote_feedback_summary_list_and_detail(client):
     assert detail["cost_evidence"][0]["quote_total_source"] == "manual_final"
     assert detail["cost_evidence"][0]["quote_total_source_label"] == "人工确认价"
     assert detail["cost_evidence"][0]["quote_reference_total_price"] == 110
+    assert detail["cost_evidence"][0]["ai_price_source"] == "manual_selected"
+    assert detail["cost_evidence"][0]["ai_price_source_label"] == "人工切换成本条目"
     assert detail["ai_payload"]["project_details"][0]["total_price"] == 100
 
     evidence_response = client.get(
@@ -434,3 +549,36 @@ def test_admin_quote_feedback_summary_list_and_detail(client):
     assert evidence_items[0]["match_reason"] == "matched by name"
     assert evidence_items[0]["line_total_source_label"] == "人工确认价"
     assert evidence_items[0]["quote_reference_total_price"] == 110
+
+
+def test_serialize_cost_evidence_infers_ai_price_source_for_legacy_record():
+    evidence = QuoteCostEvidence(
+        project_name="墙面水泥砂浆找平",
+        quantity=40,
+        unit="㎡",
+        ai_unit_price=20.76,
+        ai_total_price=830.5,
+        cost_item_id=172,
+        cost_item_name_snapshot="墙面水泥砂浆找平",
+        cost_item_unit_snapshot="㎡",
+        reference_price=20.76,
+        reference_total=830.4,
+        cost_reference_json=json.dumps(
+            {
+                "matched": True,
+                "match_type": "fuzzy_item_name",
+                "cost_item_id": 172,
+                "item_name": "墙面水泥砂浆找平",
+                "unit": "㎡",
+                "reference_price": 20.76,
+                "ai_unit_price": 20.76,
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+    payload = serialize_cost_evidence(evidence)
+
+    assert payload["ai_price_source"] == "pre_quote_cost_adopted"
+    assert payload["ai_price_source_label"] == "采纳前置成本库"
+    assert "AI 返回单价与该参考价一致" in payload["ai_price_source_reason"]

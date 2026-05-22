@@ -2014,6 +2014,28 @@
           </div>
           <p class="detail-text">{{ quoteJobDrawer.job.request_summary || quoteJobDrawer.job.message_preview || '-' }}</p>
         </section>
+        <section
+          class="drawer-section"
+          v-if="quoteJobDrawer.job.feedback?.rejected || quoteJobDrawer.job.feedback?.rejection_reason"
+        >
+          <div class="section-title">
+            <el-icon><Document /></el-icon>
+            <span>预审打回</span>
+          </div>
+          <div class="detail-grid">
+            <div>
+              <small>打回人</small>
+              <strong>{{ quoteJobDrawer.job.feedback?.reviewed_by || quoteJobDrawer.job.username || '-' }}</strong>
+            </div>
+            <div>
+              <small>打回时间</small>
+              <strong>{{ formatDate(quoteJobDrawer.job.feedback?.rejected_at) }}</strong>
+            </div>
+          </div>
+          <p class="detail-text">
+            {{ quoteJobDrawer.job.feedback?.rejection_reason || quoteJobDrawer.job.feedback?.change_summary || '-' }}
+          </p>
+        </section>
         <section class="drawer-section" v-if="quoteJobDrawer.costEvidence?.length">
           <div class="section-title">
             <el-icon><DataAnalysis /></el-icon>
@@ -2065,6 +2087,14 @@
               <template #default="{ row }">
                 <span>{{ formatPrice(row.price_delta) }}</span>
                 <small class="muted-inline">{{ formatRate(row.price_delta_rate) }}</small>
+              </template>
+            </el-table-column>
+            <el-table-column label="AI来源" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div class="operation-client">
+                  <strong>{{ row.ai_price_source_label || '-' }}</strong>
+                  <small>{{ row.ai_price_source_reason || '-' }}</small>
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="依据" min-width="220" show-overflow-tooltip>

@@ -19,6 +19,7 @@ from app.dependencies import get_current_user, require_admin
 from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
 from app.models.file_object import FileObject
 from app.models.quote_cost_evidence import QuoteCostEvidence
+from app.models.quote_feedback import QuoteFeedback
 from app.models.quote_history import QuoteHistory
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
@@ -76,15 +77,34 @@ def _serialize_history_summary(record: Optional[QuoteHistory]) -> Optional[dict]
     }
 
 
+def _serialize_feedback_summary(record: Optional[QuoteFeedback]) -> Optional[dict]:
+    if not record:
+        return None
+    return {
+        "id": record.id,
+        "quote_id": record.quote_id,
+        "quote_job_id": record.quote_job_id,
+        "status": record.status,
+        "rejected": record.rejected,
+        "rejection_reason": record.rejection_reason,
+        "change_summary": record.change_summary,
+        "reviewed_by": record.reviewed_by,
+        "created_at": _format_dt(record.created_at),
+        "confirmed_at": _format_dt(record.confirmed_at),
+        "rejected_at": _format_dt(record.rejected_at),
+    }
+
+
 def _quote_job_context_maps(
     db: Session,
     jobs: list[QuoteJob],
-) -> tuple[dict[str, ClientInquiry], dict[str, QuoteHistory], dict[str, int]]:
+) -> tuple[dict[str, ClientInquiry], dict[str, QuoteHistory], dict[str, int], dict[str, QuoteFeedback]]:
     job_ids = [job.job_id for job in jobs]
     inquiry_ids = [job.client_inquiry_id for job in jobs if job.client_inquiry_id]
     inquiries_by_id: dict[str, ClientInquiry] = {}
     histories_by_job_id: dict[str, QuoteHistory] = {}
     evidence_counts_by_job_id: dict[str, int] = {}
+    feedback_by_job_id: dict[str, QuoteFeedback] = {}
 
     if inquiry_ids:
         # defensive: QuoteJob.client_inquiry_id should only bind inbound inquiries.
@@ -109,6 +129,16 @@ def _quote_job_context_maps(
             if history.quote_job_id and history.quote_job_id not in histories_by_job_id:
                 histories_by_job_id[history.quote_job_id] = history
 
+        feedback_rows = (
+            db.query(QuoteFeedback)
+            .filter(QuoteFeedback.quote_job_id.in_(job_ids))
+            .order_by(QuoteFeedback.updated_at.desc(), QuoteFeedback.id.desc())
+            .all()
+        )
+        for feedback in feedback_rows:
+            if feedback.quote_job_id and feedback.quote_job_id not in feedback_by_job_id:
+                feedback_by_job_id[feedback.quote_job_id] = feedback
+
         evidence_counts_by_job_id = {
             quote_job_id: count
             for quote_job_id, count in (
@@ -120,7 +150,7 @@ def _quote_job_context_maps(
             if quote_job_id
         }
 
-    return inquiries_by_id, histories_by_job_id, evidence_counts_by_job_id
+    return inquiries_by_id, histories_by_job_id, evidence_counts_by_job_id, feedback_by_job_id
 
 
 def _serialize_job(
@@ -129,6 +159,7 @@ def _serialize_job(
     include_result: bool = True,
     client_inquiry: Optional[ClientInquiry] = None,
     history: Optional[QuoteHistory] = None,
+    feedback: Optional[QuoteFeedback] = None,
     cost_evidence_count: int = 0,
 ) -> dict:
     data = {
@@ -157,6 +188,7 @@ def _serialize_job(
         "error_message": job.error_message,
         "client_inquiry": serialize_client_inquiry(client_inquiry) if client_inquiry else None,
         "history": _serialize_history_summary(history),
+        "feedback": _serialize_feedback_summary(feedback),
         "cost_evidence_count": cost_evidence_count,
     }
     if include_events:
@@ -182,13 +214,14 @@ def _serialize_job_with_context(
     include_events: bool = True,
     include_result: bool = True,
 ) -> dict:
-    inquiries_by_id, histories_by_job_id, evidence_counts_by_job_id = _quote_job_context_maps(db, [job])
+    inquiries_by_id, histories_by_job_id, evidence_counts_by_job_id, feedback_by_job_id = _quote_job_context_maps(db, [job])
     return _serialize_job(
         job,
         include_events=include_events,
         include_result=include_result,
         client_inquiry=inquiries_by_id.get(job.client_inquiry_id),
         history=histories_by_job_id.get(job.job_id),
+        feedback=feedback_by_job_id.get(job.job_id),
         cost_evidence_count=evidence_counts_by_job_id.get(job.job_id, 0),
     )
 
@@ -413,7 +446,7 @@ async def list_quote_jobs(
         .limit(page_size)
         .all()
     )
-    inquiries_by_id, histories_by_job_id, evidence_counts_by_job_id = _quote_job_context_maps(db, jobs)
+    inquiries_by_id, histories_by_job_id, evidence_counts_by_job_id, feedback_by_job_id = _quote_job_context_maps(db, jobs)
     return api_page(
         [
             _serialize_job(
@@ -422,6 +455,7 @@ async def list_quote_jobs(
                 include_result=False,
                 client_inquiry=inquiries_by_id.get(job.client_inquiry_id),
                 history=histories_by_job_id.get(job.job_id),
+                feedback=feedback_by_job_id.get(job.job_id),
                 cost_evidence_count=evidence_counts_by_job_id.get(job.job_id, 0),
             )
             for job in jobs

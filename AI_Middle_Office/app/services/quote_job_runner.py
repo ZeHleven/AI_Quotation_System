@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 import httpx
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -18,6 +19,7 @@ from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.file_storage import get_object_bytes
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
+from app.services.quote_cost_context import safe_append_quote_cost_context
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
 from app.services.quote_excel_parser import (
     QuoteExcelParseError,
@@ -138,6 +140,7 @@ async def _iter_quote_events(
     file_content: Optional[bytes],
     mime_type: Optional[str],
     filename: Optional[str],
+    db: Optional[Session] = None,
 ) -> Iterable[Tuple[str, str, Dict[str, Any]]]:
     final_query = message or ""
     excel_source_rows: list[dict[str, Any]] = []
@@ -246,6 +249,17 @@ async def _iter_quote_events(
         return
 
     final_query = normalize_quote_request_text(final_query)
+    final_query, cost_context = safe_append_quote_cost_context(db, final_query, source_rows=excel_source_rows)
+    if cost_context.matched_count:
+        logger.info(
+            "quote_job_cost_context_attached",
+            extra={
+                "username": username,
+                "event": "quote_job_cost_context_attached",
+                "matched_count": cost_context.matched_count,
+                "active_cost_item_count": cost_context.active_cost_item_count,
+            },
+        )
     yield (
         "processing",
         "[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...",
@@ -372,6 +386,7 @@ async def run_quote_job_async(job_id: str) -> None:
             file_content=file_content,
             mime_type=job.file_mime_type,
             filename=job.file_name,
+            db=db,
         ):
             db.refresh(job)
             if job.status in TERMINAL_STATUSES:

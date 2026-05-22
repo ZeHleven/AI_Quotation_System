@@ -7,9 +7,11 @@ from io import BytesIO
 import httpx
 from openpyxl import Workbook
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.client_inquiry import ClientInquiry
+from app.models.cost_item import COST_STATUS_ACTIVE, CostItem
 from app.models.quote_history import QuoteHistory
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
@@ -54,6 +56,30 @@ def _quote_excel_bytes() -> bytes:
     buffer = BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()
+
+
+def _set_flag(name: str, value):
+    old_value = getattr(settings, name)
+    object.__setattr__(settings, name, value)
+    return old_value
+
+
+def _seed_cost_item(db, *, item_name: str, unit: str = "m", price: float = 6.0) -> CostItem:
+    item = CostItem(
+        category="BIZ-2h 测试类",
+        subcategory="成本前置",
+        item_name=item_name,
+        unit=unit,
+        price=price,
+        subcontract_composite_price=price,
+        price_type="combined",
+        status=COST_STATUS_ACTIVE,
+        source="manual",
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 def test_create_quote_job_returns_queued_status(client):
@@ -523,3 +549,47 @@ def test_quote_job_runner_parses_excel_quote_sheet_before_gateway(monkeypatch):
     assert "从Excel需求单解析到的内容" in content
     assert "拆除复合木地板，规格/特征：不含清运，数量：20，单位：㎡" in content
     assert "窗帘盒/灯槽拆除，规格/特征：拆除至指定堆放点，数量：18，单位：m" in content
+
+
+def test_quote_job_runner_attaches_biz2h_cost_context_before_gateway(monkeypatch):
+    gateway_calls = []
+
+    async def fake_post_json_via_gateway(**kwargs):
+        gateway_calls.append(kwargs)
+        return httpx.Response(
+            200,
+            json={"project_details": [{"project_name": "窗帘盒/灯槽拆除", "unit": "m", "quantity": 18, "unit_price": 6, "total_price": 108}]},
+        )
+
+    monkeypatch.setattr(quote_job_runner, "post_json_via_gateway", fake_post_json_via_gateway)
+
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        _seed_cost_item(db, item_name="窗帘盒/灯槽拆除", unit="m", price=6.0)
+
+        async def collect_events():
+            return [
+                event
+                async for event in quote_job_runner._iter_quote_events(
+                    username="runner",
+                    message="请根据需求单报价",
+                    file_content=_quote_excel_bytes(),
+                    mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    filename="quote.xlsx",
+                    db=db,
+                )
+            ]
+
+        events = asyncio.run(collect_events())
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    assert events[-1][0] == "preview"
+    content = gateway_calls[0]["json_payload"]["text"]["content"]
+    assert "[成本库底价强参考]" in content
+    assert "需求项: 窗帘盒/灯槽拆除" in content
+    assert "数量: 18" in content
+    assert "匹配类型: fuzzy_item_name" in content
+    assert "reference_unit_price: 6.00 元/m" in content

@@ -46,10 +46,12 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - AI 平台升级 BIZ Track BIZ-2e 漏项检测已完成代码层验证（2026-05-21）：新增保守规则式漏项检测服务，复用同步 `/chat` 与异步 `quote_jobs` preview 成本库 enrichment；仅基于 `cost_items.active` 生成 `omission_summary` / `omission_suggestions`，旧 `index.html` 预审弹窗展示疑似漏项、触发行、原因和成本库参考价；不自动新增报价行、不改变合计、不新增 Alembic。
 - AI 平台升级 BIZ Track BIZ-2f 报价需求单 Excel 解析已完成代码层验证（2026-05-21）：新增 `quote_excel_parser`，`index.html` 支持上传 `.xlsx/.xlsm` 需求单；同步 `/chat` 与异步 `quote_jobs` 会直接解析施工项目、数量、单位、规格/特征和备注后进入现有报价流程，不再把 Excel 交给 GLM-4V；旧 `.xls` 明确提示另存为 `.xlsx`。不新增 Alembic，不改 N8N。
 - AI 平台升级 BIZ Track BIZ-2g 成本库底价兜底填价已完成代码层验证（2026-05-21）：当 AI 预审单给出空/0 单价但已命中 `cost_items.active` 底价且可解析数量时，报价预审会使用成本库参考价回填单价和合计，并标记“已用成本库底价兜底”；AI 已给出正常正数单价时不覆盖。不新增 Alembic，不改 N8N。
+- AI 平台升级 BIZ Track BIZ-2h 成本库价格前置给 AI 报价链路已完成代码层验证（2026-05-22）：新增 `quote_cost_context`，在 FastAPI 调用 N8N/Dify 前基于 `cost_items.active` 匹配需求项，把命中的底价、单位、数量、匹配类型、`cost_item_id` 和参考合计作为 `[成本库底价强参考]` 追加到 `text.content`；同步 `/chat` 与异步 `quote_jobs` 已接入，BIZ-2g 后置兜底继续保留。不新增 Alembic，不改 N8N。
 - 产品边界：系统完善前不正式投入生产使用；后续阶段先按内网开发/验证推进，最后统一准备正式生产 Runbook。
 - 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
 - 当前数据库迁移 head：`20260520_0019`；内网验证数据库若仍低于 head，需执行 Alembic 升级后启用完整反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账、BIZ-2a 成本数据库和 BIZ-2c RAG 同步记录。
 - 最新验证（2026-05-21，BIZ-2f/BIZ-2g 报价需求单 Excel 解析 + 成本库底价兜底填价）：`python -m alembic current` 显示 `20260520_0019 (head)`；`FEATURE_COST_DB=true`、`PUBLIC_ACCESS_ENABLED=false`；成本库当前 `total=197 / active=190 / archived=7`；`.xlsx/.xlsm` 需求单解析不新增数据库结构，上传 Excel 会先转成报价清单文本再进入现有报价、成本库参考、底价兜底和漏项检测链路；旧 `.xls` 提示另存为 `.xlsx`；底价兜底仅在 AI 单价空/0、成本库命中且有数量时生效；`python -m pytest` 为 `168 passed`，`ai-web` 的 `npm run build` 通过。当前不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
+- 最新验证（2026-05-22，BIZ-2h 成本库价格前置给 AI 报价链路）：已完成代码层验证；`FEATURE_COST_DB=true` 时，报价请求进入 N8N/Dify 前会追加 active 成本库强参考上下文；`FEATURE_COST_DB=false` 或无命中时请求文本保持不变；不新增数据库结构，不改 N8N，BIZ-2g 兜底仍作为后置安全网。当前不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
 
 ## 关键模块
 
@@ -65,7 +67,8 @@ Milvus 向量数据库 (192.168.88.128:19530)
 - `app/api/v1/history.py`：报价历史记录。
 - `app/api/v1/users.py`：用户配额管理、Phase 0 角色授权/撤销和权限历史。
 - `app/api/v1/quote_jobs.py`：新版异步报价任务 API，创建、查询、事件流、取消、重试、超时标记。
-- `app/services/quote_cost_matching.py`：BIZ-2b/BIZ-2d/BIZ-2g 报价结果成本底价参考匹配，给 preview 明细附加 `cost_reference` 与匹配汇总，处理中文符号、单位族和词序差异，并在 AI 单价空/0 且命中底价时保守回填。
+- `app/services/quote_cost_matching.py`：BIZ-2b/BIZ-2d/BIZ-2g/BIZ-2h 成本底价匹配基础能力，给 preview 明细附加 `cost_reference` 与匹配汇总，处理中文符号、单位族和词序差异，并在 AI 单价空/0 且命中底价时保守回填；同时向前置上下文服务提供 active 匹配 helper。
+- `app/services/quote_cost_context.py`：BIZ-2h 报价前置成本上下文，在调用 N8N/Dify 前把命中的 `cost_items.active` 底价、单位、数量和匹配类型追加为 AI 强参考文本。
 - `app/services/quote_omission_detection.py`：BIZ-2e 保守规则式漏项检测，基于当前报价行和 `cost_items.active` 生成 `omission_summary` / `omission_suggestions`。
 - `app/services/quote_excel_parser.py`：BIZ-2f 报价需求单 Excel 解析，支持 `.xlsx/.xlsm` 表头识别并输出报价清单文本。
 - `app/services/quote_helpers.py`：报价通用工具，包含 N8N 签名、报价文件名和编号换行清单输入清洗。

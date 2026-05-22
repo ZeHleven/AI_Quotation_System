@@ -21,6 +21,7 @@
 > AI 平台升级 BIZ Track BIZ-2e 漏项检测已完成代码层验证（2026-05-21）：新增保守规则式漏项检测服务，复用报价预审成本库 enrichment，仅基于 `cost_items.active` 给出“疑似漏项”提示；旧 `index.html` 预审弹窗展示提示、触发行和成本库参考价，不自动新增报价行、不改变合计、不新增 Alembic。
 > AI 平台升级 BIZ Track BIZ-2f 报价需求单 Excel 解析已完成代码层验证（2026-05-21）：新增 `quote_excel_parser`，`index.html` 支持上传 `.xlsx/.xlsm` 需求单；同步 `/chat` 与异步 `quote_jobs` 会直接解析施工项目、数量、单位、规格/特征、备注后进入现有报价流程，不再把 Excel 交给 GLM-4V；旧 `.xls` 明确提示另存为 `.xlsx`。不新增 Alembic，不改 N8N。
 > AI 平台升级 BIZ Track BIZ-2g 成本库底价兜底填价已完成代码层验证（2026-05-21）：当 AI 预审单给出空/0 单价但已命中 `cost_items.active` 底价且可解析数量时，报价预审会使用成本库参考价回填单价和合计，并标记“已用成本库底价兜底”；AI 已给出正常正数单价时不覆盖。不新增 Alembic，不改 N8N。
+> AI 平台升级 BIZ Track BIZ-2h 成本库价格前置给 AI 报价链路已完成代码层验证（2026-05-22）：新增 `quote_cost_context`，报价请求进入 N8N/Dify 前先基于 `cost_items.active` 匹配需求项，把命中的底价、单位、数量、匹配类型、`cost_item_id` 和参考合计作为 `[成本库底价强参考]` 追加给 AI；同步 `/chat` 与异步 `quote_jobs` 均已接入。不新增 Alembic，不改 N8N，BIZ-2g 后置兜底继续保留。
 > 商务/市场部提效路线阶段性收束（2026-05-20）：BIZ-1a 台账已完成，但后续提醒、流水等低收益延展暂不继续推进；真正高价值方向调整为"外部项目源自动搜索/收集 + 公司标准筛选 + 联系方式输出"，因外部项目搜索引擎调用成功率未知、外部项目收集平台合作和 API 权限尚未确定，标记为待定。
 
 ---
@@ -44,6 +45,7 @@
 - **AI 平台升级 BIZ Track BIZ-2e 漏项检测已完成代码层验证**：已新增 `app/services/quote_omission_detection.py`，在同步 `/chat` 和异步 `quote_jobs` preview 的成本库 enrichment 后追加 `omission_summary` / `omission_suggestions`；首批规则覆盖木地板拆除→踢脚线拆除、防水→防水保护层、墙地砖/吊顶拆除→垃圾清运等保守提示，并内置“窗帘盒/灯槽拆除”不误报验收；只提示、不自动改总价、不新增数据库结构。
 - **AI 平台升级 BIZ Track BIZ-2f 报价需求单 Excel 解析已完成代码层验证**：已新增 `app/services/quote_excel_parser.py`，支持 `.xlsx/.xlsm` 需求单按表头识别施工项目、数量、单位、规格/特征和备注；同步 `/chat` 与异步 `quote_jobs` 上传 Excel 时会先转成稳定文本清单，再进入现有 N8N/Dify 报价、成本库参考和漏项检测链路；旧 `.xls` 给出明确另存提示，不新增数据库结构。
 - **AI 平台升级 BIZ Track BIZ-2g 成本库底价兜底填价已完成代码层验证**：已在 `quote_cost_matching` 增加保守兜底规则；仅当成本库已命中 active 底价、AI 单价为空/0 且报价行有有效数量时，用参考价回填单价和合计，并在预审弹窗提示“已用成本库底价兜底”；AI 正常正数单价不被覆盖，不新增数据库结构。
+- **AI 平台升级 BIZ Track BIZ-2h 成本库价格前置给 AI 报价链路已完成代码层验证**：已新增 `app/services/quote_cost_context.py`，复用 active 成本匹配能力，在 FastAPI 调用 N8N/Dify 前追加命中的成本库底价强参考上下文；`FEATURE_COST_DB=false` 或无命中时保持原请求文本不变，不新增数据库结构，不改 N8N。
 - **商务/市场部路线阶段性暂停**：BIZ-1a 台账属于信息沉淀工具，对核心效率提升有限；BIZ-1b 跟进提醒、BIZ-1c 跟进流水和传统 CRM 式延展暂不启动。后续只保留高价值待定方向：调用外部项目搜索引擎或外部项目收集平台，结合公司内部筛选项目标准，自动筛选合格项目并提供联系方式；待外部平台合作、API 权限和搜索可行性明确后再重新立项。
 - **正式生产策略**：系统整体完善前不正式投入生产使用；不再为单一阶段单独做正式生产上线闭环。
 - **维护策略**：进入问题驱动维护阶段，优先投入报价准确率、知识库质量、RAG 评测和真实用户体验问题。
@@ -311,11 +313,25 @@ cost_item_history
 - [x] 预审弹窗展示“已用成本库底价兜底”
 - [x] 不新增 Alembic revision，不改 N8N/Dify
 
-#### BIZ-2h 知识库深度治理（并入 BIZ-2，持续维护）
+#### BIZ-2h 成本库价格前置给 AI 报价链路
 
-- BIZ-2c 已覆盖 active 成本条目同步进 RAG 的主路径
-- 后续如需同时保留工艺知识、历史资料和成本主库，需要设计多源 RAG 合并策略
-- 原 Phase 5（知识库历史数据治理导入）的目标通过 BIZ-2a 导入和 BIZ-2c 联动覆盖，不单独排期
+**当前状态**：已完成代码层验证（2026-05-22）。本阶段将成本库底价从“AI 返回后的校验/兜底”前移到“请求进入 N8N/Dify 前的强参考上下文”，不新增数据库结构，不改 N8N/Dify。
+
+- 新增 `quote_cost_context`，复用 `quote_cost_matching` 的 `cost_items.active` 匹配能力
+- 同步 `/chat` 与异步 `quote_jobs` 在调用 N8N 前追加 `[成本库底价强参考]`
+- 上下文包含需求项、数量、单位、匹配类型、成本库项、`reference_unit_price`、参考合计和 `cost_item_id`
+- Excel 需求单优先使用 BIZ-2f 解析出的结构化行；文本需求使用保守分段和数量单位识别
+- `FEATURE_COST_DB=false`、无 active 成本项或无命中项时，请求文本保持不变
+- BIZ-2g 后置兜底继续保留，用于 AI 仍返回空/0 单价的安全网
+
+**代码层验收标准**：
+- [x] 成本库命中项会在 N8N 前进入 `text.content`
+- [x] 同步 `/chat` 与异步 `quote_jobs` 行为一致
+- [x] 仅使用 `cost_items.active`，不使用 draft/archived
+- [x] 无命中或关闭 `FEATURE_COST_DB` 时不改变原请求
+- [x] 不新增 Alembic revision，不改 N8N/Dify
+
+**知识库深度治理后续**：BIZ-2c 已覆盖 active 成本条目同步进 RAG 的主路径；后续如需同时保留工艺知识、历史资料和成本主库，再设计多源 RAG 合并策略。原 Phase 5（知识库历史数据治理导入）的目标通过 BIZ-2a 导入和 BIZ-2c 联动覆盖，不单独排期。
 
 ---
 
@@ -369,6 +385,7 @@ cost_item_history
 | BIZ-2e | 漏项检测 | 已完成代码层验证（2026-05-21）；保守规则提示，不新增 Alembic |
 | BIZ-2f | 报价需求单 Excel 解析 | 已完成代码层验证（2026-05-21）；支持 `.xlsx/.xlsm` 需求单 |
 | BIZ-2g | 成本库底价兜底填价 | 已完成代码层验证（2026-05-21）；0 元报价命中底价时保守回填 |
+| BIZ-2h | 成本库价格前置给 AI 报价链路 | 已完成代码层验证（2026-05-22）；N8N/Dify 前追加 active 底价强参考 |
 
 **第三阶段（第二阶段稳定后）**
 

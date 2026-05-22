@@ -5,8 +5,10 @@ from io import BytesIO
 import httpx
 from openpyxl import Workbook
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
+from app.models.cost_item import COST_STATUS_ACTIVE, CostItem
 from app.models.user import User
 
 
@@ -51,6 +53,30 @@ def _quote_excel_bytes() -> bytes:
     buffer = BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()
+
+
+def _set_flag(name: str, value):
+    old_value = getattr(settings, name)
+    object.__setattr__(settings, name, value)
+    return old_value
+
+
+def _seed_cost_item(db, *, item_name: str, unit: str = "m", price: float = 6.0) -> CostItem:
+    item = CostItem(
+        category="BIZ-2h 测试类",
+        subcategory="成本前置",
+        item_name=item_name,
+        unit=unit,
+        price=price,
+        subcontract_composite_price=price,
+        price_type="combined",
+        status=COST_STATUS_ACTIVE,
+        source="manual",
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 def test_chat_sse_text_quote_reaches_preview_and_decrements_quota(client, monkeypatch):
@@ -199,3 +225,46 @@ def test_chat_sse_rejects_pdf_before_gateway_call(client, monkeypatch):
     assert events[-1]["status"] == "error"
     assert "暂只支持图片输入" in events[-1]["message"]
     assert gateway_called is False
+
+
+def test_chat_sse_attaches_biz2h_cost_context_before_gateway(client, monkeypatch):
+    _, headers = _create_user_headers(client, quota=3)
+    gateway_calls = []
+
+    async def fake_post_json_via_gateway(**kwargs):
+        gateway_calls.append(kwargs)
+        return httpx.Response(
+            200,
+            json={"project_details": [{"project_name": "窗帘盒/灯槽拆除", "unit": "m", "quantity": 18, "unit_price": 6, "total_price": 108}]},
+        )
+
+    monkeypatch.setattr("app.api.v1.quote.post_json_via_gateway", fake_post_json_via_gateway)
+
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        _seed_cost_item(db, item_name="窗帘盒/灯槽拆除", unit="m", price=6.0)
+
+        response = client.post(
+            "/api/v1/chat",
+            data={"message": "请根据需求单报价"},
+            files={
+                "file": (
+                    "quote.xlsx",
+                    _quote_excel_bytes(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+            headers=headers,
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    assert response.status_code == 200
+    content = gateway_calls[0]["json_payload"]["text"]["content"]
+    assert "[成本库底价强参考]" in content
+    assert "需求项: 窗帘盒/灯槽拆除" in content
+    assert "数量: 18" in content
+    assert "匹配类型: fuzzy_item_name" in content
+    assert "reference_unit_price: 6.00 元/m" in content

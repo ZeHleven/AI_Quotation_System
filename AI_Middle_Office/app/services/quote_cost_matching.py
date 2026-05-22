@@ -446,6 +446,29 @@ def _active_cost_items(db: Session) -> list[CostItem]:
     )
 
 
+def load_active_cost_items(db: Session) -> list[CostItem]:
+    return _active_cost_items(db)
+
+
+def match_quote_row_cost_reference(
+    row: dict[str, Any],
+    active_items: list[CostItem],
+    *,
+    source_row: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any] | None, CostItem | None]:
+    working_row = copy.deepcopy(row)
+    _apply_source_row_metadata(working_row, source_row)
+    item, match_type = _find_cost_match(working_row, active_items)
+    if item and match_type:
+        reference = _cost_item_reference(
+            item,
+            match_type=match_type,
+            ai_unit_price=parse_amount(working_row.get("unit_price")),
+        )
+        return working_row, reference, item
+    return working_row, None, None
+
+
 def _contains_project_details_object(value: Any, depth: int = 0) -> bool:
     if depth > 6:
         return False

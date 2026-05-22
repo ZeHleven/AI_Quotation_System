@@ -2040,7 +2040,7 @@
               <template #default="{ row }">
                 <div class="operation-client">
                   <strong>{{ formatPrice(row.line_total_price ?? row.ai_total_price) }}</strong>
-                  <small>{{ totalSourceLabel(row.line_total_source) }}</small>
+                  <small>{{ row.line_total_source_label || totalSourceLabel(row.line_total_source) }}</small>
                 </div>
               </template>
             </el-table-column>
@@ -2056,7 +2056,8 @@
               <template #default="{ row }">
                 <div class="operation-client">
                   <strong>{{ formatPrice(row.quote_total_price) }}</strong>
-                  <small>{{ totalSourceLabel(row.quote_total_source) }}</small>
+                  <small>{{ row.quote_total_source_label || totalSourceLabel(row.quote_total_source) }}</small>
+                  <small>参考合计 {{ formatPrice(row.quote_reference_total_price) }}</small>
                 </div>
               </template>
             </el-table-column>

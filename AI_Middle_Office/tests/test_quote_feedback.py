@@ -416,8 +416,11 @@ def test_admin_quote_feedback_summary_list_and_detail(client):
     assert detail["cost_evidence"][0]["manual_modified"] is True
     assert detail["cost_evidence"][0]["line_total_price"] == 130
     assert detail["cost_evidence"][0]["line_total_source"] == "manual_final"
+    assert detail["cost_evidence"][0]["line_total_source_label"] == "人工确认价"
     assert detail["cost_evidence"][0]["quote_total_price"] == 130
     assert detail["cost_evidence"][0]["quote_total_source"] == "manual_final"
+    assert detail["cost_evidence"][0]["quote_total_source_label"] == "人工确认价"
+    assert detail["cost_evidence"][0]["quote_reference_total_price"] == 110
     assert detail["ai_payload"]["project_details"][0]["total_price"] == 100
 
     evidence_response = client.get(
@@ -429,3 +432,5 @@ def test_admin_quote_feedback_summary_list_and_detail(client):
     assert len(evidence_items) == 1
     assert evidence_items[0]["feedback_id"] == feedback_id
     assert evidence_items[0]["match_reason"] == "matched by name"
+    assert evidence_items[0]["line_total_source_label"] == "人工确认价"
+    assert evidence_items[0]["quote_reference_total_price"] == 110

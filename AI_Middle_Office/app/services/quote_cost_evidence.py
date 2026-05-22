@@ -16,6 +16,12 @@ TOTAL_SOURCE_AI_QUOTE = "ai_quote"
 TOTAL_SOURCE_COST_REFERENCE_FALLBACK = "cost_reference_fallback"
 TOTAL_SOURCE_MANUAL_FINAL = "manual_final"
 TOTAL_SOURCE_MIXED = "mixed"
+TOTAL_SOURCE_LABELS = {
+    TOTAL_SOURCE_AI_QUOTE: "AI报价计算",
+    TOTAL_SOURCE_COST_REFERENCE_FALLBACK: "成本库兜底计算",
+    TOTAL_SOURCE_MANUAL_FINAL: "人工确认价",
+    TOTAL_SOURCE_MIXED: "混合来源",
+}
 
 
 def _utcnow() -> datetime:
@@ -181,6 +187,10 @@ def _quote_total_source(evidence_rows: list[QuoteCostEvidence]) -> Optional[str]
     if len(sources) == 1:
         return next(iter(sources))
     return TOTAL_SOURCE_MIXED
+
+
+def _total_source_label(source: Optional[str]) -> Optional[str]:
+    return TOTAL_SOURCE_LABELS.get(source or "")
 
 
 def _apply_quote_totals(evidence_rows: list[QuoteCostEvidence]) -> None:
@@ -422,8 +432,10 @@ def serialize_cost_evidence(item: QuoteCostEvidence) -> dict[str, Any]:
         "final_total_price": item.final_total_price,
         "line_total_price": item.line_total_price,
         "line_total_source": item.line_total_source,
+        "line_total_source_label": _total_source_label(item.line_total_source),
         "quote_total_price": item.quote_total_price,
         "quote_total_source": item.quote_total_source,
+        "quote_total_source_label": _total_source_label(item.quote_total_source),
         "quote_reference_total_price": item.quote_reference_total_price,
         "manual_modified": item.manual_modified,
         "adopted_cost_reference": item.adopted_cost_reference,

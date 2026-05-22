@@ -198,8 +198,12 @@
       display: flex; justify-content: space-between; align-items: center;
       background: var(--dark); color: var(--white);
       border-radius: 8px; padding: 12px 20px; margin-bottom: 14px;
+      gap: 16px;
     }
+    .summary-left, .summary-total-stack { display: grid; gap: 4px; }
     .summary-label { font-size: 13px; opacity: 0.7; }
+    .summary-subtle, .summary-source { font-size: 12px; opacity: 0.72; }
+    .summary-total-stack { text-align: right; }
     .summary-total { font-size: 24px; font-weight: 700; }
     .push-status { margin-bottom: 12px; }
     .review-hints { display: grid; gap: 10px; margin-bottom: 12px; }
@@ -219,8 +223,10 @@
     .cost-reference-cell { display: grid; gap: 4px; align-items: start; }
     .cost-reference-price { font-size: 13px; font-weight: 700; color: var(--dark); }
     .cost-reference-delta { font-size: 12px; color: var(--slate); }
+    .cost-reference-total, .total-source-chip { font-size: 12px; color: var(--slate); }
     .cost-reference-fallback { font-size: 12px; color: #b45309; }
     .cost-reference-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .total-price-cell { display: grid; gap: 4px; }
     .quote-evidence-message .el-message-box__message { white-space: pre-line; line-height: 1.6; }
 
     .cursor {
@@ -468,12 +474,18 @@
       </el-dialog>
 
       <!-- 人在回路预审弹窗 -->
-      <el-dialog v-model="showPreviewDialog" title="🧐 AI 报价明细预审 (支持手工干预)" width="1040px" :close-on-click-modal="false" :show-close="false">
+      <el-dialog v-model="showPreviewDialog" title="🧐 AI 报价明细预审 (支持手工干预)" width="1120px" :close-on-click-modal="false" :show-close="false">
 
         <!-- 优化5：置顶摘要栏 -->
         <div class="preview-summary-bar">
-          <span class="summary-label">共 {{ previewData.length }} 个施工项目</span>
-          <span class="summary-total">¥ {{ finalTotalAmount }}</span>
+          <div class="summary-left">
+            <span class="summary-label">共 {{ previewData.length }} 个施工项目</span>
+            <span class="summary-subtle">成本库参考合计：{{ quoteReferenceTotalAmount }}</span>
+          </div>
+          <div class="summary-total-stack">
+            <span class="summary-total">¥ {{ finalTotalAmount }}</span>
+            <span class="summary-source">{{ quoteTotalSourceText }}</span>
+          </div>
         </div>
 
         <el-alert title="请仔细核对以下 AI 提取的数据，如有遗漏或单价错误，请直接点击表格框进行修改。" type="warning" show-icon style="margin-bottom: 15px;"></el-alert>
@@ -542,6 +554,9 @@
                   {{ costReferenceLabel(scope.row) }}
                 </el-tag>
                 <span class="cost-reference-price">{{ costReferencePriceText(scope.row) }}</span>
+                <span v-if="costReferenceTotalText(scope.row)" class="cost-reference-total">
+                  参考合计 {{ costReferenceTotalText(scope.row) }}
+                </span>
                 <span v-if="costReferenceDeltaText(scope.row)" class="cost-reference-delta">
                   {{ costReferenceDeltaText(scope.row) }}
                 </span>
@@ -549,7 +564,7 @@
                   {{ costReferenceFallbackText(scope.row) }}
                 </span>
                 <div class="cost-reference-actions" v-if="costReference(scope.row).matched || scope.row.quote_explanation">
-                  <el-button type="primary" link size="small" @click="showCostReferenceEvidence(scope.row)">查看依据</el-button>
+                  <el-button type="primary" link size="small" @click="showCostReferenceEvidence(scope.row, scope.$index)">查看依据</el-button>
                   <el-button v-if="costReference(scope.row).cost_item_id" type="primary" link size="small" @click="openCostReferenceDetail(scope.row)">成本库详情</el-button>
                 </div>
               </div>
@@ -557,7 +572,10 @@
           </el-table-column>
           <el-table-column prop="total_price" label="系统合计(元)" width="130">
             <template #default="scope">
-              <el-input-number v-model="scope.row.total_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing"></el-input-number>
+              <div class="total-price-cell">
+                <el-input-number v-model="scope.row.total_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing"></el-input-number>
+                <span class="total-source-chip">{{ lineTotalSourceText(scope.row, scope.$index) }}</span>
+              </div>
             </template>
           </el-table-column>
           <el-table-column prop="notes" label="工艺与避坑备注" min-width="200">
@@ -877,6 +895,78 @@
 
         const costReference = (row = {}) => row.cost_reference || row.costReference || {};
 
+        const TOTAL_SOURCE_LABELS = {
+          ai_quote: 'AI报价计算',
+          cost_reference_fallback: '成本库兜底计算',
+          manual_final: '人工确认价',
+          mixed: '混合来源',
+        };
+
+        const totalSourceLabel = (source) => TOTAL_SOURCE_LABELS[source] || '-';
+
+        const rowQuantityValue = (row = {}) => {
+          const explanation = row.quote_explanation || {};
+          return parseMoney(row.quantity ?? row.qty ?? row.count ?? explanation.quantity);
+        };
+
+        const costReferenceTotalValue = (row = {}) => {
+          const reference = costReference(row);
+          if (!reference.matched) return null;
+          const directTotal = parseMoney(
+            reference.reference_total ?? reference.reference_total_price ?? reference.total_reference_price
+          );
+          if (directTotal !== null) return directTotal;
+          const quantity = rowQuantityValue(row);
+          const referencePrice = parseMoney(reference.reference_price);
+          if (quantity === null || referencePrice === null) return null;
+          return Math.round(quantity * referencePrice * 100) / 100;
+        };
+
+        const costReferenceTotalText = (row = {}) => {
+          const total = costReferenceTotalValue(row);
+          return total === null ? '' : `¥ ${formatMoney(total)}`;
+        };
+
+        const rowPriceManuallyChanged = (row = {}, index = 0) => {
+          const original = comparableRow(previewOriginalData.value[index] || {});
+          const current = comparableRow(row);
+          return current.unit_price !== original.unit_price || current.total_price !== original.total_price;
+        };
+
+        const lineTotalSource = (row = {}, index = 0) => {
+          if (rowPriceManuallyChanged(row, index)) return 'manual_final';
+          const reference = costReference(row);
+          if (reference.fallback_applied || row.cost_reference_fallback) return 'cost_reference_fallback';
+          return 'ai_quote';
+        };
+
+        const lineTotalSourceText = (row = {}, index = 0) => totalSourceLabel(lineTotalSource(row, index));
+
+        const quoteReferenceTotalValue = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          const totals = rows
+            .map(row => costReferenceTotalValue(row))
+            .filter(value => value !== null);
+          if (!totals.length) return null;
+          return Math.round(totals.reduce((sum, value) => sum + value, 0) * 100) / 100;
+        });
+
+        const quoteReferenceTotalAmount = computed(() => {
+          const total = quoteReferenceTotalValue.value;
+          return total === null ? '—' : `¥ ${formatMoney(total)}`;
+        });
+
+        const quoteTotalSource = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          const sources = new Set(rows.map((row, index) => lineTotalSource(row, index)).filter(Boolean));
+          if (!sources.size) return '';
+          if (sources.has('manual_final')) return 'manual_final';
+          if (sources.size === 1) return Array.from(sources)[0];
+          return 'mixed';
+        });
+
+        const quoteTotalSourceText = computed(() => totalSourceLabel(quoteTotalSource.value));
+
         const costReferenceSummary = computed(() => {
           const rows = Array.isArray(previewData.value) ? previewData.value : [];
           const total = rows.length;
@@ -924,17 +1014,22 @@
           return reference.evidence_url || reference.cost_item_url || `/admin/cost-db?cost_item_id=${reference.cost_item_id}`;
         };
 
-        const costReferenceEvidenceText = (row = {}) => {
+        const costReferenceEvidenceText = (row = {}, index = 0) => {
           const reference = costReference(row);
+          const original = previewOriginalData.value[index] || {};
           const explanation = row.quote_explanation || {};
           const sourceItem = reference.source_cost_item || {};
           const breakdown = reference.price_breakdown || {};
           const sourceLabel = reference.reference_price_source_label || reference.reference_price_source || '主参考价';
           const quantity = row.quantity ?? explanation.quantity ?? '-';
           const unit = row.unit || explanation.unit || '-';
-          const aiUnitPrice = parseMoney(row.unit_price);
-          const aiTotalPrice = parseMoney(row.total_price);
+          const aiUnitPrice = parseMoney(original.unit_price) ?? parseMoney(row.unit_price);
+          const aiTotalPrice = parseMoney(original.total_price) ?? parseMoney(row.total_price);
+          const lineTotal = parseMoney(row.total_price);
+          const lineSource = lineTotalSource(row, index);
           const referencePrice = parseMoney(reference.reference_price);
+          const referenceTotal = costReferenceTotalValue(row);
+          const quoteReferenceTotal = quoteReferenceTotalValue.value;
           const delta = parseMoney(reference.price_delta);
           const rate = Number(reference.price_delta_rate);
           const deltaText = delta === null
@@ -951,8 +1046,12 @@
           const evidenceUrl = costReferenceDetailUrl(row);
           return [
             `施工项目：${row.project_name || row.item || '-'}`,
-            `AI 报价：¥ ${aiUnitPrice === null ? '-' : formatMoney(aiUnitPrice)} / ${unit} × ${quantity} = ¥ ${aiTotalPrice === null ? '-' : formatMoney(aiTotalPrice)}`,
+            `AI 原始报价：¥ ${aiUnitPrice === null ? '-' : formatMoney(aiUnitPrice)} / ${unit} × ${quantity} = ¥ ${aiTotalPrice === null ? '-' : formatMoney(aiTotalPrice)}`,
             `AI 报价依据：${explanation.ai_basis || 'AI 工作流原始返回的单价与备注；系统展示可审计输入和结果，不臆测模型内部推理。'}`,
+            `系统行合计：¥ ${lineTotal === null ? '-' : formatMoney(lineTotal)}（${totalSourceLabel(lineSource)}）`,
+            reference.matched ? `成本库参考合计：¥ ${referenceTotal === null ? '-' : formatMoney(referenceTotal)}（参考单价 × 数量）` : '',
+            `整单系统合计：¥ ${finalTotalAmount.value}（${quoteTotalSourceText.value}）`,
+            `整单成本库参考合计：${quoteReferenceTotal === null ? '—' : `¥ ${formatMoney(quoteReferenceTotal)}`}`,
             row.notes ? `AI 工艺备注：${row.notes}` : '',
             explanation.cost_context_basis ? `前置成本库上下文：${explanation.cost_context_basis}` : '',
             reference.matched ? `成本库命中：#${reference.cost_item_id} ${sourceItem.item_name || reference.item_name || '-'}（${sourceItem.category || reference.category || '-'}）` : '成本库命中：无',
@@ -966,8 +1065,8 @@
           ].filter(Boolean).join('\n');
         };
 
-        const showCostReferenceEvidence = (row = {}) => {
-          ElMessageBox.alert(costReferenceEvidenceText(row), '报价依据与成本库证据链', {
+        const showCostReferenceEvidence = (row = {}, index = 0) => {
+          ElMessageBox.alert(costReferenceEvidenceText(row, index), '报价依据与成本库证据链', {
             confirmButtonText: '知道了',
             customClass: 'quote-evidence-message',
           });
@@ -1678,11 +1777,12 @@
         return {
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
           showPreviewDialog, previewData, previewOriginalData, pushing, pushError, finalTotalAmount,
+          quoteReferenceTotalAmount, quoteTotalSourceText, lineTotalSourceText,
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
           omissionSuggestions, omissionSummary, omissionSummaryText,
           costReference, costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText,
-          costReferenceFallbackText, costReferenceTagType, showCostReferenceEvidence, openCostReferenceDetail,
+          costReferenceFallbackText, costReferenceTotalText, costReferenceTagType, showCostReferenceEvidence, openCostReferenceDetail,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           canSubmit, selectedFileSummary,

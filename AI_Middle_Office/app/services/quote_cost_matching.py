@@ -155,6 +155,47 @@ def _row_unit(row: dict[str, Any]) -> str:
     return _clean_text(_row_value(row, "unit", "measurement_unit"))
 
 
+def _row_quantity(row: dict[str, Any]) -> float | None:
+    quantity = parse_amount(_row_value(row, "quantity", "qty", "count", "工程量", "数量", "计量数量"))
+    if quantity is None or quantity <= 0:
+        return None
+    return quantity
+
+
+def _apply_source_row_metadata(row: dict[str, Any], source_row: dict[str, Any] | None) -> None:
+    if not source_row:
+        return
+    key_pairs = (
+        ("quantity", ("quantity", "qty", "count", "工程量", "数量", "计量数量")),
+        ("unit", ("unit", "measurement_unit", "单位", "计量单位")),
+        ("spec", ("spec", "specification", "feature", "features", "project_feature", "规格", "特征")),
+        ("notes", ("notes", "remark", "remarks", "备注", "说明")),
+    )
+    for target_key, aliases in key_pairs:
+        if row.get(target_key) not in (None, ""):
+            continue
+        value = _row_value(source_row, *aliases)
+        if value not in (None, ""):
+            row[target_key] = value
+
+
+def _source_row_for_index(row: dict[str, Any], index: int, source_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not source_rows:
+        return None
+    if 0 <= index < len(source_rows):
+        return source_rows[index]
+
+    row_name_key = _searchable_name_key(_row_name(row))
+    if not row_name_key:
+        return None
+    for source_row in source_rows:
+        source_name = _clean_text(_row_value(source_row, "project_name", "item_name", "name"))
+        source_name_key = _searchable_name_key(source_name)
+        if source_name_key and (source_name_key == row_name_key or source_name_key in row_name_key or row_name_key in source_name_key):
+            return source_row
+    return None
+
+
 def _price_source(item: CostItem) -> str:
     reference = round(float(item.price or 0.0), 6)
     for field_name in (
@@ -221,6 +262,55 @@ def _no_match_reference(row: dict[str, Any]) -> dict[str, Any]:
         "price_delta_rate": None,
         "message": "无底价参考",
     }
+
+
+def _append_cost_fallback_note(row: dict[str, Any]) -> None:
+    fallback_note = "由成本库参考价兜底生成，需人工确认。"
+    existing = _clean_text(row.get("notes"))
+    if fallback_note.rstrip("。") in existing:
+        return
+    row["notes"] = f"{existing}；{fallback_note}" if existing else fallback_note
+
+
+def _apply_cost_reference_fallback(row: dict[str, Any], reference: dict[str, Any]) -> None:
+    reference_price = parse_amount(reference.get("reference_price"))
+    ai_unit_price = parse_amount(row.get("unit_price"))
+    quantity = _row_quantity(row)
+    if (
+        not reference.get("matched")
+        or reference_price is None
+        or reference_price <= 0
+        or quantity is None
+        or (ai_unit_price is not None and ai_unit_price > 0)
+    ):
+        return
+
+    previous_total = parse_amount(row.get("total_price"))
+    fallback_total = round(quantity * reference_price, 2)
+    row["unit_price"] = _round_money(reference_price)
+    row["total_price"] = fallback_total
+    _append_cost_fallback_note(row)
+    fallback_payload = {
+        "applied": True,
+        "reason": "ai_unit_price_empty_or_zero",
+        "reference_price": _round_money(reference_price),
+        "quantity": _round_money(quantity),
+        "unit_price_before": _round_money(ai_unit_price),
+        "total_price_before": _round_money(previous_total),
+        "total_price_after": fallback_total,
+    }
+    row["cost_reference_fallback"] = fallback_payload
+    reference.update(
+        {
+            "fallback_applied": True,
+            "fallback_reason": fallback_payload["reason"],
+            "ai_unit_price_before_fallback": fallback_payload["unit_price_before"],
+            "total_price_before_fallback": fallback_payload["total_price_before"],
+            "ai_unit_price": _round_money(reference_price),
+            "price_delta": 0.0,
+            "price_delta_rate": 0.0,
+        }
+    )
 
 
 def _name_match_score(row_name: str, cost_name: str) -> int:
@@ -337,11 +427,13 @@ def _find_cost_match(row: dict[str, Any], active_items: list[CostItem]) -> tuple
 
 def _reference_summary(rows: list[dict[str, Any]], active_count: int) -> dict[str, Any]:
     matched = sum(1 for row in rows if (row.get("cost_reference") or {}).get("matched"))
+    fallback_applied = sum(1 for row in rows if (row.get("cost_reference") or {}).get("fallback_applied"))
     return {
         "enabled": True,
         "active_cost_item_count": active_count,
         "matched_count": matched,
         "unmatched_count": max(0, len(rows) - matched),
+        "fallback_applied_count": fallback_applied,
     }
 
 
@@ -369,24 +461,28 @@ def _contains_project_details_object(value: Any, depth: int = 0) -> bool:
     return False
 
 
-def enrich_quote_payload_with_cost_refs(db: Session, payload: Any) -> Any:
+def enrich_quote_payload_with_cost_refs(db: Session, payload: Any, *, source_rows: list[dict[str, Any]] | None = None) -> Any:
     if not settings.feature_cost_db:
         return payload
 
     active_items = _active_cost_items(db)
     enriched = copy.deepcopy(payload)
     target = extract_project_payload(enriched)
+    source_rows = [row for row in (source_rows or []) if isinstance(row, dict)]
 
     if isinstance(target, dict) and isinstance(target.get("project_details"), list):
         rows = [copy.deepcopy(item) for item in target["project_details"] if isinstance(item, dict)]
-        for row in rows:
+        for index, row in enumerate(rows):
+            _apply_source_row_metadata(row, _source_row_for_index(row, index, source_rows))
             item, match_type = _find_cost_match(row, active_items)
             if item and match_type:
-                row["cost_reference"] = _cost_item_reference(
+                reference = _cost_item_reference(
                     item,
                     match_type=match_type,
                     ai_unit_price=parse_amount(row.get("unit_price")),
                 )
+                _apply_cost_reference_fallback(row, reference)
+                row["cost_reference"] = reference
             else:
                 row["cost_reference"] = _no_match_reference(row)
         target["project_details"] = rows
@@ -396,21 +492,27 @@ def enrich_quote_payload_with_cost_refs(db: Session, payload: Any) -> Any:
 
     if isinstance(target, list):
         rows = [copy.deepcopy(item) for item in target if isinstance(item, dict)]
-        for row in rows:
+        for index, row in enumerate(rows):
+            _apply_source_row_metadata(row, _source_row_for_index(row, index, source_rows))
             item, match_type = _find_cost_match(row, active_items)
-            row["cost_reference"] = (
-                _cost_item_reference(item, match_type=match_type, ai_unit_price=parse_amount(row.get("unit_price")))
-                if item and match_type
-                else _no_match_reference(row)
-            )
+            if item and match_type:
+                reference = _cost_item_reference(
+                    item,
+                    match_type=match_type,
+                    ai_unit_price=parse_amount(row.get("unit_price")),
+                )
+                _apply_cost_reference_fallback(row, reference)
+                row["cost_reference"] = reference
+            else:
+                row["cost_reference"] = _no_match_reference(row)
         return rows
 
     return enriched
 
 
-def safe_enrich_quote_payload_with_cost_refs(db: Session, payload: Any) -> Any:
+def safe_enrich_quote_payload_with_cost_refs(db: Session, payload: Any, *, source_rows: list[dict[str, Any]] | None = None) -> Any:
     try:
-        return enrich_quote_payload_with_cost_refs(db, payload)
+        return enrich_quote_payload_with_cost_refs(db, payload, source_rows=source_rows)
     except Exception:
         logger.exception("quote_cost_reference_enrichment_failed")
         return payload

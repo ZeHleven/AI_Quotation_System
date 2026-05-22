@@ -2,8 +2,10 @@ import json
 import uuid
 import asyncio
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 
 import httpx
+from openpyxl import Workbook
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
@@ -41,6 +43,17 @@ def _admin_headers(client):
 
 def _response_data(response):
     return response.json()["data"]
+
+
+def _quote_excel_bytes() -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["工作内容", "工程量", "计量单位", "特征描述"])
+    sheet.append(["拆除复合木地板", 20, "㎡", "不含清运"])
+    sheet.append(["窗帘盒/灯槽拆除", 18, "m", "拆除至指定堆放点"])
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def test_create_quote_job_returns_queued_status(client):
@@ -473,3 +486,40 @@ def test_quote_job_runner_normalizes_plain_multiline_quote_items_before_gateway(
     assert events[-1][0] == "preview"
     content = gateway_calls[0]["json_payload"]["text"]["content"]
     assert content == "拆除复合木地板 20㎡；拆除复合木地板 20㎡，拆除木脚线 30m；窗帘盒/灯槽拆除 18m"
+
+
+def test_quote_job_runner_parses_excel_quote_sheet_before_gateway(monkeypatch):
+    gateway_calls = []
+
+    async def fake_post_json_via_gateway(**kwargs):
+        gateway_calls.append(kwargs)
+        return httpx.Response(
+            200,
+            json={"project_details": [{"project_name": "拆除复合木地板", "unit_price": 12, "total_price": 240}]},
+        )
+
+    async def fail_vision_call(*args, **kwargs):
+        raise AssertionError("Excel quote sheets should not be sent to GLM-4V")
+
+    monkeypatch.setattr(quote_job_runner, "post_json_via_gateway", fake_post_json_via_gateway)
+    monkeypatch.setattr(quote_job_runner, "call_glm_vision_extract", fail_vision_call)
+
+    async def collect_events():
+        return [
+            event
+            async for event in quote_job_runner._iter_quote_events(
+                username="runner",
+                message="请根据需求单报价",
+                file_content=_quote_excel_bytes(),
+                mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                filename="quote.xlsx",
+            )
+        ]
+
+    events = asyncio.run(collect_events())
+
+    assert events[-1][0] == "preview"
+    content = gateway_calls[0]["json_payload"]["text"]["content"]
+    assert "从Excel需求单解析到的内容" in content
+    assert "拆除复合木地板，规格/特征：不含清运，数量：20，单位：㎡" in content
+    assert "窗帘盒/灯槽拆除，规格/特征：拆除至指定堆放点，数量：18，单位：m" in content

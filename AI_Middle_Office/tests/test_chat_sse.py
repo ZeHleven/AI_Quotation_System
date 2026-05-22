@@ -1,7 +1,9 @@
 import json
 import uuid
+from io import BytesIO
 
 import httpx
+from openpyxl import Workbook
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
@@ -38,6 +40,17 @@ def _sse_events(response_text: str) -> list[dict]:
             if line.startswith("data: "):
                 events.append(json.loads(line[6:]))
     return events
+
+
+def _quote_excel_bytes() -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["施工项目", "数量", "单位", "备注"])
+    sheet.append(["拆除复合木地板", 20, "㎡", "不含清运"])
+    sheet.append(["窗帘盒/灯槽拆除", 18, "m", "拆除至指定堆放点"])
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def test_chat_sse_text_quote_reaches_preview_and_decrements_quota(client, monkeypatch):
@@ -122,6 +135,45 @@ def test_chat_sse_normalizes_numbered_text_before_gateway(client, monkeypatch):
     assert "\n" not in content
     assert "1." not in content
     assert "拆除复合木地板，35平方米；拆除木脚线，42米" in content
+
+
+def test_chat_sse_parses_excel_quote_sheet_before_gateway(client, monkeypatch):
+    _, headers = _create_user_headers(client, quota=3)
+    gateway_calls = []
+
+    async def fake_post_json_via_gateway(**kwargs):
+        gateway_calls.append(kwargs)
+        return httpx.Response(
+            200,
+            json={"project_details": [{"project_name": "拆除复合木地板", "unit_price": 12, "total_price": 240}]},
+        )
+
+    async def fail_vision_call(*args, **kwargs):
+        raise AssertionError("Excel quote sheets should not be sent to GLM-4V")
+
+    monkeypatch.setattr("app.api.v1.quote.post_json_via_gateway", fake_post_json_via_gateway)
+    monkeypatch.setattr("app.api.v1.quote.call_glm_vision_extract", fail_vision_call)
+
+    response = client.post(
+        "/api/v1/chat",
+        data={"message": "请根据需求单报价"},
+        files={
+            "file": (
+                "quote.xlsx",
+                _quote_excel_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    events = _sse_events(response.text)
+    assert events[-1]["status"] == "preview"
+    content = gateway_calls[0]["json_payload"]["text"]["content"]
+    assert "从Excel需求单解析到的内容" in content
+    assert "拆除复合木地板，数量：20，单位：㎡，备注：不含清运" in content
+    assert "窗帘盒/灯槽拆除，数量：18，单位：m，备注：拆除至指定堆放点" in content
 
 
 def test_chat_sse_rejects_pdf_before_gateway_call(client, monkeypatch):

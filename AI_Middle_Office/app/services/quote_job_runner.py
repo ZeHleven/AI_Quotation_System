@@ -19,6 +19,12 @@ from app.models.user import User
 from app.services.file_storage import get_object_bytes
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
+from app.services.quote_excel_parser import (
+    QuoteExcelParseError,
+    is_legacy_excel_file,
+    is_quote_excel_file,
+    parse_quote_excel_bytes,
+)
 from app.services.quote_feedback import safe_record_ai_preview
 from app.services.quote_job_readability import (
     apply_job_duration,
@@ -134,6 +140,7 @@ async def _iter_quote_events(
     filename: Optional[str],
 ) -> Iterable[Tuple[str, str, Dict[str, Any]]]:
     final_query = message or ""
+    excel_source_rows: list[dict[str, Any]] = []
 
     yield (
         "processing",
@@ -143,54 +150,85 @@ async def _iter_quote_events(
     await asyncio.sleep(0.2)
 
     if file_content:
-        if "pdf" in (mime_type or "").lower():
+        if is_quote_excel_file(filename, mime_type):
+            yield (
+                "processing",
+                f"[Excel Module] 📊 正在解析报价需求单: {filename}...",
+                {"stage": "excel"},
+            )
+            try:
+                parsed_excel = parse_quote_excel_bytes(file_content, filename=filename)
+            except QuoteExcelParseError as exc:
+                yield (
+                    "error",
+                    f"❌ [Excel Module] {str(exc)}",
+                    {"stage": "excel"},
+                )
+                return
+
+            excel_source_rows = list(parsed_excel.items)
+            final_query = f"{final_query} [从Excel需求单解析到的内容]: {parsed_excel.text}".replace("\n", "；").replace("\r", "")
+            yield (
+                "processing",
+                f"[Excel Module] ✅ 已解析 {parsed_excel.item_count} 行报价需求，准备进入算价流程",
+                {"stage": "excel"},
+            )
+            await asyncio.sleep(0.2)
+        elif is_legacy_excel_file(filename, mime_type):
+            yield (
+                "error",
+                "❌ [格式校验] 暂不支持旧版 .xls，请另存为 .xlsx 后重新上传",
+                {"stage": "validation"},
+            )
+            return
+        elif "pdf" in (mime_type or "").lower():
             yield (
                 "error",
                 "❌ [格式校验] 拦截：国内引擎暂只支持图片输入，请截图重试",
                 {"stage": "validation"},
             )
             return
-
-        yield (
-            "processing",
-            f"[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...",
-            {"stage": "vision"},
-        )
-
-        base64_data = base64.b64encode(file_content).decode("utf-8")
-        try:
-            extracted_text = await call_glm_vision_extract(
-                base64_data,
-                mime_type or "",
-                username=username,
-            )
-        except Exception as glm_err:
-            logger.exception(
-                "vision_model_failed",
-                extra={"username": username, "event": "vision_model_failed"},
-            )
+        else:
             yield (
-                "error",
-                f"❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}",
+                "processing",
+                f"[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...",
                 {"stage": "vision"},
             )
-            return
 
-        if not extracted_text:
+            base64_data = base64.b64encode(file_content).decode("utf-8")
+            try:
+                extracted_text = await call_glm_vision_extract(
+                    base64_data,
+                    mime_type or "",
+                    username=username,
+                )
+            except Exception as glm_err:
+                logger.exception(
+                    "vision_model_failed",
+                    extra={"username": username, "event": "vision_model_failed"},
+                )
+                yield (
+                    "error",
+                    f"❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}",
+                    {"stage": "vision"},
+                )
+                return
+
+            if not extracted_text:
+                yield (
+                    "error",
+                    "❌ [Vision Module] GLM-4V 返回空内容，请重试",
+                    {"stage": "vision"},
+                )
+                return
+
+            final_query = f"{final_query} [从文件识别到的内容]: {extracted_text}".replace("\n", "；").replace("\r", "")
             yield (
-                "error",
-                "❌ [Vision Module] GLM-4V 返回空内容，请重试",
+                "processing",
+                "[Vision Module] ✅ 提取完毕，已成功结构化二维图纸特征！",
                 {"stage": "vision"},
             )
-            return
-
-        final_query = f"{final_query} [从文件识别到的内容]: {extracted_text}".replace("\n", "；").replace("\r", "")
-        yield (
-            "processing",
-            "[Vision Module] ✅ 提取完毕，已成功结构化二维图纸特征！",
-            {"stage": "vision"},
-        )
-        await asyncio.sleep(0.2)
+            await asyncio.sleep(0.2)
     elif final_query.strip():
         yield (
             "processing",
@@ -272,7 +310,7 @@ async def _iter_quote_events(
     yield (
         "preview",
         "[n8n Workflow] ✅ AI 预审数据已就绪，请人工复核！",
-        {"stage": "completed", "data": calc_result},
+        {"stage": "completed", "data": calc_result, "source_rows": excel_source_rows},
     )
 
 
@@ -342,7 +380,8 @@ async def run_quote_job_async(job_id: str) -> None:
             job.stage = extra.get("stage", job.stage)
             if status_name == "preview":
                 extra = dict(extra)
-                extra["data"] = safe_enrich_quote_payload_with_cost_refs(db, extra.get("data"))
+                source_rows = extra.pop("source_rows", None)
+                extra["data"] = safe_enrich_quote_payload_with_cost_refs(db, extra.get("data"), source_rows=source_rows)
             append_job_event(job, status_name, message, trace_id=job.trace_id, **extra)
 
             if status_name == "preview":

@@ -219,6 +219,7 @@
     .cost-reference-cell { display: grid; gap: 4px; align-items: start; }
     .cost-reference-price { font-size: 13px; font-weight: 700; color: var(--dark); }
     .cost-reference-delta { font-size: 12px; color: var(--slate); }
+    .cost-reference-fallback { font-size: 12px; color: #b45309; }
 
     .cursor {
       display: inline-block; width: 6px; height: 15px; background: var(--slate);
@@ -366,12 +367,12 @@
                 </div>
               </div>
               <div class="input-textarea-wrap">
-                <el-input v-model="inputText" type="textarea" :autosize="{minRows:1,maxRows:4}" placeholder="描述需求或上传图片清单..." resize="none" @keyup.enter.exact="sendMessage" :disabled="sending || pushing"></el-input>
+                <el-input v-model="inputText" type="textarea" :autosize="{minRows:1,maxRows:4}" placeholder="描述需求或上传图片/Excel需求单..." resize="none" @keyup.enter.exact="sendMessage" :disabled="sending || pushing"></el-input>
               </div>
               <div class="input-toolbar">
                 <div class="toolbar-left">
-                  <el-upload action="#" :auto-upload="false" :show-file-list="false" :on-change="handleFileChange" :disabled="sending || pushing">
-                    <el-button circle size="small" :disabled="sending || pushing" :title="sending ? '报价处理中，暂不能更换附件' : '上传图片附件'">📎</el-button>
+                  <el-upload action="#" accept="image/*,.xlsx,.xlsm" :auto-upload="false" :show-file-list="false" :on-change="handleFileChange" :disabled="sending || pushing">
+                    <el-button circle size="small" :disabled="sending || pushing" :title="sending ? '报价处理中，暂不能更换附件' : '上传图片或Excel需求单'">📎</el-button>
                   </el-upload>
                   <el-button circle size="small" title="历史记录" @click="openHistory" :disabled="pushing">📋</el-button>
                 </div>
@@ -541,6 +542,9 @@
                 <span class="cost-reference-price">{{ costReferencePriceText(scope.row) }}</span>
                 <span v-if="costReferenceDeltaText(scope.row)" class="cost-reference-delta">
                   {{ costReferenceDeltaText(scope.row) }}
+                </span>
+                <span v-if="costReferenceFallbackText(scope.row)" class="cost-reference-fallback">
+                  {{ costReferenceFallbackText(scope.row) }}
                 </span>
               </div>
             </template>
@@ -903,9 +907,15 @@
           return [deltaText, rateText].filter(Boolean).join(' / ');
         };
 
+        const costReferenceFallbackText = (row = {}) => {
+          const reference = costReference(row);
+          return reference.fallback_applied ? '已用成本库底价兜底' : '';
+        };
+
         const costReferenceTagType = (row = {}) => {
           const reference = costReference(row);
           if (!reference.matched) return 'info';
+          if (reference.fallback_applied) return 'warning';
           const rate = Math.abs(Number(reference.price_delta_rate));
           if (Number.isFinite(rate) && rate >= 0.2) return 'warning';
           return 'success';
@@ -926,6 +936,7 @@
           const reference = costReference(row);
           const refRate = Math.abs(Number(reference.price_delta_rate));
           if (reference.matched && Number.isFinite(refRate) && refRate >= 0.2) risks.push('偏离底价');
+          if (reference.fallback_applied) risks.push('成本库兜底');
           if (!risks.length) return { label: '正常', type: 'success', reasons: [] };
           const high = risks.some(item => ['缺少项目', '单价异常', '合计异常'].includes(item));
           return { label: high ? '高风险' : '需复核', type: high ? 'danger' : 'warning', reasons: risks };
@@ -1600,7 +1611,7 @@
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
           omissionSuggestions, omissionSummary, omissionSummaryText,
-          costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText, costReferenceTagType,
+          costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText, costReferenceFallbackText, costReferenceTagType,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           canSubmit, selectedFileSummary,

@@ -20,6 +20,12 @@ from app.schemas.quote import ConfirmPushRequest
 from app.services.excel_service import build_excel_base64
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
+from app.services.quote_excel_parser import (
+    QuoteExcelParseError,
+    is_legacy_excel_file,
+    is_quote_excel_file,
+    parse_quote_excel_bytes,
+)
 from app.services.quote_feedback import record_ai_preview, record_confirmed_quote
 from app.services.quote_history import create_quote_history_record
 from app.services.quote_helpers import attach_quote_filename, normalize_quote_request_text, sign_payload
@@ -64,38 +70,58 @@ async def process_chat(
         trace_token = set_trace_id(request_trace_id)
         yield f": {' ' * 1024}\n\n"
         final_query = message or ""
+        excel_source_rows: list[dict] = []
         try:
             yield _sse_event("processing", "[API Gateway] 📡 安全握手成功，已剥离 JWT 并唤醒底层引擎...", trace_id=request_trace_id)
             await asyncio.sleep(0.5)
 
             if file_content:
-                if "pdf" in mime_type.lower():
-                    yield _sse_event("error", "❌ [格式校验] 拦截：国内引擎暂只支持图片输入，请截图重试", trace_id=request_trace_id)
-                    return
+                if is_quote_excel_file(filename, mime_type):
+                    yield _sse_event("processing", f"[Excel Module] 📊 正在解析报价需求单: {filename}...", trace_id=request_trace_id)
+                    try:
+                        parsed_excel = parse_quote_excel_bytes(file_content, filename=filename)
+                    except QuoteExcelParseError as exc:
+                        yield _sse_event("error", f"❌ [Excel Module] {str(exc)}", trace_id=request_trace_id)
+                        return
 
-                yield _sse_event("processing", f"[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...", trace_id=request_trace_id)
-
-                base64_data = base64.b64encode(file_content).decode("utf-8")
-                try:
-                    extracted_text = await call_glm_vision_extract(
-                        base64_data,
-                        mime_type,
-                        username=current_user.username,
+                    excel_source_rows = list(parsed_excel.items)
+                    final_query = f"{final_query} [从Excel需求单解析到的内容]: {parsed_excel.text}".replace("\n", "；").replace("\r", "")
+                    yield _sse_event(
+                        "processing",
+                        f"[Excel Module] ✅ 已解析 {parsed_excel.item_count} 行报价需求，准备进入算价流程",
                         trace_id=request_trace_id,
                     )
-                except Exception as glm_err:
-                    logger.exception("vision_model_failed", extra={"username": current_user.username, "event": "vision_model_failed"})
-                    yield _sse_event("error", f"❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}", trace_id=request_trace_id)
-                    return
-
-                if extracted_text:
-                    final_query = f"{final_query} [从文件识别到的内容]: {extracted_text}".replace("\n", "；").replace(
-                        "\r", "")
-                    yield _sse_event("processing", "[Vision Module] ✅ 提取完毕，已成功结构化二维图纸特征！", trace_id=request_trace_id)
                     await asyncio.sleep(0.5)
-                else:
-                    yield _sse_event("error", "❌ [Vision Module] GLM-4V 返回空内容，请重试", trace_id=request_trace_id)
+                elif is_legacy_excel_file(filename, mime_type):
+                    yield _sse_event("error", "❌ [格式校验] 暂不支持旧版 .xls，请另存为 .xlsx 后重新上传", trace_id=request_trace_id)
                     return
+                elif "pdf" in (mime_type or "").lower():
+                    yield _sse_event("error", "❌ [格式校验] 拦截：国内引擎暂只支持图片输入，请截图重试", trace_id=request_trace_id)
+                    return
+                else:
+                    yield _sse_event("processing", f"[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...", trace_id=request_trace_id)
+
+                    base64_data = base64.b64encode(file_content).decode("utf-8")
+                    try:
+                        extracted_text = await call_glm_vision_extract(
+                            base64_data,
+                            mime_type,
+                            username=current_user.username,
+                            trace_id=request_trace_id,
+                        )
+                    except Exception as glm_err:
+                        logger.exception("vision_model_failed", extra={"username": current_user.username, "event": "vision_model_failed"})
+                        yield _sse_event("error", f"❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}", trace_id=request_trace_id)
+                        return
+
+                    if extracted_text:
+                        final_query = f"{final_query} [从文件识别到的内容]: {extracted_text}".replace("\n", "；").replace(
+                            "\r", "")
+                        yield _sse_event("processing", "[Vision Module] ✅ 提取完毕，已成功结构化二维图纸特征！", trace_id=request_trace_id)
+                        await asyncio.sleep(0.5)
+                    else:
+                        yield _sse_event("error", "❌ [Vision Module] GLM-4V 返回空内容，请重试", trace_id=request_trace_id)
+                        return
             else:
                 if final_query.strip():
                     yield _sse_event("processing", "[Text Module] 📝 识别纯文本指令，正在执行语义清洗...", trace_id=request_trace_id)
@@ -129,7 +155,7 @@ async def process_chat(
                     logger.exception("n8n_response_parse_failed", extra={"username": current_user.username, "event": "n8n_response_parse_failed"})
                     yield _sse_event("error", f"❌ [n8n Workflow] 响应体解析失败（HTTP 200）\n实际返回内容：{body_preview}\n→ 请确认 N8N budget-calc 工作流末尾有 Respond to Webhook 节点且 Response Body 设为 JSON", trace_id=request_trace_id)
                     return
-                calc_result = safe_enrich_quote_payload_with_cost_refs(db, calc_result)
+                calc_result = safe_enrich_quote_payload_with_cost_refs(db, calc_result, source_rows=excel_source_rows)
                 current_user.quota -= 1
                 db.commit()
                 try:

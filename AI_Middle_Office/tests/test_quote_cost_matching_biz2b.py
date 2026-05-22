@@ -229,6 +229,140 @@ def test_biz2d_rejects_different_action_and_archived_rows(client):
     assert reference["matched"] is False
 
 
+def test_biz2g_applies_cost_reference_fallback_for_zero_ai_price(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2g fallback window box removal {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        _seed_cost_item(db, item_name=item_name, unit="m", price=6.0)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": item_name,
+                    "quantity": 18,
+                    "unit": "m",
+                    "unit_price": 0,
+                    "total_price": 0,
+                    "notes": "AI未找到对应定额项目",
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    reference = row["cost_reference"]
+    assert row["unit_price"] == 6
+    assert row["total_price"] == 108
+    assert "由成本库参考价兜底生成" in row["notes"]
+    assert row["cost_reference_fallback"]["applied"] is True
+    assert reference["matched"] is True
+    assert reference["fallback_applied"] is True
+    assert reference["ai_unit_price_before_fallback"] == 0
+    assert reference["ai_unit_price"] == 6
+    assert reference["price_delta"] == 0
+    assert reference["price_delta_rate"] == 0
+    assert enriched["cost_reference_summary"]["fallback_applied_count"] == 1
+
+
+def test_biz2g_does_not_override_positive_ai_price(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2g positive price remains ai result {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        _seed_cost_item(db, item_name=item_name, unit="m", price=6.0)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": item_name,
+                    "quantity": 18,
+                    "unit": "m",
+                    "unit_price": 8,
+                    "total_price": 144,
+                    "notes": "AI已给出报价",
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    reference = row["cost_reference"]
+    assert row["unit_price"] == 8
+    assert row["total_price"] == 144
+    assert "cost_reference_fallback" not in row
+    assert reference.get("fallback_applied") is None
+    assert reference["price_delta"] == 2
+    assert enriched["cost_reference_summary"]["fallback_applied_count"] == 0
+
+
+def test_biz2g_skips_fallback_without_quantity(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2g missing quantity skip fallback {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        _seed_cost_item(db, item_name=item_name, unit="m", price=6.0)
+        payload = {"project_details": [{"project_name": item_name, "unit": "m", "unit_price": 0, "total_price": 0}]}
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    reference = row["cost_reference"]
+    assert row["unit_price"] == 0
+    assert row["total_price"] == 0
+    assert "cost_reference_fallback" not in row
+    assert reference.get("fallback_applied") is None
+
+
+def test_biz2g_applies_excel_source_quantity_before_fallback(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2g source row quantity fallback {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        _seed_cost_item(db, item_name=item_name, unit="m", price=6.0)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": item_name,
+                    "unit_price": 0,
+                    "total_price": 0,
+                    "notes": "数据集无对应项，单价设为0",
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(
+            db,
+            payload,
+            source_rows=[{"project_name": item_name, "quantity": "18", "unit": "m"}],
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    reference = row["cost_reference"]
+    assert row["quantity"] == "18"
+    assert row["unit"] == "m"
+    assert row["unit_price"] == 6
+    assert row["total_price"] == 108
+    assert reference["fallback_applied"] is True
+    assert enriched["cost_reference_summary"]["fallback_applied_count"] == 1
+
+
 def test_enrich_quote_payload_is_noop_when_feature_disabled(client):
     payload = {"project_details": [{"project_name": "BIZ2b 未启用", "unit_price": 10}]}
     db = SessionLocal()

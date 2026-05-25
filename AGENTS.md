@@ -83,15 +83,19 @@ Clear_test/
 - AI 平台升级 BIZ Track BIZ-2f 报价需求单 Excel 解析已完成代码层验证（2026-05-21）：新增 `quote_excel_parser`，`index.html` 支持上传 `.xlsx/.xlsm` 需求单；同步 `/chat` 与异步 `quote_jobs` 会直接解析施工项目、数量、单位、规格/特征和备注后进入现有报价流程，不再把 Excel 交给 GLM-4V；旧 `.xls` 明确提示另存为 `.xlsx`。不新增 Alembic，不改 N8N。
 - AI 平台升级 BIZ Track BIZ-2g 成本库底价兜底填价已完成代码层验证（2026-05-21）：当 AI 预审单给出空/0 单价但已命中 `cost_items.active` 底价且可解析数量时，报价预审会使用成本库参考价回填单价和合计，并标记“已用成本库底价兜底”；AI 已给出正常正数单价时不覆盖。不新增 Alembic，不改 N8N。
 - AI 平台升级 BIZ Track BIZ-2h 成本库价格前置给 AI 报价链路已完成代码层验证（2026-05-22）：新增报价前置成本上下文服务，在 FastAPI 调用 N8N/Dify 前基于 `cost_items.active` 匹配需求项，把命中的底价、单位、数量、匹配类型和参考合计作为强参考文本追加到 `text.content`；同步 `/chat` 与异步 `quote_jobs` 已接入，BIZ-2g 事后兜底继续保留。不新增 Alembic，不改 N8N，不改旧 HTML 迁移策略。
+- AI 平台升级 BIZ Track BIZ-2i 报价可解释性与审计记录已完成代码层验证（2026-05-22）：报价确认/打回后记录成本证据，包含 AI 原始报价、最终报价、成本库参考价、成本条目快照、行合计来源、整单合计来源、AI 报价来源和证据链接；后台报价反馈/报价运营可追溯。不新增 Alembic。
+- AI 平台升级 BIZ Track BIZ-2j 报价依据与成本库证据链展示优化已完成代码层验证（2026-05-22）：`index.html` 预审“查看依据”弹窗已按 AI 报价来源、AI 报价依据、成本库参考、合计对照等分区展示，成本库详情链接改为按钮；后台报价任务详情展示 AI 来源和成本证据。
+- BIZ-2 预审体验补强已完成当前环境手动验收并推送（2026-05-23）：品牌文案统一为“旗胜智价”；预审阶段支持同名不同规格成本条目切换，切换后同步采用新成本条目参考价重算单价/合计；AI 来源可区分采纳/偏离前置成本库、无成本库参考 AI 估算、成本库兜底和人工切换；报价运营详情展示预审打回原因。
 - 产品边界：系统完善前不正式投入生产使用；后续阶段先按内网开发/验证推进，最后统一准备正式生产 Runbook。
 - 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
-- 架构升级路线按 `docs/superpowers/specs/2026-05-14-ai-platform-upgrade-design.md` 和 `ROADMAP.md` 的 BIZ Track 分阶段执行；当前已完成到 BIZ-2h 成本库价格前置给 AI 报价链路代码层验证，不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
+- 架构升级路线按 `docs/superpowers/specs/2026-05-14-ai-platform-upgrade-design.md` 和 `ROADMAP.md` 的 BIZ Track 分阶段执行；当前 BIZ-2 报价系统增强主链路已完成到 BIZ-2j，并完成条目切换、AI 来源和打回原因展示等演示前体验补强；不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
 - 当前代码迁移 head：`20260520_0019`；正式报价成本与 RAG 源为 MySQL `cost_items.active`，旧 `materials` 已清空退役、`material_snapshots` 仅作旧审计回溯；报价反馈新增 `quote_feedback` / `quote_corrections` / `quote_rag_traces`，Prompt 回归评测新增 `prompt_regression_cases` / `prompt_regression_runs`，知识库治理新增 `knowledge_candidates`，Phase 0 RBAC 新增 `users.role_version` / `dingtalk_user_id` / `dingtalk_bound_at`、`user_roles`、`user_role_events`，Phase 2 响应速度新增 `client_inquiries` 和 `quote_jobs.client_inquiry_id`，Phase 3 执行速度新增 `execution_tasks` 和 `execution_task_events`，Phase 4a 会议纪要新增 `meeting_notes`、`task_drafts` 和 `meeting_note_revisions`，BIZ-1a 新增 `client_inquiries.direction/stage/next_followup_at/cancelled_*` 与 `client_inquiry_events`，BIZ-2a 新增 `cost_items` 和 `cost_item_history`，BIZ-2c 新增 `cost_rag_sync_runs`。
 - 内网验证数据库若低于 `20260520_0019`，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账、BIZ-2a 成本数据库和 BIZ-2c RAG 同步记录。
 - 新增数据库字段/表必须走 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` 或启动兼容迁移。
 - `LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 不再自动导入旧 `rag_materials.json`；RAG 评测报告目录由 `RAG_EVAL_REPORT_DIR` 控制。
 - 最新验证（2026-05-21，BIZ-2f/BIZ-2g 报价需求单 Excel 解析 + 成本库底价兜底填价）：`python -m alembic current` 显示 `20260520_0019 (head)`；`FEATURE_COST_DB=true`、`PUBLIC_ACCESS_ENABLED=false`；成本库当前 `total=197 / active=190 / archived=7`；`.xlsx/.xlsm` 需求单解析不新增数据库结构，上传 Excel 会先转成报价清单文本再进入现有报价、成本库参考、底价兜底和漏项检测链路；旧 `.xls` 提示另存为 `.xlsx`；底价兜底仅在 AI 单价空/0、成本库命中且有数量时生效；`python -m pytest` 为 `168 passed`，`ai-web` 的 `npm run build` 通过。当前不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
 - 最新验证（2026-05-22，BIZ-2h 成本库价格前置给 AI 报价链路）：已完成代码层验证；`FEATURE_COST_DB=true` 时，FastAPI 会在请求进入 N8N/Dify 前为命中 `cost_items.active` 的需求项追加 `[成本库底价强参考]` 上下文，包含底价、单位、数量、匹配类型、`cost_item_id` 和参考合计；`FEATURE_COST_DB=false` 或无命中时保持原请求文本不变；不新增数据库结构，不改 N8N，BIZ-2g 兜底仍作为后置安全网。当前不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
+- 最新验证（2026-05-23，BIZ-2i/BIZ-2j 与预审体验补强）：已完成代码层验证和当前环境手动验收；`index.html` 可展示报价依据与成本库证据链、AI 报价来源、成本库详情按钮、同名不同规格成本条目切换和打回原因追溯；`ai-web` 报价运营详情可展示成本证据、AI 来源和预审打回原因；不新增数据库结构，不改 N8N/Dify，不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
 
 ## 账号
 

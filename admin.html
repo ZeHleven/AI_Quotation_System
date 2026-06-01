@@ -222,6 +222,13 @@
                 <el-tag v-if="opsAlerts.length" type="danger" size="small" effect="dark">{{ opsAlerts.length }} 条告警</el-tag>
               </div>
               <div class="panel-actions">
+                <el-button
+                  size="small"
+                  type="warning"
+                  :loading="opsAckLoading"
+                  @click="acknowledgeCurrentOpsLogs"
+                  plain
+                >标记当前异常已读</el-button>
                 <el-button size="small" :loading="opsLoading" @click="fetchOpsDashboard(true)" plain>刷新</el-button>
               </div>
             </div>
@@ -266,10 +273,11 @@
                   {{ opsJobs.stuck_count || 0 }} 个卡住
                 </el-tag>
               </div>
-              <el-descriptions :column="3" border size="small" style="margin-bottom:10px;">
+              <el-descriptions :column="4" border size="small" style="margin-bottom:10px;">
                 <el-descriptions-item label="活跃任务">{{ opsJobs.active_count || 0 }}</el-descriptions-item>
                 <el-descriptions-item label="阈值">{{ opsJobs.stuck_minutes || 30 }} 分钟</el-descriptions-item>
                 <el-descriptions-item label="异常日志">{{ opsLogs.total_matches || 0 }}</el-descriptions-item>
+                <el-descriptions-item label="未读当前异常">{{ opsLogs.current_event_count || 0 }}</el-descriptions-item>
               </el-descriptions>
               <el-table :data="opsStuckJobs" border size="small" height="220" empty-text="暂无卡住任务">
                 <el-table-column prop="updated_at" label="最后更新" width="145"></el-table-column>
@@ -286,6 +294,13 @@
                 <span style="font-size:12px; color:#909399;">{{ opsLogs.log_dir || 'logs' }}</span>
               </div>
               <el-table :data="opsLogItems" border size="small" height="270" empty-text="最近未发现异常日志">
+                <el-table-column label="状态" width="82">
+                  <template #default="scope">
+                    <el-tag :type="opsLogStatusType(scope.row)" size="small" effect="plain">
+                      {{ opsLogStatusLabel(scope.row) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="modified_at" label="文件时间" width="145"></el-table-column>
                 <el-table-column prop="file" label="日志文件" width="180" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="line" label="行" width="70" align="right"></el-table-column>
@@ -1220,6 +1235,7 @@
         const {
           opsDashboard,
           opsLoading,
+          opsAckLoading,
           opsServices,
           opsAlerts,
           opsJobs,
@@ -1227,7 +1243,10 @@
           opsStuckJobs,
           opsLogItems,
           fetchOpsDashboard,
+          acknowledgeCurrentOpsLogs,
           opsOverallType,
+          opsLogStatusLabel,
+          opsLogStatusType,
           startOpsPolling,
           stopOpsPolling
         } = opsModule;
@@ -1449,8 +1468,8 @@
 
         return {
           navItems, activeSection, scrollToSection,
-          opsDashboard, opsLoading, opsServices, opsAlerts, opsJobs, opsLogs, opsStuckJobs, opsLogItems,
-          fetchOpsDashboard, opsOverallType,
+          opsDashboard, opsLoading, opsAckLoading, opsServices, opsAlerts, opsJobs, opsLogs, opsStuckJobs, opsLogItems,
+          fetchOpsDashboard, acknowledgeCurrentOpsLogs, opsOverallType, opsLogStatusLabel, opsLogStatusType,
           tableData, loading, saving, syncing, lastSyncTime, tableRowClassName,
           handleAdd, handleDelete, handleImportCSV, saveData, syncToMilvus,
           userData, userLoading, fetchUsers, updateQuota,

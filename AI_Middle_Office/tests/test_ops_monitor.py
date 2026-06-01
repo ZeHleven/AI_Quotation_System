@@ -97,6 +97,35 @@ def test_ops_http_probe_uses_httpx_client(monkeypatch):
     assert calls[0]["kwargs"]["headers"]["User-Agent"] == "ai-middle-office-ops-probe"
 
 
+def test_ops_probe_retries_transient_http_failure(monkeypatch):
+    calls = {"count": 0}
+
+    def flaky_http_probe(url, timeout_seconds):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise TimeoutError("transient timeout")
+        return {"http_status": 200}
+
+    monkeypatch.setattr(ops_monitor, "_http_probe", flaky_http_probe)
+    monkeypatch.setattr(ops_monitor.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(
+        ops_monitor,
+        "settings",
+        SimpleNamespace(
+            rag_service_url="http://rag.test",
+            ops_probe_timeout_seconds=0.1,
+            ops_probe_attempts=2,
+            ops_probe_retry_delay_seconds=0.01,
+        ),
+    )
+
+    result = ops_monitor.check_rag_service()
+
+    assert result["ok"] is True
+    assert result["meta"]["http_status"] == 200
+    assert calls["count"] == 2
+
+
 def test_collect_error_logs_ignores_stale_timestamped_errors(monkeypatch):
     log_dir = Path(__file__).resolve().parent / ".test_ops_logs"
     if log_dir.exists():
@@ -130,8 +159,134 @@ def test_collect_error_logs_ignores_stale_timestamped_errors(monkeypatch):
         result = ops_monitor.collect_error_logs(limit=10)
 
         assert result["total_matches"] == 1
+        assert result["total_events"] == 1
         assert "quote_job_crashed" in result["items"][0]["message"]
         assert "Cannot connect to redis" not in result["items"][0]["message"]
+    finally:
+        shutil.rmtree(log_dir, ignore_errors=True)
+
+
+def test_collect_error_logs_aggregates_tracebacks_into_events(monkeypatch):
+    log_dir = Path(__file__).resolve().parent / ".test_ops_logs"
+    if log_dir.exists():
+        shutil.rmtree(log_dir)
+    log_dir.mkdir()
+    try:
+        first_at = datetime.now() - timedelta(minutes=8)
+        second_at = datetime.now() - timedelta(minutes=6)
+        log_file = log_dir / "celery_worker_test.log"
+        log_file.write_text(
+            "\n".join(
+                [
+                    f"[{first_at:%Y-%m-%d %H:%M:%S},000: ERROR/MainProcess] quote_request_timeout",
+                    "Traceback (most recent call last):",
+                    "Traceback (most recent call last):",
+                    f"[{second_at:%Y-%m-%d %H:%M:%S},000: ERROR/MainProcess] quote_request_timeout",
+                    "Traceback (most recent call last):",
+                    "Traceback (most recent call last):",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(ops_monitor, "LOG_DIR", log_dir)
+        monkeypatch.setattr(
+            ops_monitor,
+            "settings",
+            SimpleNamespace(
+                ops_log_max_files=2,
+                ops_log_scan_lines=50,
+                ops_log_lookback_minutes=180,
+                ops_log_current_minutes=30,
+            ),
+        )
+
+        result = ops_monitor.collect_error_logs(limit=10)
+
+        assert result["total_matches"] == 6
+        assert result["total_events"] == 2
+        assert result["current_event_count"] == 0
+        assert result["historical_event_count"] == 2
+        assert {item["category"] for item in result["items"]} == {"quote_timeout"}
+        assert {item["match_count"] for item in result["items"]} == {3}
+    finally:
+        shutil.rmtree(log_dir, ignore_errors=True)
+
+
+def test_build_alerts_ignores_historical_log_events_when_services_are_ok():
+    services = [{"name": "Celery Worker", "ok": True}]
+    jobs = {"stuck_count": 0}
+    logs = {
+        "total_matches": 6,
+        "total_events": 2,
+        "current_event_count": 0,
+        "historical_event_count": 2,
+        "items": [{"category": "quote_timeout", "status": "historical"}],
+    }
+
+    alerts = ops_monitor.build_alerts(services, jobs, logs)
+
+    assert not any(alert.get("kind") == "current_log_events" for alert in alerts)
+
+
+def test_build_alerts_reports_current_log_events():
+    services = [{"name": "Celery Worker", "ok": True}]
+    jobs = {"stuck_count": 0}
+    logs = {
+        "total_matches": 1,
+        "total_events": 1,
+        "current_event_count": 1,
+        "historical_event_count": 0,
+        "items": [{"category": "quote_job_crashed", "status": "current"}],
+    }
+
+    alerts = ops_monitor.build_alerts(services, jobs, logs)
+
+    assert any(alert.get("kind") == "current_log_events" for alert in alerts)
+
+
+def test_acknowledge_error_logs_suppresses_current_alert_but_keeps_history(monkeypatch):
+    log_dir = Path(__file__).resolve().parent / ".test_ops_logs"
+    if log_dir.exists():
+        shutil.rmtree(log_dir)
+    log_dir.mkdir()
+    try:
+        recent_at = datetime.now() - timedelta(minutes=5)
+        log_file = log_dir / "celery_worker_test.log"
+        log_file.write_text(
+            f"[{recent_at:%Y-%m-%d %H:%M:%S},000: ERROR/MainProcess] "
+            "consumer: Cannot connect to redis://broker:6379/0: Timeout connecting to server.",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(ops_monitor, "LOG_DIR", log_dir)
+        monkeypatch.setattr(
+            ops_monitor,
+            "settings",
+            SimpleNamespace(
+                ops_log_max_files=2,
+                ops_log_scan_lines=50,
+                ops_log_lookback_minutes=180,
+                ops_log_current_minutes=30,
+            ),
+        )
+
+        before = ops_monitor.collect_error_logs(limit=10)
+        assert before["current_event_count"] == 1
+
+        ack_result = ops_monitor.acknowledge_error_logs(username="admin")
+
+        assert ack_result["acknowledged_count"] == 1
+        after = ops_monitor.collect_error_logs(limit=10)
+        assert after["current_event_count"] == 0
+        assert after["historical_event_count"] == 1
+        assert after["acknowledged_event_count"] == 1
+        assert after["items"][0]["status"] == "acknowledged"
+        assert after["items"][0]["acknowledged_by"] == "admin"
+        alerts = ops_monitor.build_alerts(
+            [{"name": "Celery Worker", "ok": True}],
+            {"stuck_count": 0},
+            after,
+        )
+        assert not any(alert.get("kind") == "current_log_events" for alert in alerts)
     finally:
         shutil.rmtree(log_dir, ignore_errors=True)
 

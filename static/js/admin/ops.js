@@ -19,6 +19,7 @@
 
     const opsDashboard = ref({ ...EMPTY_DASHBOARD });
     const opsLoading = ref(false);
+    const opsAckLoading = ref(false);
     const opsLastAlertKey = ref('');
     let opsTimer = null;
 
@@ -33,6 +34,20 @@
       if (status === 'ready') return 'success';
       if (status === 'degraded') return 'warning';
       return 'info';
+    };
+
+    const opsLogStatusLabel = (row) => {
+      if (!row) return '历史';
+      if (row.status === 'current') return '当前';
+      if (row.status === 'acknowledged') return '已读';
+      return '历史';
+    };
+
+    const opsLogStatusType = (row) => {
+      if (!row) return 'info';
+      if (row.status === 'current') return 'warning';
+      if (row.status === 'acknowledged') return 'info';
+      return 'success';
     };
 
     const notifyOpsAlerts = (alerts) => {
@@ -65,6 +80,34 @@
       }
     };
 
+    const acknowledgeCurrentOpsLogs = async () => {
+      if ((opsLogs.value.current_event_count || 0) <= 0) {
+        ElMessage.info('暂无需要标记已读的当前异常');
+        return;
+      }
+      opsAckLoading.value = true;
+      try {
+        const res = await axios.post(
+          `${coreApiBaseUrl}/admin/ops/logs/acknowledge`,
+          {},
+          { headers: authHeaders() },
+        );
+        const result = apiData(res, {}) || {};
+        const count = result.acknowledged_count || 0;
+        opsDashboard.value = {
+          ...opsDashboard.value,
+          logs: result.logs || opsDashboard.value.logs || {},
+        };
+        opsLastAlertKey.value = '';
+        await fetchOpsDashboard(false);
+        ElMessage.success(count > 0 ? `已标记 ${count} 起当前异常日志为已读` : '当前没有新的异常日志需要标记');
+      } catch (e) {
+        ElMessage.error(apiErrorMessage(e, '标记异常日志已读失败'));
+      } finally {
+        opsAckLoading.value = false;
+      }
+    };
+
     const startOpsPolling = () => {
       fetchOpsDashboard(true);
       if (opsTimer) clearInterval(opsTimer);
@@ -80,6 +123,7 @@
     return {
       opsDashboard,
       opsLoading,
+      opsAckLoading,
       opsServices,
       opsAlerts,
       opsJobs,
@@ -87,7 +131,10 @@
       opsStuckJobs,
       opsLogItems,
       fetchOpsDashboard,
+      acknowledgeCurrentOpsLogs,
       opsOverallType,
+      opsLogStatusLabel,
+      opsLogStatusType,
       startOpsPolling,
       stopOpsPolling,
     };

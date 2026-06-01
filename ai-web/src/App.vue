@@ -97,6 +97,15 @@
           <el-icon><Document /></el-icon>
           <span>成本数据库</span>
         </button>
+        <button
+          v-if="canViewRequirementStandardization"
+          :class="['nav-item', { active: routeName === 'requirementStandardization' }]"
+          type="button"
+          @click="navigate('/admin/requirement-standardization')"
+        >
+          <el-icon><Tickets /></el-icon>
+          <span>需求单标准化</span>
+        </button>
         <button v-if="canOpenLegacyQuote" class="nav-item" type="button" @click="openLegacy('/index.html')">
           <el-icon><Document /></el-icon>
           <span>旧报价工作台</span>
@@ -1076,7 +1085,7 @@
             </div>
             <div class="heading-actions">
               <el-button
-                v-if="canManageCostDb"
+                v-if="canEditCostDb"
                 :icon="Document"
                 plain
                 :disabled="costDbFeatureDisabled"
@@ -1085,7 +1094,7 @@
                 导入 Excel
               </el-button>
               <el-button
-                v-if="canManageCostDb"
+                v-if="canApproveCostDb"
                 :icon="DataAnalysis"
                 plain
                 :loading="costRagSyncing"
@@ -1095,7 +1104,7 @@
                 同步 active 到 RAG
               </el-button>
               <el-button
-                v-if="canManageCostDb"
+                v-if="canViewCostDb"
                 :icon="Clock"
                 plain
                 :disabled="costDbFeatureDisabled"
@@ -1104,7 +1113,33 @@
                 同步记录
               </el-button>
               <el-button
-                v-if="canManageCostDb"
+                v-if="canExportCostDb"
+                :icon="Download"
+                plain
+                :disabled="costDbFeatureDisabled || costDbLoading"
+                @click="exportCostItems"
+              >
+                导出
+              </el-button>
+              <el-button
+                v-if="canViewCostAudit"
+                :icon="Search"
+                plain
+                :disabled="costDbFeatureDisabled"
+                @click="openCostAuditDialog"
+              >
+                审计记录
+              </el-button>
+              <el-button
+                :icon="TrendCharts"
+                plain
+                :disabled="costDbFeatureDisabled"
+                @click="openCostLineageDrawer"
+              >
+                状态与流向
+              </el-button>
+              <el-button
+                v-if="canApproveCostDb"
                 :icon="Select"
                 plain
                 :loading="costAllSelecting"
@@ -1114,7 +1149,7 @@
                 {{ selectedCostItemIds.length ? '取消全选' : '全选全部' }}
               </el-button>
               <el-button
-                v-if="canManageCostDb"
+                v-if="canApproveCostDb"
                 :icon="Tickets"
                 type="success"
                 plain
@@ -1125,7 +1160,7 @@
                 批量核定 active
               </el-button>
               <el-button
-                v-if="canManageCostDb"
+                v-if="canApproveCostDb"
                 :icon="Refresh"
                 type="warning"
                 plain
@@ -1136,7 +1171,18 @@
                 批量恢复 draft
               </el-button>
               <el-button
-                v-if="canManageCostDb"
+                v-if="canApproveCostDb"
+                :icon="Delete"
+                type="danger"
+                plain
+                :loading="costBulkSubmitting"
+                :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedArchivableCostItemCount === 0"
+                @click="bulkArchiveCostItems"
+              >
+                批量归档
+              </el-button>
+              <el-button
+                v-if="canEditCostDb"
                 :icon="Plus"
                 type="primary"
                 :disabled="costDbFeatureDisabled"
@@ -1157,7 +1203,23 @@
             title="成本数据库功能尚未开启"
           ></el-alert>
           <template v-else>
-            <div class="cost-db-filters">
+            <el-alert
+              v-if="costRagSyncStatus"
+              class="dashboard-alert"
+              :type="costRagSyncSummaryAlertType(costRagSyncStatus.status)"
+              show-icon
+              :closable="false"
+            >
+              <template #title>
+                <span>
+                  RAG 同步状态：{{ costRagSyncStatus.status_label || costRagSyncSummaryLabel(costRagSyncStatus.status) }}
+                  · active {{ costRagSyncStatus.active_count || 0 }} 条
+                  · 最近成功 {{ formatShanghaiDate(costRagSyncStatus.latest_successful_run?.finished_at) }}
+                </span>
+              </template>
+              <div>{{ costRagSyncStatus.message || '暂无同步状态' }}</div>
+            </el-alert>
+            <div class="cost-db-filters cost-item-filters">
               <el-input
                 v-model="costItemFilters.category"
                 size="small"
@@ -1197,6 +1259,20 @@
                   :value="option.value"
                 ></el-option>
               </el-select>
+              <el-select
+                v-model="costItemFilters.source"
+                size="small"
+                clearable
+                placeholder="来源"
+                @change="applyCostItemFilters"
+              >
+                <el-option
+                  v-for="option in costSourceOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                ></el-option>
+              </el-select>
               <el-input
                 v-model="costItemFilters.keyword"
                 size="small"
@@ -1218,7 +1294,7 @@
               @selection-change="handleCostItemSelectionChange"
             >
               <el-table-column
-                v-if="canManageCostDb"
+                v-if="canApproveCostDb"
                 type="selection"
                 width="48"
                 :selectable="costItemSelectable"
@@ -1271,7 +1347,7 @@
                   <div class="row-actions">
                     <el-button size="small" :icon="Document" plain @click="openCostItemDetail(row)">详情</el-button>
                     <el-button
-                      v-if="canManageCostDb"
+                      v-if="canEditCostDb"
                       size="small"
                       plain
                       :disabled="row.status === 'archived'"
@@ -1280,7 +1356,7 @@
                       编辑
                     </el-button>
                     <el-button
-                      v-if="canManageCostDb"
+                      v-if="canApproveCostDb"
                       size="small"
                       type="success"
                       plain
@@ -1290,7 +1366,7 @@
                       启用
                     </el-button>
                     <el-button
-                      v-if="canManageCostDb"
+                      v-if="canApproveCostDb"
                       size="small"
                       type="warning"
                       plain
@@ -1300,7 +1376,7 @@
                       撤回启用
                     </el-button>
                     <el-button
-                      v-if="canManageCostDb"
+                      v-if="canApproveCostDb"
                       size="small"
                       type="danger"
                       plain
@@ -1325,13 +1401,473 @@
           </template>
         </template>
 
+        <template v-else-if="routeName === 'requirementStandardization'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">BIZ-2l-2 / BIZ-2l-3</p>
+              <h2>需求单标准化确认</h2>
+            </div>
+            <div class="heading-actions">
+              <el-upload
+                :auto-upload="false"
+                :show-file-list="true"
+                :limit="1"
+                accept=".xlsx,.xlsm"
+                :on-change="handleRequirementFileChange"
+                :on-remove="clearRequirementFile"
+              >
+                <el-button :icon="Document" plain>选择 Excel</el-button>
+              </el-upload>
+              <el-button
+                type="primary"
+                :icon="DataAnalysis"
+                :loading="requirementLoading"
+                :disabled="!requirementFile || requirementFeatureDisabled"
+                @click="previewRequirementStandardization"
+              >
+                解析预览
+              </el-button>
+              <el-button :icon="Clock" plain @click="openRequirementHistory">历史解析记录</el-button>
+              <el-button
+                :icon="Select"
+                plain
+                :disabled="!requirementPreview"
+                @click="saveRequirementProgress('手动保存进度')"
+              >
+                保存进度
+              </el-button>
+              <el-button :icon="Refresh" plain @click="resetRequirementStandardization">重置</el-button>
+            </div>
+          </div>
+
+          <el-alert
+            v-if="requirementFeatureDisabled"
+            class="dashboard-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="需求单标准化功能尚未开启"
+          ></el-alert>
+
+          <template v-else>
+            <div v-if="requirementPreview" class="metric-grid">
+              <div class="metric-card">
+                <span>Sheet</span>
+                <strong>{{ requirementSummary.sheet_count || 0 }}</strong>
+                <small>映射候选 {{ visibleRequirementSheetMappings.length }}，已隐藏 {{ hiddenRequirementSheetCount }}</small>
+              </div>
+              <div class="metric-card">
+                <span>标准行</span>
+                <strong>{{ requirementSummary.standard_row_count || 0 }}</strong>
+                <small>确认后可发起现有报价</small>
+              </div>
+              <div class="metric-card">
+                <span>需确认</span>
+                <strong>{{ requirementSummary.requires_confirmation_count || 0 }}</strong>
+                <small>低置信度或价格列等风险</small>
+              </div>
+              <div class="metric-card">
+                <span>已选择</span>
+                <strong>{{ selectedRequirementRows.length }}</strong>
+                <small>确认前仍可编辑</small>
+              </div>
+            </div>
+
+            <section v-if="requirementPreview" class="dashboard-section requirement-section">
+              <div class="section-title">
+                <el-icon><Tickets /></el-icon>
+                <span>人工列映射</span>
+                <small>只显示有清单意义的 Sheet；总计 {{ requirementSummary.sheet_count || 0 }} 个，已隐藏 {{ hiddenRequirementSheetCount }} 个封面/说明/汇总类 Sheet</small>
+              </div>
+              <el-tabs v-model="requirementActiveSheet" class="dashboard-tabs">
+                <el-tab-pane
+                  v-for="sheet in visibleRequirementSheetMappings"
+                  :key="sheet.sheet_name"
+                  :label="sheet.sheet_name"
+                  :name="sheet.sheet_name"
+                  >
+                  <el-table
+                    :data="visibleRequirementColumns(sheet)"
+                    row-key="column"
+                    class="users-table"
+                    empty-text="暂无列信息"
+                  >
+                    <el-table-column prop="column" label="列" width="70" />
+                    <el-table-column label="原始表头" min-width="140" show-overflow-tooltip>
+                      <template #default="{ row }">{{ row.label || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="样例" min-width="220" show-overflow-tooltip>
+                      <template #default="{ row }">{{ (row.sample_values || []).slice(0, 3).join(' / ') || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="标准字段" width="190">
+                      <template #default="{ row }">
+                        <el-select v-model="requirementMappings[sheet.sheet_name][row.column]" size="small">
+                          <el-option
+                            v-for="option in requirementFieldOptions"
+                            :key="option.value"
+                            :label="option.label"
+                            :value="option.value"
+                          ></el-option>
+                        </el-select>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-tab-pane>
+              </el-tabs>
+              <div class="section-actions">
+                <el-button
+                  type="primary"
+                  plain
+                  :loading="requirementLoading"
+                  @click="remapRequirementStandardization"
+                >
+                  应用列映射
+                </el-button>
+              </div>
+            </section>
+
+            <section v-if="visibleRequirementRows.length" class="dashboard-section requirement-section">
+              <div class="section-title">
+                <el-icon><Document /></el-icon>
+                <span>行确认</span>
+                <small>按 Sheet 独立确认；“原始行”保留 Excel 原始列值，便于核对多层工程量</small>
+              </div>
+              <div class="requirement-filters">
+                <el-input
+                  v-model="requirementRowFilters.keyword"
+                  clearable
+                  :prefix-icon="Search"
+                  placeholder="搜索项目名称、规格、备注、来源行号或原始行内容"
+                  @keyup.enter="focusFirstRequirementMatch"
+                />
+                <el-select v-model="requirementRowFilters.status" class="requirement-filter-select">
+                  <el-option
+                    v-for="option in requirementRowFilterOptions"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  ></el-option>
+                </el-select>
+                <el-button :icon="Search" plain @click="focusFirstRequirementMatch">定位首条</el-button>
+                <span class="filter-count">匹配 {{ filteredRequirementRows.length }} / {{ visibleRequirementRows.length }} 行</span>
+              </div>
+              <div class="requirement-bulk-actions">
+                <span>批量操作当前筛选结果</span>
+                <el-button plain size="small" :disabled="!filteredRequirementRows.length" @click="bulkIncludeRequirementRows(true)">
+                  全选
+                </el-button>
+                <el-button plain size="small" :disabled="!filteredRequirementRows.length" @click="bulkIncludeRequirementRows(false)">
+                  取消选择
+                </el-button>
+                <el-button type="success" plain size="small" :disabled="!filteredRequirementRows.length" @click="bulkConfirmRequirementRows(true)">
+                  批量确认
+                </el-button>
+                <el-button type="warning" plain size="small" :disabled="!filteredRequirementRows.length" @click="bulkConfirmRequirementRows(false)">
+                  批量撤回确认
+                </el-button>
+                <small>已选 {{ selectedRequirementRows.length }} 行，当前筛选 {{ filteredRequirementRows.length }} 行</small>
+              </div>
+              <div v-if="requirementBlockedRows.length" class="requirement-validation-panel">
+                <div class="requirement-validation-heading">
+                  <div>
+                    <el-icon><Warning /></el-icon>
+                    <strong>校验问题</strong>
+                    <small>{{ requirementBlockedRows.length }} 行需要处理，已自动切到问题行</small>
+                  </div>
+                  <el-button type="warning" plain size="small" @click="focusFirstRequirementBlockedRow">
+                    定位首条问题
+                  </el-button>
+                </div>
+                <el-table
+                  :data="requirementBlockedRows"
+                  row-key="blocked_row_key"
+                  class="users-table requirement-validation-table"
+                  empty-text="暂无校验问题"
+                >
+                  <el-table-column label="来源" width="140">
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.source_sheet || '-' }}</strong>
+                        <small>原始行 {{ row.raw_row_index || '-' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="原始行内容" min-width="220" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <span class="raw-cells-inline">{{ requirementRawCellsText(row) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="项目名称" min-width="190" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.item_name || '-' }}</template>
+                  </el-table-column>
+                  <el-table-column label="数量/单位" width="150">
+                    <template #default="{ row }">
+                      {{ row.quantity === null || row.quantity === undefined || row.quantity === '' ? '-' : row.quantity }}{{ row.unit || '' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="错误原因" min-width="220">
+                    <template #default="{ row }">
+                      <div class="validation-error-list">
+                        <span
+                          v-for="message in requirementValidationMessages(row)"
+                          :key="message"
+                        >
+                          {{ message }}
+                        </span>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="120" fixed="right">
+                    <template #default="{ row }">
+                      <el-button type="warning" plain size="small" @click="locateRequirementBlockedRow(row)">
+                        定位处理
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+              <el-tabs v-if="filteredRequirementRows.length" v-model="requirementActiveRowSheet" class="dashboard-tabs">
+                <el-tab-pane
+                  v-for="sheet in visibleRequirementRowSheets"
+                  :key="sheet.sheet_name"
+                  :label="`${sheet.sheet_name} (${visibleRequirementRowsForSheet(sheet.sheet_name).length})`"
+                  :name="sheet.sheet_name"
+                >
+                  <el-alert
+                    v-if="hiddenRequirementRowCountForSheet(sheet.sheet_name)"
+                    class="dashboard-alert"
+                    type="info"
+                    show-icon
+                    :closable="false"
+                    :title="`本 Sheet 已自动隐藏 ${hiddenRequirementRowCountForSheet(sheet.sheet_name)} 条说明/汇总/空白行`"
+                  ></el-alert>
+                  <el-table
+                    :data="visibleRequirementRowsForSheet(sheet.sheet_name)"
+                    row-key="requirement_row_key"
+                    :row-class-name="requirementRowClassName"
+                    class="users-table requirement-table"
+                    empty-text="暂无标准化行"
+                  >
+                    <el-table-column label="进入清单" width="92">
+                      <template #default="{ row }">
+                        <el-checkbox v-model="row.include"></el-checkbox>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="来源" width="96">
+                      <template #default="{ row }">
+                        <div class="operation-client">
+                          <strong>行 {{ row.raw_row_index }}</strong>
+                          <small>{{ row.source_sheet || '-' }}</small>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="原始行" min-width="260" show-overflow-tooltip>
+                      <template #default="{ row }">
+                        <span class="raw-cells-inline">{{ requirementRawCellsText(row) }}</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="项目名称" min-width="220">
+                      <template #default="{ row }">
+                        <el-input v-model="row.item_name" size="small" />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="规格/特征" min-width="220">
+                      <template #default="{ row }">
+                        <el-input v-model="row.spec" size="small" />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="标准数量" width="130">
+                      <template #default="{ row }">
+                        <el-input v-model="row.quantity" size="small" />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="数量来源" min-width="190">
+                      <template #default="{ row }">
+                        <el-select
+                          v-if="row.quantity_candidates?.length"
+                          v-model="row.quantity_source_key"
+                          size="small"
+                          @change="applyRequirementQuantitySource(row, $event)"
+                        >
+                          <el-option
+                            v-for="candidate in row.quantity_candidates"
+                            :key="candidate.key"
+                            :label="requirementQuantityCandidateLabel(candidate)"
+                            :value="candidate.key"
+                          ></el-option>
+                          <el-option label="手工填写" value="manual"></el-option>
+                        </el-select>
+                        <span v-else class="raw-cells-inline">{{ requirementQuantitySourceText(row) }}</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="原始工程量候选" min-width="230" show-overflow-tooltip>
+                      <template #default="{ row }">
+                        <span class="raw-cells-inline">{{ requirementQuantityCandidatesText(row) }}</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="单位" width="110">
+                      <template #default="{ row }">
+                        <el-input v-model="row.unit" size="small" />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="备注" min-width="180">
+                      <template #default="{ row }">
+                        <el-input v-model="row.remark" size="small" />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="风险" min-width="220">
+                      <template #default="{ row }">
+                        <div class="warning-stack">
+                          <el-tag :type="requirementConfidenceType(row.confidence)" effect="plain">{{ row.confidence || '-' }}</el-tag>
+                          <small>{{ (row.warnings || []).join(', ') || '无' }}</small>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="人工确认" width="110">
+                      <template #default="{ row }">
+                        <el-checkbox v-model="row.confirmed" :disabled="!row.include"></el-checkbox>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-tab-pane>
+              </el-tabs>
+              <el-empty v-else description="没有匹配的行" />
+              <div class="section-actions">
+                <el-button
+                  type="primary"
+                  :loading="requirementConfirming"
+                  :disabled="!selectedRequirementRows.length"
+                  @click="confirmRequirementStandardization"
+                >
+                  生成确认清单
+                </el-button>
+              </div>
+            </section>
+
+            <section v-if="requirementConfirmed" class="dashboard-section requirement-section">
+              <div class="section-title">
+                <el-icon><Select /></el-icon>
+                <span>已确认标准清单</span>
+                <small>{{ requirementConfirmed.summary.confirmed_row_count }} 行</small>
+              </div>
+              <el-alert
+                v-if="requirementConfirmed.summary.blocked_row_count"
+                class="dashboard-alert"
+                type="warning"
+                show-icon
+                :closable="false"
+                :title="`有 ${requirementConfirmed.summary.blocked_row_count} 行未通过确认校验，下面已列出每一行原因`"
+              ></el-alert>
+              <div v-if="requirementBlockedRows.length" class="requirement-validation-panel requirement-validation-result">
+                <div class="requirement-validation-heading">
+                  <div>
+                    <el-icon><Warning /></el-icon>
+                    <strong>未通过确认校验明细</strong>
+                    <small>{{ requirementBlockedRows.length }} 行，按原始 Sheet 和行号定位</small>
+                  </div>
+                  <el-button type="warning" plain size="small" @click="focusFirstRequirementBlockedRow">
+                    定位首条问题
+                  </el-button>
+                </div>
+                <el-table
+                  :data="requirementBlockedRows"
+                  row-key="blocked_row_key"
+                  class="users-table requirement-validation-table"
+                  empty-text="暂无未通过行"
+                >
+                  <el-table-column label="来源" width="140">
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.source_sheet || '-' }}</strong>
+                        <small>原始行 {{ row.raw_row_index || '-' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="项目名称" min-width="180" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.item_name || '-' }}</template>
+                  </el-table-column>
+                  <el-table-column label="数量/单位" width="130">
+                    <template #default="{ row }">
+                      {{ row.quantity === null || row.quantity === undefined || row.quantity === '' ? '-' : row.quantity }}{{ row.unit || '' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="未通过原因" min-width="300">
+                    <template #default="{ row }">
+                      <div class="validation-error-list">
+                        <span
+                          v-for="message in requirementValidationMessages(row)"
+                          :key="message"
+                        >
+                          {{ message }}
+                        </span>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="原始行内容" min-width="240" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <span class="raw-cells-inline">{{ requirementRawCellsText(row) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="120" fixed="right">
+                    <template #default="{ row }">
+                      <el-button type="warning" plain size="small" @click="locateRequirementBlockedRow(row)">
+                        定位处理
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+              <el-input
+                v-model="requirementConfirmed.quote_text"
+                type="textarea"
+                :rows="8"
+                readonly
+              ></el-input>
+              <div class="requirement-quote-actions">
+                <div class="requirement-quote-note">
+                  <strong>接入报价链路</strong>
+                  <small>只发送已确认标准行，剔除行和未通过校验行不会进入报价。</small>
+                </div>
+                <el-button
+                  type="primary"
+                  :icon="DataAnalysis"
+                  :loading="requirementQuoting"
+                  :disabled="!selectedRequirementRows.length"
+                  @click="startRequirementQuoteJob"
+                >
+                  发起报价
+                </el-button>
+              </div>
+              <el-alert
+                v-if="requirementQuoteJob"
+                class="dashboard-alert"
+                type="success"
+                show-icon
+                :closable="false"
+                :title="`已创建报价任务：${requirementQuoteJob.job_id}`"
+              >
+                <template #default>
+                  <div class="requirement-quote-result">
+                    <span>状态：{{ jobStatusLabel(requirementQuoteJob.status) }}</span>
+                    <span>阶段：{{ requirementQuoteJob.stage || '-' }}</span>
+                    <el-button size="small" plain @click="openQuoteJobDetail(requirementQuoteJob)">查看任务详情</el-button>
+                  </div>
+                </template>
+              </el-alert>
+            </section>
+          </template>
+        </template>
+
         <template v-else>
           <div class="content-heading">
             <div>
               <p class="eyebrow">Phase 0</p>
               <h2>用户角色</h2>
             </div>
-            <el-button :icon="Refresh" plain @click="loadUsers">刷新</el-button>
+            <div class="row-actions">
+              <el-button :icon="Refresh" plain @click="loadUsers">刷新</el-button>
+              <el-button v-if="canMutateRoles" type="primary" :icon="Plus" @click="openCreateUser">新建用户</el-button>
+            </div>
           </div>
 
           <div class="role-hints">
@@ -1842,6 +2378,233 @@
       </template>
     </el-drawer>
 
+    <el-drawer v-model="costLineageDrawer.visible" size="1100px" title="成本库状态与流向">
+      <el-tabs v-model="costLineageDrawer.activeTab" class="dashboard-tabs" @tab-click="handleCostLineageTabClick">
+        <el-tab-pane label="总览" name="summary">
+          <div v-loading="costLineageDrawer.summaryLoading">
+            <div class="detail-grid lineage-summary-grid">
+              <div>
+                <small>草稿 draft</small>
+                <strong>{{ costLineageSummary.by_status?.draft || 0 }}</strong>
+              </div>
+              <div>
+                <small>启用 active</small>
+                <strong>{{ costLineageSummary.by_status?.active || 0 }}</strong>
+              </div>
+              <div>
+                <small>归档 archived</small>
+                <strong>{{ costLineageSummary.by_status?.archived || 0 }}</strong>
+              </div>
+              <div>
+                <small>AI 建议草稿</small>
+                <strong>{{ costLineageSummary.ai_suggested_draft_count || 0 }}</strong>
+              </div>
+              <div>
+                <small>被报价引用条目</small>
+                <strong>{{ costLineageSummary.quote_used_count || 0 }}</strong>
+              </div>
+              <div>
+                <small>active 且已引用</small>
+                <strong>{{ costLineageSummary.active_quote_used_count || 0 }}</strong>
+              </div>
+              <div>
+                <small>active RAG 范围</small>
+                <strong>{{ costLineageSummary.active_rag_scope_count || 0 }}</strong>
+              </div>
+              <div>
+                <small>最近 RAG 同步</small>
+                <strong>{{ formatDate(costLineageSummary.latest_successful_rag_sync?.finished_at) }}</strong>
+              </div>
+            </div>
+            <section class="drawer-section">
+              <div class="section-title">
+                <el-icon><DataAnalysis /></el-icon>
+                <span>来源分布</span>
+              </div>
+              <div class="lineage-source-row">
+                <el-tag effect="plain">人工 {{ costLineageSummary.by_source?.manual || 0 }}</el-tag>
+                <el-tag effect="plain">导入 {{ costLineageSummary.by_source?.imported || 0 }}</el-tag>
+                <el-tag effect="plain">AI 建议 {{ costLineageSummary.by_source?.ai_suggested || 0 }}</el-tag>
+              </div>
+            </section>
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="新增 draft" name="draft"></el-tab-pane>
+        <el-tab-pane label="active 记录" name="active"></el-tab-pane>
+        <el-tab-pane label="归档记录" name="archived"></el-tab-pane>
+      </el-tabs>
+
+      <template v-if="costLineageDrawer.activeTab !== 'summary'">
+        <div class="cost-db-filters lineage-filters">
+          <el-select
+            v-model="costLineageFilters.source"
+            size="small"
+            clearable
+            placeholder="来源"
+            @change="applyCostLineageFilters"
+          >
+            <el-option
+              v-for="option in costSourceOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-select
+            v-model="costLineageFilters.has_quote_usage"
+            size="small"
+            clearable
+            placeholder="报价引用"
+            @change="applyCostLineageFilters"
+          >
+            <el-option label="已被引用" value="true" />
+            <el-option label="未被引用" value="false" />
+          </el-select>
+          <el-input
+            v-model="costLineageFilters.keyword"
+            size="small"
+            clearable
+            placeholder="名称/特征/来源备注"
+            @keyup.enter="applyCostLineageFilters"
+            @clear="applyCostLineageFilters"
+          />
+          <el-button size="small" type="primary" plain @click="applyCostLineageFilters">查询</el-button>
+          <el-button size="small" :icon="Refresh" plain :loading="costLineageDrawer.loading" @click="loadCostLineageRows">刷新</el-button>
+        </div>
+        <div class="lineage-layout">
+          <div>
+            <el-table
+              v-loading="costLineageDrawer.loading"
+              :data="costLineageRows"
+              class="users-table"
+              row-key="id"
+              empty-text="暂无流向记录"
+              @row-click="openCostLineageDetail"
+            >
+              <el-table-column label="成本项/来源" min-width="260" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <strong>{{ row.item_name || '-' }}</strong>
+                    <small>{{ costSourceLabel(row.source) }} · {{ row.origin?.quote_job_id || row.origin?.created_by_username || '-' }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="96">
+                <template #default="{ row }">
+                  <el-tag :type="costStatusTag(row.status)" effect="plain">{{ costStatusLabel(row.status) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="unit" label="单位" width="70" />
+              <el-table-column label="价格" width="120">
+                <template #default="{ row }">{{ formatPrice(row.price) }}</template>
+              </el-table-column>
+              <el-table-column label="引用" width="90">
+                <template #default="{ row }">{{ row.quote_usage?.count || 0 }}</template>
+              </el-table-column>
+              <el-table-column label="去向" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.destination?.status_text || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="更新时间" min-width="150">
+                <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
+              </el-table-column>
+            </el-table>
+            <el-pagination
+              v-if="costLineageTotal > costLineagePageSize"
+              v-model:current-page="costLineagePage"
+              :page-size="costLineagePageSize"
+              :total="costLineageTotal"
+              layout="total, prev, pager, next"
+              small
+              @current-change="loadCostLineageRows"
+            />
+          </div>
+          <aside class="lineage-detail">
+            <div v-if="costLineageDrawer.detailLoading" class="center-state">
+              <el-icon class="spin"><Refresh /></el-icon>
+              <span>加载中</span>
+            </div>
+            <template v-else-if="costLineageDrawer.detail">
+              <div class="drawer-user">{{ costLineageDrawer.detail.item_name }}</div>
+              <div class="detail-grid">
+                <div>
+                  <small>来源</small>
+                  <strong>{{ costSourceLabel(costLineageDrawer.detail.source) }}</strong>
+                </div>
+                <div>
+                  <small>当前状态</small>
+                  <strong>{{ costStatusLabel(costLineageDrawer.detail.status) }}</strong>
+                </div>
+                <div>
+                  <small>来源报价任务</small>
+                  <strong>{{ costLineageDrawer.detail.origin?.quote_job_id || '-' }}</strong>
+                </div>
+                <div>
+                  <small>来源历史 ID</small>
+                  <strong>{{ costLineageDrawer.detail.origin?.quote_history_id || '-' }}</strong>
+                </div>
+                <div>
+                  <small>来源行号</small>
+                  <strong>{{ costLineageDrawer.detail.origin?.line_no || '-' }}</strong>
+                </div>
+                <div>
+                  <small>价格动作</small>
+                  <strong>{{ costLineageDrawer.detail.origin?.price_confirmation_label || costPriceActionLabel(costLineageDrawer.detail.origin?.manual_price_action) }}</strong>
+                </div>
+                <div>
+                  <small>报价引用次数</small>
+                  <strong>{{ costLineageDrawer.detail.quote_usage?.count || 0 }}</strong>
+                </div>
+              </div>
+              <section class="drawer-section">
+                <div class="section-title">
+                  <el-icon><TrendCharts /></el-icon>
+                  <span>当前去向</span>
+                </div>
+                <p class="detail-text">{{ costLineageDrawer.detail.destination?.status_text || '-' }}</p>
+                <p class="detail-text">{{ costLineageDrawer.detail.destination?.rag_sync_note || '-' }}</p>
+              </section>
+              <section class="drawer-section">
+                <div class="section-title">
+                  <el-icon><Clock /></el-icon>
+                  <span>生命周期</span>
+                </div>
+                <el-timeline>
+                  <el-timeline-item
+                    v-for="event in visibleCostHistory(costLineageDrawer.detail.history)"
+                    :key="event.id"
+                    :timestamp="formatDate(event.changed_at)"
+                    placement="top"
+                  >
+                    <div class="event-row">
+                      <strong>{{ costHistoryTypeLabel(event.change_type) }}</strong>
+                      <el-tag size="small" effect="plain">{{ event.changed_by_username || '-' }}</el-tag>
+                    </div>
+                    <p>{{ costHistoryText(event) }}</p>
+                    <small>{{ event.change_reason || '-' }}</small>
+                  </el-timeline-item>
+                </el-timeline>
+                <el-empty v-if="!visibleCostHistory(costLineageDrawer.detail.history).length" description="暂无生命周期记录" />
+              </section>
+              <section class="drawer-section">
+                <div class="section-title">
+                  <el-icon><Document /></el-icon>
+                  <span>报价引用</span>
+                </div>
+                <div v-for="usage in costLineageDrawer.detail.quote_usages" :key="usage.id" class="lineage-usage-item">
+                  <strong>{{ usage.project_name || '-' }}</strong>
+                  <span>{{ usage.quote_job_id || '-' }} · 历史 #{{ usage.quote_history_id || '-' }}</span>
+                  <span>参考 {{ formatPrice(usage.reference_price) }}，最终 {{ formatPrice(usage.final_unit_price) }}</span>
+                  <small>{{ formatDate(usage.confirmed_at || usage.created_at) }}</small>
+                </div>
+                <el-empty v-if="!costLineageDrawer.detail.quote_usages?.length" description="暂无报价引用" />
+              </section>
+            </template>
+            <el-empty v-else description="点击左侧条目查看来源和去向" />
+          </aside>
+        </div>
+      </template>
+    </el-drawer>
+
     <el-dialog v-model="costRagSyncDialog.visible" title="RAG 同步记录" width="920px">
       <div class="dialog-toolbar">
         <span>记录每次 active 成本库同步到 RAG 的时间、数量和结果</span>
@@ -1888,6 +2651,123 @@
         small
         @current-change="loadCostRagSyncRuns"
       ></el-pagination>
+    </el-dialog>
+
+    <el-dialog v-model="costAuditDialog.visible" title="成本库审计记录" width="1120px">
+      <div class="cost-db-filters">
+        <el-select
+          v-model="costAuditFilters.action"
+          size="small"
+          clearable
+          placeholder="动作"
+          @change="applyCostAuditFilters"
+        >
+          <el-option
+            v-for="option in costAuditActionOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+        <el-input
+          v-model="costAuditFilters.username"
+          size="small"
+          clearable
+          placeholder="用户"
+          @keyup.enter="applyCostAuditFilters"
+          @clear="applyCostAuditFilters"
+        />
+        <el-input
+          v-model="costAuditFilters.resource_id"
+          size="small"
+          clearable
+          placeholder="条目ID"
+          @keyup.enter="applyCostAuditFilters"
+          @clear="applyCostAuditFilters"
+        />
+        <el-select
+          v-model="costAuditFilters.status"
+          size="small"
+          clearable
+          placeholder="结果"
+          @change="applyCostAuditFilters"
+        >
+          <el-option label="成功" value="success" />
+          <el-option label="失败" value="failed" />
+        </el-select>
+        <el-button size="small" :icon="Refresh" plain :loading="costAuditDialog.loading" @click="loadCostAuditLogs">
+          刷新
+        </el-button>
+      </div>
+      <el-table
+        v-loading="costAuditDialog.loading"
+        :data="costAuditLogs"
+        class="users-table"
+        empty-text="暂无审计记录"
+      >
+        <el-table-column label="时间（北京时间）" min-width="170">
+          <template #default="{ row }">{{ formatShanghaiDate(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="动作" min-width="160">
+          <template #default="{ row }">{{ costAuditActionLabel(row.action) }}</template>
+        </el-table-column>
+        <el-table-column prop="username" label="用户" width="120" />
+        <el-table-column label="对象" min-width="140">
+          <template #default="{ row }">{{ row.resource_type }} #{{ row.resource_id || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="结果" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'success' ? 'success' : 'danger'" effect="light">
+              {{ row.status === 'success' ? '成功' : '失败' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="result_count" label="数量" width="90" />
+        <el-table-column prop="client_ip" label="IP" width="130" />
+        <el-table-column label="说明" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.message || costAuditFilterSummary(row.filters) || '-' }}</template>
+        </el-table-column>
+      </el-table>
+      <el-pagination
+        v-if="costAuditTotal > costAuditPageSize"
+        v-model:current-page="costAuditPage"
+        :page-size="costAuditPageSize"
+        :total="costAuditTotal"
+        layout="total, prev, pager, next"
+        small
+        @current-change="loadCostAuditLogs"
+      ></el-pagination>
+    </el-dialog>
+
+    <el-dialog v-model="createUserDialog.visible" title="新建用户" width="460px">
+      <el-form label-position="top" :model="createUserDialog">
+        <el-form-item label="账号">
+          <el-input v-model="createUserDialog.username" maxlength="64" />
+        </el-form-item>
+        <el-form-item label="初始密码">
+          <el-input v-model="createUserDialog.password" type="password" show-password maxlength="128" />
+        </el-form-item>
+        <el-form-item label="初始额度">
+          <el-input-number v-model="createUserDialog.quota" :min="0" :max="9999" />
+        </el-form-item>
+        <el-form-item label="初始角色">
+          <el-select v-model="createUserDialog.roles" class="full-width" multiple>
+            <el-option
+              v-for="role in roleOptions"
+              :key="role.value"
+              :label="role.label"
+              :value="role.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="createUserDialog.note" type="textarea" :rows="3" maxlength="120" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createUserDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="createUser">创建</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="grantDialog.visible" title="授予角色" width="420px">
@@ -2013,6 +2893,127 @@
             <span>需求摘要</span>
           </div>
           <p class="detail-text">{{ quoteJobDrawer.job.request_summary || quoteJobDrawer.job.message_preview || '-' }}</p>
+        </section>
+        <section class="drawer-section" v-if="quoteJobDrawer.reviewDetail">
+          <div class="section-title">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>预审条目与风险检查</span>
+            <small>
+              确认 {{ quoteJobDrawer.reviewDetail.summary?.requirement_row_count || 0 }} 行 /
+              预审 {{ quoteJobDrawer.reviewDetail.summary?.preview_row_count || 0 }} 行
+            </small>
+          </div>
+          <el-alert
+            v-if="quoteJobDrawer.reviewDetail.summary?.integrity_status === 'incomplete'"
+            class="dashboard-alert"
+            :title="quoteJobDrawer.reviewDetail.summary?.message || 'AI 预审不完整，存在确认清单行未匹配到预审报价'"
+            type="error"
+            show-icon
+            :closable="false"
+          />
+          <el-alert
+            v-if="quoteJobDrawer.reviewDetail.summary?.placeholder_count"
+            class="dashboard-alert"
+            :title="`AI 未返回 ${quoteJobDrawer.reviewDetail.summary.placeholder_count} 行确认清单，系统已生成占位行，需人工补价后再下发。`"
+            type="error"
+            show-icon
+            :closable="false"
+          />
+          <div class="review-summary-grid">
+            <div>
+              <small>疑似未报价</small>
+              <strong>{{ quoteJobDrawer.reviewDetail.summary?.missing_count || 0 }}</strong>
+            </div>
+            <div>
+              <small>无底价参考</small>
+              <strong>{{ quoteJobDrawer.reviewDetail.summary?.no_cost_reference_count || 0 }}</strong>
+            </div>
+            <div>
+              <small>高风险</small>
+              <strong>{{ quoteJobDrawer.reviewDetail.summary?.high_risk_count || 0 }}</strong>
+            </div>
+            <div>
+              <small>需复核</small>
+              <strong>{{ quoteJobDrawer.reviewDetail.summary?.review_required_count || 0 }}</strong>
+            </div>
+          </div>
+          <el-table
+            :data="quoteJobDrawer.reviewDetail.preview_rows || []"
+            row-key="index"
+            class="users-table"
+            empty-text="暂无预审条目"
+          >
+            <el-table-column label="风险" width="96">
+              <template #default="{ row }">
+                <el-tag :type="row.risk?.type || 'info'" effect="plain">{{ row.risk?.label || '-' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="施工项目" min-width="170" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div class="operation-client">
+                  <strong>{{ row.project_name || '-' }}</strong>
+                  <small>{{ row.quantity ?? '-' }} {{ row.unit || '' }}</small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="AI单价/合计" width="140">
+              <template #default="{ row }">
+                <div class="operation-client">
+                  <strong>{{ formatPrice(row.ai_unit_price) }}</strong>
+                  <small>合计 {{ formatPrice(row.system_total_price) }}</small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="风险原因" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ (row.risk?.reasons || []).join('、') || '无' }}</template>
+            </el-table-column>
+            <el-table-column label="检查项" min-width="280">
+              <template #default="{ row }">
+                <div class="review-check-tags">
+                  <el-tag
+                    v-for="check in reviewCheckItems(row)"
+                    :key="check.key"
+                    :type="reviewCheckTagType(check)"
+                    effect="plain"
+                    size="small"
+                  >
+                    {{ check.label }}
+                  </el-tag>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+        <section class="drawer-section" v-if="quoteJobDrawer.reviewDetail?.missing_requirement_rows?.length">
+          <div class="section-title">
+            <el-icon><Warning /></el-icon>
+            <span>确认清单对账</span>
+            <small>{{ quoteJobDrawer.reviewDetail.missing_requirement_rows.length }} 行疑似未进入预审单</small>
+          </div>
+          <el-table
+            :data="quoteJobDrawer.reviewDetail.missing_requirement_rows"
+            row-key="requirement_index"
+            class="users-table"
+            empty-text="暂无疑似漏报价行"
+          >
+            <el-table-column label="来源" width="150">
+              <template #default="{ row }">
+                <div class="operation-client">
+                  <strong>{{ row.requirement_row?.source_sheet || '-' }}</strong>
+                  <small>第 {{ row.requirement_row?.raw_row_index || '-' }} 行</small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="确认项目" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.requirement_row?.item_name || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="数量/单位" width="120">
+              <template #default="{ row }">{{ row.requirement_row?.quantity ?? '-' }}{{ row.requirement_row?.unit || '' }}</template>
+            </el-table-column>
+            <el-table-column label="原始行" min-width="260" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.requirement_row?.raw_text || '-' }}</template>
+            </el-table-column>
+          </el-table>
         </section>
         <section
           class="drawer-section"
@@ -2398,6 +3399,87 @@
         </section>
       </template>
     </el-drawer>
+
+    <el-drawer v-model="requirementHistoryDrawer.visible" size="760px" title="历史解析记录">
+      <div class="history-toolbar">
+        <el-button :icon="Refresh" plain :loading="requirementHistoryDrawer.loading" @click="loadRequirementHistoryRecords">
+          刷新
+        </el-button>
+        <span class="filter-count">本地浏览器历史，最多保留 {{ REQUIREMENT_HISTORY_RECORD_LIMIT }} 条</span>
+      </div>
+      <el-table
+        :data="requirementHistoryRecords"
+        row-key="id"
+        class="users-table"
+        empty-text="暂无历史解析记录"
+      >
+        <el-table-column label="文件" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="operation-client">
+              <strong>{{ row.file_name || '-' }}</strong>
+              <small>{{ requirementHistoryStatusLabel(row.status) }} · {{ formatLocalDate(row.updated_at) }}</small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="进度" min-width="180">
+          <template #default="{ row }">
+            <div class="operation-client">
+              <strong>{{ row.selected_row_count || 0 }} / {{ row.standard_row_count || 0 }} 行已选</strong>
+              <small>确认 {{ row.confirmed_row_count || 0 }} 行 · Sheet {{ row.sheet_count || 0 }}</small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="version_count" label="版本" width="80" />
+        <el-table-column label="操作" width="260" fixed="right">
+          <template #default="{ row }">
+            <div class="row-actions">
+              <el-button size="small" type="primary" plain @click="restoreRequirementRecord(row)">继续</el-button>
+              <el-button size="small" plain @click="openRequirementVersions(row)">版本</el-button>
+              <el-button size="small" type="danger" plain @click="deleteRequirementRecord(row)">删除</el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-drawer>
+
+    <el-drawer v-model="requirementVersionDrawer.visible" size="720px" :title="`版本回滚 - ${requirementVersionDrawer.record?.file_name || ''}`">
+      <div class="history-toolbar">
+        <el-button :icon="Refresh" plain :loading="requirementVersionDrawer.loading" @click="loadRequirementVersions(requirementVersionDrawer.record?.id)">
+          刷新
+        </el-button>
+        <span class="filter-count">回滚会生成一个新版本，原历史不会被覆盖</span>
+      </div>
+      <el-table
+        :data="requirementVersions"
+        row-key="id"
+        class="users-table"
+        empty-text="暂无版本"
+      >
+        <el-table-column label="版本" width="100">
+          <template #default="{ row }">
+            <strong>v{{ row.version_no }}</strong>
+          </template>
+        </el-table-column>
+        <el-table-column label="动作" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="operation-client">
+              <strong>{{ row.action }}</strong>
+              <small>{{ formatLocalDate(row.created_at) }}</small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="摘要" min-width="190">
+          <template #default="{ row }">
+            <span>{{ requirementVersionSummary(row.snapshot) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="130" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" plain @click="rollbackRequirementVersion(row)">回滚</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-drawer>
   </div>
 </template>
 
@@ -2410,19 +3492,28 @@ import {
   DataAnalysis,
   Delete,
   Document,
+  Download,
   Histogram,
   Lock,
   Plus,
   Refresh,
+  Search,
   Select,
   Setting,
   SwitchButton,
   Tickets,
   TrendCharts,
   User,
+  Warning,
 } from '@element-plus/icons-vue'
 
 const TOKEN_KEY = 'ai_token'
+const REQUIREMENT_HISTORY_DB_NAME = 'ai_requirement_standardization_history'
+const REQUIREMENT_HISTORY_DB_VERSION = 1
+const REQUIREMENT_HISTORY_RECORD_STORE = 'records'
+const REQUIREMENT_HISTORY_VERSION_STORE = 'versions'
+const REQUIREMENT_HISTORY_RECORD_LIMIT = 30
+const REQUIREMENT_HISTORY_VERSION_LIMIT = 20
 const api = axios.create({ baseURL: '/api/v1' })
 
 api.interceptors.request.use((config) => {
@@ -2446,6 +3537,10 @@ api.interceptors.response.use(
 const roleOptions = [
   { value: 'system_admin', label: 'system_admin', hint: '权限与系统配置' },
   { value: 'admin', label: 'admin', hint: '报价与知识库管理' },
+  { value: 'cost_viewer', label: 'cost_viewer', hint: '完整成本库只读' },
+  { value: 'cost_editor', label: 'cost_editor', hint: '维护成本库 draft' },
+  { value: 'cost_approver', label: 'cost_approver', hint: '启用/归档成本价' },
+  { value: 'cost_exporter', label: 'cost_exporter', hint: '成本数据导出预留' },
   { value: 'staff', label: 'staff', hint: '旧报价工作台' },
   { value: 'manager', label: 'manager', hint: '执行任务上线后生效' },
   { value: 'viewer', label: 'viewer', hint: '看板开启后生效' },
@@ -2524,9 +3619,45 @@ const costPriceTypeOptions = [
 ]
 
 const costSourceOptions = [
-  { value: 'manual', label: '手工' },
+  { value: 'manual', label: '人工' },
   { value: 'imported', label: '导入' },
   { value: 'ai_suggested', label: 'AI 建议' },
+]
+
+const costAuditActionOptions = [
+  { value: 'cost_item.list', label: '查看列表' },
+  { value: 'cost_item.detail', label: '查看详情' },
+  { value: 'cost_item.export', label: '导出' },
+  { value: 'cost_item.create', label: '新建' },
+  { value: 'cost_item.update', label: '编辑' },
+  { value: 'cost_item.activate', label: '启用 active' },
+  { value: 'cost_item.withdraw', label: '撤回启用' },
+  { value: 'cost_item.archive', label: '归档' },
+  { value: 'cost_item.bulk_status', label: '批量状态变更' },
+  { value: 'cost_rag.sync', label: '同步 RAG' },
+]
+
+const requirementFieldOptions = [
+  { value: 'ignore', label: '忽略' },
+  { value: 'item_name', label: '项目名称' },
+  { value: 'spec', label: '规格/特征' },
+  { value: 'quantity', label: '数量' },
+  { value: 'unit', label: '单位' },
+  { value: 'remark', label: '备注' },
+  { value: 'location', label: '区域/位置' },
+  { value: 'price_ignored', label: '价格列（只读）' },
+]
+
+const requirementRowFilterOptions = [
+  { value: 'all', label: '全部候选行' },
+  { value: 'included', label: '已选行' },
+  { value: 'excluded', label: '未选行' },
+  { value: 'blocked', label: '未通过校验' },
+  { value: 'requires_confirmation', label: '需人工确认' },
+  { value: 'low_confidence', label: '低置信度' },
+  { value: 'with_warnings', label: '有风险提示' },
+  { value: 'multi_quantity', label: '多工程量候选' },
+  { value: 'quantity_missing', label: '数量来源不明' },
 ]
 
 const loginForm = reactive({ username: '', password: '' })
@@ -2572,6 +3703,46 @@ const costRagSyncRuns = ref([])
 const costRagSyncTotal = ref(0)
 const costRagSyncPage = ref(1)
 const costRagSyncPageSize = 10
+const costRagSyncStatus = ref(null)
+const costRagSyncStatusLoading = ref(false)
+const costAuditLogs = ref([])
+const costAuditTotal = ref(0)
+const costAuditPage = ref(1)
+const costAuditPageSize = 10
+const costLineageRows = ref([])
+const costLineageTotal = ref(0)
+const costLineagePage = ref(1)
+const costLineagePageSize = 20
+const costLineageSummary = ref({})
+const requirementFile = ref(null)
+const requirementPreview = ref(null)
+const requirementRows = ref([])
+const requirementActiveSheet = ref('')
+const requirementActiveRowSheet = ref('')
+const requirementActiveBlockedRowKey = ref('')
+const requirementConfirmed = ref(null)
+const requirementQuoteJob = ref(null)
+const requirementLoading = ref(false)
+const requirementConfirming = ref(false)
+const requirementQuoting = ref(false)
+const requirementFeatureDisabled = ref(false)
+const requirementMappings = reactive({})
+const requirementCurrentRecordId = ref('')
+const requirementHistoryRecords = ref([])
+const requirementVersions = ref([])
+const requirementHistoryDrawer = reactive({
+  visible: false,
+  loading: false,
+})
+const requirementVersionDrawer = reactive({
+  visible: false,
+  loading: false,
+  record: null,
+})
+const requirementRowFilters = reactive({
+  keyword: '',
+  status: 'all',
+})
 const clientInquiryFilters = reactive({
   source: '',
   keyword: '',
@@ -2604,7 +3775,13 @@ const costItemFilters = reactive({
   category: '',
   status: [],
   price_type: '',
+  source: '',
   keyword: '',
+})
+const costLineageFilters = reactive({
+  source: '',
+  keyword: '',
+  has_quote_usage: '',
 })
 const dashboardRange = ref('last_30_days')
 const dashboardTab = ref('quote')
@@ -2624,6 +3801,15 @@ const grantDialog = reactive({
   note: '',
 })
 
+const createUserDialog = reactive({
+  visible: false,
+  username: '',
+  password: '',
+  quota: 5,
+  roles: ['staff'],
+  note: '',
+})
+
 const eventsDrawer = reactive({
   visible: false,
   user: null,
@@ -2636,6 +3822,7 @@ const quoteJobDrawer = reactive({
   loading: false,
   job: null,
   costEvidence: [],
+  reviewDetail: null,
 })
 
 const executionDialog = reactive({
@@ -2743,12 +3930,34 @@ const costItemDrawer = reactive({
   item: null,
 })
 
+const costLineageDrawer = reactive({
+  visible: false,
+  loading: false,
+  summaryLoading: false,
+  detailLoading: false,
+  activeTab: 'summary',
+  detail: null,
+})
+
 const costRagSyncDialog = reactive({
   visible: false,
   loading: false,
 })
 
+const costAuditDialog = reactive({
+  visible: false,
+  loading: false,
+})
+
+const costAuditFilters = reactive({
+  action: '',
+  username: '',
+  resource_id: '',
+  status: '',
+})
+
 const roles = computed(() => session.user?.roles || [])
+const hasRole = (...roleNames) => roles.value.some((role) => roleNames.includes(role))
 const canMutateRoles = computed(() => roles.value.includes('system_admin'))
 const canAccessPermissions = computed(() => roles.value.includes('system_admin') || roles.value.includes('admin'))
 const canViewDashboard = computed(() => canAccessPermissions.value || roles.value.includes('viewer'))
@@ -2758,19 +3967,93 @@ const canCreateExecutionTask = computed(() => canAccessPermissions.value)
 const canCreateMeetingNote = computed(() => canViewExecution.value)
 const canViewBusinessLedger = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canManageBusinessLedger = computed(() => canAccessPermissions.value)
-const canViewCostDb = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
-const canManageCostDb = computed(() => canAccessPermissions.value)
+const canViewCostDb = computed(() => canAccessPermissions.value || hasRole('cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter'))
+const canEditCostDb = computed(() => canAccessPermissions.value || hasRole('cost_editor', 'cost_approver'))
+const canApproveCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
+const canExportCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_exporter'))
+const canViewCostAudit = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
+const canViewRequirementStandardization = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canOpenLegacyQuote = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
 const selectedCostItemIds = computed(() => selectedCostItems.value.map((item) => item.id).filter(Boolean))
 const selectableCostItems = computed(() => costItems.value.filter((item) => costItemSelectable(item)))
 const selectedDraftCostItemCount = computed(() => selectedCostItems.value.filter((item) => item.status === 'draft').length)
 const selectedActiveCostItemCount = computed(() => selectedCostItems.value.filter((item) => item.status === 'active').length)
+const selectedArchivableCostItemCount = computed(() => selectedCostItems.value.filter((item) => item.status === 'draft' || item.status === 'active').length)
 const visibleDailyTrends = computed(() => (quoteDashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
 const visibleResponseSources = computed(() => (responseDashboard.value?.by_source || []).slice(0, 12))
 const visibleResponseResponders = computed(() => (responseDashboard.value?.by_responder || []).slice(0, 12))
 const visibleExecutionTrends = computed(() => (executionDashboard.value?.daily_trends || []).filter((item) => item.task_count > 0).slice(-12))
 const visibleExecutionAssignees = computed(() => (executionDashboard.value?.by_assignee || []).slice(0, 12))
+const requirementSheetMappings = computed(() => requirementPreview.value?.sheet_mappings || [])
+const requirementSummary = computed(() => requirementPreview.value?.summary || {})
+const selectedRequirementRows = computed(() => requirementRows.value.filter((row) => row.include))
+const visibleRequirementRows = computed(() => (
+  requirementRows.value.filter((row) => row.row_type === 'data_row' || row.include || row.confirmed)
+))
+const requirementBlockedRows = computed(() => {
+  const blockedRows = requirementConfirmed.value?.blocked_rows || []
+  if (!blockedRows.length) return []
+  const currentRowsByKey = new Map()
+  for (const row of requirementRows.value) {
+    for (const key of requirementLookupKeys(row)) {
+      if (!currentRowsByKey.has(key)) currentRowsByKey.set(key, row)
+    }
+  }
+  return blockedRows.map((blockedRow, index) => {
+    const currentRow = requirementLookupKeys(blockedRow)
+      .map((key) => currentRowsByKey.get(key))
+      .find(Boolean)
+    const blockedKey = requirementPrimaryLookupKey(blockedRow) || requirementPrimaryLookupKey(currentRow) || `blocked:${index}`
+    return {
+      ...blockedRow,
+      blocked_row_key: blockedKey,
+      requirement_row_key: blockedRow.requirement_row_key || currentRow?.requirement_row_key || blockedKey,
+      source_sheet: currentRow?.source_sheet ?? blockedRow.source_sheet,
+      raw_row_index: currentRow?.raw_row_index ?? blockedRow.raw_row_index,
+      item_name: currentRow?.item_name ?? blockedRow.item_name,
+      spec: currentRow?.spec ?? blockedRow.spec,
+      quantity: currentRow?.quantity ?? blockedRow.quantity,
+      unit: currentRow?.unit ?? blockedRow.unit,
+      remark: currentRow?.remark ?? blockedRow.remark,
+      raw_text: currentRow?.raw_text ?? blockedRow.raw_text,
+      raw_cells: currentRow?.raw_cells ?? blockedRow.raw_cells ?? [],
+      errors: blockedRow.errors || [],
+      error_messages: blockedRow.error_messages || [],
+      error_summary: blockedRow.error_summary || '',
+      warnings: blockedRow.warnings || currentRow?.warnings || [],
+    }
+  })
+})
+const requirementBlockedRowKeySet = computed(() => {
+  const keys = new Set()
+  for (const row of requirementBlockedRows.value) {
+    for (const key of requirementLookupKeys(row)) keys.add(key)
+    if (row.blocked_row_key) keys.add(row.blocked_row_key)
+  }
+  return keys
+})
+const filteredRequirementRows = computed(() => visibleRequirementRows.value.filter((row) => requirementRowMatchesFilters(row)))
+const hiddenRequirementRowCount = computed(() => Math.max(0, requirementRows.value.length - visibleRequirementRows.value.length))
+const visibleRequirementRowSheets = computed(() => {
+  const sheetNames = new Set(filteredRequirementRows.value.map((row) => row.source_sheet).filter(Boolean))
+  const fromMappings = requirementSheetMappings.value.filter((sheet) => sheetNames.has(sheet.sheet_name))
+  if (fromMappings.length) return fromMappings
+  return Array.from(sheetNames).map((sheetName) => ({ sheet_name: sheetName }))
+})
+const visibleRequirementSheetMappings = computed(() => {
+  const filtered = requirementSheetMappings.value.filter((sheet) => {
+    const sheetRows = requirementRows.value.filter((row) => row.source_sheet === sheet.sheet_name)
+    const hasDataRows = sheetRows.some((row) => row.row_type === 'data_row')
+    const mappedFields = Object.values(sheet.field_mapping || {})
+    const hasCoreMapping = mappedFields.some((field) => ['item_name', 'spec', 'quantity', 'unit'].includes(field))
+    return hasDataRows || hasCoreMapping
+  })
+  return filtered.length ? filtered : requirementSheetMappings.value
+})
+const hiddenRequirementSheetCount = computed(() => (
+  Math.max(0, requirementSheetMappings.value.length - visibleRequirementSheetMappings.value.length)
+))
 const executionAssigneeOptions = computed(() => {
   const source = users.value.length ? users.value : (session.user ? [session.user] : [])
   return source.filter((user) => {
@@ -2796,6 +4079,7 @@ function routeFromPath(path) {
   if (path === '/admin/execution') return 'execution'
   if (path === '/admin/business-ledger') return 'businessLedger'
   if (path === '/admin/cost-db') return 'costDb'
+  if (path === '/admin/requirement-standardization') return 'requirementStandardization'
   return 'permissions'
 }
 
@@ -2826,6 +4110,7 @@ function openLegacy(path) {
 function roleTagType(role) {
   if (role === 'system_admin') return 'danger'
   if (role === 'admin') return 'warning'
+  if (role?.startsWith('cost_')) return 'warning'
   if (role === 'staff') return 'success'
   if (role === 'manager') return 'primary'
   return 'info'
@@ -3017,6 +4302,32 @@ function costSourceLabel(source) {
   return option?.label || source || '-'
 }
 
+function costAuditActionLabel(action) {
+  const option = costAuditActionOptions.find((item) => item.value === action)
+  return option?.label || action || '-'
+}
+
+function costAuditFilterSummary(filters) {
+  if (!filters) return ''
+  const parts = []
+  if (filters.status) parts.push(`状态:${filters.status}`)
+  if (filters.source) parts.push(`来源:${filters.source}`)
+  if (filters.keyword) parts.push(`关键词:${filters.keyword}`)
+  if (filters.exported_count !== undefined) parts.push(`导出:${filters.exported_count}`)
+  if (filters.target_status) parts.push(`目标:${filters.target_status}`)
+  return parts.join('，')
+}
+
+function costPriceActionLabel(action) {
+  const labels = {
+    manual_override: '人工改价',
+    manual_existing: '人工确认价',
+    accepted_ai_suggestion: '人工采纳 AI 建议',
+    untouched: '默认确认',
+  }
+  return labels[action] || action || '-'
+}
+
 function costRagSyncStatusLabel(status) {
   const labels = {
     running: '同步中',
@@ -3030,6 +4341,24 @@ function costRagSyncStatusTag(status) {
   if (status === 'success') return 'success'
   if (status === 'failed') return 'danger'
   if (status === 'running') return 'warning'
+  return 'info'
+}
+
+function costRagSyncSummaryLabel(status) {
+  const labels = {
+    synced: '已同步',
+    stale: '需同步',
+    failed: '同步失败',
+    never_synced: '未同步',
+    empty_active: '无 active 条目',
+  }
+  return labels[status] || status || '-'
+}
+
+function costRagSyncSummaryAlertType(status) {
+  if (status === 'synced') return 'success'
+  if (status === 'failed') return 'error'
+  if (status === 'stale' || status === 'never_synced') return 'warning'
   return 'info'
 }
 
@@ -3107,6 +4436,29 @@ function parseCostNumber(value) {
 function pushStatusLabel(history) {
   if (!history) return '未确认'
   return history.pushed_to_dingtalk ? '已推送钉钉' : '已确认未推送'
+}
+
+function reviewCheckItems(row) {
+  const items = Object.entries(row?.checks || {}).map(([key, value]) => ({
+    key,
+    ...(value || {}),
+  }))
+  if (row?.requirement_placeholder && !items.some((item) => item.key === 'ai_returned_requirement_row')) {
+    items.unshift({
+      key: 'ai_returned_requirement_row',
+      passed: false,
+      skipped: false,
+      severity: 'danger',
+      label: 'AI 未返回该确认行，需人工补价',
+    })
+  }
+  return items
+}
+
+function reviewCheckTagType(check) {
+  if (check?.skipped) return 'info'
+  if (check?.passed) return 'success'
+  return check?.severity === 'danger' ? 'danger' : 'warning'
 }
 
 function canRetryQuoteJob(row) {
@@ -3209,6 +4561,830 @@ function isFeatureDisabled(error) {
   return error.response?.data?.detail === 'FEATURE_DISABLED'
 }
 
+function cloneRequirementState(value) {
+  return value === undefined ? null : JSON.parse(JSON.stringify(value))
+}
+
+function requirementNewId(prefix = 'req') {
+  if (window.crypto?.randomUUID) return `${prefix}_${window.crypto.randomUUID()}`
+  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+function openRequirementHistoryDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error('当前浏览器不支持 IndexedDB，无法保存本地历史'))
+      return
+    }
+    const request = window.indexedDB.open(REQUIREMENT_HISTORY_DB_NAME, REQUIREMENT_HISTORY_DB_VERSION)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(REQUIREMENT_HISTORY_RECORD_STORE)) {
+        db.createObjectStore(REQUIREMENT_HISTORY_RECORD_STORE, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(REQUIREMENT_HISTORY_VERSION_STORE)) {
+        const store = db.createObjectStore(REQUIREMENT_HISTORY_VERSION_STORE, { keyPath: 'id' })
+        store.createIndex('record_id', 'record_id', { unique: false })
+      }
+    }
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+  })
+}
+
+function requirementStoreRequest(storeName, mode, operation) {
+  return openRequirementHistoryDb().then((db) => new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, mode)
+    const store = transaction.objectStore(storeName)
+    const request = operation(store)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    transaction.oncomplete = () => db.close()
+    transaction.onerror = () => {
+      db.close()
+      reject(transaction.error)
+    }
+  }))
+}
+
+function requirementGetAllRecords() {
+  return requirementStoreRequest(REQUIREMENT_HISTORY_RECORD_STORE, 'readonly', (store) => store.getAll())
+}
+
+function requirementGetRecord(recordId) {
+  return requirementStoreRequest(REQUIREMENT_HISTORY_RECORD_STORE, 'readonly', (store) => store.get(recordId))
+}
+
+function requirementPutRecord(record) {
+  return requirementStoreRequest(REQUIREMENT_HISTORY_RECORD_STORE, 'readwrite', (store) => store.put(record))
+}
+
+function requirementDeleteRecordStoreItem(recordId) {
+  return requirementStoreRequest(REQUIREMENT_HISTORY_RECORD_STORE, 'readwrite', (store) => store.delete(recordId))
+}
+
+function requirementPutVersion(version) {
+  return requirementStoreRequest(REQUIREMENT_HISTORY_VERSION_STORE, 'readwrite', (store) => store.put(version))
+}
+
+function requirementGetAllVersions() {
+  return requirementStoreRequest(REQUIREMENT_HISTORY_VERSION_STORE, 'readonly', (store) => store.getAll())
+}
+
+function requirementDeleteVersionStoreItem(versionId) {
+  return requirementStoreRequest(REQUIREMENT_HISTORY_VERSION_STORE, 'readwrite', (store) => store.delete(versionId))
+}
+
+function buildRequirementSnapshot() {
+  return {
+    requirementPreview: cloneRequirementState(requirementPreview.value),
+    requirementRows: cloneRequirementState(requirementRows.value),
+    requirementMappings: cloneRequirementState(requirementMappings),
+    requirementConfirmed: cloneRequirementState(requirementConfirmed.value),
+    requirementQuoteJob: cloneRequirementState(requirementQuoteJob.value),
+    requirementActiveSheet: requirementActiveSheet.value,
+    requirementActiveRowSheet: requirementActiveRowSheet.value,
+    requirementActiveBlockedRowKey: requirementActiveBlockedRowKey.value,
+    requirementRowFilters: cloneRequirementState(requirementRowFilters),
+  }
+}
+
+function restoreRequirementSnapshot(snapshot) {
+  requirementPreview.value = cloneRequirementState(snapshot?.requirementPreview)
+  requirementRows.value = (cloneRequirementState(snapshot?.requirementRows) || []).map((row, index) => ({
+    ...row,
+    requirement_row_key: row.requirement_row_key || `${row.source_sheet || 'sheet'}:${row.raw_row_index || index}:${index}`,
+    quantity_source_key: row.quantity_source_key || requirementInitialQuantitySourceKey(row),
+  }))
+  Object.keys(requirementMappings).forEach((key) => delete requirementMappings[key])
+  Object.entries(snapshot?.requirementMappings || {}).forEach(([sheetName, mapping]) => {
+    requirementMappings[sheetName] = { ...(mapping || {}) }
+  })
+  requirementConfirmed.value = cloneRequirementState(snapshot?.requirementConfirmed)
+  requirementQuoteJob.value = cloneRequirementState(snapshot?.requirementQuoteJob)
+  requirementActiveSheet.value = snapshot?.requirementActiveSheet || visibleRequirementSheetMappings.value[0]?.sheet_name || ''
+  requirementActiveRowSheet.value = snapshot?.requirementActiveRowSheet || visibleRequirementRowSheets.value[0]?.sheet_name || requirementActiveSheet.value
+  requirementActiveBlockedRowKey.value = snapshot?.requirementActiveBlockedRowKey || ''
+  requirementRowFilters.keyword = snapshot?.requirementRowFilters?.keyword || ''
+  requirementRowFilters.status = snapshot?.requirementRowFilters?.status || 'all'
+}
+
+function requirementProgressStatus() {
+  if (requirementQuoteJob.value?.job_id) return 'quoted'
+  if (requirementConfirmed.value?.summary?.confirmed_row_count) return 'confirmed'
+  if (requirementPreview.value) return selectedRequirementRows.value.length ? 'reviewing' : 'parsed'
+  return 'empty'
+}
+
+function requirementHistoryStatusLabel(status) {
+  return {
+    parsed: '已解析',
+    reviewing: '确认中',
+    confirmed: '已生成确认清单',
+    quoted: '已发起报价',
+  }[status] || '未知'
+}
+
+function formatLocalDate(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function requirementSnapshotSummary(snapshot) {
+  const rows = snapshot?.requirementRows || []
+  const confirmed = snapshot?.requirementConfirmed?.summary?.confirmed_row_count || 0
+  return {
+    sheet_count: snapshot?.requirementPreview?.summary?.sheet_count || 0,
+    standard_row_count: snapshot?.requirementPreview?.summary?.standard_row_count || 0,
+    selected_row_count: rows.filter((row) => row.include).length,
+    confirmed_row_count: confirmed,
+  }
+}
+
+function requirementVersionSummary(snapshot) {
+  const summary = requirementSnapshotSummary(snapshot)
+  return `已选 ${summary.selected_row_count}/${summary.standard_row_count}，确认 ${summary.confirmed_row_count}`
+}
+
+async function loadRequirementHistoryRecords() {
+  requirementHistoryDrawer.loading = true
+  try {
+    const records = await requirementGetAllRecords()
+    requirementHistoryRecords.value = (records || []).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
+  } catch (error) {
+    ElMessage.error(error.message || '历史记录读取失败')
+  } finally {
+    requirementHistoryDrawer.loading = false
+  }
+}
+
+async function loadRequirementVersions(recordId) {
+  if (!recordId) return
+  requirementVersionDrawer.loading = true
+  try {
+    const versions = await requirementGetAllVersions()
+    requirementVersions.value = (versions || [])
+      .filter((item) => item.record_id === recordId)
+      .sort((a, b) => (b.version_no || 0) - (a.version_no || 0))
+  } catch (error) {
+    ElMessage.error(error.message || '版本记录读取失败')
+  } finally {
+    requirementVersionDrawer.loading = false
+  }
+}
+
+async function saveRequirementProgress(action, options = {}) {
+  if (!requirementPreview.value) {
+    if (!options.quiet) ElMessage.warning('暂无可保存的解析进度')
+    return null
+  }
+  try {
+    const now = new Date().toISOString()
+    const recordId = requirementCurrentRecordId.value || requirementNewId('req_record')
+    const existingRecord = await requirementGetRecord(recordId)
+    const allVersions = await requirementGetAllVersions()
+    const versions = (allVersions || []).filter((item) => item.record_id === recordId)
+    const versionNo = versions.reduce((max, item) => Math.max(max, item.version_no || 0), 0) + 1
+    const snapshot = buildRequirementSnapshot()
+    const summary = requirementSnapshotSummary(snapshot)
+    const version = {
+      id: requirementNewId('req_version'),
+      record_id: recordId,
+      version_no: versionNo,
+      action,
+      created_at: now,
+      snapshot,
+    }
+    const record = {
+      ...(existingRecord || {}),
+      id: recordId,
+      file_name: requirementPreview.value?.source?.file_name || existingRecord?.file_name || 'uploaded.xlsx',
+      created_at: existingRecord?.created_at || now,
+      updated_at: now,
+      active_version_id: version.id,
+      version_count: versionNo,
+      status: requirementProgressStatus(),
+      ...summary,
+    }
+    await requirementPutVersion(version)
+    await requirementPutRecord(record)
+    requirementCurrentRecordId.value = recordId
+    await pruneRequirementHistory()
+    if (requirementHistoryDrawer.visible) await loadRequirementHistoryRecords()
+    if (requirementVersionDrawer.visible && requirementVersionDrawer.record?.id === recordId) {
+      requirementVersionDrawer.record = record
+      await loadRequirementVersions(recordId)
+    }
+    if (!options.quiet) ElMessage.success('进度已保存')
+    return record
+  } catch (error) {
+    if (!options.quiet) ElMessage.error(error.message || '进度保存失败')
+    return null
+  }
+}
+
+async function pruneRequirementHistory() {
+  const [records, versions] = await Promise.all([requirementGetAllRecords(), requirementGetAllVersions()])
+  const sortedRecords = (records || []).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
+  for (const record of sortedRecords.slice(REQUIREMENT_HISTORY_RECORD_LIMIT)) {
+    await requirementDeleteRecordWithVersions(record.id)
+  }
+  const remainingRecords = sortedRecords.slice(0, REQUIREMENT_HISTORY_RECORD_LIMIT)
+  for (const record of remainingRecords) {
+    const recordVersions = (versions || [])
+      .filter((item) => item.record_id === record.id)
+      .sort((a, b) => (b.version_no || 0) - (a.version_no || 0))
+    for (const oldVersion of recordVersions.slice(REQUIREMENT_HISTORY_VERSION_LIMIT)) {
+      await requirementDeleteVersionStoreItem(oldVersion.id)
+    }
+  }
+}
+
+async function requirementDeleteRecordWithVersions(recordId) {
+  const versions = await requirementGetAllVersions()
+  for (const version of (versions || []).filter((item) => item.record_id === recordId)) {
+    await requirementDeleteVersionStoreItem(version.id)
+  }
+  await requirementDeleteRecordStoreItem(recordId)
+}
+
+async function openRequirementHistory() {
+  requirementHistoryDrawer.visible = true
+  await loadRequirementHistoryRecords()
+}
+
+async function openRequirementVersions(record) {
+  requirementVersionDrawer.record = record
+  requirementVersionDrawer.visible = true
+  await loadRequirementVersions(record.id)
+}
+
+async function restoreRequirementRecord(record) {
+  try {
+    const versions = await requirementGetAllVersions()
+    const activeVersion = (versions || []).find((item) => item.id === record.active_version_id)
+      || (versions || []).filter((item) => item.record_id === record.id).sort((a, b) => (b.version_no || 0) - (a.version_no || 0))[0]
+    if (!activeVersion) {
+      ElMessage.warning('该记录没有可恢复版本')
+      return
+    }
+    restoreRequirementSnapshot(activeVersion.snapshot)
+    requirementCurrentRecordId.value = record.id
+    requirementHistoryDrawer.visible = false
+    ElMessage.success('已恢复历史进度')
+  } catch (error) {
+    ElMessage.error(error.message || '历史进度恢复失败')
+  }
+}
+
+async function rollbackRequirementVersion(version) {
+  try {
+    await ElMessageBox.confirm(`确认回滚到 v${version.version_no}？当前状态会作为新的回滚版本保存。`, '版本回滚', {
+      confirmButtonText: '确认回滚',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  restoreRequirementSnapshot(version.snapshot)
+  requirementCurrentRecordId.value = version.record_id
+  const record = await saveRequirementProgress(`回滚到版本 ${version.version_no}`, { quiet: true })
+  if (record) requirementVersionDrawer.record = record
+  await loadRequirementVersions(version.record_id)
+  await loadRequirementHistoryRecords()
+  ElMessage.success(`已回滚到 v${version.version_no}`)
+}
+
+async function deleteRequirementRecord(record) {
+  try {
+    await ElMessageBox.confirm(`确认删除“${record.file_name || '该解析记录'}”及其全部版本？`, '删除历史解析记录', {
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  try {
+    await requirementDeleteRecordWithVersions(record.id)
+    if (requirementCurrentRecordId.value === record.id) requirementCurrentRecordId.value = ''
+    if (requirementVersionDrawer.record?.id === record.id) {
+      requirementVersionDrawer.visible = false
+      requirementVersionDrawer.record = null
+      requirementVersions.value = []
+    }
+    await loadRequirementHistoryRecords()
+    ElMessage.success('历史记录已删除')
+  } catch (error) {
+    ElMessage.error(error.message || '历史记录删除失败')
+  }
+}
+
+function handleRequirementFileChange(file) {
+  requirementFile.value = file.raw || file
+  requirementConfirmed.value = null
+  requirementQuoteJob.value = null
+  requirementActiveBlockedRowKey.value = ''
+  requirementCurrentRecordId.value = ''
+}
+
+function clearRequirementFile() {
+  requirementFile.value = null
+}
+
+function resetRequirementStandardization() {
+  requirementFile.value = null
+  requirementPreview.value = null
+  requirementRows.value = []
+  requirementActiveSheet.value = ''
+  requirementActiveRowSheet.value = ''
+  requirementActiveBlockedRowKey.value = ''
+  requirementConfirmed.value = null
+  requirementQuoteJob.value = null
+  requirementRowFilters.keyword = ''
+  requirementRowFilters.status = 'all'
+  requirementCurrentRecordId.value = ''
+  Object.keys(requirementMappings).forEach((key) => delete requirementMappings[key])
+}
+
+function defaultRequirementInclude(row) {
+  return row.row_type === 'data_row' && row.confidence !== 'low'
+}
+
+function hydrateRequirementPreview(preview) {
+  requirementPreview.value = preview
+  requirementRowFilters.keyword = ''
+  requirementRowFilters.status = 'all'
+  requirementRows.value = (preview.rows || []).map((row, index) => ({
+    ...row,
+    requirement_row_key: `${row.source_sheet || 'sheet'}:${row.raw_row_index || index}:${index}`,
+    quantity_source_key: requirementInitialQuantitySourceKey(row),
+    include: defaultRequirementInclude(row),
+    confirmed: false,
+  }))
+  Object.keys(requirementMappings).forEach((key) => delete requirementMappings[key])
+  for (const sheet of preview.sheet_mappings || []) {
+    requirementMappings[sheet.sheet_name] = { ...(sheet.field_mapping || {}) }
+    for (const column of sheet.columns || []) {
+      if (!requirementMappings[sheet.sheet_name][column.column]) {
+        requirementMappings[sheet.sheet_name][column.column] = column.detected_field || 'ignore'
+      }
+    }
+  }
+  requirementActiveSheet.value = visibleRequirementSheetMappings.value[0]?.sheet_name || preview.sheet_mappings?.[0]?.sheet_name || ''
+  requirementActiveRowSheet.value = visibleRequirementRowSheets.value[0]?.sheet_name || requirementActiveSheet.value
+  requirementActiveBlockedRowKey.value = ''
+  requirementConfirmed.value = null
+  requirementQuoteJob.value = null
+}
+
+function requirementPayloadMappings() {
+  return requirementSheetMappings.value.map((sheet) => ({
+    sheet_name: sheet.sheet_name,
+    field_mapping: requirementMappings[sheet.sheet_name] || {},
+  }))
+}
+
+function requirementConfidenceType(confidence) {
+  if (confidence === 'high') return 'success'
+  if (confidence === 'medium') return 'warning'
+  return 'danger'
+}
+
+function requirementInitialQuantitySourceKey(row) {
+  if (row.quantity_source?.key) return row.quantity_source.key
+  const selected = (row.quantity_candidates || []).find((candidate) => candidate.selected)
+  return selected?.key || (row.quantity_candidates?.length ? row.quantity_candidates[0].key : 'manual')
+}
+
+function applyRequirementQuantitySource(row, key) {
+  if (key === 'manual') {
+    row.quantity_source = { key: 'manual', label: '手工填写', method: 'manual' }
+    return
+  }
+  const candidate = (row.quantity_candidates || []).find((item) => item.key === key)
+  if (!candidate) return
+  row.quantity = candidate.quantity
+  row.quantity_source = { ...candidate, selected: true, method: 'manual_candidate' }
+}
+
+function requirementQuantityCandidateLabel(candidate) {
+  const label = candidate.label && candidate.label !== candidate.column ? ` ${candidate.label}` : ''
+  const group = candidate.group_label && candidate.group_label !== candidate.label ? ` / ${candidate.group_label}` : ''
+  return `${candidate.column}${label}${group}: ${candidate.raw_value}`
+}
+
+function requirementQuantitySourceText(row) {
+  if (row.quantity_source?.key === 'manual') return '手工填写'
+  if (row.quantity_source?.column) return requirementQuantityCandidateLabel(row.quantity_source)
+  if (row.quantity_source?.label) return row.quantity_source.label
+  return row.quantity === null || row.quantity === undefined || row.quantity === '' ? '未识别' : '行内识别'
+}
+
+function requirementQuantityCandidatesText(row) {
+  const candidates = row.quantity_candidates || []
+  if (!candidates.length) return '无其他工程量候选'
+  return candidates.map((candidate) => requirementQuantityCandidateLabel(candidate)).join(' / ')
+}
+
+function requirementLookupKeys(row) {
+  if (!row) return []
+  const keys = []
+  if (row.requirement_row_key) keys.push(String(row.requirement_row_key))
+  if (row.source_sheet && row.raw_row_index !== undefined && row.raw_row_index !== null) {
+    keys.push(`${row.source_sheet}:${row.raw_row_index}`)
+  }
+  return Array.from(new Set(keys))
+}
+
+function requirementPrimaryLookupKey(row) {
+  return requirementLookupKeys(row)[0] || ''
+}
+
+function requirementRowIsBlocked(row) {
+  return requirementLookupKeys(row).some((key) => requirementBlockedRowKeySet.value.has(key))
+}
+
+function requirementValidationErrorLabel(code) {
+  return {
+    CONFIRMATION_REQUIRED: '需要勾选人工确认',
+    MISSING_ITEM_NAME: '缺少项目名称，不能自动进入报价',
+    MISSING_QUANTITY: '缺少数量，不能自动进入报价',
+    INVALID_QUANTITY: '数量为 0、负数或非法文本，不能自动进入报价',
+    RANGE_QUANTITY: '数量为范围值，需要人工确认',
+    APPROXIMATE_QUANTITY: '数量为约数，需要人工确认',
+    MISSING_UNIT: '缺少单位，需要人工确认',
+    MULTIPLE_NUMBERS: '同一行存在多个数字，需要确认哪个是工程量',
+    MULTIPLE_QUANTITY_CANDIDATES: '同一行存在多个工程量候选，需确认采用哪一个数量',
+    PRICE_COLUMN_PRESENT: '原表包含价格列，系统不会采用该价格',
+    LOW_CONFIDENCE: '低置信度，必须人工确认',
+    AMBIGUOUS_HEADER: '表头不清晰，需要人工确认列映射',
+    NOT_DATA_ROW: '该行不是有效清单数据行，可能是说明、汇总或空白行',
+  }[code] || code || '未通过校验'
+}
+
+function requirementValidationErrorText(errors) {
+  const labels = (errors || []).map((code) => requirementValidationErrorLabel(code))
+  return labels.join('、') || '未通过校验'
+}
+
+function requirementValidationMessages(row) {
+  if (row?.error_messages?.length) return row.error_messages
+  const messages = []
+  for (const code of row?.errors || []) {
+    if (code === 'CONFIRMATION_REQUIRED') {
+      messages.push(...requirementConfirmationRiskMessages(row))
+    } else {
+      messages.push(requirementValidationErrorLabel(code))
+    }
+  }
+  return Array.from(new Set(messages.filter(Boolean))).length
+    ? Array.from(new Set(messages.filter(Boolean)))
+    : ['未通过确认校验']
+}
+
+function requirementConfirmationRiskMessages(row) {
+  const warningCodes = new Set((row?.warnings || []).filter((code) => code && code !== 'MULTI_SHEET_DETECTED'))
+  const riskCodes = [
+    'PRICE_COLUMN_PRESENT',
+    'LOW_CONFIDENCE',
+    'MULTIPLE_QUANTITY_CANDIDATES',
+    'MULTIPLE_NUMBERS',
+    'RANGE_QUANTITY',
+    'APPROXIMATE_QUANTITY',
+    'AMBIGUOUS_HEADER',
+    'MISSING_ITEM_NAME',
+    'MISSING_QUANTITY',
+    'INVALID_QUANTITY',
+    'MISSING_UNIT',
+  ].filter((code) => warningCodes.has(code))
+  if (row?.confidence === 'low' && !warningCodes.has('LOW_CONFIDENCE')) {
+    riskCodes.push('LOW_CONFIDENCE')
+  }
+  return riskCodes.length
+    ? riskCodes.map((code) => requirementValidationErrorLabel(code))
+    : ['该行被标记为需人工确认，请核对项目名称、数量、单位、风险提示和原始行内容']
+}
+
+function requirementRowClassName({ row }) {
+  const classes = []
+  if (requirementRowIsBlocked(row)) classes.push('requirement-row-blocked')
+  if (requirementActiveBlockedRowKey.value && requirementLookupKeys(row).includes(requirementActiveBlockedRowKey.value)) {
+    classes.push('requirement-row-focused')
+  }
+  return classes.join(' ')
+}
+
+async function locateRequirementBlockedRow(row) {
+  const key = requirementPrimaryLookupKey(row)
+  requirementActiveBlockedRowKey.value = key
+  requirementRowFilters.status = 'blocked'
+  requirementActiveRowSheet.value = row.source_sheet || requirementActiveRowSheet.value
+  await nextTick()
+  const focusedRow = document.querySelector('.requirement-row-focused')
+  focusedRow?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+
+async function focusFirstRequirementBlockedRow() {
+  const first = requirementBlockedRows.value[0]
+  if (!first) return
+  await locateRequirementBlockedRow(first)
+}
+
+function markRequirementConfirmationDirty() {
+  requirementConfirmed.value = null
+  requirementQuoteJob.value = null
+  requirementActiveBlockedRowKey.value = ''
+}
+
+function bulkIncludeRequirementRows(include) {
+  for (const row of filteredRequirementRows.value) {
+    row.include = include
+    if (!include) row.confirmed = false
+  }
+  markRequirementConfirmationDirty()
+  ElMessage.success(include ? '已全选当前筛选结果' : '已取消选择当前筛选结果')
+}
+
+function bulkConfirmRequirementRows(confirmed) {
+  for (const row of filteredRequirementRows.value) {
+    if (confirmed) row.include = true
+    row.confirmed = confirmed
+  }
+  markRequirementConfirmationDirty()
+  ElMessage.success(confirmed ? '已批量确认当前筛选结果' : '已批量撤回当前筛选结果的确认')
+}
+
+function requirementRowMatchesFilters(row) {
+  const keyword = requirementRowFilters.keyword.trim().toLowerCase()
+  if (keyword && !requirementRowSearchText(row).includes(keyword)) return false
+  if (requirementRowFilters.status === 'included') return Boolean(row.include)
+  if (requirementRowFilters.status === 'excluded') return !row.include
+  if (requirementRowFilters.status === 'blocked') return requirementRowIsBlocked(row)
+  if (requirementRowFilters.status === 'requires_confirmation') return Boolean(row.requires_confirmation)
+  if (requirementRowFilters.status === 'low_confidence') return row.confidence === 'low'
+  if (requirementRowFilters.status === 'with_warnings') return Boolean(row.warnings?.length)
+  if (requirementRowFilters.status === 'multi_quantity') return (row.quantity_candidates || []).length > 1
+  if (requirementRowFilters.status === 'quantity_missing') {
+    return row.quantity === null || row.quantity === undefined || row.quantity === '' || !row.quantity_source?.key
+  }
+  return true
+}
+
+function requirementRowSearchText(row) {
+  const rawCells = (row.raw_cells || []).map((cell) => `${cell.column} ${cell.value}`).join(' ')
+  const quantityCandidates = (row.quantity_candidates || [])
+    .map((candidate) => `${candidate.column} ${candidate.label} ${candidate.group_label} ${candidate.raw_value} ${candidate.quantity}`)
+    .join(' ')
+  const blockedRow = requirementBlockedRows.value.find((item) => (
+    requirementLookupKeys(row).some((key) => requirementLookupKeys(item).includes(key))
+  ))
+  return [
+    row.source_sheet,
+    row.raw_row_index,
+    row.row_type,
+    row.item_name,
+    row.spec,
+    row.quantity,
+    row.unit,
+    row.remark,
+    row.location,
+    row.work_area,
+    row.raw_text,
+    rawCells,
+    row.quantity_source?.column,
+    row.quantity_source?.label,
+    row.quantity_source?.group_label,
+    row.quantity_source?.raw_value,
+    quantityCandidates,
+    ...(row.warnings || []),
+    ...(blockedRow?.errors || []).map((code) => requirementValidationErrorLabel(code)),
+  ].filter((value) => value !== undefined && value !== null).join(' ').toLowerCase()
+}
+
+async function focusFirstRequirementMatch() {
+  const first = filteredRequirementRows.value[0]
+  if (!first) {
+    ElMessage.warning('没有匹配的行')
+    return
+  }
+  requirementActiveBlockedRowKey.value = requirementPrimaryLookupKey(first)
+  requirementActiveRowSheet.value = first.source_sheet || requirementActiveRowSheet.value
+  await nextTick()
+  const focusedRow = document.querySelector('.requirement-row-focused')
+  focusedRow?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+
+function visibleRequirementRowsForSheet(sheetName) {
+  return filteredRequirementRows.value.filter((row) => row.source_sheet === sheetName)
+}
+
+function hiddenRequirementRowCountForSheet(sheetName) {
+  const total = requirementRows.value.filter((row) => row.source_sheet === sheetName).length
+  const candidateCount = visibleRequirementRows.value.filter((row) => row.source_sheet === sheetName).length
+  return Math.max(0, total - candidateCount)
+}
+
+function requirementRawCellsText(row) {
+  const cells = (row.raw_cells || [])
+    .filter((cell) => visibleRequirementRawCell(cell.value))
+    .map((cell) => `${cell.column}: ${cell.value}`)
+  return cells.join(' / ') || row.raw_text || '-'
+}
+
+function visibleRequirementRawCell(value) {
+  const text = String(value || '').trim()
+  return Boolean(text && !['-', '--', '—', '–', '/', '#REF!'].includes(text.toUpperCase()))
+}
+
+function visibleRequirementColumns(sheet) {
+  return (sheet.columns || []).filter((column) => {
+    if (column.detected_field === 'price_ignored') return false
+    if (ignoredRequirementColumnLabel(column.label)) return false
+    if (column.detected_field && column.detected_field !== 'ignore') return true
+    if ((column.sample_values || []).some((value) => meaningfulRequirementCell(value))) return true
+    return column.label && column.label !== column.column && meaningfulRequirementCell(column.label)
+  })
+}
+
+function ignoredRequirementColumnLabel(value) {
+  const text = String(value || '').trim()
+  if (!text) return false
+  if (/^[一二三四五六七八九十0-9]+[-—–~至到]+[一二三四五六七八九十0-9]+楼$/.test(text)) return true
+  return ['人工费', '管理费', '主材费', '辅材费', '材料费', '机械费', '利润', '税金', '规费'].some((term) => text.includes(term))
+}
+
+function meaningfulRequirementCell(value) {
+  const text = String(value || '').trim()
+  if (!text || ['-', '--', '—', '–', '/', '#REF!'].includes(text.toUpperCase())) return false
+  if (/^[A-Z]{1,3}$/.test(text)) return false
+  if (/^\d+(\.\d+)?$/.test(text)) return false
+  return true
+}
+
+async function previewRequirementStandardization() {
+  if (!requirementFile.value) {
+    ElMessage.warning('请先选择 .xlsx/.xlsm 需求单')
+    return
+  }
+  requirementLoading.value = true
+  requirementFeatureDisabled.value = false
+  try {
+    const form = new FormData()
+    form.append('file', requirementFile.value)
+    const response = await api.post('/admin/requirement-standardization/preview', form)
+    hydrateRequirementPreview(responseData(response))
+    await saveRequirementProgress('解析预览', { quiet: true })
+    ElMessage.success('已生成标准化预览')
+  } catch (error) {
+    if (isFeatureDisabled(error)) {
+      requirementFeatureDisabled.value = true
+      return
+    }
+    ElMessage.error(apiErrorMessage(error, '需求单解析失败'))
+  } finally {
+    requirementLoading.value = false
+  }
+}
+
+async function remapRequirementStandardization() {
+  if (!requirementPreview.value) return
+  requirementLoading.value = true
+  try {
+    const response = await api.post('/admin/requirement-standardization/remap', {
+      preview: requirementPreview.value,
+      sheet_mappings: requirementPayloadMappings(),
+    })
+    hydrateRequirementPreview(responseData(response))
+    await saveRequirementProgress('应用列映射', { quiet: true })
+    ElMessage.success('已应用人工列映射')
+  } catch (error) {
+    if (isFeatureDisabled(error)) {
+      requirementFeatureDisabled.value = true
+      return
+    }
+    ElMessage.error(apiErrorMessage(error, '列映射应用失败'))
+  } finally {
+    requirementLoading.value = false
+  }
+}
+
+async function submitRequirementConfirmation(saveReason = '生成确认清单') {
+  const response = await api.post('/admin/requirement-standardization/confirm', {
+    rows: requirementRows.value,
+  })
+  requirementConfirmed.value = responseData(response)
+  await saveRequirementProgress(saveReason, { quiet: true })
+  return requirementConfirmed.value
+}
+
+async function confirmRequirementStandardization() {
+  requirementConfirming.value = true
+  try {
+    const confirmed = await submitRequirementConfirmation('生成确认清单')
+    requirementQuoteJob.value = null
+    if (confirmed.summary.blocked_row_count) {
+      ElMessage.warning(`有 ${confirmed.summary.blocked_row_count} 行未通过确认校验，已列出每行原因`)
+      await focusFirstRequirementBlockedRow()
+    } else {
+      requirementActiveBlockedRowKey.value = ''
+      if (requirementRowFilters.status === 'blocked') requirementRowFilters.status = 'included'
+      ElMessage.success('已生成确认清单')
+    }
+  } catch (error) {
+    if (isFeatureDisabled(error)) {
+      requirementFeatureDisabled.value = true
+      return
+    }
+    ElMessage.error(apiErrorMessage(error, '确认清单生成失败'))
+  } finally {
+    requirementConfirming.value = false
+  }
+}
+
+async function startRequirementQuoteJob() {
+  if (!selectedRequirementRows.value.length) {
+    ElMessage.warning('请先选择要进入报价的标准行')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '系统会重新校验当前行确认结果，只将已确认且通过校验的标准行发送到现有报价任务。',
+      '发起报价',
+      {
+        confirmButtonText: '发起报价',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  requirementQuoting.value = true
+  requirementQuoteJob.value = null
+  try {
+    const confirmed = await submitRequirementConfirmation('发起报价前确认清单')
+    const summary = confirmed.summary || {}
+    if (summary.blocked_row_count) {
+      ElMessage.warning(`有 ${summary.blocked_row_count} 行未通过确认校验，请处理后再发起报价`)
+      await focusFirstRequirementBlockedRow()
+      return
+    }
+    if (!summary.confirmed_row_count || !(confirmed.quote_text || '').trim()) {
+      ElMessage.warning('没有可发起报价的确认行')
+      return
+    }
+
+    const form = new FormData()
+    const sourceFile = requirementPreview.value?.source?.file_name || ''
+    form.append('message', `【来源：需求单标准化确认清单】\n${confirmed.quote_text}`)
+    form.append('source', '需求单标准化')
+    form.append('notes', `来自需求单标准化确认清单${sourceFile ? `：${sourceFile}` : ''}；确认行数：${summary.confirmed_row_count}`)
+    form.append('requirement_rows_json', JSON.stringify(confirmed.rows || []))
+    const response = await api.post('/quote/jobs', form)
+    requirementQuoteJob.value = responseData(response)
+    await saveRequirementProgress('发起报价', { quiet: true })
+    if (canViewQuoteOperations.value) loadQuoteJobs()
+    handoffRequirementQuoteJob(requirementQuoteJob.value)
+  } catch (error) {
+    if (isFeatureDisabled(error)) {
+      requirementFeatureDisabled.value = true
+      return
+    }
+    ElMessage.error(apiErrorMessage(error, '报价任务创建失败'))
+  } finally {
+    requirementQuoting.value = false
+  }
+}
+
+function handoffRequirementQuoteJob(job) {
+  if (!job?.job_id) {
+    ElMessage.success('已创建报价任务')
+    return
+  }
+  try {
+    window.sessionStorage.setItem('aimo_quote_job_handoff', JSON.stringify({
+      quote_job_id: job.job_id,
+      trace_id: job.trace_id || '',
+      source: 'requirement_standardization',
+      source_file_name: requirementPreview.value?.source?.file_name || '',
+      created_at: new Date().toISOString(),
+    }))
+  } catch (error) {
+    console.warn('quote job handoff storage failed', error)
+  }
+  const params = new URLSearchParams({
+    quote_job_id: job.job_id,
+    from: 'requirement_standardization',
+  })
+  if (job.trace_id) params.set('trace_id', job.trace_id)
+  window.location.href = `/index.html?${params.toString()}`
+}
+
 function isBusinessLedgerDisabled(error) {
   return error.response?.status === 404 && error.response?.data?.detail === 'NOT_FOUND'
 }
@@ -3282,9 +5458,18 @@ async function openQuoteJobDetail(row) {
   quoteJobDrawer.loading = true
   quoteJobDrawer.job = null
   quoteJobDrawer.costEvidence = []
+  quoteJobDrawer.reviewDetail = null
   try {
     const response = await api.get(`/quote/jobs/${row.job_id}`)
     quoteJobDrawer.job = responseData(response)
+    try {
+      const reviewResponse = await api.get(`/quote/jobs/${row.job_id}/review-detail`)
+      quoteJobDrawer.reviewDetail = responseData(reviewResponse)
+    } catch (error) {
+      if (error.response?.status !== 404) {
+        ElMessage.warning(apiErrorMessage(error, '预审条目加载失败'))
+      }
+    }
     const evidenceCount = Math.max(
       Number(row.cost_evidence_count || 0),
       Number(quoteJobDrawer.job?.cost_evidence_count || 0),
@@ -3442,12 +5627,14 @@ async function loadCostItems() {
     costItems.value = responseData(response) || []
     costItemTotal.value = response.data?.total ?? costItems.value.length
     await syncCurrentCostPageSelection()
+    await loadCostRagSyncStatus({ silent: true })
   } catch (error) {
     costItems.value = []
     costItemTotal.value = 0
     selectedCostItems.value = []
     if (isFeatureDisabled(error)) {
       costDbFeatureDisabled.value = true
+      costRagSyncStatus.value = null
       return
     }
     if (error.response?.status === 401) state.error = 'unauthorized'
@@ -3467,6 +5654,7 @@ function buildCostItemQueryParams(page, pageSize) {
   if (category) params.category = category
   if (costItemFilters.status.length) params.status = costItemFilters.status.join(',')
   if (costItemFilters.price_type) params.price_type = costItemFilters.price_type
+  if (costItemFilters.source) params.source = costItemFilters.source
   const keyword = costItemFilters.keyword.trim()
   if (keyword) params.keyword = keyword
   return params
@@ -3567,8 +5755,24 @@ function costBulkResultMessage(actionLabel, data) {
   return parts.join('，')
 }
 
+async function loadCostRagSyncStatus(options = {}) {
+  if (!canViewCostDb.value || costDbFeatureDisabled.value) return
+  costRagSyncStatusLoading.value = true
+  try {
+    const response = await api.get('/admin/cost-items/sync-rag/status')
+    costRagSyncStatus.value = responseData(response)
+  } catch (error) {
+    costRagSyncStatus.value = null
+    if (!options.silent) {
+      ElMessage.error(apiErrorMessage(error, 'RAG 同步状态加载失败'))
+    }
+  } finally {
+    costRagSyncStatusLoading.value = false
+  }
+}
+
 async function loadCostRagSyncRuns() {
-  if (!canManageCostDb.value || costDbFeatureDisabled.value) return
+  if (!canViewCostDb.value || costDbFeatureDisabled.value) return
   costRagSyncDialog.loading = true
   try {
     const response = await api.get('/admin/cost-items/sync-rag/runs', {
@@ -3588,14 +5792,190 @@ async function loadCostRagSyncRuns() {
   }
 }
 
+function costItemExportParams() {
+  const params = buildCostItemQueryParams(1, costItemPageSize)
+  delete params.page
+  delete params.page_size
+  return params
+}
+
+async function exportCostItems() {
+  if (!canExportCostDb.value || costDbFeatureDisabled.value) return
+  try {
+    await ElMessageBox.confirm('确认按当前筛选条件导出成本数据？导出动作会写入审计记录。', '导出成本数据', {
+      type: 'warning',
+      confirmButtonText: '确认导出',
+      cancelButtonText: '返回',
+    })
+  } catch {
+    return
+  }
+  try {
+    const response = await api.get('/admin/cost-items/export', {
+      params: costItemExportParams(),
+      responseType: 'blob',
+    })
+    const disposition = response.headers?.['content-disposition'] || ''
+    const match = disposition.match(/filename="?([^"]+)"?/i)
+    const filename = match?.[1] || `cost_items_${Date.now()}.csv`
+    const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    ElMessage.success('已生成成本库导出文件')
+    if (costAuditDialog.visible) await loadCostAuditLogs()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '导出成本数据失败'))
+  }
+}
+
+function costAuditQueryParams() {
+  const params = {
+    page: costAuditPage.value,
+    page_size: costAuditPageSize,
+  }
+  if (costAuditFilters.action) params.action = costAuditFilters.action
+  if (costAuditFilters.username.trim()) params.username = costAuditFilters.username.trim()
+  if (costAuditFilters.resource_id.trim()) params.resource_id = costAuditFilters.resource_id.trim()
+  if (costAuditFilters.status) params.status = costAuditFilters.status
+  return params
+}
+
+async function loadCostAuditLogs() {
+  if (!canViewCostAudit.value || costDbFeatureDisabled.value) return
+  costAuditDialog.loading = true
+  try {
+    const response = await api.get('/admin/cost-items/audit-logs', { params: costAuditQueryParams() })
+    costAuditLogs.value = responseData(response) || []
+    costAuditTotal.value = response.data?.total ?? costAuditLogs.value.length
+  } catch (error) {
+    costAuditLogs.value = []
+    costAuditTotal.value = 0
+    ElMessage.error(apiErrorMessage(error, '审计记录加载失败'))
+  } finally {
+    costAuditDialog.loading = false
+  }
+}
+
+function openCostAuditDialog() {
+  if (!canViewCostAudit.value || costDbFeatureDisabled.value) return
+  costAuditDialog.visible = true
+  costAuditPage.value = 1
+  loadCostAuditLogs()
+}
+
+function applyCostAuditFilters() {
+  costAuditPage.value = 1
+  loadCostAuditLogs()
+}
+
 function openCostRagSyncDialog() {
+  if (!canViewCostDb.value || costDbFeatureDisabled.value) return
   costRagSyncDialog.visible = true
   costRagSyncPage.value = 1
   loadCostRagSyncRuns()
 }
 
+function costLineageStatusForTab() {
+  return ['draft', 'active', 'archived'].includes(costLineageDrawer.activeTab)
+    ? costLineageDrawer.activeTab
+    : ''
+}
+
+async function loadCostLineageSummary() {
+  if (!canViewCostDb.value || costDbFeatureDisabled.value) return
+  costLineageDrawer.summaryLoading = true
+  try {
+    const response = await api.get('/admin/cost-items/lineage/summary')
+    costLineageSummary.value = responseData(response) || {}
+  } catch (error) {
+    costLineageSummary.value = {}
+    ElMessage.error(apiErrorMessage(error, '状态与流向汇总加载失败'))
+  } finally {
+    costLineageDrawer.summaryLoading = false
+  }
+}
+
+function costLineageQueryParams() {
+  const params = {
+    page: costLineagePage.value,
+    page_size: costLineagePageSize,
+  }
+  const status = costLineageStatusForTab()
+  if (status) params.status = status
+  if (costLineageFilters.source) params.source = costLineageFilters.source
+  if (costLineageFilters.keyword.trim()) params.keyword = costLineageFilters.keyword.trim()
+  if (costLineageFilters.has_quote_usage) params.has_quote_usage = costLineageFilters.has_quote_usage
+  return params
+}
+
+async function loadCostLineageRows() {
+  if (!canViewCostDb.value || costDbFeatureDisabled.value || costLineageDrawer.activeTab === 'summary') return
+  costLineageDrawer.loading = true
+  try {
+    const response = await api.get('/admin/cost-items/lineage', { params: costLineageQueryParams() })
+    costLineageRows.value = responseData(response) || []
+    costLineageTotal.value = response.data?.total ?? costLineageRows.value.length
+    if (!costLineageDrawer.detail && costLineageRows.value.length) {
+      await openCostLineageDetail(costLineageRows.value[0])
+    }
+  } catch (error) {
+    costLineageRows.value = []
+    costLineageTotal.value = 0
+    ElMessage.error(apiErrorMessage(error, '状态与流向列表加载失败'))
+  } finally {
+    costLineageDrawer.loading = false
+  }
+}
+
+function openCostLineageDrawer() {
+  if (!canViewCostDb.value || costDbFeatureDisabled.value) return
+  costLineageDrawer.visible = true
+  costLineageDrawer.activeTab = 'summary'
+  costLineageDrawer.detail = null
+  costLineageRows.value = []
+  costLineageTotal.value = 0
+  loadCostLineageSummary()
+}
+
+function handleCostLineageTabClick(tab) {
+  const tabName = tab?.paneName || tab?.props?.name || costLineageDrawer.activeTab
+  costLineageDrawer.activeTab = tabName
+  costLineagePage.value = 1
+  costLineageDrawer.detail = null
+  if (tabName === 'summary') {
+    loadCostLineageSummary()
+  } else {
+    loadCostLineageRows()
+  }
+}
+
+function applyCostLineageFilters() {
+  costLineagePage.value = 1
+  costLineageDrawer.detail = null
+  loadCostLineageRows()
+}
+
+async function openCostLineageDetail(row) {
+  if (!row?.id) return
+  costLineageDrawer.detailLoading = true
+  try {
+    const response = await api.get(`/admin/cost-items/${row.id}/lineage`)
+    costLineageDrawer.detail = responseData(response)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '成本条目流向详情加载失败'))
+  } finally {
+    costLineageDrawer.detailLoading = false
+  }
+}
+
 async function syncActiveCostItemsToRag() {
-  if (!canManageCostDb.value || costDbFeatureDisabled.value) return
+  if (!canApproveCostDb.value || costDbFeatureDisabled.value) return
   try {
     await ElMessageBox.confirm('确认将 active 成本条目同步到 RAG？这会让成本数据库成为报价检索主源。', '同步成本库到 RAG', {
       type: 'warning',
@@ -3615,21 +5995,26 @@ async function syncActiveCostItemsToRag() {
   } finally {
     costRagSyncing.value = false
     if (costRagSyncDialog.visible) await loadCostRagSyncRuns()
+    await loadCostRagSyncStatus({ silent: true })
   }
 }
 
 async function bulkActivateCostItems() {
-  if (!canManageCostDb.value || !selectedDraftCostItemCount.value) return
+  if (!canApproveCostDb.value || !selectedDraftCostItemCount.value) return
+  let reason = ''
   try {
-    await ElMessageBox.confirm(
-      `确认将选中条目中的 ${selectedDraftCostItemCount.value} 条 draft 批量核定为 active？`,
+    const result = await ElMessageBox.prompt(
+      `确认将选中条目中的 ${selectedDraftCostItemCount.value} 条 draft 批量核定为 active？请输入核定原因`,
       '批量核定 active',
       {
+        inputPattern: /\S+/,
+        inputErrorMessage: '核定原因不能为空',
         type: 'warning',
         confirmButtonText: '确认核定',
         cancelButtonText: '返回',
       },
     )
+    reason = result.value
   } catch {
     return
   }
@@ -3638,7 +6023,7 @@ async function bulkActivateCostItems() {
     const response = await api.post('/admin/cost-items/bulk-status', {
       item_ids: selectedCostItemIds.value,
       target_status: 'active',
-      reason: '批量核定',
+      reason,
     })
     ElMessage.success(costBulkResultMessage('批量核定完成', responseData(response) || {}))
     clearCostItemSelection()
@@ -3651,7 +6036,7 @@ async function bulkActivateCostItems() {
 }
 
 async function bulkRestoreCostItemsToDraft() {
-  if (!canManageCostDb.value || !selectedActiveCostItemCount.value) return
+  if (!canApproveCostDb.value || !selectedActiveCostItemCount.value) return
   let reason = ''
   try {
     const result = await ElMessageBox.prompt(
@@ -3681,6 +6066,43 @@ async function bulkRestoreCostItemsToDraft() {
     await loadCostItems()
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '批量恢复失败'))
+  } finally {
+    costBulkSubmitting.value = false
+  }
+}
+
+async function bulkArchiveCostItems() {
+  if (!canApproveCostDb.value || !selectedArchivableCostItemCount.value) return
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt(
+      `确认将选中的 ${selectedArchivableCostItemCount.value} 条成本数据批量归档？归档后不可撤回，请输入归档原因`,
+      '批量归档成本条目',
+      {
+        inputPattern: /\S+/,
+        inputErrorMessage: '归档原因不能为空',
+        confirmButtonText: '确认归档',
+        cancelButtonText: '返回',
+        type: 'warning',
+      },
+    )
+    reason = result.value
+  } catch {
+    return
+  }
+  costBulkSubmitting.value = true
+  try {
+    const response = await api.post('/admin/cost-items/bulk-status', {
+      item_ids: selectedCostItemIds.value,
+      target_status: 'archived',
+      reason,
+    })
+    ElMessage.success(costBulkResultMessage('批量归档完成', responseData(response) || {}))
+    clearCostItemSelection()
+    await loadCostItems()
+    await loadCostRagSyncStatus({ silent: true })
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '批量归档失败'))
   } finally {
     costBulkSubmitting.value = false
   }
@@ -3803,13 +6225,13 @@ function validateCostItemForm() {
 }
 
 function openCostItemCreate() {
-  if (!canManageCostDb.value) return
+  if (!canEditCostDb.value) return
   resetCostItemForm('create')
   costItemDialog.visible = true
 }
 
 async function openCostItemEdit(row) {
-  if (!canManageCostDb.value || row.status === 'archived') return
+  if (!canEditCostDb.value || row.status === 'archived') return
   resetCostItemForm('edit')
   costItemDialog.mode = 'edit'
   try {
@@ -3836,6 +6258,7 @@ async function openCostItemDetail(row) {
 }
 
 async function submitCostItem() {
+  if (!canEditCostDb.value) return
   if (!validateCostItemForm()) return
   state.submitting = true
   try {
@@ -3857,19 +6280,23 @@ async function submitCostItem() {
 }
 
 async function activateCostItem(row) {
-  if (!canManageCostDb.value || row.status !== 'draft') return
+  if (!canApproveCostDb.value || row.status !== 'draft') return
+  let reason = ''
   try {
-    await ElMessageBox.confirm('确认启用这条成本数据？', '启用成本条目', {
+    const result = await ElMessageBox.prompt('确认启用这条成本数据？请输入核定原因', '启用成本条目', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '核定原因不能为空',
       type: 'warning',
       confirmButtonText: '确认启用',
       cancelButtonText: '返回',
     })
+    reason = result.value
   } catch {
     return
   }
   state.submitting = true
   try {
-    await api.post(`/admin/cost-items/${row.id}/activate`)
+    await api.post(`/admin/cost-items/${row.id}/activate`, { reason })
     ElMessage.success('已启用成本条目')
     clearCostItemSelection()
     await loadCostItems()
@@ -3881,7 +6308,7 @@ async function activateCostItem(row) {
 }
 
 async function withdrawCostItem(row) {
-  if (!canManageCostDb.value || row.status !== 'active') return
+  if (!canApproveCostDb.value || row.status !== 'active') return
   let reason = ''
   try {
     const result = await ElMessageBox.prompt('请输入撤回启用原因', '撤回启用', {
@@ -3913,7 +6340,7 @@ async function withdrawCostItem(row) {
 }
 
 async function archiveCostItem(row) {
-  if (!canManageCostDb.value || row.status === 'archived') return
+  if (!canApproveCostDb.value || row.status === 'archived') return
   let reason = ''
   if (row.status === 'active') {
     try {
@@ -3954,7 +6381,7 @@ async function archiveCostItem(row) {
 }
 
 function openCostImportDialog() {
-  if (!canManageCostDb.value) return
+  if (!canEditCostDb.value) return
   costImportDialog.file = null
   costImportDialog.preview = null
   costImportDialog.loading = false
@@ -3972,6 +6399,7 @@ function clearCostImportFile() {
 }
 
 async function previewCostImport() {
+  if (!canEditCostDb.value) return
   if (!costImportDialog.file) {
     ElMessage.warning('请选择 Excel 文件')
     return
@@ -3992,6 +6420,7 @@ async function previewCostImport() {
 }
 
 async function confirmCostImport() {
+  if (!canEditCostDb.value) return
   if (!costImportDialog.preview?.batch_id) return
   state.submitting = true
   try {
@@ -4598,6 +7027,13 @@ async function bootstrap() {
       }
       return
     }
+    if (routeName.value === 'requirementStandardization') {
+      if (!canViewRequirementStandardization.value) {
+        state.error = 'forbidden'
+        return
+      }
+      return
+    }
     if (!canAccessPermissions.value) {
       state.error = 'forbidden'
       return
@@ -4615,6 +7051,43 @@ function openGrant(user) {
   grantDialog.role = 'staff'
   grantDialog.note = ''
   grantDialog.visible = true
+}
+
+function openCreateUser() {
+  createUserDialog.username = ''
+  createUserDialog.password = ''
+  createUserDialog.quota = 5
+  createUserDialog.roles = ['staff']
+  createUserDialog.note = '管理员创建账号'
+  createUserDialog.visible = true
+}
+
+async function createUser() {
+  if (!createUserDialog.username.trim() || !createUserDialog.password) {
+    ElMessage.warning('请填写账号和初始密码')
+    return
+  }
+  if (!createUserDialog.roles.length || !createUserDialog.note.trim()) {
+    ElMessage.warning('请选择角色并填写备注')
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post('/admin/users', {
+      username: createUserDialog.username.trim(),
+      password: createUserDialog.password,
+      quota: createUserDialog.quota,
+      roles: createUserDialog.roles,
+      note: createUserDialog.note,
+    })
+    createUserDialog.visible = false
+    await loadUsers()
+    ElMessage.success('用户已创建')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '创建用户失败'))
+  } finally {
+    state.submitting = false
+  }
 }
 
 async function grantSelectedRole() {

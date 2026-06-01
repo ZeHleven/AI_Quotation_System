@@ -1,6 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -8,6 +9,7 @@ from app.core.responses import api_ok
 from app.dependencies import require_admin
 from app.models.user import User
 from app.services.ops_monitor import (
+    acknowledge_error_logs,
     build_ops_dashboard,
     collect_error_logs,
     collect_job_status,
@@ -17,6 +19,10 @@ from app.services.ops_monitor import (
 
 
 router = APIRouter()
+
+
+class AcknowledgeOpsLogsRequest(BaseModel):
+    fingerprints: list[str] | None = None
 
 
 def _build_ops_dashboard_with_session():
@@ -53,6 +59,19 @@ async def get_ops_logs(
     current_user: User = Depends(require_admin),
 ):
     return api_ok(await asyncio.to_thread(collect_error_logs, limit=limit))
+
+
+@router.post("/admin/ops/logs/acknowledge", summary="Acknowledge current ops log events")
+async def acknowledge_ops_logs(
+    req: AcknowledgeOpsLogsRequest,
+    current_user: User = Depends(require_admin),
+):
+    result = await asyncio.to_thread(
+        acknowledge_error_logs,
+        fingerprints=req.fingerprints,
+        username=current_user.username,
+    )
+    return api_ok(result)
 
 
 @router.get("/admin/ops/jobs", summary="Ops stuck quote jobs")

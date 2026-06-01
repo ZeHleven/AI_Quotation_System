@@ -229,6 +229,11 @@ textarea {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+.heading-actions .el-button + .el-button {
+  margin-left: 0;
 }
 
 .dashboard-alert {
@@ -340,6 +345,57 @@ textarea {
   gap: 8px;
   align-items: center;
   margin-bottom: 10px;
+}
+
+.cost-db-filters.cost-item-filters {
+  grid-template-columns: 150px 155px 130px 96px minmax(360px, 1fr) auto;
+}
+
+.cost-db-filters.lineage-filters {
+  grid-template-columns: 140px 140px minmax(220px, 1fr) auto auto;
+}
+
+.lineage-summary-grid {
+  margin-top: 8px;
+}
+
+.lineage-source-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lineage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  gap: 14px;
+  align-items: start;
+}
+
+.lineage-detail {
+  min-height: 360px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+}
+
+.lineage-usage-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e4e9f2;
+}
+
+.lineage-usage-item:last-child {
+  border-bottom: 0;
+}
+
+.lineage-usage-item span,
+.lineage-usage-item small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .inquiry-filters .el-select,
@@ -500,6 +556,40 @@ textarea {
   white-space: nowrap;
 }
 
+.review-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.review-summary-grid > div {
+  min-height: 62px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+}
+
+.review-summary-grid small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.review-summary-grid strong {
+  color: #0f3f7a;
+  font-size: 18px;
+}
+
+.review-check-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .drawer-section {
   margin-bottom: 18px;
 }
@@ -634,6 +724,195 @@ textarea {
   white-space: nowrap;
 }
 
+.requirement-section {
+  margin-top: 18px;
+}
+
+.requirement-table .el-input__wrapper {
+  min-width: 0;
+}
+
+.raw-cells-inline {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.requirement-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(150px, 190px) auto auto;
+  gap: 10px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.requirement-filter-select {
+  width: 100%;
+}
+
+.filter-count {
+  color: #667085;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.requirement-bulk-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -2px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.requirement-bulk-actions span {
+  color: #1f2a44;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.requirement-bulk-actions small {
+  margin-left: auto;
+  color: #667085;
+  font-size: 12px;
+}
+
+.requirement-validation-panel {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #f5c2c7;
+  border-radius: 8px;
+  background: #fff7f7;
+}
+
+.requirement-validation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.requirement-validation-heading > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.requirement-validation-heading strong {
+  color: #842029;
+  font-size: 14px;
+}
+
+.requirement-validation-heading small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.validation-error-tags {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.validation-error-list {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: #842029;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.validation-error-list span {
+  overflow-wrap: anywhere;
+}
+
+.requirement-table .requirement-row-blocked > td {
+  background: #fff7f7 !important;
+}
+
+.requirement-table .requirement-row-focused > td {
+  background: #fff1c7 !important;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.section-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.requirement-quote-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.requirement-quote-note {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.requirement-quote-note strong {
+  color: #1f2a44;
+  font-size: 14px;
+}
+
+.requirement-quote-note small,
+.requirement-quote-result {
+  color: #667085;
+  font-size: 12px;
+}
+
+.requirement-quote-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.warning-stack {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.warning-stack small {
+  min-width: 0;
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -688,8 +967,15 @@ textarea {
   }
 
   .cost-db-filters,
+  .cost-db-filters.cost-item-filters,
+  .cost-db-filters.lineage-filters,
+  .requirement-filters,
   .cost-import-summary {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .lineage-layout {
+    grid-template-columns: 1fr;
   }
 
   .draft-confirm-grid {
@@ -723,8 +1009,33 @@ textarea {
 
   .heading-actions,
   .heading-actions .el-radio-group,
+  .history-toolbar,
   .heading-actions .el-button {
     width: 100%;
+  }
+
+  .history-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .requirement-quote-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .requirement-validation-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .requirement-bulk-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .requirement-bulk-actions small {
+    margin-left: 0;
   }
 
   .metric-grid {
@@ -739,8 +1050,12 @@ textarea {
   .meeting-filters,
   .business-ledger-filters,
   .cost-db-filters,
+  .cost-db-filters.cost-item-filters,
+  .cost-db-filters.lineage-filters,
+  .requirement-filters,
   .cost-import-summary,
   .detail-grid,
+  .review-summary-grid,
   .draft-confirm-grid,
   .ledger-form-grid {
     grid-template-columns: 1fr;

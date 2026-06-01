@@ -113,6 +113,19 @@
     .detail-meta { margin-bottom: 12px; }
     .detail-title { font-weight: 700; color: var(--dark); margin-bottom: 6px; overflow-wrap: anywhere; }
     .detail-summary { font-size: 12px; color: var(--slate); line-height: 1.5; overflow-wrap: anywhere; }
+    .rejected-reason { margin-top: 6px; color: #b42318; font-weight: 600; }
+    .history-drawer-header {
+      width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .history-drawer-title { font-weight: 700; color: var(--dark); }
+    .history-filter-bar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px;
+    }
+    .history-keyword { width: 220px; }
+    .history-status-select { width: 110px; }
+    .history-range-inputs { display: flex; align-items: center; gap: 6px; }
+    .history-range-inputs .el-input-number { width: 96px; }
+    .history-filter-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
     .recovery-actions {
       margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;
     }
@@ -220,11 +233,39 @@
     .omission-item { display: grid; gap: 4px; color: var(--dark); }
     .omission-item strong { font-size: 13px; }
     .omission-item span { font-size: 12px; color: var(--slate); }
+    .submitted-demand-panel {
+      display: grid; gap: 5px; padding: 10px 12px; margin-bottom: 12px;
+      border: 1px solid var(--steel); border-radius: 6px; background: #F8FBFD;
+    }
+    .submitted-demand-panel strong { font-size: 13px; color: var(--dark); }
+    .submitted-demand-panel span { font-size: 12px; color: var(--slate); line-height: 1.5; overflow-wrap: anywhere; white-space: pre-line; }
+    .submitted-demand-cell { display: grid; gap: 4px; min-width: 0; }
+    .submitted-demand-cell strong { font-size: 13px; line-height: 1.35; color: var(--dark); overflow-wrap: anywhere; }
+    .submitted-demand-cell span { font-size: 12px; line-height: 1.35; color: var(--slate); overflow-wrap: anywhere; }
+    .submitted-demand-empty { font-size: 12px; color: var(--steel); }
+    .preview-table-shell {
+      display: grid; gap: 6px; margin-top: 10px;
+    }
+    .preview-table-scrollbar {
+      position: sticky; top: 0; z-index: 8;
+      height: 18px; overflow-x: auto; overflow-y: hidden;
+      border: 1px solid var(--steel); border-radius: 6px;
+      background: #F8FBFD;
+    }
+    .preview-table-scrollbar-inner { height: 1px; }
+    .preview-table-scrollbar::-webkit-scrollbar { height: 10px; }
+    .preview-table-scrollbar::-webkit-scrollbar-track { background: #EEF3F7; border-radius: 999px; }
+    .preview-table-scrollbar::-webkit-scrollbar-thumb { background: #9AA9B5; border-radius: 999px; }
+    .preview-table .el-scrollbar__wrap,
+    .preview-table .el-table__body-wrapper {
+      scroll-behavior: auto;
+    }
     .cost-reference-cell { display: grid; gap: 4px; align-items: start; }
     .cost-reference-price { font-size: 13px; font-weight: 700; color: var(--dark); }
     .cost-reference-delta { font-size: 12px; color: var(--slate); }
     .cost-reference-total, .total-source-chip { font-size: 12px; color: var(--slate); }
     .cost-reference-fallback { font-size: 12px; color: #b45309; }
+    .cost-reference-no-cost { font-size: 12px; color: #b45309; line-height: 1.35; }
     .cost-reference-actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .total-price-cell { display: grid; gap: 4px; }
 
@@ -315,12 +356,14 @@
                   <el-button type="primary" class="full-btn" :loading="loading" @click="handleLogin">验证接口 Token</el-button>
                 </el-form>
               </el-tab-pane>
-              <el-tab-pane label="新员工注册" name="register">
-                <el-form :model="authForm" label-width="70px" @submit.prevent="handleRegister">
-                  <el-form-item label="账号"><el-input v-model="authForm.username" placeholder="设置员工账号"></el-input></el-form-item>
-                  <el-form-item label="密码"><el-input v-model="authForm.password" type="password" placeholder="设置登录密码" show-password></el-input></el-form-item>
-                  <el-button type="success" class="full-btn" :loading="loading" @click="handleRegister">注册并领取额度</el-button>
-                </el-form>
+              <el-tab-pane label="账号开通" name="register">
+                <el-alert
+                  title="账号由管理员统一开通"
+                  type="info"
+                  :closable="false"
+                  show-icon>
+                </el-alert>
+                <el-button type="info" class="full-btn" disabled style="margin-top: 14px;">请联系管理员开通账号</el-button>
               </el-tab-pane>
             </el-tabs>
           </el-card>
@@ -453,8 +496,62 @@
       </el-main>
 
       <!-- 历史记录抽屉 -->
-      <el-drawer v-model="showHistory" title="📋 我的报价历史" size="70%" direction="rtl">
-        <el-table :data="historyList" border stripe style="width:100%" v-loading="historyLoading">
+      <el-drawer v-model="showHistory" size="70%" direction="rtl">
+        <template #header>
+          <div class="history-drawer-header">
+            <span class="history-drawer-title">📋 我的报价历史</span>
+            <el-button size="small" :loading="historyLoading" @click.stop="fetchHistory(1)">刷新</el-button>
+          </div>
+        </template>
+        <div class="history-filter-bar">
+          <el-date-picker
+            v-model="historyFilters.dateRange"
+            type="daterange"
+            unlink-panels
+            value-format="YYYY-MM-DD"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            size="small"
+          ></el-date-picker>
+          <el-input v-model="historyFilters.keyword" placeholder="报价内容" clearable size="small" class="history-keyword"></el-input>
+          <div class="history-range-inputs">
+            <el-input-number v-model="historyFilters.minItemCount" :min="0" :controls="false" placeholder="项目数下限" size="small"></el-input-number>
+            <span>至</span>
+            <el-input-number v-model="historyFilters.maxItemCount" :min="0" :controls="false" placeholder="项目数上限" size="small"></el-input-number>
+          </div>
+          <div class="history-range-inputs">
+            <el-input-number v-model="historyFilters.minTotalAmount" :min="0" :controls="false" placeholder="总价下限" size="small"></el-input-number>
+            <span>至</span>
+            <el-input-number v-model="historyFilters.maxTotalAmount" :min="0" :controls="false" placeholder="总价上限" size="small"></el-input-number>
+          </div>
+          <el-select v-model="historyFilters.pushStatus" placeholder="状态" clearable size="small" class="history-status-select">
+            <el-option label="草稿" value="draft"></el-option>
+            <el-option label="打回" value="rejected"></el-option>
+            <el-option label="已推送" value="pushed"></el-option>
+            <el-option label="未推送" value="not_pushed"></el-option>
+          </el-select>
+          <div class="history-filter-actions">
+            <el-button size="small" type="primary" :loading="historyLoading" @click="searchHistory">查询</el-button>
+            <el-button size="small" @click="resetHistoryFilters">重置</el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              :disabled="!selectedDraftRows.length || historyBatchDeleting"
+              :loading="historyBatchDeleting"
+              @click="deleteSelectedPreviewDrafts"
+            >删除草稿</el-button>
+          </div>
+        </div>
+        <el-table
+          :data="historyList"
+          border
+          stripe
+          style="width:100%"
+          v-loading="historyLoading"
+          @selection-change="handleHistorySelectionChange"
+        >
+          <el-table-column type="selection" width="46" :selectable="isHistoryRowSelectable"></el-table-column>
           <el-table-column prop="created_at" label="时间" width="160"></el-table-column>
           <el-table-column label="报价内容" min-width="260" show-overflow-tooltip>
             <template #default="scope">
@@ -467,6 +564,7 @@
                 <span v-if="scope.row.client_inquiry?.client_name" class="quote-meta-tag">客户 {{ scope.row.client_inquiry.client_name }}</span>
                 <span v-if="scope.row.client_inquiry?.client_phone" class="quote-meta-tag">电话 {{ scope.row.client_inquiry.client_phone }}</span>
               </div>
+              <div v-if="scope.row.rejection_reason" class="detail-summary rejected-reason">打回原因：{{ scope.row.rejection_reason }}</div>
             </template>
           </el-table-column>
           <el-table-column prop="item_count" label="项目数" width="80" align="center"></el-table-column>
@@ -475,12 +573,27 @@
           </el-table-column>
           <el-table-column label="推送" width="80" align="center">
             <template #default="scope">
-              <el-tag :type="scope.row.pushed_to_dingtalk ? 'success' : 'info'" size="small" effect="plain">{{ scope.row.pushed_to_dingtalk ? '已推送' : '未推送' }}</el-tag>
+              <el-tag :type="historyPushTagType(scope.row)" size="small" effect="plain">{{ historyPushText(scope.row) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="80" align="center">
+          <el-table-column label="操作" width="190" align="center">
             <template #default="scope">
-              <el-button size="small" :loading="detailLoading && historyDetail && historyDetail.id === scope.row.id" @click="viewDetail(scope.row)">详情</el-button>
+              <el-button
+                v-if="scope.row.can_edit_preview_draft"
+                type="primary"
+                size="small"
+                :loading="detailLoading && historyDetail && historyDetail.id === scope.row.id"
+                @click="editPreviewDraft(scope.row)"
+              >编辑</el-button>
+              <el-button v-else size="small" :loading="detailLoading && historyDetail && historyDetail.id === scope.row.id" @click="viewDetail(scope.row)">详情</el-button>
+              <el-button
+                v-if="canResendHistory(scope.row)"
+                type="success"
+                size="small"
+                :loading="historyResendingId === scope.row.id"
+                :disabled="detailLoading"
+                @click="resendHistoryQuote(scope.row)"
+              >再次发送</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -499,7 +612,7 @@
               <el-descriptions-item label="总价">¥ {{ formatMoney(historyDetail.total_amount) }}</el-descriptions-item>
               <el-descriptions-item label="项目数">{{ historyDetail.item_count || detailRows.length }}</el-descriptions-item>
               <el-descriptions-item label="来源文件">{{ historyDetail.source_file_name || '（无附件）' }}</el-descriptions-item>
-              <el-descriptions-item label="推送">{{ historyDetail.pushed_to_dingtalk ? '已推送钉钉' : '未推送' }}</el-descriptions-item>
+              <el-descriptions-item label="状态">{{ historyPushText(historyDetail) }}</el-descriptions-item>
               <el-descriptions-item label="确认人">{{ historyDetail.confirmed_by || currentUser }}</el-descriptions-item>
               <el-descriptions-item label="需求来源">{{ historyDetail.client_inquiry?.source || '—' }}</el-descriptions-item>
               <el-descriptions-item label="客户姓名">{{ historyDetail.client_inquiry?.client_name || '—' }}</el-descriptions-item>
@@ -507,6 +620,7 @@
               <el-descriptions-item label="咨询时间">{{ historyDetail.client_inquiry?.inquiry_time || '—' }}</el-descriptions-item>
               <el-descriptions-item label="需求" :span="3">{{ historyDetail.request_text || '—' }}</el-descriptions-item>
               <el-descriptions-item label="摘要" :span="3">{{ historyDetail.project_summary || '—' }}</el-descriptions-item>
+              <el-descriptions-item v-if="historyDetail.rejection_reason" label="打回原因" :span="3">{{ historyDetail.rejection_reason }}</el-descriptions-item>
             </el-descriptions>
           </div>
           <el-table :data="detailRows" border stripe style="width:100%">
@@ -526,7 +640,15 @@
       </el-dialog>
 
       <!-- 人在回路预审弹窗 -->
-      <el-dialog v-model="showPreviewDialog" title="🧐 AI 报价明细预审 (支持手工干预)" width="1120px" :close-on-click-modal="false" :show-close="false">
+      <el-dialog
+        v-model="showPreviewDialog"
+        title="报价明细预审 (成本库优先，人工确认)"
+        width="calc(100vw - 48px)"
+        class="quote-preview-dialog"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        :before-close="handlePreviewDialogClose"
+      >
 
         <!-- 优化5：置顶摘要栏 -->
         <div class="preview-summary-bar">
@@ -540,10 +662,75 @@
           </div>
         </div>
 
+        <div v-if="previewSubmittedDemandText" class="submitted-demand-panel">
+          <strong>本次提交需求</strong>
+          <span>{{ previewSubmittedDemandText }}</span>
+        </div>
+
         <el-alert title="请仔细核对以下 AI 提取的数据，如有遗漏或单价错误，请直接点击表格框进行修改。" type="warning" show-icon style="margin-bottom: 15px;"></el-alert>
         <el-alert v-if="pushing" class="push-status" title="正在生成 Excel 并推送到钉钉，请勿关闭或重复提交。" type="info" show-icon></el-alert>
         <el-alert v-if="pushError" class="push-status" :title="pushError" type="error" show-icon :closable="false"></el-alert>
         <div class="review-hints">
+          <el-alert
+            v-if="previewCompletenessBlocked"
+            :title="previewCompletenessMessage"
+            type="error"
+            show-icon
+            :closable="false"
+          ></el-alert>
+          <el-alert
+            v-if="placeholderPricingBlocked"
+            :title="placeholderPricingMessage"
+            type="error"
+            show-icon
+            :closable="false"
+          ></el-alert>
+          <el-alert
+            v-if="manualPricingBlocked"
+            :title="manualPricingMessage"
+            type="error"
+            show-icon
+            :closable="false"
+          ></el-alert>
+          <el-alert
+            v-if="costCandidateConfirmationBlocked"
+            :title="costCandidateConfirmationMessage"
+            type="error"
+            show-icon
+            :closable="false"
+          ></el-alert>
+          <el-alert
+            v-if="aiRewriteConfirmationBlocked"
+            :title="aiRewriteConfirmationMessage"
+            type="error"
+            show-icon
+            :closable="false"
+          ></el-alert>
+          <el-alert
+            v-if="aiNoteConfirmationBlocked"
+            :title="aiNoteConfirmationMessage"
+            type="error"
+            show-icon
+            :closable="false"
+          ></el-alert>
+          <el-alert
+            v-if="reviewSummary.requirement_row_count"
+            :title="`确认清单 ${reviewSummary.requirement_row_count} 行，AI 预审返回 ${reviewSummary.preview_row_count || 0} 行；疑似未报价 ${reviewSummary.missing_count || 0} 行，无底价参考 ${reviewSummary.no_cost_reference_count || 0} 行，AI备注冲突 ${reviewSummary.ai_note_conflict_count || 0} 行，需复核 ${reviewSummary.review_required_count || 0} 项`"
+            :type="reviewSummaryType"
+            show-icon
+            :closable="false"
+          ></el-alert>
+          <div v-if="reviewMissingRows.length" class="omission-panel">
+            <div
+              v-for="item in reviewMissingRows.slice(0, 5)"
+              :key="item.requirement_row?.requirement_row_key || `${item.requirement_index}-${item.requirement_row?.raw_row_index}`"
+              class="omission-item"
+            >
+              <strong>{{ item.label }}：{{ item.requirement_row?.item_name || '-' }}</strong>
+              <span>来源：{{ item.requirement_row?.source_sheet || '-' }} 第 {{ item.requirement_row?.raw_row_index || '-' }} 行；数量 {{ item.requirement_row?.quantity ?? '-' }}{{ item.requirement_row?.unit || '' }}</span>
+              <span v-if="item.requirement_row?.raw_text">原始行：{{ item.requirement_row.raw_text }}</span>
+            </div>
+          </div>
           <el-alert
             v-if="costReferenceSummary.total"
             :title="`成本库参考：${costReferenceSummary.matched} 行已匹配，${costReferenceSummary.unmatched} 行无底价参考`"
@@ -581,7 +768,26 @@
           </div>
         </div>
 
-        <el-table :data="previewData" border stripe style="width: 100%">
+        <div class="preview-table-shell">
+          <div
+            class="preview-table-scrollbar"
+            ref="previewTopScrollRef"
+            @scroll="syncPreviewHorizontalScroll('top')"
+          >
+            <div
+              class="preview-table-scrollbar-inner"
+              :style="{ width: `${previewTableScrollWidth}px` }"
+            ></div>
+          </div>
+        <el-table
+          ref="previewTableRef"
+          :data="previewData"
+          border
+          stripe
+          class="preview-table"
+          max-height="56vh"
+          style="width: 100%"
+        >
           <el-table-column label="风险" width="90" align="center">
             <template #default="scope">
               <el-tag :type="(previewRowRisks[scope.$index] || {type:'success'}).type" size="small" effect="plain">
@@ -589,17 +795,51 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="提交需求" min-width="240">
+            <template #default="scope">
+              <div v-if="submittedRequirementForPreviewRow(scope.row, scope.$index)" class="submitted-demand-cell">
+                <strong>{{ submittedRequirementTitle(submittedRequirementForPreviewRow(scope.row, scope.$index)) }}</strong>
+                <span>{{ submittedRequirementMeta(submittedRequirementForPreviewRow(scope.row, scope.$index)) }}</span>
+                <span v-if="submittedRequirementRawText(submittedRequirementForPreviewRow(scope.row, scope.$index))">
+                  原始行：{{ submittedRequirementRawText(submittedRequirementForPreviewRow(scope.row, scope.$index)) }}
+                </span>
+              </div>
+              <span v-else class="submitted-demand-empty">未绑定确认清单</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="project_name" label="施工项目" min-width="160">
             <template #default="scope">
-              <el-input v-model="scope.row.project_name" size="small" :disabled="pushing"></el-input>
+              <el-input v-model="scope.row.project_name" size="small" :disabled="pushing" @change="schedulePreviewDraftSave"></el-input>
             </template>
           </el-table-column>
-          <el-table-column prop="unit_price" label="AI 建议单价(元)" width="130">
+          <el-table-column prop="quantity" label="工程量" width="110">
             <template #default="scope">
-              <el-input-number v-model="scope.row.unit_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing"></el-input-number>
+              <el-input-number
+                v-model="scope.row.quantity"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                size="small"
+                style="width:100%"
+                :disabled="pushing"
+                @change="handleQuantityChange(scope.row)"
+              ></el-input-number>
             </template>
           </el-table-column>
-          <el-table-column label="成本库参考" width="220">
+          <el-table-column prop="unit" label="单位" width="80">
+            <template #default="scope">
+              <el-input v-model="scope.row.unit" size="small" :disabled="pushing" @change="schedulePreviewDraftSave"></el-input>
+            </template>
+          </el-table-column>
+          <el-table-column prop="unit_price" label="预审参考单价(元)" width="145">
+            <template #default="scope">
+              <div class="total-price-cell">
+                <span>{{ aiSuggestedUnitPriceText(scope.row) }}</span>
+                <span class="total-source-chip">{{ previewUnitPriceSourceText(scope.row) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="成本库依据" width="220">
             <template #default="scope">
               <div class="cost-reference-cell">
                 <el-tag :type="costReferenceTagType(scope.row)" size="small" effect="plain">
@@ -607,7 +847,7 @@
                 </el-tag>
                 <span class="cost-reference-price">{{ costReferencePriceText(scope.row) }}</span>
                 <span v-if="costReferenceTotalText(scope.row)" class="cost-reference-total">
-                  参考合计 {{ costReferenceTotalText(scope.row) }}
+                  依据合计 {{ costReferenceTotalText(scope.row) }}
                 </span>
                 <span v-if="costReferenceDeltaText(scope.row)" class="cost-reference-delta">
                   {{ costReferenceDeltaText(scope.row) }}
@@ -615,33 +855,97 @@
                 <span v-if="costReferenceFallbackText(scope.row)" class="cost-reference-fallback">
                   {{ costReferenceFallbackText(scope.row) }}
                 </span>
+                <span v-if="costCandidateWarningText(scope.row)" class="cost-reference-delta">
+                  {{ costCandidateWarningText(scope.row) }}
+                </span>
+                <span v-if="aiRewriteWarningText(scope.row)" class="cost-reference-delta">
+                  {{ aiRewriteWarningText(scope.row) }}
+                </span>
+                <span v-if="aiNoteConflictWarningText(scope.row)" class="cost-reference-delta">
+                  {{ aiNoteConflictWarningText(scope.row) }}
+                </span>
+                <span v-if="noCostNoticeText(scope.row)" class="cost-reference-no-cost">
+                  {{ noCostNoticeText(scope.row) }}
+                </span>
                 <div class="cost-reference-actions">
                   <el-button type="primary" link size="small" @click="showCostReferenceEvidence(scope.row, scope.$index)">查看依据</el-button>
-                  <el-button v-if="costReference(scope.row).cost_item_id" type="primary" link size="small" @click="openCostReferenceDetail(scope.row)">成本库详情</el-button>
+                  <el-button v-if="costReference(scope.row).cost_item_id && canOpenFullCostDb" type="primary" link size="small" @click="openCostReferenceDetail(scope.row)">成本库详情</el-button>
+                  <el-button v-if="needsCostCandidateConfirmation(scope.row)" type="danger" link size="small" @click="confirmCurrentCostCandidate(scope.row)">确认当前依据</el-button>
+                  <el-button v-if="needsAiRewriteConfirmation(scope.row)" type="danger" link size="small" @click="confirmAiRewriteCostReference(scope.row)">确认原始依据</el-button>
+                  <el-button v-if="needsAiNoteConfirmation(scope.row)" type="danger" link size="small" @click="confirmAiNoteCostBasis(scope.row)">确认备注处理</el-button>
                   <el-button type="warning" link size="small" @click="openCostSwitchDialog(scope.row, scope.$index)">切换条目</el-button>
                 </div>
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="total_price" label="系统合计(元)" width="130">
+          <el-table-column prop="manual_unit_price" label="人工确认价(元)" width="170">
             <template #default="scope">
               <div class="total-price-cell">
-                <el-input-number v-model="scope.row.total_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing"></el-input-number>
+                <el-input-number
+                  v-model="scope.row.manual_unit_price"
+                  :min="0"
+                  :precision="2"
+                  :controls="false"
+                  size="small"
+                  style="width:100%"
+                  :disabled="pushing"
+                  @change="handleManualPriceChange(scope.row)"
+                ></el-input-number>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  :disabled="pushing || !canAcceptAiSuggestedPrice(scope.row)"
+                  @click="acceptAiSuggestedPrice(scope.row)"
+                >
+                  {{ acceptSuggestedPriceButtonText(scope.row) }}
+                </el-button>
+                <span v-if="manualPriceHint(scope.row)" class="total-source-chip">{{ manualPriceHint(scope.row) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="total_price" label="人工确认合计(元)" width="150">
+            <template #default="scope">
+              <div class="total-price-cell">
+                <el-input-number v-model="scope.row.total_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing" @change="handleManualTotalChange(scope.row)"></el-input-number>
                 <span class="total-source-chip">{{ lineTotalSourceText(scope.row, scope.$index) }}</span>
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="notes" label="工艺与避坑备注" min-width="200">
+          <el-table-column prop="notes" label="工艺与避坑备注" min-width="320">
             <template #default="scope">
-              <el-input v-model="scope.row.notes" type="textarea" :rows="2" size="small" :disabled="pushing"></el-input>
+              <el-input
+                v-model="scope.row.notes"
+                type="textarea"
+                :autosize="{ minRows: 4, maxRows: 8 }"
+                size="small"
+                :disabled="pushing"
+                @change="handleNotesChange(scope.row)"
+              ></el-input>
             </template>
           </el-table-column>
         </el-table>
+        </div>
+
+        <el-alert
+          v-if="previewContext.quoteJobId"
+          class="push-status"
+          :title="previewDraftStatusText"
+          :type="previewDraftAlertType"
+          show-icon
+          :closable="false"
+        ></el-alert>
 
         <template #footer>
           <span class="dialog-footer">
+            <el-button :loading="previewDraftSaving" :disabled="pushing || !previewContext.quoteJobId || !previewData.length" @click="savePreviewDraftNow()">
+              保存草稿
+            </el-button>
+            <el-button :loading="previewDraftSaving" :disabled="pushing" @click="closePreviewAndKeepDraft">
+              关闭
+            </el-button>
             <el-button @click="cancelPreview" :disabled="pushing">打回重填</el-button>
-            <el-button type="success" :loading="pushing" :disabled="!previewData.length" @click="submitFinalQuote">
+            <el-button type="success" :loading="pushing" :disabled="!previewData.length || previewCompletenessBlocked || placeholderPricingBlocked || manualPricingBlocked || costCandidateConfirmationBlocked || aiRewriteConfirmationBlocked || aiNoteConfirmationBlocked" @click="submitFinalQuote">
               {{ pushing ? '正在推送钉钉' : '确认无误，下发生成 Excel 并推钉钉' }}
             </el-button>
           </span>
@@ -668,7 +972,7 @@
 
           <div class="evidence-metrics">
             <div class="evidence-metric">
-              <small>AI 原始单价</small>
+              <small>工作流返回单价</small>
               <strong>{{ evidenceDialogData.aiUnitPriceText }}</strong>
               <span>{{ evidenceDialogData.aiTotalText }}</span>
             </div>
@@ -690,7 +994,7 @@
           </div>
 
           <section class="evidence-section">
-            <h4>AI 报价来源</h4>
+            <h4>预审单价来源</h4>
             <div class="evidence-kv">
               <span>来源判断</span>
               <strong>{{ evidenceDialogData.aiPriceSourceLabel }}</strong>
@@ -700,9 +1004,33 @@
           </section>
 
           <section class="evidence-section">
-            <h4>AI 报价依据</h4>
+            <h4>预审生成依据</h4>
             <p>{{ evidenceDialogData.aiBasis }}</p>
             <p v-if="evidenceDialogData.notes">工艺备注：{{ evidenceDialogData.notes }}</p>
+          </section>
+
+          <section v-if="evidenceDialogData.aiRewriteRisk" class="evidence-section">
+            <h4>AI 改写风险</h4>
+            <div class="evidence-kv">
+              <span>原始需求</span>
+              <strong>{{ evidenceDialogData.sourceRequirementText }}</strong>
+              <span>AI 返回项目</span>
+              <strong>{{ evidenceDialogData.aiReturnedText }}</strong>
+              <span>系统判断</span>
+              <strong>{{ evidenceDialogData.aiRewriteReason }}</strong>
+            </div>
+          </section>
+
+          <section v-if="evidenceDialogData.aiNoteConflict" class="evidence-section">
+            <h4>AI 备注冲突</h4>
+            <div class="evidence-kv">
+              <span>AI 原始备注</span>
+              <strong>{{ evidenceDialogData.aiOriginalNotes }}</strong>
+              <span>系统建议备注</span>
+              <strong>{{ evidenceDialogData.systemSuggestedNotes }}</strong>
+              <span>系统判断</span>
+              <strong>{{ evidenceDialogData.aiNoteConflictReason }}</strong>
+            </div>
           </section>
 
           <section class="evidence-section">
@@ -739,7 +1067,7 @@
         <template #footer>
           <span class="evidence-dialog-footer">
             <el-button @click="showEvidenceDialog = false">关闭</el-button>
-            <el-button type="primary" :disabled="!evidenceDialogData.detailUrl" @click="openEvidenceCostDetail">
+            <el-button type="primary" :disabled="!canOpenFullCostDb || !evidenceDialogData.detailUrl" @click="openEvidenceCostDetail">
               打开成本库详情
             </el-button>
           </span>
@@ -814,8 +1142,8 @@
   <script src="/static/js/shared.js"></script>
 
   <script>
-    const { createApp, ref, computed, nextTick, onMounted, onBeforeUnmount } = Vue;
-    const { ElMessage } = ElementPlus;
+    const { createApp, ref, computed, nextTick, onMounted, onBeforeUnmount, watch } = Vue;
+    const { ElMessage, ElMessageBox } = ElementPlus;
 
     const STAGES_WITH_IMAGE = [
       { id: 'created', icon: '🧾', label: '创建任务' },
@@ -886,6 +1214,10 @@
           aiPriceSourceReason: '-',
           aiBasis: '-',
           notes: '',
+          aiNoteConflict: false,
+          aiOriginalNotes: '',
+          systemSuggestedNotes: '',
+          aiNoteConflictReason: '',
           costItemText: '-',
           matchReason: '-',
           priceSourceReason: '-',
@@ -902,6 +1234,29 @@
         const costSwitchKeyword = ref('');
         const costSwitchRowIndex = ref(-1);
         const costSwitchCurrentTitle = ref('');
+        const currentRoleList = computed(() => {
+          currentUser.value;
+          const userInfo = getUserInfo() || {};
+          const roles = Array.isArray(userInfo.roles) ? userInfo.roles.slice() : [];
+          if (userInfo.role && !roles.includes(userInfo.role)) roles.push(userInfo.role);
+          if (roles.includes('system_admin') && !roles.includes('admin')) roles.push('admin');
+          if (roles.includes('admin')) {
+            ['cost_viewer', 'cost_editor', 'cost_approver'].forEach((role) => {
+              if (!roles.includes(role)) roles.push(role);
+            });
+          }
+          if (roles.includes('cost_approver') && !roles.includes('cost_editor')) roles.push('cost_editor');
+          if (roles.includes('cost_editor') && !roles.includes('cost_viewer')) roles.push('cost_viewer');
+          return roles;
+        });
+        const canOpenFullCostDb = computed(() => currentRoleList.value.some((role) => [
+          'admin',
+          'system_admin',
+          'cost_viewer',
+          'cost_editor',
+          'cost_approver',
+          'cost_exporter',
+        ].includes(role)));
         const previewData       = ref([]);
         const previewOriginalData = ref([]);
         const omissionSuggestions = ref([]);
@@ -913,23 +1268,77 @@
         const knowledgeLearningEnabled = ref(true);
         const knowledgeLearningReason = ref('');
         const previewContext    = ref({ quoteJobId: '', traceId: '', quoteId: '', rawPayload: null });
+        const previewDraftSaving = ref(false);
+        const previewDraftStatus = ref('');
+        const previewDraftSavedAt = ref('');
+        const previewDraftVersion = ref(null);
+        const previewDraftError = ref('');
+        const previewDraftRestored = ref(false);
+        let previewDraftSaveTimer = null;
+        const reviewDetail = ref(null);
+        const reviewDetailLoading = ref(false);
+        const previewTableRef = ref(null);
+        const previewTopScrollRef = ref(null);
+        const previewTableScrollWidth = ref(1200);
+        let previewTableScrollElement = null;
+        let previewTableScrollHandler = null;
+        let previewHorizontalScrollSyncing = false;
+        const quoteHandoffStorageKey = 'aimo_quote_job_handoff';
+        let incomingQuoteJobHandled = false;
 
         const showHistory     = ref(false);
         const historyList     = ref([]);
         const historyLoading  = ref(false);
         const historyTotal    = ref(0);
         const historyPage     = ref(1);
+        const historyFilters  = ref({
+          dateRange: [],
+          keyword: '',
+          minItemCount: null,
+          maxItemCount: null,
+          minTotalAmount: null,
+          maxTotalAmount: null,
+          pushStatus: '',
+        });
+        const historySelectedRows = ref([]);
+        const historyBatchDeleting = ref(false);
+        const historyResendingId = ref(null);
         const showDetailDialog = ref(false);
         const detailLoading   = ref(false);
         const historyDetail   = ref(null);
         const detailRows      = ref([]);
 
+        const isHistoryRowSelectable = (row = {}) => row.push_status === 'draft' || row.record_type === 'preview_draft';
+        const selectedDraftRows = computed(() => historySelectedRows.value.filter(isHistoryRowSelectable));
+
+        const addHistoryParam = (params, key, value) => {
+          if (value !== null && value !== undefined && value !== '') params[key] = value;
+        };
+
+        const buildHistoryParams = (page = 1) => {
+          const filters = historyFilters.value || {};
+          const params = { page, page_size: 20, _: Date.now() };
+          const [startDate, endDate] = filters.dateRange || [];
+          addHistoryParam(params, 'start_date', startDate);
+          addHistoryParam(params, 'end_date', endDate);
+          addHistoryParam(params, 'keyword', (filters.keyword || '').trim());
+          addHistoryParam(params, 'min_item_count', filters.minItemCount);
+          addHistoryParam(params, 'max_item_count', filters.maxItemCount);
+          addHistoryParam(params, 'min_total_amount', filters.minTotalAmount);
+          addHistoryParam(params, 'max_total_amount', filters.maxTotalAmount);
+          addHistoryParam(params, 'push_status', filters.pushStatus);
+          return params;
+        };
+
         const fetchHistory = async (page = 1) => {
           historyPage.value = page;
           historyLoading.value = true;
+          historySelectedRows.value = [];
           try {
-            const res = await axios.get(`${API_BASE_URL}/history?page=${page}&page_size=20`,
-              { headers: authHeaders() });
+            const res = await axios.get(`${API_BASE_URL}/history`, {
+              headers: authHeaders(),
+              params: buildHistoryParams(page),
+            });
             const body = apiBody(res);
             historyList.value = apiData(res, []);
             historyTotal.value = body.total || 0;
@@ -941,7 +1350,106 @@
           }
         };
 
+        const searchHistory = () => fetchHistory(1);
+
+        const resetHistoryFilters = () => {
+          historyFilters.value = {
+            dateRange: [],
+            keyword: '',
+            minItemCount: null,
+            maxItemCount: null,
+            minTotalAmount: null,
+            maxTotalAmount: null,
+            pushStatus: '',
+          };
+          fetchHistory(1);
+        };
+
+        const handleHistorySelectionChange = (rows = []) => {
+          historySelectedRows.value = rows || [];
+        };
+
+        const deleteSelectedPreviewDrafts = async () => {
+          const draftIds = selectedDraftRows.value.map(row => Number(row.draft_id)).filter(Boolean);
+          if (!draftIds.length) {
+            ElMessage.warning('请选择要删除的草稿');
+            return;
+          }
+          try {
+            await ElMessageBox.confirm(`确定删除选中的 ${draftIds.length} 份预审草稿？`, '删除草稿', {
+              confirmButtonText: '删除',
+              cancelButtonText: '取消',
+              type: 'warning',
+            });
+          } catch {
+            return;
+          }
+          historyBatchDeleting.value = true;
+          try {
+            const res = await axios.post(
+              `${API_BASE_URL}/quote/preview-drafts/batch-delete`,
+              { draft_ids: draftIds },
+              { headers: authHeaders() }
+            );
+            const data = apiData(res, {});
+            const skipped = Number(data.skipped_count || 0);
+            ElMessage.success(`已删除 ${data.deleted_count || 0} 份草稿${skipped ? `，跳过 ${skipped} 份` : ''}`);
+            historySelectedRows.value = [];
+            const nextPage = historyList.value.length <= draftIds.length && historyPage.value > 1
+              ? historyPage.value - 1
+              : historyPage.value;
+            await fetchHistory(nextPage);
+          } catch (error) {
+            if (error.response?.status === 401) handleUnauthorized();
+            ElMessage.error(apiErrorMessage(error, '删除草稿失败'));
+          } finally {
+            historyBatchDeleting.value = false;
+          }
+        };
+
         const openHistory = () => { showHistory.value = true; fetchHistory(1); };
+
+        const historyPushText = (row = {}) => {
+          if (row.push_status === 'rejected' || row.record_type === 'rejected_quote') return '打回';
+          if (row.push_status === 'draft' || row.record_type === 'preview_draft') return '草稿';
+          return row.pushed_to_dingtalk ? '已推送' : '未推送';
+        };
+
+        const historyPushTagType = (row = {}) => {
+          if (row.push_status === 'rejected' || row.record_type === 'rejected_quote') return 'danger';
+          if (row.push_status === 'draft' || row.record_type === 'preview_draft') return 'warning';
+          return row.pushed_to_dingtalk ? 'success' : 'info';
+        };
+
+        const canResendHistory = (row = {}) => row.record_type === 'history' && row.pushed_to_dingtalk && !!row.id;
+
+        const resendHistoryQuote = async (row = {}) => {
+          if (!canResendHistory(row) || historyResendingId.value) return;
+          try {
+            await ElMessageBox.confirm(
+              '确定再次发送这份已推送报价到钉钉吗？系统会直接使用历史最终报价明细，不会重新识别、解析或生成报价。',
+              '再次发送报价',
+              {
+                confirmButtonText: '再次发送',
+                cancelButtonText: '取消',
+                type: 'warning',
+              }
+            );
+          } catch {
+            return;
+          }
+          historyResendingId.value = row.id;
+          try {
+            const res = await axios.post(`${API_BASE_URL}/history/${row.id}/resend`, {}, { headers: authHeaders() });
+            const data = apiData(res, {});
+            ElMessage.success(`已再次发送到钉钉：${data.item_count || row.item_count || 0} 行，合计 ¥${formatMoney(data.total_amount ?? row.total_amount)}`);
+          } catch (error) {
+            if (error.response?.status === 401) handleUnauthorized();
+            ElMessage.error(apiErrorMessage(error, '再次发送报价失败'));
+          } finally {
+            historyResendingId.value = null;
+          }
+        };
 
         const formatMoney = (value) => {
           const num = Number(value);
@@ -951,6 +1459,16 @@
         const viewDetail = async (row) => {
           historyDetail.value = row;
           detailRows.value = [];
+          if (row?.record_type === 'rejected_quote') {
+            try {
+              const parsed = JSON.parse(row.payload_json || '{}');
+              detailRows.value = parsed.project_details || [];
+            } catch {
+              detailRows.value = [];
+            }
+            showDetailDialog.value = true;
+            return;
+          }
           try {
             showDetailDialog.value = true;
             detailLoading.value = true;
@@ -970,6 +1488,43 @@
             }
             if (e.response?.status === 401) handleUnauthorized();
             ElMessage.error(apiErrorMessage(e, '获取历史详情失败'));
+          } finally {
+            detailLoading.value = false;
+          }
+        };
+
+        const editPreviewDraft = async (row = {}) => {
+          if (!row.quote_job_id) {
+            ElMessage.warning('这条草稿缺少报价任务编号，无法继续编辑');
+            return;
+          }
+          historyDetail.value = row;
+          detailLoading.value = true;
+          try {
+            const jobRes = await axios.get(`${API_BASE_URL}/quote/jobs/${row.quote_job_id}`, { headers: authHeaders() });
+            const job = apiData(jobRes, apiBody(jobRes));
+            let rawPayload = job?.result;
+            if (!rawPayload) {
+              const draftRes = await axios.get(`${API_BASE_URL}/quote/jobs/${row.quote_job_id}/preview-draft`, { headers: authHeaders() });
+              const draftData = apiData(draftRes, {});
+              rawPayload = draftData?.draft;
+            }
+            if (!rawPayload || !openPreviewFromPayload(rawPayload, {
+              quoteJobId: row.quote_job_id,
+              traceId: row.trace_id || job?.trace_id || '',
+              quoteId: row.quote_id || '',
+              requestSummary: job?.request_summary || row.request_text || '',
+              requestText: row.request_text || '',
+              sourceFileName: job?.source_file_name || job?.file_name || '',
+            })) {
+              ElMessage.error('未能打开这份预审草稿，请重新查看任务状态或联系管理员');
+              return;
+            }
+            showHistory.value = false;
+            ElMessage.success('已打开预审草稿，可继续编辑');
+          } catch (error) {
+            if (error.response?.status === 401) handleUnauthorized();
+            ElMessage.error(apiErrorMessage(error, '打开预审草稿失败'));
           } finally {
             detailLoading.value = false;
           }
@@ -1100,6 +1655,22 @@
           return previewData.value.reduce((sum, item) => sum + (Number(item.total_price) || 0), 0).toFixed(2);
         });
 
+        const previewDraftStatusText = computed(() => {
+          if (!previewContext.value.quoteJobId) return '当前预审未绑定异步任务，暂不支持草稿恢复';
+          if (previewDraftSaving.value) return '正在自动保存预审草稿...';
+          if (previewDraftError.value) return previewDraftError.value;
+          if (previewDraftRestored.value && previewDraftSavedAt.value) return `已恢复未完成预审草稿，上次保存 ${previewDraftSavedAt.value}`;
+          if (previewDraftSavedAt.value) return `已自动保存 ${previewDraftSavedAt.value}`;
+          if (previewDraftStatus.value === 'editing') return '预审草稿已创建';
+          return '修改人工改价、工程量、合计或备注后会自动保存';
+        });
+
+        const previewDraftAlertType = computed(() => {
+          if (previewDraftError.value) return 'error';
+          if (previewDraftRestored.value || previewDraftSavedAt.value) return 'success';
+          return 'info';
+        });
+
         const cloneRows = (rows) => JSON.parse(JSON.stringify(Array.isArray(rows) ? rows : []));
 
         const parseMoney = (value) => {
@@ -1108,9 +1679,16 @@
           return Number.isFinite(normalized) ? normalized : null;
         };
 
+        const roundMoney = (value) => {
+          const amount = parseMoney(value);
+          return amount === null ? null : Math.round(amount * 100) / 100;
+        };
+
         const comparableRow = (row = {}) => ({
           project_name: String(row.project_name || row.item_name || '').trim(),
-          unit_price: parseMoney(row.unit_price),
+          quantity: parseMoney(row.quantity),
+          unit: String(row.unit || '').trim(),
+          manual_unit_price: parseMoney(row.manual_unit_price ?? row.unit_price),
           total_price: parseMoney(row.total_price),
           notes: String(row.notes || '').trim(),
         });
@@ -1141,23 +1719,62 @@
         const costReference = (row = {}) => row.cost_reference || row.costReference || {};
 
         const TOTAL_SOURCE_LABELS = {
-          ai_quote: 'AI报价计算',
+          ai_quote: 'AI估价计算',
           cost_reference_fallback: '成本库兜底计算',
           manual_final: '人工确认价',
           mixed: '混合来源',
         };
 
         const AI_PRICE_SOURCE_LABELS = {
-          pre_quote_cost_adopted: '采纳前置成本库',
-          pre_quote_cost_deviated: '偏离前置成本库',
-          model_estimate: '无成本库参考，AI估算',
-          cost_reference_fallback: '成本库兜底',
-          manual_selected: '人工切换成本条目',
+          pre_quote_cost_adopted: '成本库依据价',
+          pre_quote_cost_deviated: '偏离成本库依据',
+          model_estimate: '无成本库参考，AI估价',
+          cost_reference_fallback: '成本库兜底价',
+          manual_selected: '人工切换成本依据',
           unknown: '来源不足',
         };
 
+        const NO_COST_NOTICE = '无成本库参考价，AI 估价，仅供参考，请人工确认价格依据';
+
         const totalSourceLabel = (source) => TOTAL_SOURCE_LABELS[source] || '-';
         const aiPriceSourceLabel = (source) => AI_PRICE_SOURCE_LABELS[source] || AI_PRICE_SOURCE_LABELS.unknown;
+        const noCostNoticeText = (row = {}) => {
+          const reference = costReference(row);
+          return reference.matched ? '' : NO_COST_NOTICE;
+        };
+
+        const aiSuggestedUnitPrice = (row = {}) => parseMoney(
+          row.ai_suggested_unit_price
+          ?? row.original_unit_price
+          ?? row.ai_unit_price
+          ?? costReference(row).ai_unit_price
+          ?? row.unit_price
+          ?? row.price
+        );
+
+        const aiSuggestedTotalPrice = (row = {}) => parseMoney(
+          row.ai_suggested_total_price
+          ?? row.original_total_price
+          ?? row.ai_total_price
+          ?? costReference(row).ai_total_price
+          ?? row.total_price
+          ?? row.amount
+          ?? row.subtotal
+        );
+
+        const aiSuggestedUnitPriceText = (row = {}) => {
+          const price = aiSuggestedUnitPrice(row);
+          return price === null ? '-' : formatMoney(price);
+        };
+
+        const previewUnitPriceSourceText = (row = {}) => aiPriceSourceInfo(row).label;
+
+        const acceptSuggestedPriceButtonText = (row = {}) => {
+          const source = aiPriceSourceInfo(row).source;
+          if (source === 'model_estimate') return '采用AI估价';
+          if (source === 'pre_quote_cost_deviated') return '采用预审价';
+          return '采用参考价';
+        };
 
         const aiPriceSourceInfo = (row = {}) => {
           const reference = costReference(row);
@@ -1182,17 +1799,17 @@
             return {
               source: 'cost_reference_fallback',
               label: aiPriceSourceLabel('cost_reference_fallback'),
-              reason: explicitReason || 'AI 原始单价为空或为 0，系统使用成本库参考价兜底生成本行报价。',
+              reason: explicitReason || '工作流原始单价为空或为 0，系统使用成本库参考价兜底生成本行报价。',
             };
           }
           if (!reference.matched) {
             return {
               source: 'model_estimate',
               label: aiPriceSourceLabel('model_estimate'),
-              reason: explicitReason || '本行未命中 cost_items.active 成本条目，AI 单价来自 N8N/Dify 工作流返回结果。',
+              reason: explicitReason || '本行未命中 cost_items.active 成本条目，预审单价来自 N8N/Dify 工作流 AI 估价结果。',
             };
           }
-          const aiUnitPrice = parseMoney(row.unit_price ?? row.price ?? explanation.ai_unit_price ?? reference.ai_unit_price);
+          const aiUnitPrice = aiSuggestedUnitPrice(row);
           const referencePrice = parseMoney(reference.reference_price);
           if (aiUnitPrice !== null && referencePrice !== null && referencePrice !== 0) {
             const sourceItem = reference.source_cost_item || {};
@@ -1203,13 +1820,13 @@
               return {
                 source: 'pre_quote_cost_adopted',
                 label: aiPriceSourceLabel('pre_quote_cost_adopted'),
-                reason: explicitReason || `FastAPI 已在报价请求进入 AI 前传入成本库 ${itemId ? `#${itemId} ` : ''}“${itemName}” 的参考价 ${formatMoney(referencePrice)} 元/${unit}；AI 返回单价与该参考价一致。`,
+                reason: explicitReason || `FastAPI 已在报价请求进入工作流前传入成本库 ${itemId ? `#${itemId} ` : ''}“${itemName}” 的参考价 ${formatMoney(referencePrice)} 元/${unit}；工作流返回单价与该成本库参考价一致。`,
               };
             }
             return {
               source: 'pre_quote_cost_deviated',
               label: aiPriceSourceLabel('pre_quote_cost_deviated'),
-              reason: explicitReason || `FastAPI 已在报价请求进入 AI 前传入成本库 ${itemId ? `#${itemId} ` : ''}“${itemName}” 的参考价 ${formatMoney(referencePrice)} 元/${unit}；AI 返回单价 ${formatMoney(aiUnitPrice)} 元，需人工复核偏离原因。`,
+              reason: explicitReason || `FastAPI 已在报价请求进入工作流前传入成本库 ${itemId ? `#${itemId} ` : ''}“${itemName}” 的参考价 ${formatMoney(referencePrice)} 元/${unit}；工作流返回单价 ${formatMoney(aiUnitPrice)} 元，需人工复核偏离原因。`,
             };
           }
           return {
@@ -1222,6 +1839,261 @@
         const rowQuantityValue = (row = {}) => {
           const explanation = row.quote_explanation || {};
           return parseMoney(row.quantity ?? row.qty ?? row.count ?? explanation.quantity);
+        };
+
+        const defaultManualUnitPrice = (row = {}) => {
+          const reference = costReference(row);
+          const referencePrice = parseMoney(reference.reference_price);
+          if (reference.matched && referencePrice !== null && referencePrice > 0) {
+            return roundMoney(referencePrice);
+          }
+          return 0;
+        };
+
+        const manualTotalFromQuantity = (row = {}, manualPrice = null) => {
+          const price = roundMoney(manualPrice ?? row.manual_unit_price);
+          const quantity = rowQuantityValue(row);
+          if (price === null || quantity === null || quantity <= 0) return null;
+          return roundMoney(price * quantity);
+        };
+
+        const MANUAL_PRICE_ACTION_LABELS = {
+          manual_override: '人工确认价',
+          manual_existing: '人工确认价',
+          accepted_ai_suggestion: '人工确认采纳参考价',
+          untouched: '待人工确认',
+        };
+
+        const manualPriceAction = (row = {}) => {
+          if (row.manual_price_action) return row.manual_price_action;
+          if (row.manual_price_source === 'accepted_ai_suggestion') return 'accepted_ai_suggestion';
+          if (['manual_input', 'manual_total_input', 'manual_existing'].includes(row.manual_price_source)) return 'manual_override';
+          return 'untouched';
+        };
+
+        const manualPriceActionText = (row = {}) => {
+          const action = manualPriceAction(row);
+          if (action === 'accepted_ai_suggestion') {
+            return costReference(row).matched ? '人工确认采纳参考价' : '人工确认采纳AI估价';
+          }
+          return MANUAL_PRICE_ACTION_LABELS[action] || '人工确认价';
+        };
+
+        const finalPriceSourceForRow = (row = {}) => {
+          const action = manualPriceAction(row);
+          if (action === 'manual_override' || action === 'manual_existing') return 'manual';
+          if (action === 'accepted_ai_suggestion') return costReference(row).matched ? 'cost_reference' : 'ai_suggested';
+          if (costReference(row).matched) return 'cost_reference';
+          return 'ai_suggested';
+        };
+
+        const canAcceptAiSuggestedPrice = (row = {}) => {
+          const aiPrice = aiSuggestedUnitPrice(row);
+          return aiPrice !== null && aiPrice > 0;
+        };
+
+        const applyManualPricingToRow = (row = {}, options = {}) => {
+          const manualPrice = roundMoney(row.manual_unit_price);
+          const finalPrice = manualPrice !== null && manualPrice > 0 ? manualPrice : 0;
+          const autoTotal = manualTotalFromQuantity(row, finalPrice);
+          row.manual_unit_price = finalPrice;
+          row.unit_price = finalPrice;
+          row.manual_price_applied = true;
+          row.manual_price_action = row.manual_price_action || 'untouched';
+          row.manual_price_source = row.manual_price_source || (costReference(row).matched ? 'cost_reference_default' : 'no_cost_default_zero');
+          if (autoTotal !== null) {
+            row.total_price = autoTotal;
+            row.manual_total_source = 'manual_price_times_quantity';
+          } else if (finalPrice <= 0 || !options.keepExistingTotalWhenNoQuantity) {
+            row.total_price = 0;
+            row.manual_total_source = 'manual_price_missing_quantity';
+          } else {
+            row.total_price = roundMoney(row.total_price) ?? 0;
+            row.manual_total_source = 'manual_price_total_kept';
+          }
+          row.final_price_source = finalPriceSourceForRow(row);
+          row.price_confirmed_by_user = true;
+          row.price_confirmation_label = manualPriceActionText(row);
+          return row;
+        };
+
+        const normalizeManualPricingRow = (row = {}) => {
+          const normalized = { ...row };
+          normalized.ai_suggested_unit_price = aiSuggestedUnitPrice(row);
+          normalized.ai_suggested_total_price = aiSuggestedTotalPrice(row);
+          const existingManualPrice = parseMoney(row.manual_unit_price);
+          normalized.manual_unit_price = existingManualPrice !== null ? existingManualPrice : defaultManualUnitPrice(row);
+          normalized.manual_price_source = existingManualPrice !== null
+            ? (row.manual_price_source || 'manual_existing')
+            : (costReference(row).matched ? 'cost_reference_default' : 'no_cost_default_zero');
+          normalized.manual_price_action = row.manual_price_action || (existingManualPrice !== null ? 'manual_existing' : 'untouched');
+          return applyManualPricingToRow(normalized, { keepExistingTotalWhenNoQuantity: true });
+        };
+
+        const normalizeManualPricingRows = (rows = []) => (Array.isArray(rows) ? rows : []).map(normalizeManualPricingRow);
+
+        const handleManualPriceChange = (row = {}) => {
+          row.manual_price_source = 'manual_input';
+          row.manual_price_action = 'manual_override';
+          applyManualPricingToRow(row, { keepExistingTotalWhenNoQuantity: true });
+          schedulePreviewDraftSave();
+        };
+
+        const handleQuantityChange = (row = {}) => {
+          row.quantity = roundMoney(row.quantity) ?? 0;
+          if (parseMoney(row.manual_unit_price) !== null) {
+            applyManualPricingToRow(row, { keepExistingTotalWhenNoQuantity: true });
+          }
+          schedulePreviewDraftSave();
+        };
+
+        const handleManualTotalChange = (row = {}) => {
+          row.total_price = roundMoney(row.total_price) ?? 0;
+          row.manual_total_source = 'manual_total_input';
+          row.manual_price_source = 'manual_total_input';
+          row.manual_price_action = 'manual_override';
+          const manualPrice = roundMoney(row.manual_unit_price);
+          row.unit_price = manualPrice !== null && manualPrice > 0 ? manualPrice : 0;
+          row.final_price_source = finalPriceSourceForRow(row);
+          row.price_confirmed_by_user = true;
+          row.price_confirmation_label = manualPriceActionText(row);
+          schedulePreviewDraftSave();
+        };
+
+        const acceptAiSuggestedPrice = (row = {}) => {
+          const aiPrice = aiSuggestedUnitPrice(row);
+          if (aiPrice === null || aiPrice <= 0) {
+            ElMessage.warning('预审参考单价为空，无法采纳');
+            return;
+          }
+          row.manual_unit_price = roundMoney(aiPrice);
+          row.manual_price_source = 'accepted_ai_suggestion';
+          row.manual_price_action = 'accepted_ai_suggestion';
+          applyManualPricingToRow(row, { keepExistingTotalWhenNoQuantity: true });
+          schedulePreviewDraftSave();
+        };
+
+        const manualPriceHint = (row = {}) => {
+          const manualPrice = parseMoney(row.manual_unit_price);
+          if (manualPrice === null || manualPrice <= 0) return '待填写';
+          const quantity = rowQuantityValue(row);
+          if (quantity === null || quantity <= 0) return '工程量异常';
+          if (manualPriceAction(row) === 'accepted_ai_suggestion') return costReference(row).matched ? '已采纳参考价' : '已采纳AI估价';
+          if (manualPriceAction(row) === 'manual_override' || manualPriceAction(row) === 'manual_existing') return '人工确认价';
+          return '自动合计';
+        };
+
+        const normalizeFinalQuoteRow = (row = {}) => {
+          const normalized = { ...row };
+          const manualPrice = roundMoney(normalized.manual_unit_price);
+          if (manualPrice !== null) {
+            normalized.unit_price = manualPrice > 0 ? manualPrice : 0;
+            const autoTotal = manualTotalFromQuantity(normalized, normalized.unit_price);
+            if (autoTotal !== null && normalized.manual_total_source !== 'manual_total_input') {
+              normalized.total_price = autoTotal;
+            } else {
+              normalized.total_price = roundMoney(normalized.total_price) ?? 0;
+            }
+          }
+          normalized.confirmed_unit_price = normalized.unit_price;
+          normalized.confirmed_total_price = normalized.total_price;
+          normalized.manual_price_action = normalized.manual_price_action || 'untouched';
+          normalized.final_price_source = finalPriceSourceForRow(normalized);
+          normalized.price_confirmed_by_user = true;
+          normalized.price_confirmation_label = manualPriceActionText(normalized);
+          return normalized;
+        };
+
+        const previewDraftPayload = () => ({
+          project_details: (Array.isArray(previewData.value) ? previewData.value : []).map(normalizeFinalQuoteRow),
+          customer_questions_answered: globalNotes.value || '',
+          quote_id: previewContext.value.quoteId || undefined,
+          quote_job_id: previewContext.value.quoteJobId || undefined,
+          trace_id: previewContext.value.traceId || undefined,
+          omission_suggestions: omissionSuggestions.value || [],
+          omission_summary: omissionSummary.value || {},
+        });
+
+        const savePreviewDraftNow = async (options = {}) => {
+          const quoteJobId = previewContext.value.quoteJobId;
+          if (!quoteJobId || pushing.value || !previewData.value.length) return null;
+          if (previewDraftSaveTimer) {
+            clearTimeout(previewDraftSaveTimer);
+            previewDraftSaveTimer = null;
+          }
+          previewDraftSaving.value = true;
+          previewDraftError.value = '';
+          try {
+            const response = await axios.put(`${API_BASE_URL}/quote/jobs/${quoteJobId}/preview-draft`, {
+              draft: previewDraftPayload(),
+              quote_id: previewContext.value.quoteId || undefined,
+              trace_id: previewContext.value.traceId || undefined,
+            }, { headers: authHeaders() });
+            const data = apiData(response, {});
+            previewDraftStatus.value = data.status || 'editing';
+            previewDraftVersion.value = data.version || null;
+            previewDraftSavedAt.value = data.updated_at || new Date().toLocaleTimeString();
+            if (!options.silent) ElMessage.success('预审草稿已保存');
+            return data;
+          } catch (error) {
+            if (error.response?.status === 401) handleUnauthorized();
+            previewDraftError.value = apiErrorMessage(error, '预审草稿保存失败，请检查网络');
+            if (!options.silent) ElMessage.error(previewDraftError.value);
+            return null;
+          } finally {
+            previewDraftSaving.value = false;
+          }
+        };
+
+        const schedulePreviewDraftSave = () => {
+          if (!previewContext.value.quoteJobId || pushing.value || !previewData.value.length) return;
+          previewDraftError.value = '';
+          if (previewDraftSaveTimer) clearTimeout(previewDraftSaveTimer);
+          previewDraftSaveTimer = setTimeout(() => {
+            savePreviewDraftNow({ silent: true });
+          }, 1000);
+        };
+
+        const discardPreviewDraft = async () => {
+          const quoteJobId = previewContext.value.quoteJobId;
+          if (!quoteJobId) return;
+          if (previewDraftSaveTimer) {
+            clearTimeout(previewDraftSaveTimer);
+            previewDraftSaveTimer = null;
+          }
+          try {
+            await axios.post(`${API_BASE_URL}/quote/jobs/${quoteJobId}/preview-draft/discard`, {}, { headers: authHeaders() });
+            previewDraftStatus.value = 'discarded';
+            previewDraftSavedAt.value = '';
+            previewDraftError.value = '';
+            previewDraftRestored.value = false;
+          } catch (error) {
+            console.warn('preview draft discard failed', error);
+          }
+        };
+
+        const restorePreviewDraftIfAny = async (quoteJobId) => {
+          if (!quoteJobId) return false;
+          try {
+            const response = await axios.get(`${API_BASE_URL}/quote/jobs/${quoteJobId}/preview-draft`, { headers: authHeaders() });
+            const data = apiData(response, {});
+            if (!data.exists || data.status !== 'editing' || !Array.isArray(data.draft?.project_details)) return false;
+            previewData.value = cloneRows(data.draft.project_details);
+            globalNotes.value = data.draft.customer_questions_answered || globalNotes.value;
+            omissionSuggestions.value = Array.isArray(data.draft.omission_suggestions) ? data.draft.omission_suggestions : omissionSuggestions.value;
+            omissionSummary.value = data.draft.omission_summary || omissionSummary.value;
+            previewDraftStatus.value = data.status || 'editing';
+            previewDraftVersion.value = data.version || null;
+            previewDraftSavedAt.value = data.updated_at || '';
+            previewDraftRestored.value = true;
+            previewDraftError.value = '';
+            ElMessage.success('已恢复上次未完成的预审草稿');
+            return true;
+          } catch (error) {
+            if (error.response?.status === 401) handleUnauthorized();
+            console.warn('preview draft restore failed', error);
+            return false;
+          }
         };
 
         const costReferenceTotalValue = (row = {}) => {
@@ -1249,6 +2121,7 @@
         };
 
         const lineTotalSource = (row = {}, index = 0) => {
+          if (row.manual_price_applied || row.manual_unit_price !== undefined) return 'manual_final';
           if (rowPriceManuallyChanged(row, index)) return 'manual_final';
           const reference = costReference(row);
           if (reference.fallback_applied || row.cost_reference_fallback) return 'cost_reference_fallback';
@@ -1289,6 +2162,329 @@
           return { total, matched, unmatched: Math.max(0, total - matched) };
         });
 
+        const reviewSummary = computed(() => reviewDetail.value?.summary || {});
+        const reviewMissingRows = computed(() => reviewDetail.value?.missing_requirement_rows || []);
+        const reviewExtraRows = computed(() => reviewDetail.value?.extra_preview_rows || []);
+        const reviewPreviewRows = computed(() => reviewDetail.value?.preview_rows || []);
+        const submittedRequirementRows = computed(() => reviewDetail.value?.requirement_rows || []);
+        const requirementRowsByKey = computed(() => {
+          const map = new Map();
+          submittedRequirementRows.value.forEach((row, index) => {
+            [
+              row.requirement_row_key,
+              row.requirement_row_key && String(row.requirement_row_key).trim(),
+              `REQ-${String(index + 1).padStart(4, '0')}`,
+            ].filter(Boolean).forEach((key) => map.set(String(key), row));
+          });
+          return map;
+        });
+        const previewSubmittedDemandText = computed(() => {
+          const context = previewContext.value || {};
+          const requestText = String(context.requestSummary || context.requestText || '').trim();
+          const fileName = String(context.sourceFileName || context.fileName || '').trim();
+          const parts = [];
+          if (requestText) parts.push(requestText.length > 260 ? `${requestText.slice(0, 260)}...` : requestText);
+          if (fileName) parts.push(`附件：${fileName}`);
+          return parts.join('；');
+        });
+        const reviewSummaryType = computed(() => {
+          const summary = reviewSummary.value;
+          if ((summary.high_risk_count || 0) > 0 || (summary.missing_count || 0) > 0) return 'error';
+          if ((summary.review_required_count || 0) > 0 || (summary.no_cost_reference_count || 0) > 0) return 'warning';
+          return 'success';
+        });
+        const previewCompletenessBlocked = computed(() => {
+          const summary = reviewSummary.value;
+          return Boolean(
+            summary.requirement_row_count
+            && ((summary.integrity_status === 'incomplete') || (summary.missing_count || 0) > 0)
+          );
+        });
+        const previewCompletenessMessage = computed(() => {
+          const summary = reviewSummary.value;
+          if (!previewCompletenessBlocked.value) return '';
+          return summary.message || `AI 预审不完整：确认清单 ${summary.requirement_row_count || 0} 行，AI 预审返回 ${summary.preview_row_count || 0} 行，仍有 ${summary.missing_count || 0} 行未匹配到预审报价。`;
+        });
+
+        const placeholderRowsNeedManualPricing = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          return rows.filter((row) => {
+            if (!(row.requirement_placeholder || row.quote_source === 'requirement_placeholder')) return false;
+            const unitPrice = parseMoney(row.unit_price);
+            const totalPrice = parseMoney(row.total_price);
+            return unitPrice === null || unitPrice <= 0 || totalPrice === null || totalPrice <= 0;
+          });
+        });
+        const placeholderPricingBlocked = computed(() => placeholderRowsNeedManualPricing.value.length > 0);
+        const placeholderPricingMessage = computed(() => {
+          const count = placeholderRowsNeedManualPricing.value.length;
+          if (!count) return '';
+          return `AI 未返回 ${count} 行确认清单，系统已生成占位行。请先人工填写这些行的人工改价和系统合计后再下发。`;
+        });
+
+        const manualPricingRowsNeedReview = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          return rows.filter((row) => {
+            const manualPrice = parseMoney(row.manual_unit_price);
+            const totalPrice = parseMoney(row.total_price);
+            return manualPrice === null || manualPrice <= 0 || totalPrice === null || totalPrice <= 0;
+          });
+        });
+        const manualPricingBlocked = computed(() => manualPricingRowsNeedReview.value.length > 0);
+        const manualPricingMessage = computed(() => {
+          const count = manualPricingRowsNeedReview.value.length;
+          if (!count) return '';
+          return `还有 ${count} 行缺少有效人工改价或系统合计，请补齐后再下发。`;
+        });
+
+        const needsCostCandidateConfirmation = (row = {}) => {
+          const reference = costReference(row);
+          return !!(
+            reference.requires_manual_cost_candidate_confirmation
+            && !reference.manual_cost_candidate_confirmed
+            && reference.match_type !== 'manual_selected'
+          );
+        };
+
+        const ambiguousCostCandidateRows = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          return rows.filter(needsCostCandidateConfirmation);
+        });
+
+        const costCandidateConfirmationBlocked = computed(() => ambiguousCostCandidateRows.value.length > 0);
+        const costCandidateConfirmationMessage = computed(() => {
+          const count = ambiguousCostCandidateRows.value.length;
+          if (!count) return '';
+          return `还有 ${count} 行存在多条 active 成本候选，请先确认当前依据或切换成本条目后再下发。`;
+        });
+
+        const costCandidateWarningText = (row = {}) => {
+          if (!needsCostCandidateConfirmation(row)) return '';
+          const reference = costReference(row);
+          return `多候选 ${reference.candidate_count || 2} 条，需确认`;
+        };
+
+        const needsAiRewriteConfirmation = (row = {}) => {
+          const reference = costReference(row);
+          return !!(
+            reference.requires_manual_ai_rewrite_confirmation
+            && !reference.manual_ai_rewrite_confirmed
+            && reference.match_type !== 'manual_selected'
+          );
+        };
+
+        const aiRewriteRowsNeedReview = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          return rows.filter(needsAiRewriteConfirmation);
+        });
+
+        const aiRewriteConfirmationBlocked = computed(() => aiRewriteRowsNeedReview.value.length > 0);
+        const aiRewriteConfirmationMessage = computed(() => {
+          const count = aiRewriteRowsNeedReview.value.length;
+          if (!count) return '';
+          return `还有 ${count} 行 AI 返回项目与原始成本依据不一致，请确认原始依据或切换成本条目后再下发。`;
+        });
+
+        const aiRewriteWarningText = (row = {}) => {
+          if (!needsAiRewriteConfirmation(row)) return '';
+          const reference = costReference(row);
+          const sourceName = reference.source_requirement_project_name || '原始需求';
+          const aiName = reference.ai_returned_project_name || 'AI返回项目';
+          return `AI改写风险：${sourceName} -> ${aiName}`;
+        };
+
+        const needsAiNoteConfirmation = (row = {}) => {
+          const reference = costReference(row);
+          return !!(
+            reference.requires_manual_ai_note_confirmation
+            && !reference.manual_ai_note_confirmed
+            && reference.match_type !== 'manual_selected'
+          );
+        };
+
+        const aiNoteRowsNeedReview = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          return rows.filter(needsAiNoteConfirmation);
+        });
+
+        const aiNoteConfirmationBlocked = computed(() => aiNoteRowsNeedReview.value.length > 0);
+        const aiNoteConfirmationMessage = computed(() => {
+          const count = aiNoteRowsNeedReview.value.length;
+          if (!count) return '';
+          return `还有 ${count} 行 AI 备注与成本库依据不一致，请确认备注处理或修改备注后再下发。`;
+        });
+
+        const aiNoteConflictWarningText = (row = {}) => {
+          if (!needsAiNoteConfirmation(row)) return '';
+          return 'AI备注冲突：需确认';
+        };
+
+        const confirmAiNoteCostBasis = (row = {}) => {
+          const reference = costReference(row);
+          if (!reference.matched) return;
+          reference.manual_ai_note_confirmed = true;
+          reference.requires_manual_ai_note_confirmation = false;
+          reference.confirmed_ai_note_action = 'confirmed_system_suggested_notes';
+          reference.confirmed_ai_note_value = row.notes || '';
+          row.cost_reference = reference;
+          row.quote_explanation = {
+            ...(row.quote_explanation || {}),
+            ai_note_confirmation: '已人工确认 AI 备注与成本库依据冲突处理',
+          };
+          schedulePreviewDraftSave();
+          ElMessage.success('已确认备注处理');
+        };
+
+        const handleNotesChange = (row = {}) => {
+          const reference = costReference(row);
+          if (reference.requires_manual_ai_note_confirmation) {
+            reference.manual_ai_note_confirmed = true;
+            reference.requires_manual_ai_note_confirmation = false;
+            reference.confirmed_ai_note_action = 'manual_notes_edited';
+            reference.confirmed_ai_note_value = row.notes || '';
+            row.cost_reference = reference;
+            row.quote_explanation = {
+              ...(row.quote_explanation || {}),
+              ai_note_confirmation: '已人工编辑备注并确认备注处理',
+            };
+            ElMessage.success('已确认备注处理');
+          }
+          schedulePreviewDraftSave();
+        };
+
+        const confirmCurrentCostCandidate = (row = {}) => {
+          const reference = costReference(row);
+          if (!reference.matched) return;
+          reference.manual_cost_candidate_confirmed = true;
+          reference.requires_manual_cost_candidate_confirmation = false;
+          reference.confirmed_cost_candidate_id = reference.cost_item_id || null;
+          reference.confirmed_cost_candidate_action = 'confirmed_current';
+          row.cost_reference = reference;
+          row.manual_price_source = row.manual_price_source || 'manual_confirmed_cost_reference';
+          row.manual_price_action = row.manual_price_action || 'manual_existing';
+          row.price_confirmed_by_user = true;
+          row.price_confirmation_label = manualPriceActionText(row);
+          row.quote_explanation = {
+            ...(row.quote_explanation || {}),
+            cost_candidate_confirmation: `已人工确认采用成本库条目 #${reference.cost_item_id || '-'}`,
+          };
+          schedulePreviewDraftSave();
+          ElMessage.success('已确认当前成本依据');
+        };
+
+        const confirmAiRewriteCostReference = (row = {}) => {
+          const reference = costReference(row);
+          if (!reference.matched) return;
+          reference.manual_ai_rewrite_confirmed = true;
+          reference.requires_manual_ai_rewrite_confirmation = false;
+          reference.confirmed_ai_rewrite_cost_item_id = reference.cost_item_id || null;
+          reference.confirmed_ai_rewrite_action = 'confirmed_source_requirement_cost_reference';
+          row.cost_reference = reference;
+          row.manual_price_source = row.manual_price_source || 'manual_confirmed_cost_reference';
+          row.manual_price_action = row.manual_price_action || 'manual_existing';
+          row.price_confirmed_by_user = true;
+          row.price_confirmation_label = manualPriceActionText(row);
+          row.quote_explanation = {
+            ...(row.quote_explanation || {}),
+            ai_rewrite_confirmation: `已人工确认沿用原始需求成本库条目 #${reference.cost_item_id || '-'}`,
+          };
+          schedulePreviewDraftSave();
+          ElMessage.success('已确认沿用原始需求成本依据');
+        };
+
+        const loadQuoteReviewDetail = async (quoteJobId) => {
+          if (!quoteJobId) return;
+          reviewDetailLoading.value = true;
+          try {
+            const res = await fetch(`${API_BASE_URL}/quote/jobs/${quoteJobId}/review-detail`, {
+              method: 'GET',
+              headers: authHeaders()
+            });
+            if (!res.ok) {
+              if (res.status === 401) handleUnauthorized();
+              return;
+            }
+            const body = await res.json();
+            reviewDetail.value = apiPayloadData(body, body);
+          } catch (error) {
+            console.warn('quote review detail load failed', error);
+          } finally {
+            reviewDetailLoading.value = false;
+          }
+        };
+
+        const previewRequirementKey = (row = {}) => {
+          const candidates = [
+            row.requirement_row_key,
+            row.source_requirement_row_key,
+            row.requirement_key,
+            costReference(row).source_requirement_row_key,
+          ];
+          const found = candidates.find((item) => item !== undefined && item !== null && String(item).trim());
+          return found ? String(found).trim() : '';
+        };
+
+        const submittedRequirementFromReference = (row = {}) => {
+          const reference = costReference(row);
+          if (!reference.source_requirement_project_name && !reference.source_requirement_spec) return null;
+          return {
+            item_name: reference.source_requirement_project_name || row.project_name || row.item_name || '',
+            spec: reference.source_requirement_spec || row.spec || '',
+            quantity: reference.source_requirement_quantity ?? row.quantity,
+            unit: reference.source_requirement_unit || row.unit || '',
+            remark: reference.source_requirement_remark || '',
+            raw_text: reference.source_requirement_raw_text || '',
+            source_sheet: row.source_sheet || '',
+            raw_row_index: row.raw_row_index || '',
+          };
+        };
+
+        const submittedRequirementForPreviewRow = (row = {}, index = 0) => {
+          const reviewRow = reviewPreviewRows.value[index];
+          const matchedRequirement = reviewRow?.reconciliation?.requirement_row;
+          if (matchedRequirement) return matchedRequirement;
+          const key = previewRequirementKey(row);
+          if (key && requirementRowsByKey.value.has(key)) return requirementRowsByKey.value.get(key);
+          const referenced = submittedRequirementFromReference(row);
+          if (referenced) return referenced;
+          if (row.source_sheet || row.raw_row_index || row.requirement_row_key) {
+            return {
+              item_name: row.project_name || row.item_name || '',
+              spec: row.spec || '',
+              quantity: row.quantity,
+              unit: row.unit || '',
+              remark: '',
+              raw_text: row.raw_text || '',
+              source_sheet: row.source_sheet || '',
+              raw_row_index: row.raw_row_index || '',
+            };
+          }
+          return null;
+        };
+
+        const submittedRequirementTitle = (row = {}) => row.item_name || row.project_name || row.raw_text || '未命名需求';
+
+        const submittedRequirementMeta = (row = {}) => {
+          const parts = [];
+          if (row.source_sheet || row.raw_row_index) {
+            parts.push(`来源：${row.source_sheet || '-'} 第 ${row.raw_row_index || '-'} 行`);
+          }
+          if (row.quantity !== undefined && row.quantity !== null && row.quantity !== '') {
+            parts.push(`数量：${row.quantity}${row.unit || ''}`);
+          } else if (row.unit) {
+            parts.push(`单位：${row.unit}`);
+          }
+          if (row.spec) parts.push(`规格：${row.spec}`);
+          if (row.remark) parts.push(`备注：${row.remark}`);
+          return parts.join('；') || '确认清单行';
+        };
+
+        const submittedRequirementRawText = (row = {}) => {
+          const rawText = String(row.raw_text || '').trim();
+          if (!rawText || rawText === submittedRequirementTitle(row)) return '';
+          return rawText;
+        };
+
         const omissionSummaryText = computed(() => {
           const count = omissionSuggestions.value.length;
           if (!count) return '';
@@ -1325,6 +2521,7 @@
         };
 
         const costReferenceDetailUrl = (row = {}) => {
+          if (!canOpenFullCostDb.value) return '';
           const reference = costReference(row);
           if (!reference.cost_item_id) return '';
           return reference.evidence_url || reference.cost_item_url || `/admin/cost-db?cost_item_id=${reference.cost_item_id}`;
@@ -1389,7 +2586,7 @@
 
         const buildManualCostReference = (row = {}, item = {}) => {
           const referencePrice = roundMoneyValue(item.price);
-          const aiUnitPrice = roundMoneyValue(row.unit_price);
+          const aiUnitPrice = roundMoneyValue(aiSuggestedUnitPrice(row));
           let delta = null;
           let deltaRate = null;
           if (aiUnitPrice !== null && referencePrice !== null && referencePrice !== 0) {
@@ -1453,13 +2650,23 @@
         };
 
         const loadCostSwitchCandidates = async () => {
+          const keyword = costSwitchKeyword.value.trim();
+          if (!keyword) {
+            costSwitchRows.value = [];
+            ElMessage.warning('请输入施工项目或规格关键词');
+            return;
+          }
+          if (keyword.length < 2) {
+            costSwitchRows.value = [];
+            ElMessage.warning('请输入至少 2 个字的关键词');
+            return;
+          }
           costSwitchLoading.value = true;
           try {
-            const response = await axios.get(`${API_BASE_URL}/admin/cost-items`, {
+            const response = await axios.get(`${API_BASE_URL}/cost-items/quote-candidates`, {
               headers: authHeaders(),
               params: {
-                status: 'active',
-                keyword: costSwitchKeyword.value.trim() || undefined,
+                keyword,
                 page: 1,
                 page_size: 20,
               },
@@ -1494,16 +2701,13 @@
             return;
           }
 
-          const quantity = rowQuantityValue(row);
           const referencePrice = roundMoneyValue(item.price);
           const previousUnitPrice = roundMoneyValue(row.unit_price);
           const previousTotalPrice = roundMoneyValue(row.total_price);
           if (referencePrice !== null && referencePrice > 0) {
-            row.unit_price = referencePrice;
-          }
-          if (quantity !== null && referencePrice !== null && referencePrice > 0) {
-            const fallbackTotal = Math.round(quantity * referencePrice * 100) / 100;
-            row.total_price = fallbackTotal;
+            row.manual_unit_price = referencePrice;
+            row.manual_price_source = 'manual_selected_cost_reference';
+            applyManualPricingToRow(row, { keepExistingTotalWhenNoQuantity: true });
           }
 
           delete row.cost_reference_fallback;
@@ -1525,6 +2729,7 @@
             cost_item_url: reference.cost_item_url,
           };
           showCostSwitchDialog.value = false;
+          schedulePreviewDraftSave();
           ElMessage.success(`已切换为成本条目 #${item.id}`);
         };
 
@@ -1537,8 +2742,8 @@
           const sourceLabel = reference.reference_price_source_label || reference.reference_price_source || '主参考价';
           const quantity = row.quantity ?? explanation.quantity ?? '-';
           const unit = row.unit || explanation.unit || '-';
-          const aiUnitPrice = parseMoney(original.unit_price) ?? parseMoney(row.unit_price);
-          const aiTotalPrice = parseMoney(original.total_price) ?? parseMoney(row.total_price);
+          const aiUnitPrice = aiSuggestedUnitPrice(row) ?? parseMoney(original.unit_price) ?? parseMoney(row.unit_price);
+          const aiTotalPrice = aiSuggestedTotalPrice(row) ?? parseMoney(original.total_price) ?? parseMoney(row.total_price);
           const lineTotal = parseMoney(row.total_price);
           const referencePrice = parseMoney(reference.reference_price);
           const referenceTotal = costReferenceTotalValue(row);
@@ -1573,20 +2778,28 @@
             quoteTotalSourceText: quoteTotalSourceText.value,
             aiPriceSourceLabel: aiSourceInfo.label,
             aiPriceSourceReason: aiSourceInfo.reason,
-            aiBasis: explanation.ai_basis || 'AI 工作流原始返回的单价与备注；系统展示可审计输入和结果，不臆测模型内部推理。',
+            aiBasis: explanation.ai_basis || '工作流原始返回的单价与备注；系统展示可审计输入和结果，不臆测模型内部推理。',
             notes: row.notes || '',
+            aiNoteConflict: !!reference.ai_note_cost_basis_conflict,
+            aiOriginalNotes: reference.ai_original_notes || explanation.ai_original_notes || row.ai_original_notes || '—',
+            systemSuggestedNotes: reference.system_suggested_notes || explanation.system_suggested_notes || row.notes || '—',
+            aiNoteConflictReason: reference.ai_note_conflict_reason || explanation.ai_note_warning || 'AI 原始备注与成本库依据不一致，需人工确认。',
             costItemText: reference.matched
               ? `#${reference.cost_item_id} ${sourceItem.item_name || reference.item_name || '-'}（${sourceItem.category || reference.category || '-'}）`
               : '未命中 active 成本条目',
             matchReason: reference.matched ? (reference.match_reason || costReferenceLabel(row)) : '本行暂无成本库命中。',
             priceSourceReason: reference.matched
               ? (reference.price_source_reason || `参考价取自成本库“${sourceLabel}”字段。`)
-              : '无成本库参考价。',
+              : NO_COST_NOTICE,
             costContextBasis: explanation.cost_context_basis || '本行未收到前置成本库上下文。',
             priceBreakdown,
+            aiRewriteRisk: !!reference.ai_rewrite_risk,
+            sourceRequirementText: [reference.source_requirement_project_name, reference.source_requirement_spec].filter(Boolean).join(' / ') || '—',
+            aiReturnedText: [reference.ai_returned_project_name || row.project_name || row.item_name, reference.ai_returned_spec].filter(Boolean).join(' / ') || '—',
+            aiRewriteReason: reference.ai_rewrite_reason || 'AI 返回项目与原始需求命中的成本依据不一致，需人工确认。',
             quoteReferenceTotalText: quoteReferenceTotal === null ? '—' : moneyText(quoteReferenceTotal),
             deltaText: reference.matched ? deltaText : '暂无',
-            comparison: explanation.comparison || (reference.matched ? '请结合成本库参考价与现场工艺复核。' : '无成本库参考，需人工判断。'),
+            comparison: explanation.comparison || (reference.matched ? '请结合成本库参考价与现场工艺复核。' : NO_COST_NOTICE),
             detailUrl,
           };
         };
@@ -1626,6 +2839,7 @@
 
         const rowRisk = (row = {}, index = 0) => {
           const risks = [];
+          if (row.requirement_placeholder || row.quote_source === 'requirement_placeholder') risks.push('AI 未返回，需人工补价');
           const original = comparableRow(previewOriginalData.value[index] || {});
           const current = comparableRow(row);
           if (!current.project_name) risks.push('缺少项目');
@@ -1638,10 +2852,19 @@
           }
           const reference = costReference(row);
           const refRate = Math.abs(Number(reference.price_delta_rate));
+          if (!reference.matched) risks.push('无底价参考');
           if (reference.matched && Number.isFinite(refRate) && refRate >= 0.2) risks.push('偏离底价');
           if (reference.fallback_applied) risks.push('成本库兜底');
+          const reviewRow = reviewPreviewRows.value[index] || {};
+          if (needsCostCandidateConfirmation(row)) risks.push('成本候选未确认');
+          if (needsAiRewriteConfirmation(row)) risks.push('AI改写待确认');
+          if (needsAiNoteConfirmation(row)) risks.push('AI备注待确认');
+          const reviewReasons = reviewRow.risk?.reasons || [];
+          for (const reason of reviewReasons) {
+            if (reason && !risks.includes(reason)) risks.push(reason);
+          }
           if (!risks.length) return { label: '正常', type: 'success', reasons: [] };
-          const high = risks.some(item => ['缺少项目', '单价异常', '合计异常'].includes(item));
+          const high = risks.some(item => ['AI 未返回，需人工补价', '缺少项目', '单价异常', '合计异常', '成本候选未确认', 'AI备注待确认'].includes(item));
           return { label: high ? '高风险' : '需复核', type: high ? 'danger' : 'warning', reasons: risks };
         };
 
@@ -1677,7 +2900,9 @@
           return `${selectedFile.value.type || '未知类型'} · ${sizeText}`;
         });
 
-        const handleRegister = async () => { /*省略*/ };
+        const handleRegister = async () => {
+          ElMessage.info('账号由管理员统一开通');
+        };
 
         const handleLogin = async () => {
           if (!authForm.value.username || !authForm.value.password) return ElMessage.warning('账号和密码不能为空！');
@@ -1694,6 +2919,7 @@
             currentUser.value = authData.username || authForm.value.username;
             resetClientInfoDefaults();
             isLoggedIn.value = true;
+            nextTick(() => { resumeIncomingQuoteJob(); });
           } catch (error) {
             ElMessage.error(apiErrorMessage(error, '获取底层 Token 失败，请检查密码'));
           } finally { loading.value = false; }
@@ -1805,8 +3031,9 @@
         const openPreviewFromPayload = (rawData, context = {}) => {
           const parsed = parsePreviewPayload(rawData || {});
           if (!parsed.rows.length) return false;
-          previewOriginalData.value = cloneRows(parsed.rows);
-          previewData.value = cloneRows(parsed.rows);
+          const normalizedRows = normalizeManualPricingRows(parsed.rows);
+          previewOriginalData.value = cloneRows(normalizedRows);
+          previewData.value = cloneRows(normalizedRows);
           omissionSuggestions.value = Array.isArray(parsed.payload?.omission_suggestions)
             ? parsed.payload.omission_suggestions
             : [];
@@ -1816,8 +3043,21 @@
             quoteJobId: context.quoteJobId || context.jobId || rawData?.quote_job_id || rawData?.job_id || '',
             traceId: context.traceId || rawData?.trace_id || '',
             quoteId: context.quoteId || rawData?.quote_id || '',
+            requestText: context.requestText || rawData?.request_text || '',
+            requestSummary: context.requestSummary || rawData?.request_summary || '',
+            sourceFileName: context.sourceFileName || rawData?.source_file_name || rawData?.file_name || '',
             rawPayload: rawData || null,
           };
+          previewDraftStatus.value = '';
+          previewDraftSavedAt.value = '';
+          previewDraftVersion.value = null;
+          previewDraftError.value = '';
+          previewDraftRestored.value = false;
+          reviewDetail.value = null;
+          if (previewContext.value.quoteJobId) {
+            loadQuoteReviewDetail(previewContext.value.quoteJobId);
+            restorePreviewDraftIfAny(previewContext.value.quoteJobId);
+          }
           rejectReason.value = '';
           knowledgeLearningEnabled.value = true;
           knowledgeLearningReason.value = '';
@@ -1864,6 +3104,18 @@
           return formatApiError(`报价任务${statusText}`, job?.error_message || '可以重新提交本次报价。', job?.trace_id);
         };
 
+        const quoteJobRequestContext = (job = {}, msgIndex = null, fallback = {}) => {
+          const message = Number.isInteger(msgIndex) ? (messageHistory.value[msgIndex] || {}) : {};
+          return {
+            quoteJobId: job.job_id || fallback.quoteJobId || fallback.jobId || '',
+            traceId: job.trace_id || fallback.traceId || '',
+            quoteId: fallback.quoteId || '',
+            requestText: message.sourceText || fallback.requestText || '',
+            requestSummary: job.request_summary || fallback.requestSummary || job.message_preview || '',
+            sourceFileName: job.source_file_name || job.file_name || message.sourceFile?.name || message.sourceFileName || fallback.sourceFileName || '',
+          };
+        };
+
         const applyRecoveredJobResult = (job, msgIndex) => {
           if (!job || typeof job !== 'object') {
             markRecoverable(msgIndex);
@@ -1878,7 +3130,7 @@
           });
 
           if (job.status === 'succeeded' && job.result) {
-            if (openPreviewFromPayload(job.result, { quoteJobId: job.job_id, traceId: job.trace_id })) {
+            if (openPreviewFromPayload(job.result, quoteJobRequestContext(job, msgIndex))) {
               updateAssistantMessage(msgIndex, { canRetry: false, canCheckStatus: false });
               appendAssistantContent(msgIndex, '\n✅ 已重新拉取任务结果，预审明细已恢复。');
               return true;
@@ -2012,6 +3264,212 @@
           }
         };
 
+        const readQuoteJobHandoff = () => {
+          try {
+            return JSON.parse(window.sessionStorage.getItem(quoteHandoffStorageKey) || '{}') || {};
+          } catch (error) {
+            return {};
+          }
+        };
+
+        const incomingQuoteJobFromUrl = () => {
+          const params = new URLSearchParams(window.location.search || '');
+          const jobId = params.get('quote_job_id') || params.get('job_id') || '';
+          if (!jobId) return null;
+          const handoff = readQuoteJobHandoff();
+          return {
+            jobId,
+            traceId: params.get('trace_id') || handoff.trace_id || '',
+            source: params.get('from') || handoff.source || '',
+            sourceFileName: handoff.source_file_name || '',
+          };
+        };
+
+        const followExistingQuoteJobEvents = async (job, msgIndex) => {
+          let previewOpened = false;
+          const eventResponse = await fetch(`${API_BASE_URL}/quote/jobs/${job.job_id}/events`, {
+            method: 'GET',
+            headers: authHeaders()
+          });
+
+          if (!eventResponse.ok) {
+            const traceId = eventResponse.headers.get('X-Trace-Id') || job.trace_id;
+            const errorData = await eventResponse.json().catch(() => ({}));
+            if (eventResponse.status === 401) handleUnauthorized();
+            setQuoteProgress(null, `任务订阅失败：${errorData.detail || eventResponse.statusText}`, 'error');
+            stopQuoteTimer();
+            appendAssistantContent(msgIndex, '\n' + formatApiError(`任务订阅失败 (${eventResponse.status})`, errorData.detail || eventResponse.statusText, traceId));
+            markRecoverable(msgIndex, { jobId: job.job_id, traceId });
+            sending.value = false;
+            isTyping.value = false;
+            return;
+          }
+
+          await readSseStream(eventResponse, (data) => {
+            const nextStage = resolveQuoteStage(data, false);
+            if (nextStage) setQuoteProgress(nextStage, describeQuoteProgress(nextStage));
+            if (nextStage === 'knowledge') scheduleQuoteGenerationHint();
+            if (nextStage && nextStage !== 'knowledge') clearDelayedStageTimer();
+
+            if (data.status === 'queued' || data.status === 'processing') {
+              appendAssistantContent(msgIndex, `${data.message || '报价任务处理中'}\n\n`);
+            } else if (data.status === 'preview') {
+              clearDelayedStageTimer();
+              setQuoteProgress('review', '收到 AI 预审完成信号，正在整理明细', 'success');
+              appendAssistantContent(msgIndex, data.message || 'AI 预审数据已就绪');
+              previewOpened = openPreviewFromPayload(
+                data.data || data,
+                quoteJobRequestContext(job, msgIndex, { traceId: data.trace_id || job.trace_id })
+              );
+              if (previewOpened) {
+                setQuoteProgress('review', 'AI 预审数据已就绪，等待人工复核', 'success');
+                stopQuoteTimer();
+                sending.value = false;
+              } else {
+                setQuoteProgress('review', '预审信号已收到，正在拉取完整任务结果', 'running');
+                appendAssistantContent(msgIndex, '\n正在拉取完整任务结果...\n');
+              }
+            } else if (data.status === 'error') {
+              clearDelayedStageTimer();
+              setQuoteProgress(null, data.message || '报价任务失败，请重试', 'error');
+              stopQuoteTimer();
+              appendAssistantContent(msgIndex, formatApiError('报价任务失败', data.message, data.trace_id || job.trace_id));
+              markRecoverable(msgIndex, { jobId: job.job_id, traceId: data.trace_id || job.trace_id });
+              sending.value = false;
+            } else if (data.status === 'success') {
+              clearDelayedStageTimer();
+              setQuoteProgress('review', '报价结果已生成', 'success');
+              stopQuoteTimer();
+              appendAssistantContent(msgIndex, data.message || '报价结果已生成');
+              sending.value = false;
+            }
+          });
+
+          const statusResponse = await fetch(`${API_BASE_URL}/quote/jobs/${job.job_id}`, {
+            method: 'GET',
+            headers: authHeaders()
+          });
+          if (statusResponse.ok) {
+            const statusBody = await statusResponse.json();
+            const latest = apiPayloadData(statusBody, statusBody);
+            if (latest.status === 'failed' && latest.error_message && !messageHistory.value[msgIndex].canRetry) {
+              clearDelayedStageTimer();
+              setQuoteProgress(null, latest.error_message, 'error');
+              stopQuoteTimer();
+              applyRecoveredJobResult(latest, msgIndex);
+              sending.value = false;
+            } else if (latest.status === 'succeeded' && latest.result) {
+              clearDelayedStageTimer();
+              stopQuoteTimer();
+              if (previewOpened) {
+                setQuoteProgress('review', '报价结果已生成，等待人工复核', 'success');
+              } else {
+                const recovered = applyRecoveredJobResult(latest, msgIndex);
+                setQuoteProgress(recovered ? 'review' : null, recovered ? '报价结果已生成，等待人工复核' : '报价结果已返回，但没有解析出明细', recovered ? 'success' : 'error');
+              }
+              sending.value = false;
+            }
+          }
+
+          if (sending.value && !messageHistory.value[msgIndex].canRetry) {
+            clearDelayedStageTimer();
+            setQuoteProgress(null, '任务事件流已结束，但未收到完成状态', 'error');
+            stopQuoteTimer();
+            appendAssistantContent(msgIndex, '\n任务事件流已结束，但未收到完成状态。您可以点击查看任务状态拉取结果，或重新提交。');
+            markRecoverable(msgIndex, { jobId: job.job_id, traceId: job.trace_id });
+            sending.value = false;
+          }
+          isTyping.value = false;
+        };
+
+        const resumeIncomingQuoteJob = async () => {
+          if (incomingQuoteJobHandled || !isLoggedIn.value) return;
+          const incoming = incomingQuoteJobFromUrl();
+          if (!incoming?.jobId) return;
+          incomingQuoteJobHandled = true;
+
+          const sourceText = incoming.source === 'requirement_standardization'
+            ? `需求单标准化确认清单已发起报价${incoming.sourceFileName ? `：${incoming.sourceFileName}` : ''}`
+            : '继续查看报价任务';
+          messageHistory.value.push({ role: 'user', content: sourceText });
+          messageHistory.value.push({
+            role: 'assistant',
+            content: `⏳ 已接管报价任务\n任务编号：${incoming.jobId}\n\n`,
+            canRetry: false,
+            canCheckStatus: true,
+            jobId: incoming.jobId,
+            traceId: incoming.traceId,
+            sourceText,
+            sourceFileName: incoming.sourceFileName || '',
+          });
+          const msgIndex = messageHistory.value.length - 1;
+
+          stages.value = STAGES_TEXT_ONLY;
+          sending.value = true;
+          isTyping.value = true;
+          clearDelayedStageTimer();
+          startQuoteTimer();
+          setQuoteProgress('created', '已接管报价任务，正在读取进度');
+          scrollToBottom();
+
+          try {
+            const statusResponse = await fetch(`${API_BASE_URL}/quote/jobs/${incoming.jobId}`, {
+              method: 'GET',
+              headers: authHeaders()
+            });
+            if (!statusResponse.ok) {
+              const traceId = statusResponse.headers.get('X-Trace-Id') || incoming.traceId;
+              const errorData = await statusResponse.json().catch(() => ({}));
+              if (statusResponse.status === 401) handleUnauthorized();
+              setQuoteProgress(null, `任务读取失败：${errorData.detail || statusResponse.statusText}`, 'error');
+              stopQuoteTimer();
+              appendAssistantContent(msgIndex, '\n' + formatApiError(`任务读取失败 (${statusResponse.status})`, errorData.detail || statusResponse.statusText, traceId));
+              markRecoverable(msgIndex, { jobId: incoming.jobId, traceId });
+              sending.value = false;
+              isTyping.value = false;
+              return;
+            }
+
+            const statusBody = await statusResponse.json();
+            const job = apiPayloadData(statusBody, statusBody);
+            updateAssistantMessage(msgIndex, {
+              jobId: job.job_id || incoming.jobId,
+              traceId: job.trace_id || incoming.traceId,
+              canCheckStatus: !!(job.job_id || incoming.jobId),
+            });
+
+            if (job.status === 'succeeded' && job.result) {
+              clearDelayedStageTimer();
+              stopQuoteTimer();
+              const recovered = applyRecoveredJobResult(job, msgIndex);
+              setQuoteProgress(recovered ? 'review' : null, recovered ? '报价结果已生成，等待人工复核' : '报价结果已返回，但没有解析出明细', recovered ? 'success' : 'error');
+              sending.value = false;
+              isTyping.value = false;
+              return;
+            }
+
+            if (['failed', 'canceled', 'timed_out'].includes(job.status)) {
+              clearDelayedStageTimer();
+              stopQuoteTimer();
+              applyRecoveredJobResult(job, msgIndex);
+              sending.value = false;
+              isTyping.value = false;
+              return;
+            }
+
+            appendAssistantContent(msgIndex, `任务状态：${quoteJobStatusLabel(job.status)}${job.stage ? `，阶段：${job.stage}` : ''}\n\n`);
+            await followExistingQuoteJobEvents(job, msgIndex);
+          } catch (error) {
+            clearDelayedStageTimer();
+            setQuoteProgress(null, `网络异常：${error.message}`, 'error');
+            stopQuoteTimer();
+            appendAssistantContent(msgIndex, '\n' + formatApiError('网络异常', error.message));
+            markRecoverable(msgIndex, { jobId: incoming.jobId, traceId: incoming.traceId });
+            sending.value = false;
+            isTyping.value = false;
+          }
+        };
+
         const sendMessage = async () => {
           if (sending.value || pushing.value) return;
           const text = inputText.value.trim();
@@ -2135,7 +3593,10 @@
                 clearDelayedStageTimer();
                 setQuoteProgress('review', '收到 AI 预审完成信号，正在整理明细', 'success');
                 charQueue.push(...(data.message).split(''));
-                if (openPreviewFromPayload(data.data || data, { quoteJobId: job.job_id, traceId: data.trace_id || job.trace_id })) {
+                if (openPreviewFromPayload(
+                  data.data || data,
+                  quoteJobRequestContext(job, msgIndex, { traceId: data.trace_id || job.trace_id })
+                )) {
                   setQuoteProgress('review', 'AI 预审数据已就绪，等待人工复核', 'success');
                   stopQuoteTimer();
                   sending.value = false;
@@ -2216,6 +3677,44 @@
           sendMessage();
         };
 
+        const closePreviewDraftMessage = () => {
+          if (previewContext.value.quoteJobId) {
+            ElMessage.success('预审单已关闭，草稿可在“我的报价历史”中继续编辑');
+          }
+        };
+
+        const refreshHistoryIfOpen = () => {
+          if (showHistory.value) fetchHistory(1);
+        };
+
+        const closePreviewAndKeepDraft = async () => {
+          if (pushing.value) return;
+          const saveResult = await savePreviewDraftNow({ silent: true });
+          if (previewContext.value.quoteJobId && previewData.value.length && !saveResult && previewDraftError.value) {
+            ElMessage.error('草稿保存失败，暂不关闭预审单');
+            return;
+          }
+          showPreviewDialog.value = false;
+          sending.value = false;
+          pushError.value = '';
+          closePreviewDraftMessage();
+          refreshHistoryIfOpen();
+        };
+
+        const handlePreviewDialogClose = async (done) => {
+          if (pushing.value) return;
+          const saveResult = await savePreviewDraftNow({ silent: true });
+          if (previewContext.value.quoteJobId && previewData.value.length && !saveResult && previewDraftError.value) {
+            ElMessage.error('草稿保存失败，暂不关闭预审单');
+            return;
+          }
+          sending.value = false;
+          pushError.value = '';
+          closePreviewDraftMessage();
+          refreshHistoryIfOpen();
+          done();
+        };
+
         const cancelPreview = async () => {
           if (pushing.value) return;
           showPreviewDialog.value = false;
@@ -2233,7 +3732,9 @@
               console.warn('quote feedback reject record failed', error);
             }
           }
+          await discardPreviewDraft();
           previewOriginalData.value = [];
+          reviewDetail.value = null;
           omissionSuggestions.value = [];
           omissionSummary.value = {};
           messageHistory.value.push({ role: 'assistant', content: '⏸️ 人工审核不通过，流程已打回。您可以修改参数后重新输入指令。' });
@@ -2246,13 +3747,39 @@
             ElMessage.warning('没有可推送的报价明细');
             return;
           }
+          if (previewCompletenessBlocked.value) {
+            ElMessage.error(previewCompletenessMessage.value || 'AI 预审不完整，请打回重填或重新发起报价');
+            return;
+          }
+          if (placeholderPricingBlocked.value) {
+            ElMessage.error(placeholderPricingMessage.value || '仍有 AI 未返回的占位行需要人工补价');
+            return;
+          }
+          if (manualPricingBlocked.value) {
+            ElMessage.error(manualPricingMessage.value || '仍有行缺少有效人工改价或系统合计');
+            return;
+          }
+          if (costCandidateConfirmationBlocked.value) {
+            ElMessage.error(costCandidateConfirmationMessage.value || '存在多条 active 成本候选，请先人工确认成本依据');
+            return;
+          }
+          if (aiRewriteConfirmationBlocked.value) {
+            ElMessage.error(aiRewriteConfirmationMessage.value || '存在 AI 改写项目与原始成本依据不一致，请先人工确认');
+            return;
+          }
+          if (aiNoteConfirmationBlocked.value) {
+            ElMessage.error(aiNoteConfirmationMessage.value || '存在 AI 备注与成本库依据不一致，请先人工确认备注处理');
+            return;
+          }
+          await savePreviewDraftNow({ silent: true });
           pushing.value = true;
           pushError.value = '';
           try {
             const context = previewContext.value || {};
             const shouldRecordKnowledge = knowledgeLearningEnabled.value && previewHasChanges.value;
+            const finalRows = previewData.value.map(normalizeFinalQuoteRow);
             const finalPayload = {
-              project_details: previewData.value,
+              project_details: finalRows,
               customer_questions_answered: globalNotes.value,
               quote_id: context.quoteId || undefined,
               quote_job_id: context.quoteJobId || undefined,
@@ -2263,21 +3790,32 @@
               finalPayload.feedback_reason = knowledgeLearningReason.value.trim()
                 || `人工修改 ${previewChangeSummary.value.changedRows} 行，建议沉淀为知识候选`;
             }
-            await axios.post(`${API_BASE_URL}/confirm_push`, finalPayload, {
+            const response = await axios.post(`${API_BASE_URL}/confirm_push`, finalPayload, {
               headers: authHeaders()
             });
+            const noCostSummary = response.data?.data?.no_cost_draft_summary;
+            const noCostCreated = noCostSummary?.created_count || 0;
+            const noCostSkipped = noCostSummary?.skipped_count || 0;
+            const noCostNotice = noCostCreated > 0
+              ? `本次已生成 ${noCostCreated} 条成本库待审核草稿${noCostSkipped ? `，跳过 ${noCostSkipped} 条重复/已有参考项` : ''}。`
+              : '';
+            previewDraftStatus.value = 'pushed';
+            previewDraftSavedAt.value = '';
+            previewDraftError.value = '';
+            previewDraftRestored.value = false;
             previewContext.value = { quoteJobId: '', traceId: '', quoteId: '', rawPayload: null };
             previewOriginalData.value = [];
+            reviewDetail.value = null;
             omissionSuggestions.value = [];
             omissionSummary.value = {};
-            ElMessage.success('🎉 确认成功！最终报价单已推送到钉钉！');
+            ElMessage.success(noCostNotice || '🎉 确认成功！最终报价单已推送到钉钉！');
             showPreviewDialog.value = false;
             sending.value = false;
             messageHistory.value.push({
               role: 'assistant',
               content: shouldRecordKnowledge
-                ? '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉。本次修改已记录为后续知识候选证据。'
-                : '✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！'
+                ? `✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉。本次修改已记录为后续知识候选证据。${noCostNotice ? ` ${noCostNotice}` : ''}`
+                : `✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！${noCostNotice ? ` ${noCostNotice}` : ''}`
             });
             scrollToBottom();
           } catch (error) {
@@ -2293,33 +3831,117 @@
           nextTick(() => { if (scrollbarRef.value) scrollbarRef.value.scrollTop = scrollbarRef.value.scrollHeight; });
         };
 
+        const findPreviewTableScrollElement = () => {
+          const root = previewTableRef.value?.$el || previewTableRef.value;
+          if (!root || !root.querySelector) return null;
+          return root.querySelector('.el-scrollbar__wrap')
+            || root.querySelector('.el-table__body-wrapper')
+            || root.querySelector('.el-table__inner-wrapper');
+        };
+
+        const unbindPreviewTableScroll = () => {
+          if (previewTableScrollElement && previewTableScrollHandler) {
+            previewTableScrollElement.removeEventListener('scroll', previewTableScrollHandler);
+          }
+          previewTableScrollElement = null;
+          previewTableScrollHandler = null;
+        };
+
+        const syncPreviewHorizontalScroll = (source = 'top') => {
+          const topScroller = previewTopScrollRef.value;
+          const tableScroller = findPreviewTableScrollElement();
+          if (!topScroller || !tableScroller || previewHorizontalScrollSyncing) return;
+          previewHorizontalScrollSyncing = true;
+          if (source === 'top') {
+            tableScroller.scrollLeft = topScroller.scrollLeft;
+          } else {
+            topScroller.scrollLeft = tableScroller.scrollLeft;
+          }
+          requestAnimationFrame(() => { previewHorizontalScrollSyncing = false; });
+        };
+
+        const bindPreviewTableScroll = () => {
+          const tableScroller = findPreviewTableScrollElement();
+          if (!tableScroller) return;
+          if (previewTableScrollElement === tableScroller && previewTableScrollHandler) return;
+          unbindPreviewTableScroll();
+          previewTableScrollElement = tableScroller;
+          previewTableScrollHandler = () => syncPreviewHorizontalScroll('table');
+          previewTableScrollElement.addEventListener('scroll', previewTableScrollHandler, { passive: true });
+        };
+
+        const refreshPreviewTableScroll = async () => {
+          await nextTick();
+          const tableScroller = findPreviewTableScrollElement();
+          if (!tableScroller) return;
+          bindPreviewTableScroll();
+          previewTableScrollWidth.value = Math.max(tableScroller.scrollWidth, tableScroller.clientWidth, 1200);
+          syncPreviewHorizontalScroll('table');
+        };
+
+        const handlePreviewWindowResize = () => {
+          if (showPreviewDialog.value) refreshPreviewTableScroll();
+        };
+
+        watch(showPreviewDialog, (visible) => {
+          if (visible) {
+            setTimeout(() => { refreshPreviewTableScroll(); }, 360);
+          } else {
+            unbindPreviewTableScroll();
+          }
+        });
+
+        watch(() => previewData.value.length, () => {
+          if (showPreviewDialog.value) setTimeout(() => { refreshPreviewTableScroll(); }, 0);
+        });
+
         onMounted(() => {
+          window.addEventListener('resize', handlePreviewWindowResize);
           const token = getToken();
           if (token) {
             isLoggedIn.value = true;
             const sysUser = getUserInfo();
             currentUser.value = sysUser ? sysUser.username : '已授权用户';
             resetClientInfoDefaults();
+            nextTick(() => { resumeIncomingQuoteJob(); });
           }
         });
 
         onBeforeUnmount(() => {
+          window.removeEventListener('resize', handlePreviewWindowResize);
+          unbindPreviewTableScroll();
           stopQuoteTimer();
           clearDelayedStageTimer();
+          if (previewDraftSaveTimer) {
+            clearTimeout(previewDraftSaveTimer);
+            previewDraftSaveTimer = null;
+          }
         });
 
         return {
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
-          showPreviewDialog, previewData, previewOriginalData, pushing, pushError, finalTotalAmount,
+          showPreviewDialog, previewData, previewOriginalData, previewContext, pushing, pushError, finalTotalAmount,
+          canOpenFullCostDb,
           showEvidenceDialog, evidenceDialogData, openEvidenceCostDetail,
           showCostSwitchDialog, costSwitchRows, costSwitchLoading, costSwitchKeyword, costSwitchCurrentTitle,
           loadCostSwitchCandidates, openCostSwitchDialog, applyCostSwitch, costItemReferencePriceText, costItemPriceSourceLabel,
           quoteReferenceTotalAmount, quoteTotalSourceText, lineTotalSourceText,
+          previewTableRef, previewTopScrollRef, previewTableScrollWidth, syncPreviewHorizontalScroll,
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
+          reviewDetail, reviewDetailLoading, reviewSummary, reviewSummaryType, reviewMissingRows, reviewExtraRows, reviewPreviewRows,
+          previewSubmittedDemandText, submittedRequirementForPreviewRow, submittedRequirementTitle, submittedRequirementMeta, submittedRequirementRawText,
+          previewCompletenessBlocked, previewCompletenessMessage, placeholderPricingBlocked, placeholderPricingMessage,
+          manualPricingBlocked, manualPricingMessage, handleManualPriceChange, handleQuantityChange, handleManualTotalChange, manualPriceHint, aiSuggestedUnitPriceText,
+          previewUnitPriceSourceText, acceptSuggestedPriceButtonText,
+          costCandidateConfirmationBlocked, costCandidateConfirmationMessage, needsCostCandidateConfirmation, costCandidateWarningText, confirmCurrentCostCandidate,
+          aiRewriteConfirmationBlocked, aiRewriteConfirmationMessage, needsAiRewriteConfirmation, aiRewriteWarningText, confirmAiRewriteCostReference,
+          aiNoteConfirmationBlocked, aiNoteConfirmationMessage, needsAiNoteConfirmation, aiNoteConflictWarningText, confirmAiNoteCostBasis, handleNotesChange,
+          acceptAiSuggestedPrice, canAcceptAiSuggestedPrice,
+          previewDraftSaving, previewDraftStatusText, previewDraftAlertType, savePreviewDraftNow, schedulePreviewDraftSave,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
           omissionSuggestions, omissionSummary, omissionSummaryText,
           costReference, costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText,
-          costReferenceFallbackText, costReferenceTotalText, costReferenceTagType, showCostReferenceEvidence, openCostReferenceDetail,
+          costReferenceFallbackText, costReferenceTotalText, noCostNoticeText, costReferenceTagType, showCostReferenceEvidence, openCostReferenceDetail,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           canSubmit, selectedFileSummary,
@@ -2329,8 +3951,14 @@
           sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
           retryMessage, refreshQuoteJob, checkingJobId, useExample,
           showHistory, historyList, historyLoading, historyTotal, historyPage,
+          historyFilters, historySelectedRows, selectedDraftRows, historyBatchDeleting, historyResendingId,
           showDetailDialog, detailLoading, historyDetail, detailRows,
-          fetchHistory, openHistory, viewDetail, formatMoney
+          fetchHistory, openHistory, searchHistory, resetHistoryFilters, handleHistorySelectionChange,
+          isHistoryRowSelectable, deleteSelectedPreviewDrafts,
+          viewDetail, editPreviewDraft, historyPushText, historyPushTagType,
+          canResendHistory, resendHistoryQuote,
+          closePreviewAndKeepDraft, handlePreviewDialogClose,
+          formatMoney
         };
       }
     };

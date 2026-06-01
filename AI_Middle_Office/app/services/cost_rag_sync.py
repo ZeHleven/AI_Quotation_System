@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -36,6 +37,35 @@ def _format_text(label: str, value: Any) -> str | None:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _as_aware_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _database_utc_offset(db: Session) -> timedelta:
+    bind = db.get_bind()
+    dialect_name = bind.dialect.name if bind is not None else ""
+    if dialect_name not in {"mysql", "mariadb"}:
+        return timedelta(0)
+    try:
+        seconds = db.execute(text("SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW())")).scalar()
+    except Exception:
+        logger.debug("cost_rag_sync_db_timezone_offset_failed", exc_info=True)
+        return timedelta(0)
+    return timedelta(seconds=int(seconds or 0))
+
+
+def _as_database_local_utc(value: datetime | None, db_utc_offset: timedelta) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc)
+    return value.replace(tzinfo=timezone.utc) - db_utc_offset
 
 
 def _cost_item_rag_notes(item: CostItem) -> str:
@@ -114,6 +144,87 @@ def list_cost_rag_sync_runs(db: Session, *, page: int = 1, page_size: int = 20) 
         .all()
     )
     return runs, total
+
+
+def cost_rag_sync_status_summary(db: Session) -> dict[str, Any]:
+    active_count = db.query(func.count(CostItem.id)).filter(CostItem.status == COST_STATUS_ACTIVE).scalar() or 0
+    latest_active_updated_at = (
+        db.query(func.max(CostItem.updated_at)).filter(CostItem.status == COST_STATUS_ACTIVE).scalar()
+    )
+    latest_successful_run = (
+        db.query(CostRagSyncRun)
+        .filter(CostRagSyncRun.source == SYNC_SOURCE, CostRagSyncRun.status == SYNC_STATUS_SUCCESS)
+        .order_by(CostRagSyncRun.finished_at.desc(), CostRagSyncRun.started_at.desc(), CostRagSyncRun.id.desc())
+        .first()
+    )
+    latest_run = (
+        db.query(CostRagSyncRun)
+        .filter(CostRagSyncRun.source == SYNC_SOURCE)
+        .order_by(CostRagSyncRun.started_at.desc(), CostRagSyncRun.id.desc())
+        .first()
+    )
+
+    active_count = int(active_count)
+    db_utc_offset = _database_utc_offset(db)
+    latest_active_at = _as_database_local_utc(latest_active_updated_at, db_utc_offset)
+    latest_success_finished_at = _as_aware_utc(
+        (latest_successful_run.finished_at or latest_successful_run.started_at) if latest_successful_run else None
+    )
+    latest_run_started_at = _as_aware_utc(latest_run.started_at if latest_run else None)
+    latest_success_started_at = _as_aware_utc(latest_successful_run.started_at if latest_successful_run else None)
+
+    if active_count == 0:
+        status = "empty_active"
+        label = "无 active 条目"
+        message = "当前没有 active 成本条目，RAG 暂无可同步成本知识"
+        needs_sync = False
+        is_stale = False
+    elif latest_successful_run is None:
+        status = "failed" if latest_run and latest_run.status == SYNC_STATUS_FAILED else "never_synced"
+        label = "同步失败" if status == "failed" else "未同步"
+        message = "最近一次 RAG 同步失败" if status == "failed" else "active 成本库尚未成功同步到 RAG"
+        needs_sync = True
+        is_stale = True
+    elif latest_run and latest_run.status == SYNC_STATUS_FAILED and (
+        latest_success_started_at is None or (latest_run_started_at and latest_run_started_at > latest_success_started_at)
+    ):
+        status = "failed"
+        label = "同步失败"
+        message = "最近一次 RAG 同步失败，请处理后重新同步"
+        needs_sync = True
+        is_stale = True
+    elif int(latest_successful_run.synced_count or 0) != active_count:
+        status = "stale"
+        label = "数量不一致"
+        message = "active 成本条目数量与最近成功同步数量不一致，建议重新同步 RAG"
+        needs_sync = True
+        is_stale = True
+    elif latest_active_at and latest_success_finished_at and latest_active_at > latest_success_finished_at:
+        status = "stale"
+        label = "有更新未同步"
+        message = "active 成本库已更新，RAG 可能仍是旧知识"
+        needs_sync = True
+        is_stale = True
+    else:
+        status = "synced"
+        label = "已同步"
+        message = "active 成本库已同步至 RAG"
+        needs_sync = False
+        is_stale = False
+
+    return {
+        "status": status,
+        "status_label": label,
+        "message": message,
+        "source": SYNC_SOURCE,
+        "active_count": active_count,
+        "latest_active_updated_at": latest_active_updated_at.isoformat() if latest_active_updated_at else None,
+        "latest_active_updated_at_utc": latest_active_at.isoformat() if latest_active_at else None,
+        "latest_successful_run": serialize_cost_rag_sync_run(latest_successful_run) if latest_successful_run else None,
+        "latest_run": serialize_cost_rag_sync_run(latest_run) if latest_run else None,
+        "needs_sync": needs_sync,
+        "is_stale": is_stale,
+    }
 
 
 def _create_sync_run(db: Session, *, username: str, user_id: int | None, requested_count: int) -> CostRagSyncRun:
@@ -225,7 +336,7 @@ async def sync_active_cost_items_to_rag(db: Session, username: str, user_id: int
         return {
             "success": False,
             "message": error_msg,
-            "synced_count": len(data),
+            "synced_count": 0,
             "source": SYNC_SOURCE,
             "error": error_msg,
             "run": serialize_cost_rag_sync_run(run),
@@ -246,7 +357,7 @@ async def sync_active_cost_items_to_rag(db: Session, username: str, user_id: int
         return {
             "success": False,
             "message": message,
-            "synced_count": len(data),
+            "synced_count": 0,
             "source": SYNC_SOURCE,
             "error": error,
             "run": serialize_cost_rag_sync_run(run),
@@ -266,7 +377,7 @@ async def sync_active_cost_items_to_rag(db: Session, username: str, user_id: int
         return {
             "success": False,
             "message": error,
-            "synced_count": len(data),
+            "synced_count": 0,
             "source": SYNC_SOURCE,
             "error": error,
             "run": serialize_cost_rag_sync_run(run),

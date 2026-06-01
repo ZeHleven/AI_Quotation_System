@@ -32,6 +32,9 @@ class DingTalkVerifyRequest(BaseModel):
 
 @router.post("/register", summary="注册新员工账号")
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    if not settings.allow_self_registration:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SELF_REGISTRATION_DISABLED")
+
     db_user = db.query(User).filter(User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="该用户名已存在")

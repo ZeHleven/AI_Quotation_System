@@ -65,6 +65,12 @@ class CostItemArchiveIn(BaseModel):
     reason: Optional[str] = Field(None, max_length=2000)
 
 
+class CostItemActivateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Optional[str] = Field(None, max_length=2000)
+
+
 class CostItemWithdrawIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -75,7 +81,7 @@ class CostItemBulkStatusIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     item_ids: list[int] = Field(..., min_length=1, max_length=5000)
-    target_status: Literal["active", "draft"]
+    target_status: Literal["active", "draft", "archived"]
     reason: Optional[str] = Field(None, max_length=2000)
 
 

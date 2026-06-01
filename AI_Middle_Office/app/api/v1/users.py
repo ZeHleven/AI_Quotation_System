@@ -1,15 +1,24 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.responses import api_ok
+from app.core.security import get_password_hash
 from app.dependencies import require_admin, require_system_admin
 from app.models.user import User, UserRoleEvent
-from app.services.rbac import grant_role, revoke_role, serialize_user_for_rbac
+from app.services.rbac import grant_role, normalize_role, revoke_role, serialize_user_for_rbac
 
 
 router = APIRouter()
+
+
+class AdminUserCreate(BaseModel):
+    username: str
+    password: str
+    quota: int = 5
+    roles: list[str] = Field(default_factory=lambda: ["staff"])
+    note: str
 
 
 class QuotaUpdate(BaseModel):
@@ -30,6 +39,64 @@ class RoleRevokeRequest(BaseModel):
 async def list_users(db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     users = db.query(User).options(selectinload(User.role_assignments)).order_by(User.id).all()
     return api_ok([serialize_user_for_rbac(user) for user in users])
+
+
+@router.post("/admin/users", summary="系统管理员创建用户")
+async def create_user_by_admin(
+    body: AdminUserCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_system_admin),
+):
+    username = (body.username or "").strip()
+    password = body.password or ""
+    note = (body.note or "").strip()
+    if not username:
+        raise HTTPException(status_code=422, detail="USERNAME_REQUIRED")
+    if len(password) < 6:
+        raise HTTPException(status_code=422, detail="PASSWORD_TOO_SHORT")
+    if body.quota < 0:
+        raise HTTPException(status_code=400, detail="额度不能为负数")
+    if not note:
+        raise HTTPException(status_code=422, detail="备注不能为空")
+    roles = []
+    for role in body.roles or ["staff"]:
+        normalized = normalize_role(role)
+        if normalized not in roles:
+            roles.append(normalized)
+    if not roles:
+        roles = ["staff"]
+    existing = db.query(User).filter(User.username == username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="该用户名已存在")
+
+    user = User(
+        username=username,
+        hashed_password=get_password_hash(password),
+        quota=body.quota,
+        role="user",
+        role_version=1,
+        is_active=True,
+        must_change_password=True,
+    )
+    db.add(user)
+    db.flush()
+    for role in roles:
+        grant_role(
+            db,
+            target_user=user,
+            role=role,
+            operator=current_user,
+            note=note,
+            request=request,
+        )
+    user = (
+        db.query(User)
+        .options(selectinload(User.role_assignments))
+        .filter(User.id == user.id)
+        .first()
+    )
+    return api_ok(serialize_user_for_rbac(user))
 
 
 @router.patch("/admin/users/{user_id}/quota", summary="设置指定用户的 AI 调用额度")

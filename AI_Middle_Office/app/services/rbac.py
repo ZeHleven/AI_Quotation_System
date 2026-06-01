@@ -9,7 +9,17 @@ from app.core.config import settings
 from app.models.user import User, UserRole, UserRoleEvent
 
 
-VALID_ROLES = ("system_admin", "admin", "staff", "manager", "viewer")
+VALID_ROLES = (
+    "system_admin",
+    "admin",
+    "cost_viewer",
+    "cost_editor",
+    "cost_approver",
+    "cost_exporter",
+    "staff",
+    "manager",
+    "viewer",
+)
 ROLE_ORDER = {role: index for index, role in enumerate(VALID_ROLES)}
 LEGACY_ROLE_MAP = {
     "admin": ["admin"],
@@ -48,6 +58,13 @@ def _roles_with_implications(user: User) -> set[str]:
     roles = set(get_effective_roles(user))
     if "system_admin" in roles:
         roles.add("admin")
+        roles.update({"cost_viewer", "cost_editor", "cost_approver", "cost_exporter"})
+    if "admin" in roles:
+        roles.update({"cost_viewer", "cost_editor", "cost_approver"})
+    if "cost_approver" in roles:
+        roles.update({"cost_viewer", "cost_editor"})
+    if "cost_editor" in roles:
+        roles.add("cost_viewer")
     return roles
 
 
@@ -122,13 +139,21 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_execution or settings.feature_meeting_ai else "pending",
             }
         )
-    if {"system_admin", "admin", "staff"} & roles:
+    if {"system_admin", "admin", "cost_viewer", "cost_editor", "cost_approver", "cost_exporter"} & roles:
         modules.append(
             {
                 "key": "cost_db",
                 "name": "成本数据库",
                 "path": "/admin/cost-db",
                 "status": "available" if settings.feature_cost_db else "pending",
+            }
+        )
+        modules.append(
+            {
+                "key": "requirement_standardization",
+                "name": "需求单标准化",
+                "path": "/admin/requirement-standardization",
+                "status": "available" if settings.feature_requirement_standardization else "pending",
             }
         )
     if {"system_admin", "admin", "viewer"} & roles:

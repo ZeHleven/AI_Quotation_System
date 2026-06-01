@@ -8,6 +8,7 @@ from app.models.cost_item import COST_STATUS_ACTIVE, COST_STATUS_ARCHIVED, COST_
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.user import User
 from app.services import quote_job_runner
+from app.services.quote_cost_context import build_quote_cost_context, cost_context_references_as_source_rows
 from app.services.quote_cost_matching import enrich_quote_payload_with_cost_refs
 
 
@@ -122,6 +123,43 @@ def test_enrich_quote_payload_normalizes_n8n_item_and_remark_aliases(client):
     assert enriched["cost_reference_summary"]["unmatched_count"] == 0
 
 
+def test_biz2w7_replaces_ai_placeholder_project_name_from_source_row(client):
+    suffix = uuid.uuid4().hex[:8]
+    matched_name = f"BIZ2w7 matched gypsum ceiling {suffix}"
+    unmatched_name = f"BIZ2w7 custom gypsum ceiling {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        cost_item = _seed_cost_item(db, item_name=matched_name, unit="m", price=8.0)
+        payload = {
+            "project_details": [
+                {"project_name": "item_1", "quantity": 0, "unit": "", "unit_price": 8, "total_price": 0},
+                {"project_name": "item_2", "quantity": 0, "unit": "", "unit_price": 0, "total_price": 0},
+            ]
+        }
+        enriched = enrich_quote_payload_with_cost_refs(
+            db,
+            payload,
+            source_rows=[
+                {"project_name": matched_name, "quantity": "3", "unit": "m"},
+                {"project_name": unmatched_name, "quantity": "4", "unit": "m"},
+            ],
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    rows = enriched["project_details"]
+    assert rows[0]["project_name"] == matched_name
+    assert rows[0]["quantity"] == "3"
+    assert rows[0]["unit"] == "m"
+    assert rows[0]["cost_reference"]["cost_item_id"] == cost_item.id
+    assert rows[1]["project_name"] == unmatched_name
+    assert rows[1]["quantity"] == "4"
+    assert rows[1]["unit"] == "m"
+    assert rows[1]["cost_reference"]["matched"] is False
+
+
 def test_enrich_quote_payload_ignores_excluded_context_match(client):
     suffix = uuid.uuid4().hex[:8]
     target_name = f"楼地面水泥砂浆找平 {suffix}"
@@ -187,6 +225,261 @@ def test_enrich_quote_payload_uses_active_fuzzy_match_and_ignores_draft(client):
     assert draft_reference["message"] == "无底价参考"
     assert enriched["project_details"][1]["quote_explanation"]["ai_price_source"] == "model_estimate"
     assert enriched["project_details"][1]["quote_explanation"]["ai_price_source_label"] == "无成本库参考，AI估算"
+
+
+def test_enrich_quote_payload_flags_multiple_active_candidates(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2r dust enclosure {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        older_item = _seed_cost_item(db, item_name=item_name, spec="night work", unit="m", price=100)
+        newer_item = _seed_cost_item(db, item_name=item_name, spec="day work", unit="m", price=100)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": item_name,
+                    "quantity": 8,
+                    "unit": "m",
+                    "unit_price": 100,
+                    "total_price": 800,
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    reference = enriched["project_details"][0]["cost_reference"]
+    assert reference["matched"] is True
+    assert reference["cost_item_id"] == newer_item.id
+    assert reference["candidate_count"] == 2
+    assert reference["requires_manual_cost_candidate_confirmation"] is True
+    assert {item["id"] for item in reference["alternative_cost_items"]} == {older_item.id, newer_item.id}
+    assert enriched["cost_reference_summary"]["ambiguous_candidate_count"] == 1
+
+
+def test_biz2w3_source_cost_reference_overrides_ai_rewritten_item(client):
+    suffix = uuid.uuid4().hex[:8]
+    mineral_name = f"\u8f7b\u94a2\u9f99\u9aa8\u77ff\u68c9\u677f\u540a\u9876 {suffix}"
+    gypsum_name = f"\u8f7b\u94a2\u9f99\u9aa8\u77f3\u818f\u677f\u5e73\u9762\u5929\u82b1 {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        mineral_item = _seed_cost_item(
+            db,
+            item_name=mineral_name,
+            spec="8\u5398\u62c9\u6746\u3001600mm*600mm",
+            unit="\u33a1",
+            price=50.19,
+        )
+        gypsum_item = _seed_cost_item(db, item_name=gypsum_name, unit="\u33a1", price=95.27)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": gypsum_name,
+                    "quantity": 10,
+                    "unit": "\u33a1",
+                    "unit_price": 95.27,
+                    "total_price": 952.7,
+                    "notes": "\u5ba2\u6237\u9700\u6c42\u4e3a600*600\u77ff\u68c9\u677f\u540a\u9876\uff0cAI\u8fd4\u56de\u4e86\u77f3\u818f\u677f\u9879\u76ee\u3002",
+                }
+            ]
+        }
+        source_rows = [
+            {
+                "project_name": f"600*600\u77ff\u68c9\u677f\u540a\u9876 {suffix}",
+                "quantity": 10,
+                "unit": "\u33a1",
+                "locked_cost_item_id": mineral_item.id,
+                "locked_cost_match_type": "fuzzy_item_name",
+            }
+        ]
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload, source_rows=source_rows)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    reference = row["cost_reference"]
+    assert reference["matched"] is True
+    assert reference["cost_item_id"] == mineral_item.id
+    assert reference["cost_item_id"] != gypsum_item.id
+    assert reference["reference_price"] == 50.19
+    assert reference["ai_rewrite_risk"] is True
+    assert reference["requires_manual_ai_rewrite_confirmation"] is True
+    assert reference["ai_returned_cost_item_id"] == gypsum_item.id
+    assert reference["source_requirement_project_name"].startswith("600*600")
+    assert reference["match_reason"].startswith("\u539f\u59cb\u9700\u6c42")
+    assert "\u53e6\u547d\u4e2d" in reference["match_reason"]
+    assert row["quote_explanation"]["cost_context_basis"].startswith("\u62a5\u4ef7\u8bf7\u6c42\u8fdb\u5165 N8N/Dify \u524d\uff0c\u539f\u59cb\u9700\u6c42")
+    assert row["quote_explanation"]["ai_price_source"] == "pre_quote_cost_deviated"
+    assert enriched["cost_reference_summary"]["ai_rewrite_risk_count"] == 1
+
+
+def test_biz2w3_text_cost_context_locks_original_cost_reference(client):
+    suffix = uuid.uuid4().hex[:8]
+    mineral_name = f"\u8f7b\u94a2\u9f99\u9aa8\u77ff\u68c9\u677f\u540a\u9876 {suffix}"
+    gypsum_name = f"\u8f7b\u94a2\u9f99\u9aa8\u77f3\u818f\u677f\u5e73\u9762\u5929\u82b1 {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        mineral_item = _seed_cost_item(
+            db,
+            item_name=mineral_name,
+            spec="8\u5398\u62c9\u6746\u3001600mm*600mm",
+            unit="\u33a1",
+            price=50.19,
+        )
+        _seed_cost_item(db, item_name=gypsum_name, unit="\u33a1", price=95.27)
+        context = build_quote_cost_context(
+            db,
+            f"600*600\u77ff\u68c9\u677f\u540a\u9876 {suffix}\uff0c10\u33a1",
+        )
+        source_rows = cost_context_references_as_source_rows(context)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": gypsum_name,
+                    "quantity": 10,
+                    "unit": "\u33a1",
+                    "unit_price": 95.27,
+                    "total_price": 952.7,
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload, source_rows=source_rows)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    assert context.references[0]["cost_item_id"] == mineral_item.id
+    assert source_rows[0]["locked_cost_item_id"] == mineral_item.id
+    reference = enriched["project_details"][0]["cost_reference"]
+    assert reference["cost_item_id"] == mineral_item.id
+    assert reference["requires_manual_ai_rewrite_confirmation"] is True
+
+
+def test_biz2w4_ai_note_conflict_is_sanitized_when_cost_reference_matched(client):
+    suffix = uuid.uuid4().hex[:8]
+    mineral_name = f"轻钢龙骨矿棉板吊顶 {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    original_note = "当前底层数据集中未包含‘600*600矿棉板吊顶’相关条目，无法提供报价。建议补充对应施工项或联系客服获取定制报价。"
+    try:
+        mineral_item = _seed_cost_item(
+            db,
+            item_name=mineral_name,
+            spec="8厘拉杆、600mm*600mm",
+            unit="㎡",
+            price=50.19,
+        )
+        payload = {
+            "project_details": [
+                {
+                    "project_name": mineral_name,
+                    "quantity": 10,
+                    "unit": "㎡",
+                    "unit_price": 50.19,
+                    "total_price": 501.9,
+                    "notes": original_note,
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    reference = row["cost_reference"]
+    assert reference["matched"] is True
+    assert reference["cost_item_id"] == mineral_item.id
+    assert reference["ai_note_cost_basis_conflict"] is True
+    assert reference["requires_manual_ai_note_confirmation"] is True
+    assert reference["manual_ai_note_confirmed"] is False
+    assert reference["ai_original_notes"] == original_note
+    assert "已命中成本库参考" in row["notes"]
+    assert "无法提供报价" not in row["notes"]
+    assert row["ai_original_notes"] == original_note
+    assert row["quote_explanation"]["ai_original_notes"] == original_note
+    assert "需人工确认备注处理" in row["quote_explanation"]["comparison"]
+    assert enriched["cost_reference_summary"]["ai_note_conflict_count"] == 1
+
+
+def test_biz2w4_normal_cost_note_does_not_require_manual_note_confirmation(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2w4 regular note {suffix}"
+    original_note = "按600*600矿棉板标准工艺施工，现场复核吊杆间距。"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        cost_item = _seed_cost_item(db, item_name=item_name, unit="㎡", price=50.19)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": item_name,
+                    "quantity": 10,
+                    "unit": "㎡",
+                    "unit_price": 50.19,
+                    "total_price": 501.9,
+                    "notes": original_note,
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    reference = row["cost_reference"]
+    assert reference["matched"] is True
+    assert reference["cost_item_id"] == cost_item.id
+    assert reference["ai_note_cost_basis_conflict"] is False
+    assert reference["requires_manual_ai_note_confirmation"] is False
+    assert row["notes"] == original_note
+    assert "ai_original_notes" not in row
+    assert enriched["cost_reference_summary"]["ai_note_conflict_count"] == 0
+
+
+def test_enrich_quote_payload_exact_spec_not_ambiguous_for_same_name(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2r access panel {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        exact_item = _seed_cost_item(db, item_name=item_name, spec="300x300", unit="pcs", price=45)
+        _seed_cost_item(db, item_name=item_name, spec="600x600", unit="pcs", price=80)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": item_name,
+                    "spec": "300x300",
+                    "quantity": 6,
+                    "unit": "pcs",
+                    "unit_price": 45,
+                    "total_price": 270,
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    reference = enriched["project_details"][0]["cost_reference"]
+    assert reference["matched"] is True
+    assert reference["match_type"] == "exact_item_spec"
+    assert reference["cost_item_id"] == exact_item.id
+    assert reference["requires_manual_cost_candidate_confirmation"] is False
 
 
 def test_biz2d_matches_symbol_and_unit_variants(client):
@@ -445,6 +738,74 @@ def test_biz2g_applies_excel_source_quantity_before_fallback(client):
     assert row["total_price"] == 108
     assert reference["fallback_applied"] is True
     assert enriched["cost_reference_summary"]["fallback_applied_count"] == 1
+
+
+def test_biz2n_applies_excel_source_quantity_when_ai_returns_zero(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2n source zero quantity fallback {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        _seed_cost_item(db, item_name=item_name, unit="m", price=6.0)
+        payload = {
+            "project_details": [
+                {
+                    "project_name": item_name,
+                    "quantity": 0,
+                    "unit": "m",
+                    "unit_price": 0,
+                    "total_price": 0,
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(
+            db,
+            payload,
+            source_rows=[{"project_name": item_name, "quantity": "18", "unit": "m"}],
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    assert row["quantity"] == "18"
+    assert row["unit_price"] == 6
+    assert row["total_price"] == 108
+    assert row["cost_reference"]["fallback_applied"] is True
+
+
+def test_biz2n_applies_excel_source_quantity_for_no_cost_row(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"BIZ2n no cost source quantity {suffix}"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        payload = {
+            "project_details": [
+                {
+                    "project_name": item_name,
+                    "quantity": 0,
+                    "unit": "m",
+                    "unit_price": 0,
+                    "total_price": 100,
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(
+            db,
+            payload,
+            source_rows=[{"project_name": item_name, "quantity": "35", "unit": "m"}],
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    assert row["quantity"] == "35"
+    assert row["cost_reference"]["matched"] is False
+    assert row["quote_explanation"]["quantity"] == 35
 
 
 def test_enrich_quote_payload_is_noop_when_feature_disabled(client):

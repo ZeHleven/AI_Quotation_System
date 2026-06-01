@@ -15,11 +15,18 @@ from app.core.database import get_db
 from app.core.logging import get_trace_id, reset_trace_id, set_trace_id
 from app.core.responses import api_ok
 from app.dependencies import get_current_user
+from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.schemas.quote import ConfirmPushRequest
 from app.services.excel_service import build_excel_base64
 from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
-from app.services.quote_cost_context import build_cost_context_fallback_quote, safe_append_quote_cost_context
+from app.services.no_cost_draft_capture import create_no_cost_draft_items
+from app.services.quote_preview_drafts import mark_preview_draft_pushed
+from app.services.quote_cost_context import (
+    build_cost_context_fallback_quote,
+    cost_context_references_as_source_rows,
+    safe_append_quote_cost_context,
+)
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
 from app.services.quote_excel_parser import (
     QuoteExcelParseError,
@@ -28,8 +35,9 @@ from app.services.quote_excel_parser import (
     parse_quote_excel_bytes,
 )
 from app.services.quote_feedback import record_ai_preview, record_confirmed_quote
-from app.services.quote_history import create_quote_history_record
+from app.services.quote_history import create_quote_history_record, parse_amount
 from app.services.quote_helpers import attach_quote_filename, normalize_quote_request_text, sign_payload
+from app.services.quote_review import build_quote_review_detail
 from app.services.rbac import has_admin_role
 
 
@@ -38,6 +46,83 @@ logger = logging.getLogger(__name__)
 
 N8N_WEBHOOK_URL_CALC = settings.n8n_webhook_url_calc
 N8N_WEBHOOK_URL_PUSH = settings.n8n_webhook_url_push
+
+
+def _unpriced_requirement_placeholders(details: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for index, row in enumerate(details):
+        if not isinstance(row, dict):
+            continue
+        if not (row.get("requirement_placeholder") or row.get("quote_source") == "requirement_placeholder"):
+            continue
+        unit_price = parse_amount(row.get("unit_price"))
+        total_price = parse_amount(row.get("total_price"))
+        if unit_price is None or unit_price <= 0 or total_price is None or total_price <= 0:
+            rows.append({"index": index, "project_name": row.get("project_name") or row.get("item_name")})
+    return rows
+
+
+def _unconfirmed_cost_candidate_rows(details: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for index, row in enumerate(details):
+        if not isinstance(row, dict):
+            continue
+        reference = row.get("cost_reference") or row.get("costReference") or {}
+        if not isinstance(reference, dict):
+            continue
+        if not reference.get("requires_manual_cost_candidate_confirmation"):
+            continue
+        if reference.get("manual_cost_candidate_confirmed") or reference.get("match_type") == "manual_selected":
+            continue
+        rows.append({"index": index, "project_name": row.get("project_name") or row.get("item_name")})
+    return rows
+
+
+def _unconfirmed_ai_rewrite_rows(details: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for index, row in enumerate(details):
+        if not isinstance(row, dict):
+            continue
+        reference = row.get("cost_reference") or row.get("costReference") or {}
+        if not isinstance(reference, dict):
+            continue
+        if not reference.get("requires_manual_ai_rewrite_confirmation"):
+            continue
+        if reference.get("manual_ai_rewrite_confirmed") or reference.get("match_type") == "manual_selected":
+            continue
+        rows.append({"index": index, "project_name": row.get("project_name") or row.get("item_name")})
+    return rows
+
+
+def _unconfirmed_ai_note_conflict_rows(details: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for index, row in enumerate(details):
+        if not isinstance(row, dict):
+            continue
+        reference = row.get("cost_reference") or row.get("costReference") or {}
+        if not isinstance(reference, dict):
+            continue
+        if not reference.get("requires_manual_ai_note_confirmation"):
+            continue
+        if reference.get("manual_ai_note_confirmed") or reference.get("match_type") == "manual_selected":
+            continue
+        rows.append({"index": index, "project_name": row.get("project_name") or row.get("item_name")})
+    return rows
+
+
+def _get_accessible_quote_job_for_push(db: Session, current_user: User, quote_job_id: str | None) -> QuoteJob | None:
+    if not quote_job_id:
+        return None
+    job = db.query(QuoteJob).filter(QuoteJob.job_id == quote_job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="报价任务不存在")
+    if not has_admin_role(current_user) and job.username != current_user.username:
+        raise HTTPException(status_code=404, detail="报价任务不存在")
+    return job
+
+
+def _no_cost_draft_capture_enabled() -> bool:
+    return bool(settings.feature_cost_db and settings.feature_no_cost_draft_capture)
 
 
 def _sse_event(status_name: str, message: str, trace_id: Optional[str] = None, **extra):
@@ -134,6 +219,7 @@ async def process_chat(
 
             final_query = normalize_quote_request_text(final_query)
             final_query, cost_context = safe_append_quote_cost_context(db, final_query, source_rows=excel_source_rows)
+            cost_priority_source_rows = excel_source_rows or cost_context_references_as_source_rows(cost_context)
             if cost_context.matched_count:
                 logger.info(
                     "quote_cost_context_attached",
@@ -179,7 +265,7 @@ async def process_chat(
                         calc_result = safe_enrich_quote_payload_with_cost_refs(
                             db,
                             fallback_result,
-                            source_rows=excel_source_rows,
+                            source_rows=cost_priority_source_rows,
                         )
                         current_user.quota -= 1
                         db.commit()
@@ -210,7 +296,7 @@ async def process_chat(
                     logger.exception("n8n_response_parse_failed", extra={"username": current_user.username, "event": "n8n_response_parse_failed"})
                     yield _sse_event("error", f"❌ [n8n Workflow] 响应体解析失败（HTTP 200）\n实际返回内容：{body_preview}\n→ 请确认 N8N budget-calc 工作流末尾有 Respond to Webhook 节点且 Response Body 设为 JSON", trace_id=request_trace_id)
                     return
-                calc_result = safe_enrich_quote_payload_with_cost_refs(db, calc_result, source_rows=excel_source_rows)
+                calc_result = safe_enrich_quote_payload_with_cost_refs(db, calc_result, source_rows=cost_priority_source_rows)
                 current_user.quota -= 1
                 db.commit()
                 try:
@@ -261,8 +347,59 @@ async def confirm_and_push(
 ):
     try:
         payload = payload.model_dump(mode="json")
+        quote_job_id = payload.get("quote_job_id")
+        job = _get_accessible_quote_job_for_push(db, current_user, quote_job_id)
+        if job:
+            review_detail = build_quote_review_detail(db, job)
+            summary = review_detail.get("summary") or {}
+            if summary.get("requirement_row_count") and summary.get("missing_count"):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"AI 预审不完整：确认清单 {summary.get('requirement_row_count')} 行，"
+                        f"AI 预审返回 {summary.get('preview_row_count') or 0} 行，"
+                        f"仍有 {summary.get('missing_count')} 行未匹配到预审报价。"
+                        "请打回重填或重新发起报价。"
+                    ),
+                )
         payload = attach_quote_filename(payload, current_user.username)
         details = payload.get("project_details", [])
+        unpriced_placeholders = _unpriced_requirement_placeholders(details)
+        if unpriced_placeholders:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"预审单中还有 {len(unpriced_placeholders)} 行是 AI 未返回的占位行，"
+                    "请先人工填写单价和系统合计后再下发。"
+                ),
+            )
+        unconfirmed_candidates = _unconfirmed_cost_candidate_rows(details)
+        if unconfirmed_candidates:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"预审单中还有 {len(unconfirmed_candidates)} 行存在多条 active 成本候选，"
+                    "请先人工确认采用哪条成本依据后再下发。"
+                ),
+            )
+        unconfirmed_ai_rewrites = _unconfirmed_ai_rewrite_rows(details)
+        if unconfirmed_ai_rewrites:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"预审单中还有 {len(unconfirmed_ai_rewrites)} 行存在 AI 改写项目与原始成本依据不一致，"
+                    "请先人工确认原始成本依据或切换成本条目后再下发。"
+                ),
+            )
+        unconfirmed_ai_notes = _unconfirmed_ai_note_conflict_rows(details)
+        if unconfirmed_ai_notes:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"预审单中还有 {len(unconfirmed_ai_notes)} 行存在 AI 备注与成本库依据不一致，"
+                    "请先人工确认备注处理或修改备注后再下发。"
+                ),
+            )
         excel_b64 = build_excel_base64(details)
         logger.info("confirm_push_excel_check", extra={"excel_b64_len": len(excel_b64), "details_count": len(details)})
         if not excel_b64:
@@ -283,6 +420,7 @@ async def confirm_and_push(
         )
         if response.status_code == 200:
             quote_history_id = None
+            no_cost_draft_summary = None
             try:
                 record = create_quote_history_record(
                     db,
@@ -308,7 +446,37 @@ async def confirm_and_push(
             except Exception:
                 db.rollback()
                 logger.exception("quote_feedback_confirm_record_failed", extra={"event": "quote_feedback_confirm_record_failed"})
-            return api_ok(message="✅ 最终报价单已成功投递至钉钉群！")
+            if _no_cost_draft_capture_enabled():
+                try:
+                    no_cost_draft_summary = create_no_cost_draft_items(
+                        db,
+                        current_user,
+                        payload,
+                        quote_job_id=quote_job_id,
+                        quote_history_id=quote_history_id,
+                    )
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    logger.exception("no_cost_draft_capture_failed", extra={"event": "no_cost_draft_capture_failed"})
+                    no_cost_draft_summary = {
+                        "enabled": True,
+                        "success": False,
+                        "error": "NO_COST_DRAFT_CAPTURE_FAILED",
+                    }
+            if quote_job_id:
+                try:
+                    mark_preview_draft_pushed(db, quote_job_id=quote_job_id)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    logger.exception("quote_preview_draft_mark_pushed_failed", extra={"event": "quote_preview_draft_mark_pushed_failed"})
+            message = "✅ 最终报价单已成功投递至钉钉群！"
+            if no_cost_draft_summary and no_cost_draft_summary.get("created_count"):
+                message += f" 已生成 {no_cost_draft_summary['created_count']} 条成本库待审核草稿。"
+            return api_ok({"no_cost_draft_summary": no_cost_draft_summary}, message=message)
         raise HTTPException(status_code=500, detail="底层推送流水线异常")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

@@ -4,10 +4,11 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
@@ -40,10 +41,32 @@ from app.services.quote_job_runner import (
     append_job_event,
     mark_stale_quote_jobs,
 )
+from app.services.quote_review import (
+    build_quote_review_detail,
+    parse_requirement_rows_payload,
+    save_quote_requirement_rows,
+)
+from app.services.quote_preview_drafts import (
+    delete_preview_drafts,
+    discard_preview_draft,
+    get_preview_draft,
+    mark_preview_draft_pushed,
+    save_preview_draft,
+)
 
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class PreviewDraftSaveIn(BaseModel):
+    draft: dict[str, Any] = Field(default_factory=dict)
+    quote_id: Optional[str] = None
+    trace_id: Optional[str] = None
+
+
+class PreviewDraftBatchDeleteIn(BaseModel):
+    draft_ids: list[int] = Field(default_factory=list)
 
 
 def _decode_json(raw_value: Optional[str], fallback):
@@ -312,6 +335,7 @@ async def create_quote_job(
     inquiry_time: Optional[str] = Form(None),
     time_source: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
+    requirement_rows_json: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -343,6 +367,11 @@ async def create_quote_job(
             notes=notes,
         )
 
+    try:
+        requirement_rows = parse_requirement_rows_payload(requirement_rows_json)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     job = QuoteJob(
         job_id=str(uuid.uuid4()),
         username=current_user.username,
@@ -361,6 +390,8 @@ async def create_quote_job(
     apply_job_request_summary(job)
     append_job_event(job, "queued", "报价任务已进入队列", trace_id=job.trace_id, stage="queued")
     db.add(job)
+    db.flush()
+    save_quote_requirement_rows(db, quote_job_id=job.job_id, rows=requirement_rows)
     db.commit()
     db.refresh(job)
     _dispatch_and_store(job, db)
@@ -473,6 +504,81 @@ async def get_quote_job(
     db: Session = Depends(get_db),
 ):
     data = _serialize_job_with_context(db, _get_accessible_job(job_id, current_user, db))
+    return api_ok(data)
+
+
+@router.get("/quote/jobs/{job_id}/review-detail", summary="查询报价预审条目与确认清单对账")
+async def get_quote_job_review_detail(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = _get_accessible_job(job_id, current_user, db)
+    return api_ok(build_quote_review_detail(db, job))
+
+
+@router.get("/quote/jobs/{job_id}/preview-draft", summary="查询报价预审草稿")
+async def get_quote_preview_draft(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _get_accessible_job(job_id, current_user, db)
+    return api_ok(get_preview_draft(db, job_id))
+
+
+@router.put("/quote/jobs/{job_id}/preview-draft", summary="保存报价预审草稿")
+async def save_quote_preview_draft(
+    job_id: str,
+    payload: PreviewDraftSaveIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = _get_accessible_job(job_id, current_user, db)
+    data = save_preview_draft(
+        db,
+        job=job,
+        user=current_user,
+        draft=payload.draft,
+        quote_id=payload.quote_id,
+        trace_id=payload.trace_id,
+    )
+    db.commit()
+    return api_ok(data)
+
+
+@router.post("/quote/jobs/{job_id}/preview-draft/discard", summary="放弃报价预审草稿")
+async def discard_quote_preview_draft(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _get_accessible_job(job_id, current_user, db)
+    data = discard_preview_draft(db, quote_job_id=job_id)
+    db.commit()
+    return api_ok(data)
+
+
+@router.post("/quote/jobs/{job_id}/preview-draft/mark-pushed", summary="标记报价预审草稿已推送")
+async def mark_quote_preview_draft_pushed(
+    job_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _get_accessible_job(job_id, current_user, db)
+    data = mark_preview_draft_pushed(db, quote_job_id=job_id) or get_preview_draft(db, job_id)
+    db.commit()
+    return api_ok(data)
+
+
+@router.post("/quote/preview-drafts/batch-delete", summary="批量删除报价预审草稿")
+async def batch_delete_quote_preview_drafts(
+    payload: PreviewDraftBatchDeleteIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    data = delete_preview_drafts(db, draft_ids=payload.draft_ids, user=current_user)
+    db.commit()
     return api_ok(data)
 
 

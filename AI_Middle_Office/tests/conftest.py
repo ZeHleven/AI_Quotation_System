@@ -42,6 +42,7 @@ os.environ["MINIO_ENDPOINT"] = "127.0.0.1:9002"
 os.environ["MINIO_BUCKET"] = "test-quote-files"
 os.environ["RAG_EVAL_ENABLED"] = "false"
 os.environ["LOGIN_RATE_LIMIT"] = "1000/5minutes"
+os.environ["ALLOW_SELF_REGISTRATION"] = "true"
 
 from app.main import app  # noqa: E402
 

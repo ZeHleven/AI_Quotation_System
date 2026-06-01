@@ -10,7 +10,8 @@ param(
     [switch]$NoBrowser,
     [switch]$SkipRemoteWait,
     [switch]$SkipCelery,
-    [switch]$SkipMigrations
+    [switch]$SkipMigrations,
+    [switch]$Restart
 )
 
 $ErrorActionPreference = "Stop"
@@ -144,7 +145,7 @@ function Wait-FastApiReady {
 function Start-FastApi {
     param([string]$PythonPath)
 
-    if (Test-TcpPort -TargetHost "127.0.0.1" -Port $AppPort -TimeoutMs 500) {
+    if ((Test-TcpPort -TargetHost "127.0.0.1" -Port $AppPort -TimeoutMs 500) -and -not $Restart) {
         Write-Host "[OK] FastAPI port $AppPort is already listening" -ForegroundColor Green
         return
     }
@@ -156,6 +157,15 @@ function Start-FastApi {
         if ([int]::TryParse($oldPidText, [ref]$oldPid)) {
             $oldProcess = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
             if ($oldProcess) {
+                if ($Restart) {
+                    Write-Host "[RESTART] Stopping FastAPI pid from pid file: $oldPid" -ForegroundColor Yellow
+                    Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 2
+                    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+                    $oldProcess = $null
+                }
+            }
+            if ($oldProcess) {
                 $oldCommand = (Get-CimInstance Win32_Process -Filter "ProcessId=$oldPid" -ErrorAction SilentlyContinue).CommandLine
                 if ($oldCommand -and $oldCommand -like "*uvicorn*" -and $oldCommand -like "*app.main:app*") {
                     Write-Host "[OK] FastAPI already appears to be running with pid: $oldPid" -ForegroundColor Green
@@ -164,6 +174,10 @@ function Start-FastApi {
             }
         }
         Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    }
+
+    if (Test-TcpPort -TargetHost "127.0.0.1" -Port $AppPort -TimeoutMs 500) {
+        throw "FastAPI port $AppPort is still listening after restart cleanup. Stop the old process first, then run start_all.ps1 again."
     }
 
     $outLog = Join-Path $LogDir ("fastapi_{0}.out.log" -f (Get-Date -Format "yyyyMMdd"))
@@ -190,9 +204,13 @@ function Start-Celery {
     if (-not (Test-Path $launcher)) {
         throw "Celery launcher not found: $launcher"
     }
+    $celeryArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $launcher)
+    if ($Restart) {
+        $celeryArgs += "-Restart"
+    }
     Start-Process `
         -FilePath "powershell.exe" `
-        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $launcher) `
+        -ArgumentList $celeryArgs `
         -WorkingDirectory $WorkDir `
         -WindowStyle Hidden | Out-Null
     Write-Host "[START] Celery worker launcher invoked" -ForegroundColor Cyan

@@ -36,6 +36,7 @@ from app.api.v1 import (
     quote_feedback,
     quote_jobs,
     rag_eval,
+    requirement_standardization,
     users,
 )
 from app.core.database import engine, Base, get_db
@@ -49,8 +50,11 @@ from app.models import knowledge_candidate as knowledge_candidate_model  # noqa:
 from app.models import client_inquiry as client_inquiry_model  # noqa: F401 — 触发客户咨询表建表
 from app.models import client_inquiry_event as client_inquiry_event_model  # noqa: F401 — 触发商务台账事件表建表
 from app.models import cost_item as cost_item_model  # noqa: F401 — 触发成本库表建表
+from app.models import cost_audit as cost_audit_model  # noqa: F401 — 触发成本库审计表建表
 from app.models import execution_task as execution_task_model  # noqa: F401 — 触发执行任务表建表
 from app.models import meeting as meeting_model  # noqa: F401 — 触发会议纪要与草稿表建表
+from app.models import quote_requirement_row as quote_requirement_row_model  # noqa: F401
+from app.models import quote_preview_draft as quote_preview_draft_model  # noqa: F401
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -186,6 +190,7 @@ app.include_router(model_gateway.router, prefix="/api/v1", tags=["Model Gateway"
 app.include_router(files.router, prefix="/api/v1", tags=["File Storage"])
 app.include_router(ops.router, prefix="/api/v1", tags=["Operations"])
 app.include_router(rag_eval.router, prefix="/api/v1", tags=["RAG Eval"])
+app.include_router(requirement_standardization.router, prefix="/api/v1", tags=["Requirement Standardization"])
 
 
 @app.middleware("http")
@@ -330,6 +335,13 @@ def serve_vite_business_ledger():
 
 @app.get("/admin/cost-db", include_in_schema=False)
 def serve_vite_cost_db():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/requirement-standardization", include_in_schema=False)
+def serve_vite_requirement_standardization():
     if not settings.feature_vite_frontend:
         raise HTTPException(status_code=404, detail="Not Found")
     return _serve_vite_index()

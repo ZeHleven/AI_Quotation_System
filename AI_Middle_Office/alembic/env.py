@@ -17,11 +17,13 @@ from app.models import (  # noqa: F401,E402
     knowledge_candidate,
     material,
     model_call_log,
+    cost_audit,
     prompt_regression,
     quote_cost_evidence,
     quote_feedback,
     quote_history,
     quote_job,
+    quote_requirement_row,
     rag_eval_report,
     user,
 )

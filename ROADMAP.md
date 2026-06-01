@@ -1,6 +1,6 @@
 # 系统升级路线图
 
-> 最后更新：2026-05-24
+> 最后更新：2026-05-29
 
 > 业务优化 P4 更新：真实用户体验优化代码层已落地，`index.html` 新增失败原因建议、预审风险提示和人工修改沉淀知识入口；本阶段不新增 Alembic revision。
 > P4 运行态手工验收已完成（2026-05-08）：22/22 项全部通过，详见 `AI_Middle_Office/P4_ACCEPTANCE.md`。
@@ -25,14 +25,50 @@
 > AI 平台升级 BIZ Track BIZ-2i 报价可解释性与审计记录已完成代码层验证（2026-05-22）：新增报价成本证据审计记录，确认/打回时保存 AI 原始报价、最终报价、成本库命中条目、参考价、行合计来源、整单合计来源、价差和证据链接；后台报价反馈/报价运营可追溯成本证据。不新增 Alembic。
 > AI 平台升级 BIZ Track BIZ-2j 报价依据与成本库证据链展示优化已完成代码层验证（2026-05-22）：旧 `index.html` 预审“查看依据”弹窗已重排为业务员可读的 AI 报价来源、AI 报价依据、成本库参考、合计对照等分区，并将成本库详情 URL 改为按钮跳转；后台报价任务详情同步展示 AI 来源和成本证据。
 > BIZ-2 后续体验补强已完成（2026-05-22 至 2026-05-23）：所有“闪筑智价”文案已改为“旗胜智价”；预审阶段支持同名不同规格成本条目切换，切换后同步采用新成本条目参考价重算本行单价/合计；AI 报价来源显式化，支持“采纳前置成本库 / 偏离前置成本库 / 无成本库参考 AI 估算 / 成本库兜底 / 人工切换成本条目”；报价运营详情新增预审打回原因展示。
+> AI 平台升级 BIZ Track BIZ-2k 成本库数据质量体检 + 演示回归包已通过当前环境手工验收（2026-05-28，BIZ-2k-1 报告可读性补强后复验）：新增只读 `cost_items.active` 体检服务和报告脚本，可生成 Markdown/CSV/XLSX 与演示回归包，覆盖同名不同规格、价格为空/0、单位异常、规格备注缺失、相似条目和 RAG 同步数量提示；不新增 Alembic，不新增页面/API，不改报价逻辑，不写数据库。
+> AI 平台升级 BIZ Track BIZ-2l-0 甲方需求单标准字段与典型场景确认已完成文档层确认（2026-05-25）：已形成 `docs/biz-2l-requirement-standardization-biz2l0.md`，明确标准报价行字段、字段别名、单位数量规则、行类型、典型场景、置信度、警告码、人工确认口径和 BIZ-2l-1 输出合同；不编码、不改数据库、不改报价逻辑、不改价格口径、不自动沉淀成本库。
+> AI 平台升级 BIZ Track BIZ-2l-1 只读通用清洗解析器已完成代码层验证（2026-05-25）：新增 `app/services/requirement_standardizer.py` 和 `scripts/biz2l_requirement_standardization_preview.py`，可将 `.xlsx/.xlsm` 需求单输出为标准化 JSON/CSV/Markdown 预览，覆盖字段别名、无表头混写、数量单位粘连、说明/合计/区域行、价格列只读提示、多 Sheet 和合并单元格；真实甲方清单“联昇集团办公楼装饰工程清单.xlsx”可解析 8 个 Sheet、299 个标准行，并修复“项目特征误判为项目名称”的表头优先级问题；不接报价、不写数据库、不改报价逻辑/价格口径。
+> AI 平台升级 BIZ Track BIZ-2l-2 人工列映射与行确认已完成当前环境验收（2026-05-26）：新增 `/admin/requirement-standardization` Vite 页面和需求单标准化 API，支持上传 `.xlsx/.xlsm` 解析预览、按 Sheet 人工列映射、按 Sheet 行确认、原始行追溯、标准数量来源与多工程量候选、搜索/筛选、确认清单生成、本地历史解析记录和版本回滚；历史进度使用浏览器 IndexedDB 保存，不写数据库、不新增 Alembic；仍不接报价、不改报价逻辑/价格口径、不自动沉淀成本库。后端全量测试 `202 passed, 3 warnings`，`ai-web` build 通过。
+> AI 平台升级 BIZ Track BIZ-2l-3 标准清单接入报价链路已完成代码层验证并通过业务验收（2026-05-26）：需求单标准化确认页新增“发起报价”，发起前会重新调用确认接口校验当前行，只将已确认且通过校验的标准行组装为 `quote_text` 并调用现有 `/api/v1/quote/jobs` 异步报价任务；阻断行、剔除行、说明/汇总/空白行不进入报价；行确认支持按当前筛选结果全选、取消选择、批量确认和批量撤回确认；若生成确认清单或发起报价前存在阻断行，界面展示校验问题面板、中文错误原因和原始行内容，并自动切换到“未通过校验”定位首条问题行；创建成功后自动跳转到旧报价工作台 `index.html`，由旧工作台接管任务进度并复用原有 AI 预审弹窗进行人工验收。复用现有报价、成本库前置参考、成本库匹配、漏项检测、底价兜底、证据链、预审确认和打回流程；不新增数据库结构、不新增 Alembic、不改报价逻辑/价格口径、不自动沉淀成本库。后端全量测试 `203 passed, 3 warnings`，`ai-web` build 通过。
+> AI 平台升级 BIZ Track BIZ-2l-4 预审对账与运营复核详情已完成当前环境业务验收（2026-05-27）：新增 Alembic `20260526_0022` 和 `quote_job_requirement_rows`，报价任务创建时持久化人工确认的标准需求行；新增 `/api/v1/quote/jobs/{job_id}/review-detail`，对账确认清单与 AI 预审条目，标出疑似未报价、额外预审行、无底价参考、成本库兜底、人工改动过大、偏离底价过大等复核项；运行中后端已验证 169 行任务 `2557d7ba-f0ca-48ba-91c3-5c9c8f993a4c` 的 `review-detail` 返回 200，确认行 169、预审行 169、需复核 169、高风险 169、无底价参考 153，可继续支撑旧预审弹窗和 Vite 报价运营详情复核。不改报价规则、价格口径、无底价自动处理和成本库沉淀逻辑。
+> AI 平台升级 BIZ Track BIZ-2l-5 确认清单逐行报价完整性保障已完成当前环境业务验收（2026-05-27）：异步报价会把已确认需求行以 `requirement_row_key` 逐行传给 AI，并要求 `project_details` 与确认清单逐条对应，禁止合并、抽样或省略；后端会在预审结果写入 `requirement_integrity` 完整性摘要，报价运营详情继续可追溯确认行/预审行对账；专项测试已覆盖确认需求行逐行传给 AI、不完整预审 `/confirm_push` 409 阻断、未补价占位行 `/confirm_push` 409 阻断，以及占位行不触发成本库底价兜底。不新增数据库结构、不新增 Alembic、不改报价规则、价格口径、无底价自动处理和成本库沉淀逻辑。
+> AI 平台升级 BIZ Track BIZ-2l-6 确认清单分批报价与缺失占位已完成当前环境业务验收（2026-05-27）：确认清单超过阈值时，异步报价按批进入现有 N8N/Dify 链路，默认每批 20 行，缺失行自动补报 1 次；仍未返回的确认行会按原确认清单顺序生成“AI 未返回，需人工补价”的占位预审行，保留数量、单位、Sheet、原始行号和原始备注；占位行不触发成本库底价自动兜底，未人工填写单价和系统合计前，旧 `index.html` 与 `/confirm_push` 都会阻断下发；重启后 169 行任务 `2557d7ba-f0ca-48ba-91c3-5c9c8f993a4c` 已验证预审行数 169、占位行 169、`requirement_integrity.status=complete_with_placeholders`、`missing_count=0`、未补价推送 409 阻断，前端人工验收通过；补充 Alembic `20260526_0023` 将异步报价大 JSON 字段扩为 `LONGTEXT`，避免 169 行预审结果写库超长。不改报价规则、价格口径、无底价自动处理和成本库沉淀逻辑。后端报价任务测试 `26 passed`，`ai-web` build 通过，旧 `index.html` 脚本语法检查通过。
+> BIZ-2 无底价项目处理规则草案已完成（2026-05-27）：新增 `docs/biz-2-no-cost-reference-rule-draft.md`，明确无 `cost_items.active` 参考价时允许 AI 估价，但必须提示“无成本库参考价，AI 估价，仅供参考，请人工确认价格依据”；人工确认单价/合计后可下发；下发成功后无底价条目进入成本库 `draft` 待审核，不能自动 `active`，只有成本部业务员、管理员或老板人工启用为 `active` 后，后续同类需求才允许展示成本库参考价。本文档为规则草案和开发建议，不改代码、不新增 Alembic。
+> BIZ-2m 无底价项目规则开发落地已通过当前环境手工验收（2026-05-28）：新增 `app/services/no_cost_draft_capture.py`、`FEATURE_NO_COST_DRAFT_CAPTURE`、`/confirm_push` 成功后无底价 draft 捕获、成本库来源筛选、旧预审弹窗无底价固定提示和下发成功 draft 摘要；自动生成项只写入 `cost_items.draft`，不自动 active，draft 不参与后续报价/RAG/兜底，未补价占位继续阻断，已补价占位可沉淀；BIZ-2p 后来源按手动改价/采用 AI 建议细分。演示与验收记录见 `docs/biz-2m-demo-and-acceptance.md`。不新增 Alembic，不改报价价格口径。
+> BIZ-2n 预审人工改价字段与合计联动已通过当前环境手工验收（2026-05-28）：旧 `index.html` 预审弹窗新增可编辑“工程量/单位”和“人工改价(元)”列，人工改价默认取成本库参考价，无成本库参考则默认 0；修改工程量或人工改价后联动系统合计；若 AI 返回工程量 0 但源 Excel 有有效工程量，后端会回填源工程量；下发前归一写回 `unit_price/total_price`，未补有效人工改价或系统合计前阻断推送；详见 `docs/biz-2n-manual-price-preview.md`。不新增 Alembic，不改 N8N/Dify，不改成本库 active 规则。
+
+> BIZ-2o 成本库状态与流向台账已通过当前环境手工验收（2026-05-28）：Vite `/admin/cost-db` 新增“状态与流向”入口，可按总览、新增 draft、active 记录、归档记录查看成本条目来源、当前去向、生命周期和报价引用；后端新增只读 lineage 汇总/列表/详情接口，复用 `cost_items`、`cost_item_history`、`quote_cost_evidence` 和 `cost_rag_sync_runs`。不新增 Alembic，不改报价规则、价格口径、N8N/Dify、RAG 同步或成本库 active 规则；详见 `docs/biz-2o-cost-lineage.md`。
+> BIZ-2p 预审人工改价来源判定与 AI 建议采纳已通过当前环境手工验收（2026-05-28）：旧 `index.html` 预审“人工改价(元)”列新增“采用AI建议”，点击后采纳 AI 建议单价并按工程量重算系统合计；手动改价下发后无底价 draft 来源写“人工”，采纳 AI 建议或沿用 AI 价则来源写“AI 建议”，状态与流向详情展示价格动作。详见 `docs/biz-2p-preview-price-source.md`。不新增 Alembic，不改报价规则、价格口径、N8N/Dify、RAG 同步或成本库 active 规则。
+
+> BIZ-2q 报价预审草稿保存与恢复已通过当前环境手工验收（2026-05-28）：新增 `quote_preview_drafts` 和 Alembic `20260527_0024`，旧 `index.html` 预审弹窗会在人工改价、系统合计、工程量、单位、施工项目、备注、采用 AI 建议和成本库条目切换后保存草稿；预审弹窗新增“关闭”按钮，关闭前保存草稿但不打回、不下发；“我的报价历史”会显示“草稿”状态并在操作列提供“编辑”入口，再次打开同一报价任务会恢复 `editing` 草稿；打回重填标记为 `discarded`，确认下发成功后标记为 `pushed` 并阻止继续覆盖。详见 `docs/biz-2q-preview-draft-save.md`。不改报价规则、价格口径、N8N/Dify、RAG 同步或成本库 active 规则。
+> BIZ-2q-2 我的报价历史筛选与草稿清理已通过当前环境手工验收（2026-05-28）：历史列表不再将草稿固定置顶，统一按时间倒序排列；`/api/v1/history` 支持时间、报价内容、项目数、总价和推送状态筛选；旧 `index.html` 的“我的报价历史”新增筛选栏、草稿多选和“删除草稿”批量操作；新增 `POST /api/v1/quote/preview-drafts/batch-delete`，仅删除 `editing` 草稿快照，不删除报价任务或已推送历史。详见 `docs/biz-2q-preview-draft-save.md`。不新增 Alembic，不改报价规则、价格口径、N8N/Dify、RAG 同步或成本库 active 规则。
+> BIZ-2r 成本库重复 active 防护与报价多候选提示已通过当前环境手动验收（2026-05-27）：新增统一重复判断服务，成本库单条/批量启用会阻断相同或高风险相似 active，允许同名不同规格共存；无底价 draft 沉淀前会跳过相同或相似 draft/active；报价命中多个 active 候选时在 `cost_reference` 标记多候选，旧预审单要求“确认当前依据”或切换成本条目，未确认前前端与 `/confirm_push` 均阻断下发。详见 `docs/biz-2r-cost-duplicate-active-guard.md`。不新增 Alembic，不改报价规则、价格口径、N8N/Dify、RAG 同步或成本库 active 规则。
+> BIZ-2 成本价权限清单草案已完成（2026-05-27）：新增 `docs/biz-2-cost-price-permissions-draft.md`，明确普通业务员只在自己报价预审中查看必要成本参考，成本部业务员、管理员和老板可查看完整成本库；`draft -> active`、价格修改、导出、RAG 同步等属于高风险操作，需审计；上云前建议新增成本专项角色并收紧当前 `staff` 完整成本库只读能力。本文档为权限草案和开发建议，不改代码、不新增 Alembic。
+> BIZ-2s 成本价权限落地首版已通过当前环境手动验收（2026-05-28）：新增 `cost_viewer` / `cost_editor` / `cost_approver` / `cost_exporter`，普通 `staff` 不再浏览完整成本库，只保留报价预审受限 active 成本候选接口 `GET /api/v1/cost-items/quote-candidates`；Vite `/admin/cost-db` 按查看、编辑、审批启用/归档/同步拆分按钮权限；旧 `index.html` 预审切换成本条目改走受限候选接口。详见 `docs/biz-2s-cost-price-permissions-implementation.md`。不新增 Alembic，不改报价规则、价格口径、N8N/Dify、RAG 同步逻辑或成本库 active 规则。
+> BIZ-2t 成本库数据治理执行包已生成当前环境只读治理基线（2026-05-28）：新增 `app/services/cost_governance.py` 和 `scripts/biz2t_cost_governance_pack.py`，复用 BIZ-2k active 体检结果并结合报价引用证据和 RAG 同步记录，生成 `reports/biz2t/20260528_current/` 下的治理摘要、人工整改 CSV/XLSX 和 raw JSON。当前基线：总 208 条、active 195、archived 13、draft 0，被报价引用 active 42，治理动作 126 条，高风险 5、中风险 27、低风险 94，最近 RAG 同步 success 且 195/195；试运行建议为 `cleanup_before_trial`。详见 `docs/biz-2t-cost-data-governance-execution-pack.md`。只读分析，不写库、不自动删除/合并/改价/启用 active，不新增 Alembic，不改报价规则或价格口径。
+> BIZ-2t-1 高风险整改交接清单已完成文档层准备（2026-05-28）：新增 `docs/biz-2t-high-risk-cost-handoff.md` 和 `reports/biz2t/20260528_current/cost_governance_high_risk_handoff.csv`，将 BIZ-2t 的 5 条高风险试运行阻断项整理为成本部逐条核价表，明确允许处理方式、禁止自动动作和重新生成治理报告的复核标准。本阶段只读整理，不写数据库、不自动改价/撤回/归档/启用 active，不新增 Alembic，不改报价规则或价格口径。
+> BIZ-2t-2 高风险整改结果复核包已完成只读复核（2026-05-28）：新增 `scripts/biz2t2_high_risk_handoff_review.py`、`docs/biz-2t-2-high-risk-handoff-review.md` 和 `reports/biz2t/20260528_current/high_risk_handoff_review.*`；当前 5 条高风险交接项均由管理员标记为 `accepted_risk`，`accepted_risk=5`、`trial_blocker_count=0`、建议 `ready_with_known_risks`；正式试运行仍未启动，下一步可登记试运行样例并将 5 条记录为已知风险。本阶段不写数据库、不自动整改、不触发 RAG 同步、不新增 Alembic，不改报价规则或价格口径。
+> BIZ-2u 小范围内网试运行准备包已完成文档层准备（2026-05-28）：新增 `docs/biz-2u-internal-trial-preparation.md`，明确正式试运行启动前的准入门槛、首批人员角色、样例清单、每日流程、问题反馈表、验收口径和暂停条件；正式试运行尚未启动，启动前仍建议先处理或说明 BIZ-2t 的 5 条高风险 active 来源价问题，并继续保持 `PUBLIC_ACCESS_ENABLED=false`。本阶段不新增代码、页面、数据库结构或 Alembic，不改报价规则、价格口径、N8N/Dify、RAG 同步逻辑或成本库 active 规则。
+> BIZ-2u-1 小范围内网试运行执行模板包已完成文档层准备（2026-05-28）：新增 `docs/biz-2u-1-internal-trial-execution-templates.md` 和 `reports/biz2u/20260528_trial_templates/` 下的样例登记表、问题反馈台账、每日检查清单和验收记录模板；正式试运行仍未启动。本阶段只提供可填写执行材料，不写数据库、不启动服务、不新增 Alembic，不改报价规则、价格口径、N8N/Dify、RAG 同步逻辑或成本库 active 规则。
+> BIZ-2u-2 小范围内网试运行启动前登记与检查包已完成文档层准备（2026-05-28）：新增 `docs/biz-2u-2-internal-trial-readiness-check.md` 和 `reports/biz2u/20260528_trial_readiness/` 下的已知风险登记表、启动前检查清单和摘要 JSON；5 条 `accepted_risk` 高风险项已登记为试运行已知风险，当前结论为 `ready_with_known_risks_pending_start_confirmation`；正式试运行仍未启动，后续需负责人单独确认是否进入 BIZ-2u-3。本阶段不写数据库、不启动服务、不触发 RAG 同步、不新增 Alembic，不改报价规则、价格口径、N8N/Dify 或成本库 active 规则。
+> BIZ-2v-1 报价下发与成本价权限安全加固已通过当前环境手工验收（2026-05-28）：新增 `/confirm_push` 的 `quote_job_id` 归属校验，普通用户不能用他人任务下发或标记他人预审草稿；报价候选接口关键词最少 2 个字符，普通 `staff` 只返回预审切换所需 active 成本字段，成本专项角色和管理员仍可查看完整候选；单条/批量启用 active 必须填写核定原因并写入状态历史；详见 `docs/biz-2v-1-quote-push-permission-hardening.md`。后端全量测试 `248 passed, 5 warnings`，`compileall app tests` 通过，`ai-web` build 通过，旧 `index.html` inline script 检查通过；不新增 Alembic，不改报价规则、价格口径、N8N/Dify、RAG 同步逻辑或成本库 active 规则。
+> BIZ-2v-2 RAG 同步一致性与滞后提示已通过当前环境手工验收（2026-05-28）：修正 active 到 RAG 同步失败/超时时 `synced_count` 误显示为请求条数的问题；新增 `GET /api/v1/admin/cost-items/sync-rag/status`，按当前 active 数量、最近 active 更新时间、最近成功同步记录和最近同步记录判断已同步、需同步、失败、从未同步或无 active 条目；Vite `/admin/cost-db` 展示同步状态、active 数量和最近成功同步时间；详见 `docs/biz-2v-2-rag-sync-consistency.md`。后端全量测试 `253 passed, 5 warnings`，`compileall app tests` 通过，`ai-web` build 通过；不新增 Alembic，不自动触发 RAG 同步，不改报价规则、价格口径、N8N/Dify 或成本库 active 规则。
+> BIZ-2v-3 成本库敏感操作审计与导出控制已通过当前环境手工验收（2026-05-28）：新增 Alembic `20260528_0025` 和 `cost_access_audit_logs`；成本库导出仅允许 `cost_exporter` / 管理员，完整成本库查看、详情、导出、状态变更、导入确认、状态与流向和 RAG 同步动作均写入审计；新增审计查询接口，管理员和 `cost_approver` 可查；Vite `/admin/cost-db` 新增“导出”和“审计记录”入口；详见 `docs/biz-2v-3-cost-audit-export-control.md`。后端全量测试 `257 passed, 5 warnings`，`compileall app tests` 通过，`alembic heads` 为 `20260528_0025 (head)`，`ai-web` build 通过；不改报价规则、价格口径、N8N/Dify、RAG 同步逻辑或成本库 active 规则。
+> BIZ-2w-1 系统完善审查与账号入口安全加固已通过当前环境手工验收（2026-05-28）：新增 `ALLOW_SELF_REGISTRATION=false` 默认关闭自注册，`/api/v1/auth/register` 未开启时返回 `403 SELF_REGISTRATION_DISABLED`；新增 `POST /api/v1/admin/users` 仅允许 `system_admin` 创建用户、设置额度和初始角色，Vite 权限管理页新增“新建用户”，旧 `index.html` 移除“注册并领取额度”入口提示；详见 `docs/biz-2w-1-system-risk-hardening.md`。后端全量测试 `260 passed, 5 warnings`，`compileall app tests` 通过，`ai-web` build 通过，旧 `index.html` inline script 检查通过；不新增 Alembic，不改报价规则、价格口径、RAG、N8N/Dify 或成本库 active 规则。
+
+> BIZ-2w-2 RAG 同步状态时间口径误报修复与验收需求单闭环已通过当前环境手工验收（2026-05-28）：修复 `cost_items.updated_at` 数据库本地时间与 `cost_rag_sync_runs.finished_at` 应用 UTC 直接比较导致的“刚同步仍提示有更新未同步”；后端按数据库 `NOW()` 与 `UTC_TIMESTAMP()` 差值归一化 active 更新时间，前端最近成功同步时间按本地时间展示；当前真实环境状态已恢复为 `synced / 已同步`；用户已使用 `outputs/biz2w2/biz2w2_acceptance_requirement.xlsx` 完成上传、预审修改、确认下发和追溯验收；详见 `docs/biz-2w-2-rag-sync-status-timezone-fix.md`。专项测试 `10 passed, 1 warning`，`compileall app tests` 通过，`ai-web` build 通过；不新增 Alembic，不改报价规则、价格口径、RAG 同步动作、N8N/Dify 或成本库 active 规则。
+> BIZ-2w-3 成本参考优先与 AI 改写防护已完成代码层验证，待当前环境手工验收（2026-05-28）：报价前基于原始需求命中的 active 成本参考会转为后置预审锁定依据，AI 返回项目名若改写到其他成本项会标记 AI 改写风险，未人工确认前旧预审弹窗和 `/confirm_push` 均阻断下发；真实库只读模拟已验证“600*600矿棉板吊顶，10㎡”优先保留 `#39 轻钢龙骨矿棉板吊顶` 成本依据并识别 AI 返回 `#35 轻钢龙骨石膏板平面天花` 风险；详见 `docs/biz-2w-3-cost-reference-priority-ai-rewrite-guard.md`。专项测试 `3 passed, 1 warning`，相关回归 `56 passed, 1 warning`，`compileall` 通过，`ai-web` build 通过，旧 `index.html` inline script 检查通过；不新增 Alembic，不改报价规则、价格口径、RAG、N8N/Dify 或成本库 active 规则。
+> BIZ-2w-4 AI 备注与成本依据一致性校验已通过当前环境手工验收（2026-05-29）：当预审行已命中 active 成本参考但 AI 原始备注仍声称“未包含相关条目、无法提供报价、建议补充”等时，系统保留 AI 原始备注作审计、替换预审可见备注为成本依据一致的系统建议备注，并要求人工确认备注处理；未确认前旧预审弹窗和 `/confirm_push` 均阻断下发；详见 `docs/biz-2w-4-ai-note-cost-basis-consistency.md`。专项与相关回归 `34 passed, 1 warning`，报价任务回归 `26 passed, 1 warning`，`compileall app tests`、`ai-web` build 和旧 `index.html` inline script 检查通过；不新增 Alembic，不改报价规则、价格口径、RAG、N8N/Dify 或成本库 active 规则。
+> BIZ-2w-5 自由文本同名不同规格拆行与工程量识别修复已完成代码层验证，待当前环境手工验收（2026-05-29）：修复“石膏板吊顶 9.5mm，8㎡、石膏板吊顶 12mm，8㎡”这类手输需求没有按顿号拆成两条前置成本参考、且 `9.5mm` 被误识别为 `9.5m` 工程量的问题；前置成本上下文现在会分别保留 `9.5mm` / `12mm` 规格，并取末尾真实 `8㎡` 作为工程量；详见 `docs/biz-2w-5-text-multi-spec-quantity-guard.md`。专项相关测试 `28 passed, 1 warning`，`compileall app tests` 通过；不新增 Alembic，不改报价规则、价格口径、RAG、N8N/Dify 或成本库 active 规则，不自动新增报价行或改总价。
+> BIZ-2w-6 报价来源口径与预审列名调整已通过当前环境手工验收（2026-05-29）：旧预审弹窗将“AI 建议单价”调整为“预审参考单价”，将“成本库参考 / 人工改价 / 系统合计”调整为“成本库依据 / 人工确认价 / 人工确认合计”，并按行显示“成本库依据价 / 无成本库参考，AI估价 / 偏离成本库依据”等来源标签；补充修复 AI 返回 `item_1` / `item_2` 等占位项目名时预审项目名丢失的问题；详见 `docs/biz-2w-6-quote-source-wording.md`、`docs/biz-2w-6-placeholder-project-name-hotfix.md`。旧 `index.html` inline script 检查通过，AI 占位项目名保护专项并入成本上下文/成本匹配回归 `30 passed, 1 warning`；不新增 Alembic，不改报价规则、价格口径、RAG、N8N/Dify 或成本库 active 规则，不自动新增报价行或改总价。
 > 商务/市场部提效路线阶段性收束（2026-05-20）：BIZ-1a 台账已完成，但后续提醒、流水等低收益延展暂不继续推进；真正高价值方向调整为"外部项目源自动搜索/收集 + 公司标准筛选 + 联系方式输出"，因外部项目搜索引擎调用成功率未知、外部项目收集平台合作和 API 权限尚未确定，标记为待定。
 
 ---
 
-## 当前冻结状态（2026-05-24）
+## 当前冻结状态（2026-05-26）
 
 - **后端基础设施优化已收束**：后端重构 P0-P3、补充一致性优化、运维告警收敛、Alembic 迁移纪律均已落地；后续不再做无触发的基础设施打磨。
-- **数据库规范**：当前代码迁移 head 为 `20260520_0019`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账、BIZ-2a 成本数据库和 BIZ-2c RAG 同步记录。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
+- **数据库规范**：当前代码迁移 head 为 `20260528_0025`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账、BIZ-2a 成本数据库、BIZ-2c RAG 同步记录、BIZ-2l 确认需求行对账记录、大清单预审结果持久化能力、BIZ-2q 预审草稿保存能力和 BIZ-2v-3 成本库审计日志。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
 - **业务优化 P0-P4 已完成到代码层**：P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理、P4 真实用户体验优化均已落地。
 - **前端优化 P0-P3 已完成**：已完成 `FRONTEND_ACCEPTANCE.md`、`static/js/shared.js`、`admin.html` 模块拆分，以及报价进度、失败恢复、上传/推送状态优化。
 - **AI 平台升级 Phase 0 已完成开发与当前环境验证**：Vite 壳、登录鉴权统一、RBAC 与 SPA fallback 已通过；旧 `index.html` / `admin.html` / `app.html` 继续保留，后续按设计文档逐步收拢入口。正式生产上线待单独 Runbook。
@@ -51,6 +87,7 @@
 - **AI 平台升级 BIZ Track BIZ-2h 成本库价格前置给 AI 报价链路已完成代码层验证**：已新增 `app/services/quote_cost_context.py`，复用 active 成本匹配能力，在 FastAPI 调用 N8N/Dify 前追加命中的成本库底价强参考上下文；`FEATURE_COST_DB=false` 或无命中时保持原请求文本不变，不新增数据库结构，不改 N8N。
 - **AI 平台升级 BIZ Track BIZ-2i/BIZ-2j 报价可解释性与证据链展示已完成代码层验证**：已新增报价成本证据审计记录和“查看依据”业务化展示；确认/打回后可追踪 AI 原始价、最终价、成本库参考价、行合计来源、整单合计来源、AI 报价来源和成本库详情链接。
 - **BIZ-2 预审体验补强已完成**：支持同名不同规格成本条目在预审阶段切换，切换后同步成本库参考价重算本行报价；AI 报价来源可区分采纳前置成本库、偏离前置成本库、无成本库参考 AI 估算、成本库兜底和人工切换成本条目；报价运营详情可查看预审打回原因。
+- **AI 平台升级 BIZ Track BIZ-2k 成本库数据质量体检 + 演示回归包已通过当前环境手工验收**：已新增 `app/services/cost_data_quality.py` 和 `scripts/biz2k_cost_quality_report.py`，只读分析 `cost_items.active` 并生成 Markdown/CSV/XLSX/演示回归包；BIZ-2k-1 已补强业务可读版报告和验收指引；不新增数据库结构、不写库、不触发 RAG 同步、不改变报价口径。
 - **商务/市场部路线阶段性暂停**：BIZ-1a 台账属于信息沉淀工具，对核心效率提升有限；BIZ-1b 跟进提醒、BIZ-1c 跟进流水和传统 CRM 式延展暂不启动。后续只保留高价值待定方向：调用外部项目搜索引擎或外部项目收集平台，结合公司内部筛选项目标准，自动筛选合格项目并提供联系方式；待外部平台合作、API 权限和搜索可行性明确后再重新立项。
 - **正式生产策略**：系统整体完善前不正式投入生产使用；不再为单一阶段单独做正式生产上线闭环。
 - **维护策略**：进入问题驱动维护阶段，优先投入报价准确率、知识库质量、RAG 评测和真实用户体验问题。
@@ -364,7 +401,232 @@ cost_item_history
 - 兼容旧结果缺少来源字段的情况，可根据 AI 单价与成本库参考价自动推断来源
 - 报价运营任务详情新增“预审打回”区块，展示打回人、打回时间和打回原因
 
+#### BIZ-2k 成本库数据质量体检 + 演示回归包
+
+**当前状态**：已通过当前环境手工验收（2026-05-28，BIZ-2k-1 报告可读性补强后复验）。本阶段只做只读体检和演示回归准备，不改报价逻辑、不改数据库结构、不新增页面/API、不写数据库、不触发 RAG 同步。
+
+- 新增 `app/services/cost_data_quality.py`：分析 `cost_items.active` 中同名不同规格、完全重复、价格为空/0、三类参考价缺失、单位异常、同名单位混用、规格/备注缺失、相似条目和最近 RAG 同步数量差异。
+- 新增 `scripts/biz2k_cost_quality_report.py`：从当前数据库只读读取 active 成本条目和最近同步记录，默认优先输出到 `outputs/biz2k/`，若本地目录不可写则回退到 `AI_Middle_Office/biz2k_reports/`。
+- 报告产物：`cost_quality_*.md`、`cost_quality_issues_*.csv`、`cost_quality_*.xlsx`、`demo_regression_pack_*.md`。
+- 报告中的问题均为“建议人工复核”，不代表系统自动判错；即使当前报价功能已完成业务员验收，也不据此自动修改报价规则、价格口径、无底价处理或成本库沉淀规则。
+- 测试覆盖：新增 `tests/test_cost_data_quality_biz2k.py`，验证体检分类、active 范围、演示样例和 Markdown/CSV/XLSX 生成。
+
+#### BIZ-2l 甲方需求单清洗与标准化预审
+
+**当前状态**：BIZ-2l-0 已完成文档层确认，BIZ-2l-1 已完成代码层验证，BIZ-2l-2 已完成当前环境验收，BIZ-2l-3/BIZ-2l-4/BIZ-2l-5/BIZ-2l-6 已通过当前环境业务验收（2026-05-27）；字段合同详见 `docs/biz-2l-requirement-standardization-biz2l0.md`，验收记录与操作 SOP 详见 `docs/biz-2l-acceptance-and-sop.md`。成本报价部已完成当前报价功能验收，反馈为“功能目前没问题，主要等待更多材料数据导入，之后再优化相关功能”。下一类真实风险来自甲方需求单不固定：字段名、材料名称、规格描述、单位数量、合并单元格、多 Sheet 和备注写法都可能与 `cost_items` 固定字段不一致。由于真实甲方需求单数量有限且样式离散，本阶段不再以“大量样本收集 / 甲方模板库”为前提，而是改为“通用清洗解析 + 人工确认兜底”。
+
+**定位判断**：不是单纯“加强 AI 识别”、单纯“要求人工先清洗 Excel”，也不是先建设甲方模板库，而是在报价前新增一层“需求单清洗与标准化预审”。系统负责把甲方原始需求单转换成统一的标准报价输入，AI/规则识别作为清洗能力的一部分；识别不准时由业务员快速指定列映射、修正行内容，确认后的标准清单再进入现有报价链路。
+
+**目标**：
+
+- 把不同甲方、不同字段名、不同表格结构的需求单，统一整理成系统可理解的标准报价行。
+- 保留原始行、原始字段、标准字段、识别置信度、缺失提示和成本库候选，便于业务员核对。
+- 降低因“名称不一致、规格写在备注里、单位数量拆不开、字段别名不同”导致的成本库误匹配或漏匹配。
+- 让后续材料数据继续导入后，可以通过更稳定的标准输入提升命中率，而不是直接改报价规则。
+
+**边界**：
+
+- 不改报价逻辑、不改价格口径、不改无底价项目处理规则。
+- 不自动新增报价行、不自动改总价、不自动沉淀成本库。
+- 首版不新增数据库结构；如后续需要保存模板映射、客户画像或人工修正历史，必须单独立项并走 Alembic。
+- 不迁移旧 `index.html` / `admin.html` / `app.html`，不生成新 HTML。
+- 不改 N8N/Dify 工作流；清洗后的标准文本继续进入现有报价链路。
+- `PUBLIC_ACCESS_ENABLED=false` 内网验证前提不变。
+
+**标准输出草案**：
+
+| 字段 | 用途 |
+|------|------|
+| `source_file` / `source_sheet` / `raw_row_index` | 定位原始需求单来源 |
+| `raw_fields` / `raw_text` | 保留甲方原始字段和值，便于追溯 |
+| `item_name` | 标准施工项目/材料名称 |
+| `spec` | 规格、型号、做法、特征描述 |
+| `unit` | 标准化单位 |
+| `quantity` | 标准化数量 |
+| `quantity_source` / `quantity_candidates` | 标准数量来源与原始工程量候选，避免多楼层/多工程量字段被误读 |
+| `remark` | 不能安全结构化但需要保留的信息 |
+| `location` / `work_area` | 房间、区域、楼层等位置字段，首版可选 |
+| `field_mapping` | 原字段到标准字段的映射结果 |
+| `confidence` | 行级识别置信度 |
+| `warnings` | 缺数量、缺单位、规格不清、疑似合并行等提示 |
+| `cost_candidates` | 基于 `cost_items.active` 的候选匹配，只展示，不自动定价 |
+
+**执行清单**：
+
+1. **BIZ-2l-0 标准字段与典型场景确认（已完成文档层确认）**：不等待大量真实样本，已确认标准字段、字段别名、单位数量规则、行类型、典型场景、置信度、警告码、人工确认口径和 BIZ-2l-1 输出合同；产物为 `docs/biz-2l-requirement-standardization-biz2l0.md`。
+2. **BIZ-2l-1 只读通用清洗解析器（已完成代码层验证）**：新增 `app/services/requirement_standardizer.py`，输入 `.xlsx/.xlsm`，输出标准化预览 JSON/CSV/Markdown；识别候选表头、字段语义、数据行、说明行、合计行、空行和低置信度行；新增 `scripts/biz2l_requirement_standardization_preview.py` 供本地只读预览；不接报价、不写数据库。
+3. **BIZ-2l-2 人工列映射与行确认（已完成当前环境验收）**：新增需求单标准化确认工作台，系统先猜测项目名称、规格描述、标准数量、单位、备注等列；业务员可按 Sheet 修正列映射、按 Sheet 确认/剔除行、查看原始行追溯、搜索筛选原始字段、切换标准数量来源，并通过本地历史解析记录和版本回滚继续未完成进度；不接报价、不写数据库。
+4. **BIZ-2l-3 标准清单接入报价链路（已完成代码层验证并通过业务验收）**：只有人工确认后的标准清单进入现有报价、成本库匹配、漏项检测、底价兜底和证据链流程；报价规则和价格口径保持不变。前端通过“发起报价”复用现有 `/api/v1/quote/jobs`，发起前重新校验当前行，阻断行不进入报价；创建任务后自动跳转旧报价工作台接管进度，并复用原有预审弹窗人工验收；行确认可对当前筛选结果全选、取消选择、批量确认和批量撤回确认；若存在未通过校验行，自动展示问题面板并定位到对应 Sheet 原始行。
+5. **BIZ-2l-4 预审对账与运营复核详情（已完成当前环境业务验收）**：持久化确认需求行，在预审弹窗和报价运营详情中展示确认清单与 AI 预审条目的数量差异、疑似未报价行、无底价参考和各项复核检查；新增数据库结构通过 Alembic `20260526_0022`，不改变报价规则和价格口径。
+6. **BIZ-2l-5 确认清单逐行报价完整性保障（已完成当前环境业务验收）**：报价执行时将确认需求行以 `requirement_row_key` 逐行传给 AI，要求 `project_details` 与确认清单逐条对应；预审结果带 `requirement_integrity` 摘要，旧预审弹窗和报价运营详情提示完整性状态，预审不完整时前端禁用确认推送、后端 `/confirm_push` 返回 409 阻断。
+7. **BIZ-2l-6 确认清单分批报价与缺失占位（已完成当前环境业务验收）**：大清单按批进入现有 N8N/Dify 报价链路，缺失行补报后仍未返回则生成需人工补价的占位预审行；占位行不触发成本库底价自动兜底，未补单价/合计前阻断下发；169 行确认清单已验证保留全部预审行、占位补价提示和推送阻断。
+8. **BIZ-2l 验收记录与操作 SOP（已完成文档整理）**：新增 `docs/biz-2l-acceptance-and-sop.md`，覆盖环境基线、阶段验收记录、169 行大清单验收结果、业务员操作步骤、管理员复核步骤、阻断条件、异常处理和交接检查表。
+9. **BIZ-2l-7 规则沉淀评估**：等真实使用样本自然积累后，再评估字段别名、客户偏好、人工修正历史或模板记忆；只要涉及持久化，必须单独设计 Alembic。
+10. 字段别名基础规则：先内置通用别名，如“项目名称/施工项目/工作内容/材料名称/清单名称”，“规格/型号/项目特征/描述/备注”，“工程量/数量”，“单位/计量单位”。
+11. 单位与数量规范：统一 `m/米/延米`、`㎡/m2/平方米`、`项/套/个` 等常见单位，识别数量和单位粘连、范围值、空数量、合计行。
+12. 名称与规格拆分：把“拆除木地板20㎡”“窗帘盒/灯槽拆除 18m”“墙面乳胶漆 两遍”这类混合描述拆成名称、规格、数量、单位和备注。
+13. 成本库候选提示：复用 active 成本库匹配能力，只给出候选和置信度，不自动选价；低置信度必须提示人工确认。
+
+**验收标准**：
+
+- 使用少量典型 Excel 场景样例和可获得的真实/脱敏需求单，系统能输出标准化预审结果，并保留原始行追溯；不要求先收集大量甲方模板。
+- 对核心字段 `item_name`、`quantity`、`unit`、`spec/remark` 的识别结果可被业务员快速核对；缺失或低置信度必须显式提示。
+- 已经格式规范的 Excel 需求单，标准化前后进入报价链路的报价规则和价格口径保持不变。
+- 成本库候选只作为参考展示，不自动修改单价、不自动新增成本条目。
+- 对合计行、说明行、空行、疑似标题行不生成报价项，或至少标记为需人工确认。
+- 列映射猜错时，业务员可以人工指定正确列；人工确认前不允许低置信度内容直接进入报价。
+- 行确认已按 Sheet 分组展示；业务员可以快速定位原始行内容、过滤低置信度/有警告/多数量候选/缺数量行。
+- 历史解析记录和版本回滚只保存在浏览器本地 IndexedDB，不写数据库；刷新或重新进入页面后可继续上次确认进度。
+- 人工确认清单可一键创建现有异步报价任务；创建前必须重新校验，阻断行、剔除行、说明/汇总/空白行不进入报价。
+- 全量后端测试通过；如涉及前端展示，`ai-web` build 通过。
+- 未新增数据库结构；如实际开发中必须新增持久化字段，则暂停本阶段并先补 Alembic 设计。
+
+**依赖与风险**：
+
+- 不依赖大量真实需求单样本；真实样本只用于后续回归增强和规则校准。
+- 甲方字段和材料名称天然不统一，首版目标应是“降低整理成本和误识别风险”，不是承诺 100% 自动识别或自动套用模板。
+- 如果过早自动记忆人工修正，可能把错误映射沉淀为规则；因此首版不做自动学习和自动入库。
+- 成本库材料数据不足时，即使需求单清洗正确，也只能提升输入质量，不能凭空提高底价覆盖率。
+
 **知识库深度治理后续**：BIZ-2c 已覆盖 active 成本条目同步进 RAG 的主路径；后续如需同时保留工艺知识、历史资料和成本主库，再设计多源 RAG 合并策略。原 Phase 5（知识库历史数据治理导入）的目标通过 BIZ-2a 导入和 BIZ-2c 联动覆盖，不单独排期。
+
+#### BIZ-2m 无底价项目规则开发落地
+
+**当前状态**：已通过当前环境手工验收（2026-05-28），计划见 `docs/biz-2m-no-cost-draft-implementation-plan.md`，演示与验收记录见 `docs/biz-2m-demo-and-acceptance.md`。本阶段承接 `docs/biz-2-no-cost-reference-rule-draft.md`，已在确认报价并下发成功后，把无 `cost_items.active` 参考价且已人工确认价格的预审行沉淀为成本库 `draft` 待审核条目，来源为 `ai_suggested`。
+
+**目标**：
+
+- 无底价行在预审中明确提示“无成本库参考价，AI 估价，仅供参考，请人工确认价格依据”。
+- `/confirm_push` 成功后，把无底价且有正数单价/合计的行写入 `cost_items.draft(source=ai_suggested)`。
+- BIZ-2l-6 的占位行如果未补价，继续阻断下发；如果已人工补价且下发成功，可以作为无底价 draft 候选。
+- 自动生成的 draft 不参与后续报价成本参考、不触发成本库兜底、不进入 active RAG 同步。
+- 成本部人工复核并启用为 `active` 后，后续同类报价才允许命中成本库参考价。
+
+**阶段边界**：
+
+- 不让 AI 估价自动成为 `active`。
+- 不改变报价规则、价格口径、N8N/Dify 工作流或成本库匹配口径。
+- 不自动覆盖已有 active 成本条目。
+- 首版优先复用 `cost_items.status/source/notes/created_by` 与 `cost_item_history`，不新增 Alembic；若需要结构化来源字段，再暂停并单独设计迁移。
+- 不迁移旧 `index.html` / `admin.html` / `app.html`，不生成新 HTML。
+- 不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
+
+**验收重点**：
+
+- 推送成功才生成 draft；推送失败不生成。
+- 有 active 成本参考的行不生成无底价 draft。
+- 未补价占位行 `/confirm_push` 仍返回 409。
+- 已补价占位行可生成 `draft(source=ai_suggested)`。
+- 重复 draft 不重复堆积。
+- draft 启用前不参与报价，启用后可命中。
+- 开发完成后必须跑自动化测试、写演示规划并进行模拟演示，记录不清晰或不流畅的问题。
+
+**本次验证**：
+
+- BIZ-2m 新增专项测试和确认推送测试通过：`10 passed, 1 warning`。
+- 旧确认推送、报价历史、报价反馈、占位阻断和成本匹配回归通过：`25 passed, 1 warning`。
+- BIZ-2l/BIZ-2m 组合报价任务测试通过：`35 passed, 1 warning`。
+- `ai-web` 的 `npm.cmd run build` 通过。
+- 旧 `index.html` 脚本语法检查通过。
+- 重启后运行态确认：9000 新 PID `32364`，`/health/ready=ready`，database ok，Celery broker/worker ok，worker_count=1，Alembic `20260526_0023 (head)`，`FEATURE_NO_COST_DRAFT_CAPTURE=True`。
+
+#### BIZ-2n 预审人工改价字段与合计联动
+
+**当前状态**：已通过当前环境手工验收（2026-05-28），详见 `docs/biz-2n-manual-price-preview.md`。本阶段修复 BIZ-2m 人工验收中暴露的“只改系统合计、单价仍为 0”操作风险。
+
+**已完成**：
+
+- 旧 `index.html` 预审表格新增可编辑“工程量/单位”和“人工改价(元)”列，其中“人工改价”位于“成本库参考”和“系统合计(元)”之间。
+- “人工改价”默认取成本库 `reference_price`，无成本库参考时默认 0。
+- 修改“工程量”或“人工改价”后按工程量联动“系统合计(元)”。
+- AI 返回工程量 0 但源 Excel 有有效工程量时，后端用源 Excel 工程量回填后再进行成本库参考、兜底和预审展示。
+- 确认下发前将 `manual_unit_price` 归一写回现有 `unit_price`，将系统合计写回 `total_price`。
+- 未补有效人工改价或系统合计前阻断确认推送。
+- 保留 AI 原始建议价展示，避免把 AI 价与最终人工确认价混用。
+
+**边界**：
+
+- 不新增数据库结构，不新增 Alembic。
+- 不改 N8N/Dify。
+- 不改成本库 active/draft 规则。
+- 不迁移旧 HTML。
+
+**验证**：
+
+- 旧 `index.html` 脚本语法检查通过。
+- 相关确认推送、报价历史、报价反馈、占位阻断和 BIZ-2m draft 沉淀回归通过：`22 passed, 1 warning`。
+- `ai-web` 的 `npm.cmd run build` 通过。
+
+#### BIZ-2o 成本库状态与流向台账
+
+**当前状态**：已通过当前环境手工验收（2026-05-28），详见 `docs/biz-2o-cost-lineage.md`。本阶段用于让成本部集中追踪成本条目的来源、状态和后续引用。
+
+**已完成**：
+
+- `/admin/cost-db` 新增“状态与流向”入口。
+- 支持总览、新增 draft、active 记录和归档记录四类视图。
+- 展示条目来源、当前状态、当前去向、生命周期和报价引用。
+- AI 建议 draft 可追溯来源报价任务、报价历史、行号、Sheet 和确认价格。
+- active 条目可查看后续报价引用次数和最近引用记录。
+- 首版不新增数据库结构，RAG 去向按 active 范围和最近成功同步批次推断，不记录单条同步明细。
+
+**验证**：
+
+- 成本库/同步/无底价沉淀/确认推送/成本匹配回归 `48 passed, 3 warnings`。
+- 清理后关键回归 `17 passed, 1 warning`。
+- `ai-web` 的 `npm.cmd run build` 通过。
+
+---
+
+#### BIZ-2p 预审人工改价来源判定与 AI 建议采纳
+
+**当前状态**：已通过当前环境手工验收（2026-05-28），详见 `docs/biz-2p-preview-price-source.md`。本阶段用于让成本库 draft 来源区分“人工改价”和“AI 建议价”。
+
+**已完成**：
+
+- 旧预审弹窗“人工改价(元)”列新增“采用AI建议”按钮。
+- 点击“采用AI建议”后自动采用 AI 建议单价，并按工程量重算系统合计。
+- 手动改价下发后，无底价 draft 来源写 `manual`，前端显示“人工”。
+- 采纳 AI 建议下发后，无底价 draft 来源写 `ai_suggested`，并在 notes/状态与流向详情记录“人工确认采纳AI建议”。
+- 成本库状态与流向详情新增“价格动作”字段。
+- 首版复用 `cost_items.source` 和 `cost_items.notes`，不新增数据库结构。
+
+**验证**：
+
+- 无底价确认推送专项 `7 passed, 1 warning`。
+- 无底价 draft 捕获专项 `7 passed, 1 warning`。
+- 成本库状态与流向专项 `1 passed, 1 warning`。
+- 旧 `index.html` 脚本语法检查通过。
+- `ai-web` 的 `npm.cmd run build` 通过。
+
+---
+
+#### BIZ-2q 报价预审草稿保存与恢复
+
+**当前状态**：已通过当前环境手工验收（2026-05-28），详见 `docs/biz-2q-preview-draft-save.md`。本阶段用于解决“无底价预审单填价过程中离开页面后丢失人工价格”的问题。
+
+**已完成**：
+
+- 新增 `quote_preview_drafts` 表和 Alembic `20260527_0024`，按报价任务保存一份预审编辑草稿。
+- 新增预审草稿查询、保存、放弃和标记已下发接口，权限沿用报价任务权限。
+- 旧 `index.html` 预审弹窗新增“保存草稿”和保存状态提示。
+- 旧 `index.html` 预审弹窗新增“关闭”按钮，关闭前保存草稿，不触发打回或确认下发。
+- “我的报价历史”会展示 `editing` 草稿，推送列显示“草稿”，操作列显示“编辑”。
+- “我的报价历史”不再将草稿固定置顶，统一按时间倒序排列。
+- “我的报价历史”新增时间、报价内容、项目数、总价和状态筛选。
+- “我的报价历史”新增草稿多选与批量删除；批量删除仅删除 `editing` 草稿快照，不删除报价任务或已推送历史。
+- 人工改价、系统合计、工程量、单位、施工项目、备注、采用 AI 建议、切换成本库条目后会自动保存。
+- 再次打开同一报价任务时自动恢复 `editing` 草稿。
+- 打回重填后草稿标记为 `discarded`；确认下发成功后标记为 `pushed`，防止继续覆盖。
+
+**验证**：
+
+- 预审草稿专项 `2 passed, 1 warning`；预审草稿 + 历史入口专项 `3 passed, 1 warning`；预审草稿/确认下发/占位阻断组合回归 `11 passed, 1 warning`。
+- 历史筛选与草稿批量删除补充回归：`tests\test_quote_preview_drafts_biz2q.py tests\test_quote_history.py tests\test_quote_confirm_push_biz2m.py` 为 `11 passed, 1 warning`。
+- 旧 `index.html` 脚本语法检查通过。
+- in-app browser 加载 `http://127.0.0.1:9000/index.html` 无 console error。
+- `ai-web` 的 `npm.cmd run build` 通过。
+- BIZ-2q 当时数据库已升级到 `20260527_0024 (head)`。
 
 ---
 
@@ -422,6 +684,31 @@ cost_item_history
 | BIZ-2i | 报价可解释性与审计记录 | 已完成代码层验证（2026-05-22）；记录成本证据、合计来源和证据链接 |
 | BIZ-2j | 报价依据与成本库证据链展示优化 | 已完成代码层验证（2026-05-22）；预审查看依据和后台证据表已优化 |
 | BIZ-2 体验补强 | 品牌统一、条目切换、AI 来源、打回原因展示 | 已完成当前环境手动验收并推送（2026-05-23） |
+| BIZ-2k | 成本库数据质量体检 + 演示回归包 | 已通过当前环境手工验收（2026-05-28，BIZ-2k-1 报告可读性补强后复验）；只读报告，不改报价逻辑/数据库结构 |
+| BIZ-2l | 甲方需求单清洗与标准化预审 | BIZ-2l-0/BIZ-2l-1/BIZ-2l-2 已完成；BIZ-2l-3/BIZ-2l-4/BIZ-2l-5/BIZ-2l-6 已完成当前环境业务验收；验收记录与操作 SOP 已整理到 `docs/biz-2l-acceptance-and-sop.md`；当前可由人工确认清单发起现有异步报价任务，并在预审/报价运营详情中对账确认行与预审行；大清单会分批报价，缺失行生成需人工补价占位行，未补价前阻断确认推送，不改价格口径 |
+| BIZ-2m | 无底价项目规则开发落地 | 已通过当前环境手工验收（2026-05-28）；见 `docs/biz-2m-demo-and-acceptance.md` |
+| BIZ-2n | 预审人工改价字段与合计联动 | 已通过当前环境手工验收（2026-05-28）；旧预审弹窗新增可编辑工程量/单位和人工改价列，源 Excel 有效工程量可覆盖 AI 返回的 0 工程量，修改工程量或改价后联动系统合计并在下发前写回 `unit_price/total_price`；见 `docs/biz-2n-manual-price-preview.md` |
+| BIZ-2o | 成本库状态与流向台账 | 已通过当前环境手工验收（2026-05-28）；成本数据库新增“状态与流向”入口，可查看 draft/active/archived、来源、生命周期和报价引用；见 `docs/biz-2o-cost-lineage.md` |
+| BIZ-2p | 预审人工改价来源判定与 AI 建议采纳 | 已通过当前环境手工验收（2026-05-28）；手动改价沉淀为人工来源，采用 AI 建议沉淀为 AI 建议来源并记录人工采纳动作；见 `docs/biz-2p-preview-price-source.md` |
+| BIZ-2q | 报价预审草稿保存与恢复 | 已通过当前环境手工验收（2026-05-28）；同一报价任务可保存和恢复预审人工改价草稿，确认下发后锁定；历史列表支持筛选、按时间排序和批量删除无用草稿；见 `docs/biz-2q-preview-draft-save.md` |
+| BIZ-2r | 成本库重复 active 防护与报价多候选提示 | 已通过当前环境手动验收；启用 active 前阻断重复或高风险相似条目，无底价沉淀前去重，报价命中多个 active 候选时要求人工确认成本依据；见 `docs/biz-2r-cost-duplicate-active-guard.md` |
+| BIZ-2s | 成本价权限落地首版 | 已通过当前环境手动验收；普通 staff 不再浏览完整成本库，成本专项角色和报价预审受限候选接口已落地；见 `docs/biz-2s-cost-price-permissions-implementation.md` |
+| BIZ-2t | 成本库数据治理执行包 | 已生成当前环境只读治理基线；报告位于 `reports/biz2t/20260528_current/`，高风险 5 条，试运行建议 `cleanup_before_trial`；见 `docs/biz-2t-cost-data-governance-execution-pack.md` |
+| BIZ-2t-1 | 高风险整改交接清单 | 已完成文档层准备；将 5 条高风险试运行阻断项整理为成本部逐条核价表，见 `docs/biz-2t-high-risk-cost-handoff.md` |
+| BIZ-2t-2 | 高风险整改结果复核包 | 已完成只读复核；当前 5 条均为 `accepted_risk`，`trial_blocker_count=0`，建议 `ready_with_known_risks`，见 `docs/biz-2t-2-high-risk-handoff-review.md` |
+| BIZ-2u | 小范围内网试运行准备包 | 已完成文档层准备；明确准入门槛、人员角色、样例清单、反馈表、验收口径和暂停条件；正式试运行未启动，见 `docs/biz-2u-internal-trial-preparation.md` |
+| BIZ-2u-1 | 小范围内网试运行执行模板包 | 已完成文档层准备；新增样例登记、问题反馈、每日检查和验收记录模板，正式试运行仍未启动，见 `docs/biz-2u-1-internal-trial-execution-templates.md` |
+| BIZ-2u-2 | 小范围内网试运行启动前登记与检查包 | 已完成文档层准备；5 条 `accepted_risk` 已登记为已知风险，启动前检查材料已形成，正式试运行仍未启动，见 `docs/biz-2u-2-internal-trial-readiness-check.md` |
+| BIZ-2v-1 | 报价下发与成本价权限安全加固 | 已通过当前环境手工验收（2026-05-28）；`confirm_push` 校验任务归属，普通 staff 候选查询受限，active 启用需核定原因，见 `docs/biz-2v-1-quote-push-permission-hardening.md` |
+| BIZ-2v-2 | RAG 同步一致性与滞后提示 | 已通过当前环境手工验收（2026-05-28）；修正失败同步数量口径，新增 RAG 同步状态摘要和成本库页面提示，见 `docs/biz-2v-2-rag-sync-consistency.md` |
+| BIZ-2v-3 | 成本库敏感操作审计与导出控制 | 已通过当前环境手工验收（2026-05-28）；新增成本库审计表、导出权限控制和审计记录查询，见 `docs/biz-2v-3-cost-audit-export-control.md` |
+| BIZ-2w-1 | 系统完善审查与账号入口安全加固 | 已通过当前环境手工验收（2026-05-28）；默认关闭自注册，新增 `system_admin` 新建用户入口，见 `docs/biz-2w-1-system-risk-hardening.md` |
+| BIZ-2w-2 | RAG 同步状态时间口径误报修复 | 已通过当前环境手工验收（2026-05-28）；当前真实环境状态已恢复为 `synced / 已同步`，验收需求单闭环通过，见 `docs/biz-2w-2-rag-sync-status-timezone-fix.md` |
+| BIZ-2w-3 | 成本参考优先与 AI 改写防护 | 已完成代码层验证，待当前环境手工验收（2026-05-28）；原始需求命中成本项优先于 AI 返回项目名，AI 改写成本依据时提示并阻断下发，见 `docs/biz-2w-3-cost-reference-priority-ai-rewrite-guard.md` |
+| BIZ-2w-4 | AI 备注与成本依据一致性校验 | 已通过当前环境手工验收（2026-05-29）；成本依据已命中但 AI 原始备注声称无数据/无法报价时，预审可见备注替换为系统建议备注并要求人工确认，见 `docs/biz-2w-4-ai-note-cost-basis-consistency.md` |
+| BIZ-2w-5 | 自由文本同名不同规格拆行与工程量识别修复 | 已完成代码层验证，待当前环境手工验收（2026-05-29）；手输同名不同规格需求可按顿号拆行并正确识别 `mm` 规格与 `㎡` 工程量，见 `docs/biz-2w-5-text-multi-spec-quantity-guard.md` |
+| BIZ-2w-6 | 报价来源口径与预审列名调整 | 已通过当前环境手工验收（2026-05-29）；预审展示明确成本库依据优先、AI 仅无底价估价、人工确认下发，并补充 AI 占位项目名回填原始需求行保护，见 `docs/biz-2w-6-quote-source-wording.md`、`docs/biz-2w-6-placeholder-project-name-hotfix.md` |
+| BIZ-2 成本价权限后续 | 导出控制、二次验证和高风险审计增强 | 草案已完成；见 `docs/biz-2-cost-price-permissions-draft.md`，待业务确认后继续 |
 
 **第三阶段（第二阶段稳定后）**
 

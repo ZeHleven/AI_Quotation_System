@@ -7,42 +7,153 @@
   <link rel="stylesheet" href="/static/element-plus.min.css">
   <style>
     :root {
-      --bg:     #F0F5F9;
-      --steel:  #C9D6DF;
-      --slate:  #52616B;
-      --dark:   #1E2022;
+      --bg:     #F5F5F7;
+      --panel:  #FBFBFD;
+      --steel:  #E3E5EA;
+      --slate:  #6E727C;
+      --dark:   #1D1D1F;
+      --strong: #0F1115;
       --white:  #FFFFFF;
-      --green:  #67C23A;
+      --blue:   #0A84FF;
+      --green:  #1F8F5F;
+      --shadow-soft: 0 18px 42px rgba(15,17,21,0.07);
+      --shadow-card: 0 1px 2px rgba(15,17,21,0.04), 0 12px 28px rgba(15,17,21,0.05);
+      --shadow-focus: 0 0 0 4px rgba(10,132,255,0.13);
+      --radius-md: 8px;
+      --radius-lg: 12px;
     }
     *, *::before, *::after { box-sizing: border-box; }
-    body { margin: 0; padding: 0; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    body { margin: 0; padding: 0; background: var(--bg); color: var(--dark); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
     .app-container { height: 100vh; display: flex; flex-direction: column; }
+
+    .el-button {
+      min-height: 34px;
+      border-radius: var(--radius-md);
+      font-weight: 650;
+    }
+    .el-button--primary {
+      box-shadow: 0 8px 18px rgba(10,132,255,0.16);
+    }
+    .el-input__wrapper,
+    .el-select__wrapper,
+    .el-textarea__inner,
+    .el-date-editor.el-input__wrapper,
+    .el-input-number .el-input__wrapper {
+      border-radius: var(--radius-md);
+      background: rgba(255,255,255,0.96);
+      box-shadow: inset 0 0 0 1px var(--steel);
+    }
+    .el-input__wrapper.is-focus,
+    .el-select__wrapper.is-focused,
+    .el-textarea__inner:focus {
+      box-shadow: inset 0 0 0 1px var(--blue), var(--shadow-focus);
+    }
+    .el-card,
+    .el-table,
+    .el-dialog,
+    .el-drawer {
+      color: var(--dark);
+    }
+    .el-table {
+      --el-table-border-color: #ECEEF2;
+      --el-table-header-bg-color: #F7F7F9;
+      --el-table-header-text-color: var(--slate);
+      --el-table-row-hover-bg-color: #F7FBFF;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .el-table th.el-table__cell { font-weight: 720; }
+    .el-dialog {
+      border-radius: 14px;
+      box-shadow: 0 24px 80px rgba(15,17,21,0.18);
+    }
+    .el-dialog__header {
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--steel);
+    }
+    .el-tag {
+      border-radius: 999px;
+      font-weight: 650;
+    }
 
     /* ── 顶部导航 ── */
     .sys-header {
-      height: 52px; padding: 0 24px;
+      height: 64px; padding: 0 26px;
       display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
-      background: var(--dark); color: var(--white);
-      box-shadow: 0 1px 0 rgba(201,214,223,0.10);
+      background: rgba(255,255,255,0.86); color: var(--strong);
+      border-bottom: 1px solid var(--steel);
+      backdrop-filter: saturate(180%) blur(18px);
+      box-shadow: 0 1px 0 rgba(15,17,21,0.02);
     }
-    .sys-logo { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+    .sys-logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 760; }
     .sys-logo-mark {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 22px; height: 22px; border-radius: 3px;
-      background: var(--slate); font-size: 11px; font-weight: 800; color: var(--white);
+      width: 34px; height: 34px; border-radius: 8px;
+      background: #111111; font-size: 12px; font-weight: 800; color: var(--white);
+      box-shadow: 0 10px 24px rgba(17,17,17,0.18);
     }
     .sys-nav { display: flex; align-items: center; gap: 16px; }
-    .sys-nav a { color: var(--steel); font-size: 13px; text-decoration: none; transition: color 0.15s; }
-    .sys-nav a:hover { color: var(--white); }
-    .sys-user { color: var(--steel); font-size: 13px; }
+    .sys-nav a { color: var(--slate); font-size: 13px; font-weight: 650; text-decoration: none; transition: color 0.15s; }
+    .sys-nav a:hover { color: var(--strong); }
+    .sys-user { color: var(--slate); font-size: 13px; }
 
-    .main-content { display: flex; justify-content: center; align-items: center; flex: 1; overflow: hidden; padding: 16px; }
+    .main-content { display: flex; justify-content: center; align-items: center; flex: 1; overflow: hidden; padding: 22px; }
     .auth-panel { width: 400px; }
     .full-btn { width: 100%; margin-top: 10px; }
-    .chat-panel { width: 100%; max-width: 1000px; height: 100%; display: flex; flex-direction: column; }
-    .chat-card { height: 100%; display: flex; flex-direction: column; border-radius: 2px; background: var(--white); box-shadow: 0 4px 20px rgba(30,32,34,0.08); border: 1px solid var(--steel); }
+    .chat-panel { width: 100%; max-width: 1120px; height: 100%; display: flex; flex-direction: column; }
+    .chat-card { height: 100%; display: flex; flex-direction: column; border-radius: 14px; background: var(--white); box-shadow: var(--shadow-soft); border: 1px solid var(--steel); overflow: hidden; }
     .chat-card .el-card__body { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-    .message-list { flex: 1; padding: 20px; background: var(--bg); overflow-y: auto; scroll-behavior: smooth; }
+    .quote-workflow-panel {
+      flex-shrink: 0; display: grid; gap: 12px;
+      padding: 16px 18px; background: rgba(255,255,255,0.96); border-bottom: 1px solid var(--steel);
+    }
+    .quote-workflow-heading {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+    }
+    .quote-workflow-title { display: grid; gap: 4px; min-width: 0; }
+    .quote-workflow-title strong { color: var(--strong); font-size: 16px; line-height: 1.35; }
+    .quote-workflow-title span { color: var(--slate); font-size: 12px; line-height: 1.45; }
+    .quote-workflow-steps {
+      display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;
+    }
+    .quote-workflow-step {
+      min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px;
+      align-items: center; padding: 8px 10px; border: 1px solid var(--steel);
+      border-radius: var(--radius-md); background: var(--panel); color: var(--slate);
+    }
+    .quote-workflow-step.active {
+      border-color: var(--blue); background: #F3F9FF; color: var(--strong);
+      box-shadow: var(--shadow-focus);
+    }
+    .quote-workflow-step.done {
+      border-color: rgba(31,143,95,0.36); background: #F4FBF8; color: #14735D;
+    }
+    .quote-workflow-step-index {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--white); border: 1px solid currentColor; font-size: 12px; font-weight: 700;
+    }
+    .quote-workflow-step-copy { display: grid; gap: 2px; min-width: 0; }
+    .quote-workflow-step-copy strong,
+    .quote-workflow-step-copy small {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .quote-workflow-step-copy strong { font-size: 12px; }
+    .quote-workflow-step-copy small { color: inherit; opacity: 0.72; font-size: 11px; }
+    .quote-workflow-status {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 12px; border: 1px solid var(--steel);
+      border-radius: var(--radius-md); background: var(--panel);
+    }
+    .quote-workflow-status > div { display: grid; gap: 3px; min-width: 0; }
+    .quote-workflow-status strong {
+      min-width: 0; overflow: hidden; color: var(--strong); font-size: 13px;
+      line-height: 1.35; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .quote-workflow-status span {
+      min-width: 0; color: var(--slate); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere;
+    }
+    .message-list { flex: 1; padding: 22px; background: linear-gradient(180deg, #F7F7F9 0%, var(--bg) 100%); overflow-y: auto; scroll-behavior: smooth; }
 
     /* ── 优化1：对话气泡 ── */
     .message-item { display: flex; margin-bottom: 20px; align-items: flex-start; }
@@ -50,26 +161,26 @@
 
     .avatar-circle {
       flex-shrink: 0;
-      width: 34px; height: 34px; border-radius: 50%;
+      width: 34px; height: 34px; border-radius: 9px;
       display: flex; align-items: center; justify-content: center;
       font-size: 12px; font-weight: 700; color: var(--white);
       margin: 0 10px; letter-spacing: 0;
     }
     .avatar-circle.av-ai   { background: var(--dark); }
-    .avatar-circle.av-user { background: var(--slate); }
+    .avatar-circle.av-user { background: var(--blue); }
 
     .bubble {
       max-width: 78%; padding: 12px 16px;
       font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-all;
-      box-shadow: 0 1px 4px rgba(30,32,34,0.06);
+      box-shadow: 0 1px 2px rgba(15,17,21,0.04), 0 10px 22px rgba(15,17,21,0.04);
     }
     .message-item.assistant .bubble {
       background: var(--white); border: 1px solid var(--steel); color: var(--dark);
-      border-radius: 4px 12px 12px 12px;
+      border-radius: 6px 14px 14px 14px;
     }
     .message-item.user .bubble {
-      background: var(--slate); color: var(--white); border: 1px solid var(--slate);
-      border-radius: 12px 4px 12px 12px;
+      background: #111111; color: var(--white); border: 1px solid #111111;
+      border-radius: 14px 6px 14px 14px;
     }
     .file-preview { margin-bottom: 10px; }
     .preview-img { width: 160px; height: 160px; border-radius: 8px; object-fit: cover; border: 1px solid var(--steel); }
@@ -129,6 +240,13 @@
     .recovery-actions {
       margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;
     }
+    .recovery-hint-card {
+      display: grid; gap: 6px; margin-top: 10px; padding: 10px 12px;
+      border: 1px solid #f2c078; border-radius: 8px; background: #fff8ec;
+      color: var(--dark); font-size: 12px; line-height: 1.45;
+    }
+    .recovery-hint-card strong { font-size: 13px; }
+    .recovery-hint-card ul { margin: 0; padding-left: 16px; color: var(--slate); }
 
     /* ── 优化3：欢迎卡 ── */
     .welcome-wrap {
@@ -136,8 +254,8 @@
     }
     .welcome-card {
       text-align: center; padding: 40px 36px;
-      background: var(--white); border-radius: 16px;
-      box-shadow: 0 4px 24px rgba(30,32,34,0.07);
+      background: var(--white); border: 1px solid var(--steel); border-radius: 16px;
+      box-shadow: var(--shadow-card);
       max-width: 520px; width: 100%;
     }
     .welcome-logo-big {
@@ -159,9 +277,17 @@
 
     /* ── 优化4：输入工具栏 ── */
     .input-area {
-      padding: 10px 14px 12px;
-      background: var(--white); border-top: 1px solid var(--steel);
+      position: sticky; bottom: 0; z-index: 10;
+      padding: 12px 16px 14px;
+      background: rgba(255,255,255,0.94); border-top: 1px solid var(--steel);
+      box-shadow: 0 -12px 28px rgba(15,17,21,0.06);
+      backdrop-filter: blur(12px);
     }
+    .quote-input-note {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      margin-bottom: 8px; color: var(--slate); font-size: 12px; line-height: 1.45;
+    }
+    .quote-input-note strong { color: var(--dark); font-size: 13px; }
     .upload-preview  { margin-bottom: 8px; }
     .upload-status {
       margin-top: 5px; font-size: 12px; color: var(--slate);
@@ -172,10 +298,26 @@
     .toolbar-center  { flex: 1; text-align: center; }
     .char-count      { font-size: 11px; color: var(--steel); }
     .toolbar-right   { display: flex; align-items: center; }
+    .quote-bottom-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--steel);
+    }
+    .quote-bottom-status { display: grid; gap: 2px; min-width: 0; }
+    .quote-bottom-status strong {
+      min-width: 0; overflow: hidden; color: var(--dark); font-size: 13px;
+      text-overflow: ellipsis; white-space: nowrap;
+    }
+    .quote-bottom-status span {
+      min-width: 0; color: var(--slate); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere;
+    }
+    .quote-bottom-actions {
+      display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px;
+    }
+    .quote-bottom-actions .el-button + .el-button { margin-left: 0; }
     .client-info-panel {
-      margin-bottom: 8px; padding: 8px 10px;
-      border: 1px solid rgba(201,214,223,0.75); border-radius: 6px;
-      background: #F8FBFD;
+      margin-bottom: 8px; padding: 9px 11px;
+      border: 1px solid var(--steel); border-radius: var(--radius-md);
+      background: var(--panel);
     }
     .client-info-summary {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -200,29 +342,93 @@
     .client-info-fields .el-select,
     .client-info-fields .el-date-editor { width: 100%; }
     @media (max-width: 760px) {
+      .quote-workflow-heading, .quote-workflow-status, .quote-bottom-bar {
+        display: grid;
+      }
+      .quote-workflow-steps {
+        grid-template-columns: 1fr;
+      }
       .client-info-fields { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 520px) {
       .client-info-fields { grid-template-columns: 1fr; }
     }
 
-    /* ── 优化5：预审弹窗摘要栏 ── */
-    .preview-summary-bar {
-      display: flex; justify-content: space-between; align-items: center;
-      background: var(--dark); color: var(--white);
-      border-radius: 8px; padding: 12px 20px; margin-bottom: 14px;
-      gap: 16px;
+    /* ── FE-UX-1-3：预审弹窗信息层级 ── */
+    .preview-command-center {
+      display: grid; grid-template-columns: minmax(280px, 1.15fr) minmax(360px, 1fr);
+      gap: 12px; margin-bottom: 14px; align-items: stretch;
     }
+    .preview-summary-bar {
+      min-height: 100%; display: flex; justify-content: space-between; align-items: center;
+      background: #111111; color: var(--white);
+      border-radius: var(--radius-lg); padding: 16px 18px;
+      gap: 16px;
+      box-shadow: 0 16px 36px rgba(17,17,17,0.18);
+    }
+    .summary-left { min-width: 0; }
     .summary-left, .summary-total-stack { display: grid; gap: 4px; }
-    .summary-label { font-size: 13px; opacity: 0.7; }
-    .summary-subtle, .summary-source { font-size: 12px; opacity: 0.72; }
+    .summary-label { font-size: 13px; opacity: 0.75; }
+    .summary-subtle, .summary-source { font-size: 12px; opacity: 0.74; line-height: 1.45; }
     .summary-total-stack { text-align: right; }
     .summary-total { font-size: 24px; font-weight: 700; }
+    .preview-status-grid {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
+    }
+    .preview-status-card {
+      min-width: 0; display: grid; gap: 3px; padding: 11px 12px;
+      border: 1px solid var(--steel); border-radius: var(--radius-lg); background: var(--panel); color: var(--dark);
+      box-shadow: 0 1px 2px rgba(15,17,21,0.03);
+    }
+    .preview-status-card span { font-size: 12px; color: var(--slate); }
+    .preview-status-card strong { font-size: 18px; line-height: 1.25; color: var(--dark); overflow-wrap: anywhere; }
+    .preview-status-card small { font-size: 11px; line-height: 1.35; color: var(--slate); overflow-wrap: anywhere; }
+    .preview-status-card.is-danger { border-color: #f0b8b8; background: #fff5f5; }
+    .preview-status-card.is-danger strong { color: #b42318; }
+    .preview-status-card.is-warning { border-color: #f2c078; background: #fff8ec; }
+    .preview-status-card.is-warning strong { color: #9a5b00; }
+    .preview-status-card.is-success { border-color: rgba(103,194,58,0.5); background: #f4fbf1; }
+    .preview-status-card.is-success strong { color: #2f6b1f; }
     .push-status { margin-bottom: 12px; }
+    .preview-instruction-alert { margin-bottom: 12px; }
+    .preview-blocker-panel {
+      display: grid; gap: 10px; padding: 14px;
+      border: 1px solid #F2C078; border-radius: var(--radius-lg); background: #FFFDF8; margin-bottom: 12px;
+    }
+    .preview-blocker-panel.is-clear { border-color: rgba(31,143,95,0.35); background: #F8FDFB; }
+    .preview-blocker-heading {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    .preview-blocker-title { display: grid; gap: 3px; min-width: 0; }
+    .preview-blocker-title strong, .preview-table-title strong, .preview-footer-status strong {
+      color: var(--dark); font-size: 14px; line-height: 1.35;
+    }
+    .preview-blocker-title span, .preview-table-title span, .preview-footer-status span {
+      color: var(--slate); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere;
+    }
+    .preview-blocker-list {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+    }
+    .preview-blocker-item {
+      min-width: 0; display: grid; gap: 4px; padding: 10px;
+      border: 1px solid var(--steel); border-radius: var(--radius-md); background: var(--white);
+    }
+    .preview-blocker-item strong { color: var(--dark); font-size: 13px; line-height: 1.35; }
+    .preview-blocker-item span { color: var(--slate); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+    .preview-blocker-item small { color: var(--slate); font-size: 11px; line-height: 1.4; }
+    .preview-blocker-item.is-danger { border-color: #f0b8b8; background: #fff5f5; }
+    .preview-blocker-item.is-danger small, .preview-blocker-item.is-danger strong { color: #b42318; }
+    .preview-blocker-item.is-warning { border-color: #f2c078; background: #fff8ec; }
+    .preview-blocker-item.is-warning small, .preview-blocker-item.is-warning strong { color: #9a5b00; }
+    .preview-blocker-item.is-info { background: #F8FBFD; }
+    .preview-blocker-clear {
+      padding: 10px 12px; border: 1px solid rgba(31,143,95,0.35); border-radius: var(--radius-md);
+      background: var(--white); color: #14735D; font-size: 13px;
+    }
     .review-hints { display: grid; gap: 10px; margin-bottom: 12px; }
     .learning-panel {
       display: grid; gap: 8px; padding: 10px 12px;
-      border: 1px solid var(--steel); border-radius: 6px; background: var(--bg);
+      border: 1px solid var(--steel); border-radius: var(--radius-md); background: var(--panel);
     }
     .learning-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .learning-meta { font-size: 12px; color: var(--slate); }
@@ -235,7 +441,7 @@
     .omission-item span { font-size: 12px; color: var(--slate); }
     .submitted-demand-panel {
       display: grid; gap: 5px; padding: 10px 12px; margin-bottom: 12px;
-      border: 1px solid var(--steel); border-radius: 6px; background: #F8FBFD;
+      border: 1px solid var(--steel); border-radius: var(--radius-md); background: var(--panel);
     }
     .submitted-demand-panel strong { font-size: 13px; color: var(--dark); }
     .submitted-demand-panel span { font-size: 12px; color: var(--slate); line-height: 1.5; overflow-wrap: anywhere; white-space: pre-line; }
@@ -246,11 +452,17 @@
     .preview-table-shell {
       display: grid; gap: 6px; margin-top: 10px;
     }
+    .preview-table-heading {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 11px 12px; border: 1px solid var(--steel); border-radius: var(--radius-lg); background: var(--panel);
+    }
+    .preview-table-title { display: grid; gap: 3px; min-width: 0; }
+    .preview-table-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
     .preview-table-scrollbar {
       position: sticky; top: 0; z-index: 8;
       height: 18px; overflow-x: auto; overflow-y: hidden;
-      border: 1px solid var(--steel); border-radius: 6px;
-      background: #F8FBFD;
+      border: 1px solid var(--steel); border-radius: var(--radius-md);
+      background: var(--panel);
     }
     .preview-table-scrollbar-inner { height: 1px; }
     .preview-table-scrollbar::-webkit-scrollbar { height: 10px; }
@@ -268,12 +480,34 @@
     .cost-reference-no-cost { font-size: 12px; color: #b45309; line-height: 1.35; }
     .cost-reference-actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .total-price-cell { display: grid; gap: 4px; }
+    .preview-footer-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%;
+      padding-top: 4px;
+    }
+    .preview-footer-status { display: grid; gap: 3px; min-width: 220px; text-align: left; }
+    .preview-footer-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .preview-footer-actions .el-button + .el-button { margin-left: 0; }
+
+    @media (max-width: 1080px) {
+      .preview-command-center { grid-template-columns: 1fr; }
+      .preview-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .preview-blocker-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+      .preview-summary-bar, .preview-table-heading, .preview-footer-bar {
+        display: grid; text-align: left;
+      }
+      .summary-total-stack { text-align: left; }
+      .preview-status-grid, .preview-blocker-list { grid-template-columns: 1fr; }
+      .preview-footer-actions { justify-content: stretch; }
+      .preview-footer-actions .el-button { margin-left: 0; }
+    }
 
     .quote-evidence-dialog .el-dialog__body { padding-top: 8px; }
     .evidence-layout { display: grid; gap: 14px; color: var(--dark); }
     .evidence-hero {
       display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
-      padding: 14px 16px; border: 1px solid var(--steel); border-radius: 8px; background: var(--bg);
+      padding: 14px 16px; border: 1px solid var(--steel); border-radius: var(--radius-lg); background: var(--panel);
     }
     .evidence-hero-main { display: grid; gap: 6px; min-width: 0; }
     .evidence-hero-main h3 { margin: 0; font-size: 18px; line-height: 1.35; color: var(--dark); }
@@ -283,14 +517,14 @@
     }
     .evidence-metric {
       display: grid; gap: 5px; padding: 10px 12px;
-      border: 1px solid var(--steel); border-radius: 8px; background: var(--white);
+      border: 1px solid var(--steel); border-radius: var(--radius-md); background: var(--white);
     }
     .evidence-metric small { font-size: 12px; color: var(--slate); }
     .evidence-metric strong { font-size: 16px; color: var(--dark); word-break: break-word; }
     .evidence-metric span { font-size: 12px; color: var(--slate); }
     .evidence-section {
       display: grid; gap: 8px; padding: 12px 14px;
-      border: 1px solid var(--steel); border-radius: 8px; background: var(--white);
+      border: 1px solid var(--steel); border-radius: var(--radius-md); background: var(--white);
     }
     .evidence-section h4 { margin: 0; font-size: 14px; color: var(--dark); }
     .evidence-section p { margin: 0; color: var(--slate); line-height: 1.7; white-space: pre-line; }
@@ -373,6 +607,45 @@
         <div v-else class="chat-panel">
           <el-card class="chat-card" shadow="never">
 
+            <section class="quote-workflow-panel">
+              <div class="quote-workflow-heading">
+                <div class="quote-workflow-title">
+                  <strong>报价工作台</strong>
+                  <span>{{ workflowStatusDetail }}</span>
+                </div>
+                <el-tag :type="workflowStatusTagType" effect="plain">{{ workflowStatusTitle }}</el-tag>
+              </div>
+              <div class="quote-workflow-steps">
+                <div
+                  v-for="(step, si) in workflowSteps"
+                  :key="step.key"
+                  :class="['quote-workflow-step', workflowStepIndex > si ? 'done' : workflowStepIndex === si ? 'active' : '']"
+                >
+                  <span class="quote-workflow-step-index">{{ workflowStepIndex > si ? '✓' : si + 1 }}</span>
+                  <span class="quote-workflow-step-copy">
+                    <strong>{{ step.label }}</strong>
+                    <small>{{ step.hint }}</small>
+                  </span>
+                </div>
+              </div>
+              <div class="quote-workflow-status">
+                <div>
+                  <strong>{{ workflowNextActionTitle }}</strong>
+                  <span>{{ workflowNextActionText }}</span>
+                </div>
+                <el-button
+                  v-if="latestRecoverableMessage"
+                  size="small"
+                  type="primary"
+                  plain
+                  :loading="checkingJobId === latestRecoverableMessage.jobId"
+                  @click="refreshQuoteJob(latestRecoverableMessage, latestRecoverableMessage.index)"
+                >
+                  查看任务状态
+                </el-button>
+              </div>
+            </section>
+
             <!-- 消息列表 -->
             <div class="message-list" ref="scrollbarRef">
 
@@ -423,6 +696,13 @@
                     <span v-if="msg.jobId" class="quote-meta-tag">任务 {{ msg.jobId }}</span>
                     <span v-if="msg.traceId" class="quote-meta-tag">Trace {{ msg.traceId }}</span>
                   </div>
+                  <div v-if="msg.recoveryHint" class="recovery-hint-card">
+                    <strong>下一步建议</strong>
+                    <span>{{ msg.recoveryHint.reason }}</span>
+                    <ul>
+                      <li v-for="action in msg.recoveryHint.actions" :key="action">{{ action }}</li>
+                    </ul>
+                  </div>
                   <div v-if="(msg.canRetry || msg.canCheckStatus) && !sending" class="recovery-actions">
                     <el-button v-if="msg.canRetry" size="small" type="warning" plain @click="retryMessage(index)">
                       重新提交
@@ -437,6 +717,10 @@
 
             <!-- 优化4：输入工具栏 -->
             <div class="input-area">
+              <div class="quote-input-note">
+                <strong>{{ workflowNextActionTitle }}</strong>
+                <span>{{ workflowNextActionText }}</span>
+              </div>
               <div v-if="selectedFile" class="upload-preview">
                 <el-tag :closable="!sending" @close="clearSelectedFile" type="warning" effect="dark">
                   📄 已挂载附件: {{ selectedFile.name }}
@@ -486,6 +770,19 @@
                 <div class="toolbar-right">
                   <el-button type="primary" :loading="sending" :disabled="!canSubmit" @click="sendMessage" round size="small">
                     {{ sending ? '处理中' : '发送' }}
+                  </el-button>
+                </div>
+              </div>
+              <div class="quote-bottom-bar">
+                <div class="quote-bottom-status">
+                  <strong>{{ workflowStatusTitle }}</strong>
+                  <span>{{ workflowStatusDetail }}</span>
+                </div>
+                <div class="quote-bottom-actions">
+                  <el-button size="small" plain @click="openHistory" :disabled="pushing">历史记录</el-button>
+                  <el-button size="small" plain :disabled="!showClearInput" @click="clearQuoteInput">清空输入</el-button>
+                  <el-button type="primary" size="small" :loading="sending" :disabled="!canSubmit" @click="sendMessage">
+                    {{ sending ? '处理中' : '发送需求' }}
                   </el-button>
                 </div>
               </div>
@@ -650,76 +947,58 @@
         :before-close="handlePreviewDialogClose"
       >
 
-        <!-- 优化5：置顶摘要栏 -->
-        <div class="preview-summary-bar">
-          <div class="summary-left">
-            <span class="summary-label">共 {{ previewData.length }} 个施工项目</span>
-            <span class="summary-subtle">成本库参考合计：{{ quoteReferenceTotalAmount }}</span>
+        <section class="preview-command-center">
+          <div class="preview-summary-bar">
+            <div class="summary-left">
+              <span class="summary-label">AI 预审与人工确认</span>
+              <span class="summary-subtle">共 {{ previewData.length }} 个施工项目，成本库参考合计：{{ quoteReferenceTotalAmount }}</span>
+            </div>
+            <div class="summary-total-stack">
+              <span class="summary-total">¥ {{ finalTotalAmount }}</span>
+              <span class="summary-source">{{ quoteTotalSourceText }}</span>
+            </div>
           </div>
-          <div class="summary-total-stack">
-            <span class="summary-total">¥ {{ finalTotalAmount }}</span>
-            <span class="summary-source">{{ quoteTotalSourceText }}</span>
+          <div class="preview-status-grid">
+            <article v-for="card in previewSummaryCards" :key="card.key" :class="['preview-status-card', card.tone]">
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+              <small>{{ card.detail }}</small>
+            </article>
           </div>
-        </div>
+        </section>
 
         <div v-if="previewSubmittedDemandText" class="submitted-demand-panel">
           <strong>本次提交需求</strong>
           <span>{{ previewSubmittedDemandText }}</span>
         </div>
 
-        <el-alert title="请仔细核对以下 AI 提取的数据，如有遗漏或单价错误，请直接点击表格框进行修改。" type="warning" show-icon style="margin-bottom: 15px;"></el-alert>
+        <el-alert class="preview-instruction-alert" title="请先处理阻断与复核项，再逐行核对工程量、成本库依据、人工确认价和人工确认合计。" type="warning" show-icon></el-alert>
         <el-alert v-if="pushing" class="push-status" title="正在生成 Excel 并推送到钉钉，请勿关闭或重复提交。" type="info" show-icon></el-alert>
         <el-alert v-if="pushError" class="push-status" :title="pushError" type="error" show-icon :closable="false"></el-alert>
+
+        <section class="preview-blocker-panel" :class="{ 'is-clear': previewReadyForPush }">
+          <div class="preview-blocker-heading">
+            <div class="preview-blocker-title">
+              <strong>阻断与复核</strong>
+              <span>{{ previewBlockerSummaryText }}</span>
+            </div>
+            <el-tag :type="previewReadyForPush ? 'success' : (highRiskCount > 0 ? 'danger' : 'warning')" effect="plain">
+              {{ previewReadyForPush ? '可下发' : '需处理' }}
+            </el-tag>
+          </div>
+          <div v-if="previewBlockerCards.length" class="preview-blocker-list">
+            <article v-for="item in previewBlockerCards" :key="item.key" :class="['preview-blocker-item', item.tone]">
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.message }}</span>
+              <small>{{ item.action }}</small>
+            </article>
+          </div>
+          <div v-else class="preview-blocker-clear">
+            当前未发现硬阻断。仍建议抽查成本依据、AI 备注和人工确认价后再下发。
+          </div>
+        </section>
+
         <div class="review-hints">
-          <el-alert
-            v-if="previewCompletenessBlocked"
-            :title="previewCompletenessMessage"
-            type="error"
-            show-icon
-            :closable="false"
-          ></el-alert>
-          <el-alert
-            v-if="placeholderPricingBlocked"
-            :title="placeholderPricingMessage"
-            type="error"
-            show-icon
-            :closable="false"
-          ></el-alert>
-          <el-alert
-            v-if="manualPricingBlocked"
-            :title="manualPricingMessage"
-            type="error"
-            show-icon
-            :closable="false"
-          ></el-alert>
-          <el-alert
-            v-if="costCandidateConfirmationBlocked"
-            :title="costCandidateConfirmationMessage"
-            type="error"
-            show-icon
-            :closable="false"
-          ></el-alert>
-          <el-alert
-            v-if="aiRewriteConfirmationBlocked"
-            :title="aiRewriteConfirmationMessage"
-            type="error"
-            show-icon
-            :closable="false"
-          ></el-alert>
-          <el-alert
-            v-if="aiNoteConfirmationBlocked"
-            :title="aiNoteConfirmationMessage"
-            type="error"
-            show-icon
-            :closable="false"
-          ></el-alert>
-          <el-alert
-            v-if="reviewSummary.requirement_row_count"
-            :title="`确认清单 ${reviewSummary.requirement_row_count} 行，AI 预审返回 ${reviewSummary.preview_row_count || 0} 行；疑似未报价 ${reviewSummary.missing_count || 0} 行，无底价参考 ${reviewSummary.no_cost_reference_count || 0} 行，AI备注冲突 ${reviewSummary.ai_note_conflict_count || 0} 行，需复核 ${reviewSummary.review_required_count || 0} 项`"
-            :type="reviewSummaryType"
-            show-icon
-            :closable="false"
-          ></el-alert>
           <div v-if="reviewMissingRows.length" class="omission-panel">
             <div
               v-for="item in reviewMissingRows.slice(0, 5)"
@@ -732,16 +1011,9 @@
             </div>
           </div>
           <el-alert
-            v-if="costReferenceSummary.total"
-            :title="`成本库参考：${costReferenceSummary.matched} 行已匹配，${costReferenceSummary.unmatched} 行无底价参考`"
-            :type="costReferenceSummary.unmatched ? 'warning' : 'success'"
-            show-icon
-            :closable="false"
-          ></el-alert>
-          <el-alert
-            v-if="omissionSuggestions.length"
-            :title="omissionSummaryText"
-            type="warning"
+            v-if="reviewSummary.requirement_row_count"
+            :title="`确认清单 ${reviewSummary.requirement_row_count} 行，AI 预审返回 ${reviewSummary.preview_row_count || 0} 行；疑似未报价 ${reviewSummary.missing_count || 0} 行，无底价参考 ${reviewSummary.no_cost_reference_count || 0} 行，AI备注冲突 ${reviewSummary.ai_note_conflict_count || 0} 行，需复核 ${reviewSummary.review_required_count || 0} 项`"
+            :type="reviewSummaryType"
             show-icon
             :closable="false"
           ></el-alert>
@@ -754,7 +1026,6 @@
               </span>
             </div>
           </div>
-          <el-alert v-if="previewRiskItems.length" :title="riskSummaryText" :type="highRiskCount > 0 ? 'error' : 'warning'" show-icon :closable="false"></el-alert>
           <div class="learning-panel">
             <div class="learning-row">
               <el-checkbox v-model="knowledgeLearningEnabled" :disabled="pushing || !previewHasChanges">
@@ -769,6 +1040,17 @@
         </div>
 
         <div class="preview-table-shell">
+          <div class="preview-table-heading">
+            <div class="preview-table-title">
+              <strong>逐行预审明细</strong>
+              <span>重点检查红色或黄色风险行，确认成本库依据后填写人工确认价与合计。</span>
+            </div>
+            <div class="preview-table-tags">
+              <el-tag :type="previewReadyForPush ? 'success' : 'warning'" effect="plain">{{ previewReadyForPush ? '阻断已清' : '仍需处理' }}</el-tag>
+              <el-tag v-if="previewRiskItems.length" :type="highRiskCount > 0 ? 'danger' : 'warning'" effect="plain">{{ previewRiskItems.length }} 行复核</el-tag>
+              <el-tag v-if="costReferenceSummary.total" :type="costReferenceSummary.unmatched ? 'warning' : 'success'" effect="plain">{{ costReferenceSummary.matched }}/{{ costReferenceSummary.total }} 行有成本依据</el-tag>
+            </div>
+          </div>
           <div
             class="preview-table-scrollbar"
             ref="previewTopScrollRef"
@@ -937,18 +1219,24 @@
         ></el-alert>
 
         <template #footer>
-          <span class="dialog-footer">
-            <el-button :loading="previewDraftSaving" :disabled="pushing || !previewContext.quoteJobId || !previewData.length" @click="savePreviewDraftNow()">
-              保存草稿
-            </el-button>
-            <el-button :loading="previewDraftSaving" :disabled="pushing" @click="closePreviewAndKeepDraft">
-              关闭
-            </el-button>
-            <el-button @click="cancelPreview" :disabled="pushing">打回重填</el-button>
-            <el-button type="success" :loading="pushing" :disabled="!previewData.length || previewCompletenessBlocked || placeholderPricingBlocked || manualPricingBlocked || costCandidateConfirmationBlocked || aiRewriteConfirmationBlocked || aiNoteConfirmationBlocked" @click="submitFinalQuote">
-              {{ pushing ? '正在推送钉钉' : '确认无误，下发生成 Excel 并推钉钉' }}
-            </el-button>
-          </span>
+          <div class="preview-footer-bar">
+            <div class="preview-footer-status">
+              <strong>{{ previewFooterTitle }}</strong>
+              <span>{{ previewFooterHint }}</span>
+            </div>
+            <div class="preview-footer-actions">
+              <el-button :loading="previewDraftSaving" :disabled="pushing || !previewContext.quoteJobId || !previewData.length" @click="savePreviewDraftNow()">
+                保存草稿
+              </el-button>
+              <el-button :loading="previewDraftSaving" :disabled="pushing" @click="closePreviewAndKeepDraft">
+                关闭
+              </el-button>
+              <el-button @click="cancelPreview" :disabled="pushing">打回重填</el-button>
+              <el-button type="success" :loading="pushing" :disabled="!previewData.length || previewCompletenessBlocked || placeholderPricingBlocked || manualPricingBlocked || costCandidateConfirmationBlocked || aiRewriteConfirmationBlocked || aiNoteConfirmationBlocked" @click="submitFinalQuote">
+                {{ pushing ? '正在推送钉钉' : '确认无误，下发生成 Excel 并推钉钉' }}
+              </el-button>
+            </div>
+          </div>
         </template>
       </el-dialog>
 
@@ -1572,6 +1860,90 @@
           }
           return { reason: '报价链路未返回明确原因', actions: ['点击重试或查看任务状态', '连续失败时把任务编号和追踪ID发给管理员'] };
         };
+
+        const workflowSteps = computed(() => [
+          { key: 'input', label: '输入需求', hint: '文字/图片/Excel' },
+          { key: 'parse', label: '解析建单', hint: '任务入队' },
+          { key: 'quote', label: 'AI 生成', hint: '成本库与报价' },
+          { key: 'review', label: '人工预审', hint: '改价与风险' },
+          { key: 'push', label: '确认下发', hint: 'Excel 与钉钉' },
+        ]);
+
+        const currentQuoteStageId = computed(() => stages.value[currentStage.value]?.id || '');
+
+        const latestRecoverableMessage = computed(() => {
+          for (let index = messageHistory.value.length - 1; index >= 0; index -= 1) {
+            const msg = messageHistory.value[index] || {};
+            if ((msg.canRetry || msg.canCheckStatus) && msg.jobId) {
+              return { ...msg, index };
+            }
+          }
+          return null;
+        });
+
+        const workflowStepIndex = computed(() => {
+          if (pushing.value) return 4;
+          if (showPreviewDialog.value || previewData.value.length) return 3;
+          if (sending.value) {
+            const stageId = currentQuoteStageId.value;
+            if (stageId === 'review') return 3;
+            if (['knowledge', 'quote'].includes(stageId)) return 2;
+            return 1;
+          }
+          if (inputText.value.trim() || selectedFile.value) return 0;
+          if (latestRecoverableMessage.value) return 1;
+          return 0;
+        });
+
+        const workflowStatusTitle = computed(() => {
+          if (pushError.value) return '下发异常';
+          if (pushing.value) return '正在下发报价';
+          if (showPreviewDialog.value) return previewDraftRestored.value ? '草稿已恢复' : '人工预审中';
+          if (sending.value) return '报价处理中';
+          if (latestRecoverableMessage.value) return '有任务待恢复';
+          if (inputText.value.trim() || selectedFile.value) return '需求已就绪';
+          return '等待需求';
+        });
+
+        const workflowStatusDetail = computed(() => {
+          if (pushError.value) return '查看预审弹窗中的异常提示，必要时保存草稿后重试。';
+          if (pushing.value) return '正在生成 Excel 并推送到钉钉，请等待结果返回。';
+          if (showPreviewDialog.value) return `当前预审 ${previewData.value.length || 0} 行，需完成风险处理、人工确认价和下发确认。`;
+          if (sending.value) return quoteProgressText.value || '报价任务正在处理。';
+          if (latestRecoverableMessage.value) return `任务 ${latestRecoverableMessage.value.jobId} 可继续查看状态或重新提交。`;
+          if (selectedFile.value) return `已挂载 ${selectedFile.value.name || '附件'}，可发送进入报价流程。`;
+          if (inputText.value.trim()) return '文字需求已填写，可发送进入报价流程。';
+          return '当前没有进行中的报价任务。';
+        });
+
+        const workflowStatusTagType = computed(() => {
+          if (pushError.value || (sending.value && quoteProgressTone.value === 'error')) return 'danger';
+          if (sending.value || pushing.value || latestRecoverableMessage.value) return 'warning';
+          if (showPreviewDialog.value || inputText.value.trim() || selectedFile.value) return 'success';
+          return 'info';
+        });
+
+        const workflowNextActionTitle = computed(() => {
+          if (pushError.value) return '处理下发异常';
+          if (pushing.value) return '等待下发完成';
+          if (showPreviewDialog.value) return '复核预审明细';
+          if (sending.value) return '等待 AI 预审';
+          if (latestRecoverableMessage.value) return '恢复上次任务';
+          if (inputText.value.trim() || selectedFile.value) return '发送需求';
+          return '准备报价需求';
+        });
+
+        const workflowNextActionText = computed(() => {
+          if (pushError.value) return '先查看错误原因，能保留草稿时优先保存草稿，避免丢失人工修改。';
+          if (pushing.value) return '下发期间不要关闭页面或重复点击确认按钮。';
+          if (showPreviewDialog.value) return '逐行处理阻断、无底价、候选成本依据和人工确认价后，再确认下发。';
+          if (sending.value) return '任务完成后会自动打开预审弹窗；长时间未返回时可查看任务状态。';
+          if (latestRecoverableMessage.value) return '优先查看任务状态，确认是否已有预审结果；仍失败时再重新提交。';
+          if (inputText.value.trim() || selectedFile.value) return '确认客户信息和需求内容后点击发送。';
+          return '录入文字需求，或上传图片、xlsx/xlsm 需求单。';
+        });
+
+        const showClearInput = computed(() => !sending.value && !pushing.value && (!!inputText.value.trim() || !!selectedFile.value));
 
         const formatApiError = (prefix, detail, traceId) => {
           const parts = [`❌ ${prefix}`];
@@ -2887,6 +3259,170 @@
           return `发现 ${total} 行需要复核，其中 ${highRiskCount.value} 行高风险。${examples.join('；')}`;
         });
 
+        const previewReadyForPush = computed(() => {
+          return Boolean(previewData.value.length)
+            && !previewCompletenessBlocked.value
+            && !placeholderPricingBlocked.value
+            && !manualPricingBlocked.value
+            && !costCandidateConfirmationBlocked.value
+            && !aiRewriteConfirmationBlocked.value
+            && !aiNoteConfirmationBlocked.value;
+        });
+
+        const previewSummaryCards = computed(() => {
+          const totalRows = previewData.value.length || 0;
+          const matchedRows = Number(costReferenceSummary.value.matched || 0);
+          const costTotalRows = Number(costReferenceSummary.value.total || totalRows || 0);
+          const unmatchedRows = Number(costReferenceSummary.value.unmatched || 0);
+          const changedRows = Number(previewChangeSummary.value.changedRows || 0);
+          const riskRows = previewRiskItems.value.length;
+          return [
+            {
+              key: 'rows',
+              label: '施工项目',
+              value: `${totalRows} 行`,
+              detail: reviewSummary.value.requirement_row_count
+                ? `确认清单 ${reviewSummary.value.requirement_row_count} 行`
+                : '来自本次 AI 预审',
+              tone: totalRows ? 'is-success' : 'is-warning'
+            },
+            {
+              key: 'risk',
+              label: '复核风险',
+              value: `${riskRows} 行`,
+              detail: riskRows ? `高风险 ${highRiskCount.value} 行` : '暂无行级风险',
+              tone: highRiskCount.value > 0 ? 'is-danger' : (riskRows ? 'is-warning' : 'is-success')
+            },
+            {
+              key: 'cost',
+              label: '成本依据',
+              value: costTotalRows ? `${matchedRows}/${costTotalRows}` : '-',
+              detail: unmatchedRows ? `${unmatchedRows} 行无底价参考` : '已匹配行均有依据',
+              tone: unmatchedRows ? 'is-warning' : 'is-success'
+            },
+            {
+              key: 'changes',
+              label: '人工修改',
+              value: `${changedRows} 行`,
+              detail: previewDraftSaving.value
+                ? '草稿保存中'
+                : (previewDraftRestored.value ? '已恢复草稿' : previewDraftStatusText.value),
+              tone: changedRows ? 'is-warning' : 'is-info'
+            }
+          ];
+        });
+
+        const previewBlockerCards = computed(() => {
+          const cards = [];
+          const addCard = (visible, key, title, message, action, tone = 'is-warning') => {
+            if (!visible) return;
+            cards.push({ key, title, message, action, tone });
+          };
+          addCard(
+            previewCompletenessBlocked.value,
+            'integrity',
+            '预审不完整',
+            previewCompletenessMessage.value,
+            '检查缺失行或打回重填后重新生成。',
+            'is-danger'
+          );
+          addCard(
+            placeholderPricingBlocked.value,
+            'placeholder',
+            '占位行未补价',
+            placeholderPricingMessage.value,
+            '为占位行补充人工确认价和人工确认合计。',
+            'is-danger'
+          );
+          addCard(
+            manualPricingBlocked.value,
+            'manual-price',
+            '人工确认价未补齐',
+            manualPricingMessage.value,
+            '补齐人工确认价、工程量和人工确认合计。',
+            'is-danger'
+          );
+          addCard(
+            costCandidateConfirmationBlocked.value,
+            'cost-candidate',
+            '成本候选未确认',
+            costCandidateConfirmationMessage.value,
+            '在成本库依据列确认当前依据或切换条目。',
+            'is-danger'
+          );
+          addCard(
+            aiRewriteConfirmationBlocked.value,
+            'ai-rewrite',
+            'AI 改写待确认',
+            aiRewriteConfirmationMessage.value,
+            '确认继续使用原始成本依据或切换条目。',
+            'is-danger'
+          );
+          addCard(
+            aiNoteConfirmationBlocked.value,
+            'ai-note',
+            'AI 备注待确认',
+            aiNoteConfirmationMessage.value,
+            '确认系统备注处理后再下发。',
+            'is-danger'
+          );
+          addCard(
+            reviewMissingRows.value.length > 0,
+            'missing-rows',
+            '疑似未报价',
+            `发现 ${reviewMissingRows.value.length} 条确认清单行未匹配到预审报价。`,
+            '查看下方缺失行，必要时打回重填。',
+            'is-danger'
+          );
+          addCard(
+            Number(costReferenceSummary.value.unmatched || 0) > 0,
+            'no-cost',
+            '无底价参考',
+            `${costReferenceSummary.value.unmatched || 0} 行没有 active 成本库底价。`,
+            '允许 AI 估价，但必须人工确认价格。',
+            'is-warning'
+          );
+          addCard(
+            omissionSuggestions.value.length > 0,
+            'omission',
+            '疑似漏项',
+            omissionSummaryText.value,
+            '核对下方漏项提示，确认是否需要补充需求。',
+            'is-warning'
+          );
+          addCard(
+            previewRiskItems.value.length > 0,
+            'row-risk',
+            '行级风险',
+            riskSummaryText.value,
+            '优先处理红色高风险行，再处理黄色复核行。',
+            highRiskCount.value > 0 ? 'is-danger' : 'is-warning'
+          );
+          return cards;
+        });
+
+        const previewBlockerSummaryText = computed(() => {
+          if (!previewData.value.length) return '暂无预审行，请先完成报价预审。';
+          if (previewBlockerCards.value.length) {
+            return `共 ${previewBlockerCards.value.length} 类事项需要处理，处理完成后才能安全下发。`;
+          }
+          return '硬阻断已清空，可继续抽查价格依据并确认下发。';
+        });
+
+        const previewFooterTitle = computed(() => {
+          if (pushing.value) return '正在下发';
+          if (!previewData.value.length) return '暂无可下发行';
+          return previewReadyForPush.value ? '可以确认下发' : '仍有阻断未处理';
+        });
+
+        const previewFooterHint = computed(() => {
+          if (pushing.value) return '系统正在生成 Excel 并推送钉钉，请保持弹窗打开。';
+          if (!previewData.value.length) return '等待 AI 预审返回后再进行人工确认。';
+          if (previewReadyForPush.value) return '建议最后抽查成本依据和人工确认合计，再点击确认下发。';
+          const firstBlocker = previewBlockerCards.value[0];
+          return firstBlocker ? `优先处理：${firstBlocker.title}。${firstBlocker.action}` : '请处理预审表格中的异常项。';
+        });
+
         const canSubmit = computed(() => {
           return !sending.value && !pushing.value && (!!inputText.value.trim() || !!selectedFile.value);
         });
@@ -2947,6 +3483,16 @@
             return;
           }
           selectedFile.value = null;
+        };
+
+        const clearQuoteInput = () => {
+          if (sending.value || pushing.value) {
+            ElMessage.warning('当前流程处理中，暂不能清空输入');
+            return;
+          }
+          inputText.value = '';
+          selectedFile.value = null;
+          ElMessage.info('已清空当前输入');
         };
 
         const parsePreviewPayload = (rawData) => {
@@ -3080,9 +3626,15 @@
         };
 
         const markRecoverable = (index, updates = {}) => {
+          const current = messageHistory.value[index] || {};
+          const advice = buildActionAdvice(
+            [updates.detail, updates.status, updates.traceId, current.content].filter(Boolean).join(' '),
+            updates.jobId ? '任务可恢复' : '可重新提交'
+          );
           updateAssistantMessage(index, {
             canRetry: true,
             canCheckStatus: !!updates.jobId || !!messageHistory.value[index]?.jobId,
+            recoveryHint: advice,
             ...updates,
           });
         };
@@ -3939,10 +4491,14 @@
           acceptAiSuggestedPrice, canAcceptAiSuggestedPrice,
           previewDraftSaving, previewDraftStatusText, previewDraftAlertType, savePreviewDraftNow, schedulePreviewDraftSave,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
+          previewReadyForPush, previewSummaryCards, previewBlockerCards, previewBlockerSummaryText, previewFooterTitle, previewFooterHint,
           omissionSuggestions, omissionSummary, omissionSummaryText,
           costReference, costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText,
           costReferenceFallbackText, costReferenceTotalText, noCostNoticeText, costReferenceTagType, showCostReferenceEvidence, openCostReferenceDetail,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
+          workflowSteps, workflowStepIndex, workflowStatusTitle, workflowStatusDetail,
+          workflowStatusTagType, workflowNextActionTitle, workflowNextActionText,
+          latestRecoverableMessage, showClearInput, clearQuoteInput,
           stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
           canSubmit, selectedFileSummary,
           clientSourceOptions, showClientInfo, clientForm, clientInfoSummary,

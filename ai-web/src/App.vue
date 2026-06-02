@@ -1,9 +1,12 @@
 <template>
   <div class="app-shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">旗胜智能装饰</p>
-        <h1>AI 平台中台</h1>
+      <div class="brand-lockup">
+        <span class="brand-mark">QS</span>
+        <div>
+          <p class="eyebrow">旗胜智能装饰</p>
+          <h1>旗胜智价</h1>
+        </div>
       </div>
       <div class="topbar-actions" v-if="session.user">
         <el-tag effect="plain">{{ session.user.username }}</el-tag>
@@ -12,6 +15,16 @@
     </header>
 
     <main v-if="routeName === 'login'" class="login-layout">
+      <section class="login-hero">
+        <span class="login-hero-mark">旗胜智价</span>
+        <h2>内部报价与项目运营中台</h2>
+        <p>清爽、可信、可追溯的企业工作台。</p>
+        <div class="login-hero-meta">
+          <span>AI 报价</span>
+          <span>成本数据库</span>
+          <span>项目进度</span>
+        </div>
+      </section>
       <section class="login-panel">
         <div class="panel-heading">
           <el-icon><Lock /></el-icon>
@@ -52,6 +65,13 @@
 
     <main v-else class="workspace">
       <aside class="sidebar">
+        <div class="sidebar-header">
+          <strong>管理工作台</strong>
+          <span>按业务流程分组</span>
+        </div>
+        <nav class="sidebar-nav" aria-label="后台导航">
+          <div class="nav-group" v-if="canAccessPermissions || canViewDashboard">
+            <p class="nav-group-label">权限与总览</p>
         <button
           v-if="canAccessPermissions"
           :class="['nav-item', { active: routeName === 'permissions' }]"
@@ -70,6 +90,12 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>效率驾驶舱</span>
         </button>
+          </div>
+          <div
+            class="nav-group"
+            v-if="canViewExecution || canViewProjectProgress || canViewBusinessLedger || canViewCostDb || canViewRequirementStandardization"
+          >
+            <p class="nav-group-label">业务运营</p>
         <button
           v-if="canViewExecution"
           :class="['nav-item', { active: routeName === 'execution' }]"
@@ -78,6 +104,15 @@
         >
           <el-icon><Clock /></el-icon>
           <span>执行任务</span>
+        </button>
+        <button
+          v-if="canViewProjectProgress"
+          :class="['nav-item', { active: ['projects', 'projectDetail', 'projectMyTasks'].includes(routeName) }]"
+          type="button"
+          @click="navigate('/admin/projects')"
+        >
+          <el-icon><TrendCharts /></el-icon>
+          <span>项目进度</span>
         </button>
         <button
           v-if="canViewBusinessLedger"
@@ -106,6 +141,9 @@
           <el-icon><Tickets /></el-icon>
           <span>需求单标准化</span>
         </button>
+          </div>
+          <div class="nav-group" v-if="canOpenLegacyQuote || canOpenLegacyAdmin">
+            <p class="nav-group-label">旧版入口</p>
         <button v-if="canOpenLegacyQuote" class="nav-item" type="button" @click="openLegacy('/index.html')">
           <el-icon><Document /></el-icon>
           <span>旧报价工作台</span>
@@ -114,6 +152,8 @@
           <el-icon><Setting /></el-icon>
           <span>旧知识库管理</span>
         </button>
+          </div>
+        </nav>
       </aside>
 
       <section class="content-panel">
@@ -159,6 +199,223 @@
           </div>
 
           <el-tabs v-model="dashboardTab" class="dashboard-tabs">
+            <el-tab-pane label="经营总览" name="business" :disabled="dashboardFeature.businessDisabled">
+              <el-alert
+                v-if="dashboardFeature.businessDisabled"
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="经营总览开关尚未打开"
+              />
+              <template v-else>
+                <el-alert
+                  v-if="businessDashboard?.empty_state"
+                  class="dashboard-alert"
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  title="暂无经营总览数据，指标会在试运行数据产生后显示"
+                />
+                <el-alert
+                  v-if="businessSectionErrorCount > 0"
+                  class="dashboard-alert"
+                  type="warning"
+                  show-icon
+                  :closable="false"
+                  :title="`经营总览有 ${businessSectionErrorCount} 个区块局部降级，其余数据仍可查看`"
+                />
+
+                <section class="business-overview-bar">
+                  <div class="business-overview-main">
+                    <el-tag :type="businessOverallTagType(businessDashboard?.environment?.overall_status)" effect="dark">
+                      {{ businessOverallLabel(businessDashboard?.environment?.overall_status) }}
+                    </el-tag>
+                    <div>
+                      <strong>经营总览轻量 MVP</strong>
+                      <small>只读汇总 · 不展示成本敏感明细</small>
+                    </div>
+                  </div>
+                  <div class="business-overview-meta">
+                    <span>更新时间：{{ formatDate(businessDashboard?.generated_at) }}</span>
+                    <span>环境：{{ businessModeLabel(businessDashboard?.environment?.mode) }}</span>
+                    <span>DB head：{{ businessDashboard?.environment?.database_head || '-' }}</span>
+                  </div>
+                  <div class="business-overview-actions">
+                    <el-button
+                      v-for="link in businessQuickLinks"
+                      :key="link.key"
+                      size="small"
+                      plain
+                      @click="openBusinessTarget(link.path)"
+                    >
+                      {{ link.label }}
+                    </el-button>
+                  </div>
+                </section>
+
+                <section class="business-trial-rail">
+                  <article
+                    v-for="item in businessTrialReadinessCards"
+                    :key="item.key"
+                    :class="['business-trial-card', item.tone]"
+                  >
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                    <small>{{ item.detail }}</small>
+                  </article>
+                </section>
+
+                <div class="metric-grid business-metric-grid">
+                  <button
+                    v-for="card in businessMetricCards"
+                    :key="card.key"
+                    type="button"
+                    class="metric-card metric-card-button"
+                    @click="openBusinessTarget(card.targetPath)"
+                  >
+                    <span>{{ card.title }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <small>{{ card.subtitle }}</small>
+                  </button>
+                </div>
+
+                <div class="dashboard-split business-trend-split">
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><TrendCharts /></el-icon>
+                      <span>报价趋势</span>
+                      <small>近 {{ businessQuoteTrendRows.length }} 条</small>
+                    </div>
+                    <div v-if="businessQuoteTrendRows.length" class="business-trend-list">
+                      <div
+                        v-for="row in businessQuoteTrendRows"
+                        :key="row.date"
+                        class="business-trend-row"
+                      >
+                        <span>{{ row.date }}</span>
+                        <div class="business-trend-bars">
+                          <i class="bar total" :style="{ width: businessBarWidth(row.task_count, businessQuoteTrendMax) }"></i>
+                          <i class="bar success" :style="{ width: businessBarWidth(row.success_count, businessQuoteTrendMax) }"></i>
+                          <i class="bar warning" :style="{ width: businessBarWidth(row.failed_or_timeout_count, businessQuoteTrendMax) }"></i>
+                          <i class="bar pushed" :style="{ width: businessBarWidth(row.pushed_count, businessQuoteTrendMax) }"></i>
+                        </div>
+                        <small>任务 {{ row.task_count }} · 成功 {{ row.success_count }} · 异常 {{ row.failed_or_timeout_count }} · 下发 {{ row.pushed_count }}</small>
+                      </div>
+                    </div>
+                    <el-empty v-else description="暂无报价趋势数据" />
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><TrendCharts /></el-icon>
+                      <span>项目证据趋势</span>
+                      <small>近 {{ businessProjectTrendRows.length }} 条</small>
+                    </div>
+                    <div v-if="businessProjectTrendRows.length" class="business-trend-list">
+                      <div
+                        v-for="row in businessProjectTrendRows"
+                        :key="row.date"
+                        class="business-trend-row"
+                      >
+                        <span>{{ row.date }}</span>
+                        <div class="business-trend-bars">
+                          <i class="bar total" :style="{ width: businessBarWidth(row.bypass_gate_event_count, businessProjectTrendMax) }"></i>
+                          <i class="bar warning" :style="{ width: businessBarWidth(row.bypassed_missing_evidence_count, businessProjectTrendMax) }"></i>
+                          <i class="bar pushed" :style="{ width: businessBarWidth(row.soft_reminder_event_count, businessProjectTrendMax) }"></i>
+                        </div>
+                        <small>放行 {{ row.bypass_gate_event_count }} · 未补证据 {{ row.bypassed_missing_evidence_count }} · 软提醒 {{ row.soft_reminder_event_count }}</small>
+                      </div>
+                    </div>
+                    <el-empty v-else description="暂无项目证据趋势数据" />
+                  </section>
+                </div>
+
+                <section class="dashboard-section business-distribution-section">
+                  <div class="section-title">
+                    <el-icon><Histogram /></el-icon>
+                    <span>分布概览</span>
+                  </div>
+                  <div class="business-distribution-grid">
+                    <div
+                      v-for="group in businessDistributionGroups"
+                      :key="group.key"
+                      class="business-distribution-card"
+                    >
+                      <strong>{{ group.title }}</strong>
+                      <div v-if="group.rows.length" class="business-distribution-list">
+                        <div
+                          v-for="row in group.rows"
+                          :key="row.key"
+                          class="business-distribution-row"
+                        >
+                          <span>{{ row.label }}</span>
+                          <div class="business-distribution-track">
+                            <i :style="{ width: `${row.percent}%` }"></i>
+                          </div>
+                          <small>{{ row.count }}</small>
+                        </div>
+                      </div>
+                      <el-empty v-else description="暂无分布数据" />
+                    </div>
+                  </div>
+                </section>
+
+                <div class="dashboard-split business-dashboard-split">
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><Warning /></el-icon>
+                      <span>风险与待处理</span>
+                      <small>{{ businessRisks.length }} 项</small>
+                    </div>
+                    <div class="status-list">
+                      <div
+                        v-for="risk in businessRisks"
+                        :key="risk.key"
+                        class="status-row stacked business-risk-row"
+                      >
+                        <span>
+                          <el-tag size="small" :type="businessSeverityTag(risk.severity)" effect="plain">
+                            {{ businessSeverityLabel(risk.severity) }}
+                          </el-tag>
+                          {{ risk.title }}
+                        </span>
+                        <strong>{{ risk.count }}</strong>
+                        <small>{{ risk.action }}</small>
+                        <el-button
+                          v-if="risk.target_path"
+                          size="small"
+                          plain
+                          @click="openBusinessTarget(risk.target_path)"
+                        >
+                          查看
+                        </el-button>
+                      </div>
+                      <el-empty v-if="!businessRisks.length" description="暂无待处理风险" />
+                    </div>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><DataAnalysis /></el-icon>
+                      <span>运行摘要</span>
+                    </div>
+                    <div class="status-list">
+                      <div
+                        v-for="item in businessSummaryRows"
+                        :key="item.key"
+                        class="status-row stacked"
+                      >
+                        <span>{{ item.label }}</span>
+                        <strong>{{ item.value }}</strong>
+                        <small>{{ item.detail }}</small>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </template>
+            </el-tab-pane>
+
             <el-tab-pane label="报价速度" name="quote" :disabled="dashboardFeature.quoteDisabled">
               <el-alert
                 v-if="dashboardFeature.quoteDisabled"
@@ -664,7 +921,520 @@
                 </div>
               </template>
             </el-tab-pane>
+
+            <el-tab-pane label="项目进度" name="projects" :disabled="dashboardFeature.projectDisabled">
+              <el-alert
+                v-if="dashboardFeature.projectDisabled"
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="项目进度看板开关尚未打开"
+              />
+              <template v-else>
+                <el-alert
+                  v-if="projectDashboard?.empty_state"
+                  class="dashboard-alert"
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  title="暂无项目进度数据"
+                />
+                <div class="metric-grid response-grid">
+                  <div class="metric-card">
+                    <span>项目总数</span>
+                    <strong>{{ projectDashboard?.project_count ?? 0 }}</strong>
+                    <small>进行中 {{ projectDashboard?.active_count ?? 0 }}</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>平均进度</span>
+                    <strong>{{ projectDashboard?.avg_progress_percent ?? 0 }}%</strong>
+                    <small>按阶段权重计算</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>阻塞项目</span>
+                    <strong>{{ projectDashboard?.blocked_count ?? 0 }}</strong>
+                    <small>阻塞任务 {{ projectDashboard?.blocked_task_count ?? 0 }}</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>延期项目</span>
+                    <strong>{{ projectDashboard?.delayed_count ?? 0 }}</strong>
+                    <small>逾期任务 {{ projectDashboard?.overdue_task_count ?? 0 }}</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>任务闭环</span>
+                    <strong>{{ projectDashboard?.done_task_count ?? 0 }} / {{ projectDashboard?.task_count ?? 0 }}</strong>
+                    <small>未完成 {{ projectDashboard?.open_task_count ?? 0 }}</small>
+                  </div>
+                </div>
+
+                <div class="dashboard-split">
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><TrendCharts /></el-icon>
+                      <span>当前阶段分布</span>
+                    </div>
+                    <el-table
+                      :data="projectDashboard?.stage_distribution || []"
+                      row-key="stage_name"
+                      class="users-table"
+                      empty-text="暂无阶段数据"
+                    >
+                      <el-table-column prop="stage_name" label="阶段" min-width="160" />
+                      <el-table-column prop="count" label="项目数" width="120" />
+                    </el-table>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-title">
+                      <el-icon><Histogram /></el-icon>
+                      <span>项目经理</span>
+                    </div>
+                    <div class="status-list">
+                      <div
+                        v-for="item in visibleProjectManagers"
+                        :key="item.project_manager_id"
+                        class="status-row stacked"
+                      >
+                        <span>{{ item.username }}</span>
+                        <strong>{{ item.project_count }}</strong>
+                        <small>阻塞 {{ item.blocked_count }} · 延期 {{ item.delayed_count }}</small>
+                      </div>
+                      <el-empty v-if="!visibleProjectManagers.length" description="暂无项目经理数据" />
+                    </div>
+                  </section>
+                </div>
+              </template>
+            </el-tab-pane>
           </el-tabs>
+        </template>
+
+        <template v-else-if="['projects', 'projectDetail', 'projectMyTasks'].includes(routeName)">
+          <div v-if="routeName === 'projects'">
+            <div class="content-heading">
+              <div>
+                <p class="eyebrow">BIZ-3a</p>
+                <h2>项目进度</h2>
+              </div>
+              <div class="heading-actions">
+                <el-button :icon="Tickets" plain @click="navigate('/admin/project-tasks/my')">我的任务</el-button>
+                <el-button v-if="canManageProjectProgress" :icon="Plus" type="primary" @click="openProjectCreate">新建项目</el-button>
+                <el-button v-if="canManageProjectProgress" :icon="Tickets" type="success" plain @click="openProjectTrialCreate">单人试运行</el-button>
+                <el-button v-if="canManageProjectProgress" :icon="TrendCharts" type="primary" plain @click="openProjectEpcCreate">EPC流程模板</el-button>
+                <el-button :icon="Refresh" plain @click="loadProjects">刷新</el-button>
+              </div>
+            </div>
+            <el-alert
+              v-if="projectFeatureDisabled"
+              class="dashboard-alert"
+              type="info"
+              show-icon
+              :closable="false"
+              title="项目进度功能尚未开启"
+            />
+            <template v-else>
+              <section class="project-overview-strip">
+                <article
+                  v-for="card in projectListOverviewCards"
+                  :key="card.key"
+                  :class="['project-overview-card', card.tone]"
+                >
+                  <span>{{ card.title }}</span>
+                  <strong>{{ card.value }}</strong>
+                  <small>{{ card.detail }}</small>
+                </article>
+              </section>
+              <div class="project-filters">
+                <el-select v-model="projectFilters.status" size="small" clearable placeholder="项目状态" @change="applyProjectFilters">
+                  <el-option v-for="option in projectStatusOptions" :key="option.value" :label="option.label" :value="option.value" />
+                </el-select>
+                <el-select v-model="projectFilters.risk_level" size="small" clearable placeholder="风险状态" @change="applyProjectFilters">
+                  <el-option v-for="option in projectRiskOptions" :key="option.value" :label="option.label" :value="option.value" />
+                </el-select>
+                <el-input v-model="projectFilters.keyword" size="small" clearable placeholder="项目/客户/地址" @keyup.enter="applyProjectFilters" @clear="applyProjectFilters" />
+                <el-button size="small" type="primary" plain @click="applyProjectFilters">查询</el-button>
+              </div>
+              <el-table :data="projects" row-key="id" class="users-table" empty-text="暂无项目">
+                <el-table-column label="项目" min-width="240" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <div class="operation-client">
+                      <strong>{{ row.name }}</strong>
+                      <small>{{ row.project_code }} · {{ row.client_name || '未填写客户' }}</small>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="project_manager_username" label="项目经理" width="120" />
+                <el-table-column label="当前阶段" min-width="120">
+                  <template #default="{ row }">{{ row.current_stage_name || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="总进度" min-width="170">
+                  <template #default="{ row }">
+                    <el-progress :percentage="row.progress_percent || 0" :stroke-width="8" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="110">
+                  <template #default="{ row }">
+                    <el-tag :type="projectStatusTag(row.status)" effect="plain">{{ projectStatusLabel(row.status) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="风险" width="110">
+                  <template #default="{ row }">
+                    <el-tag :type="projectRiskTag(row.risk_level)" effect="plain">{{ projectRiskLabel(row.risk_level) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="任务" width="130">
+                  <template #default="{ row }">
+                    {{ row.done_task_count || 0 }} / {{ row.task_count || 0 }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="120" fixed="right">
+                  <template #default="{ row }">
+                    <el-button size="small" :icon="Document" plain @click="navigate(`/admin/projects/${row.id}`)">详情</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-pagination
+                v-if="projectTotal > projectPageSize"
+                v-model:current-page="projectPage"
+                :page-size="projectPageSize"
+                :total="projectTotal"
+                layout="total, prev, pager, next"
+                small
+                @current-change="loadProjects"
+              />
+            </template>
+          </div>
+
+          <div v-else-if="routeName === 'projectMyTasks'">
+            <div class="content-heading">
+              <div>
+                <p class="eyebrow">BIZ-3a</p>
+                <h2>我的项目任务</h2>
+              </div>
+              <div class="heading-actions">
+                <el-button :icon="Tickets" plain @click="navigate('/admin/projects')">项目列表</el-button>
+                <el-button :icon="Refresh" plain @click="loadMyProjectTasks">刷新</el-button>
+              </div>
+            </div>
+            <section class="project-overview-strip compact">
+              <article
+                v-for="card in myProjectTaskOverviewCards"
+                :key="card.key"
+                :class="['project-overview-card', card.tone]"
+              >
+                <span>{{ card.title }}</span>
+                <strong>{{ card.value }}</strong>
+                <small>{{ card.detail }}</small>
+              </article>
+            </section>
+            <div class="project-filters compact">
+              <el-select v-model="myProjectTaskFilters.status" size="small" clearable placeholder="任务状态" @change="applyMyProjectTaskFilters">
+                <el-option v-for="option in projectTaskStatusOptions" :key="option.value" :label="option.label" :value="option.value" />
+              </el-select>
+              <el-input v-model="myProjectTaskFilters.keyword" size="small" clearable placeholder="任务/说明/下一步" @keyup.enter="applyMyProjectTaskFilters" @clear="applyMyProjectTaskFilters" />
+              <el-button size="small" type="primary" plain @click="applyMyProjectTaskFilters">查询</el-button>
+            </div>
+            <el-table :data="myProjectTasks" row-key="id" class="users-table" empty-text="暂无我的项目任务">
+              <el-table-column label="任务" min-width="250" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <strong>{{ row.title }}</strong>
+                    <small>{{ row.project_name }} · {{ row.stage_name }}</small>
+                    <span v-if="row.is_key_node || row.evidence_policy === 'complete_required'" class="project-task-badges">
+                      <el-tag v-if="row.is_key_node" size="small" effect="plain">关键节点</el-tag>
+                      <el-tag v-if="row.evidence_policy === 'complete_required'" size="small" type="danger" effect="plain">需证据</el-tag>
+                    </span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="进度" min-width="140">
+                <template #default="{ row }"><el-progress :percentage="row.progress_percent || 0" :stroke-width="8" /></template>
+              </el-table-column>
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }"><el-tag :type="projectTaskStatusTag(row.status)" effect="plain">{{ projectTaskStatusLabel(row.status) }}</el-tag></template>
+              </el-table-column>
+              <el-table-column label="证据" width="105">
+                <template #default="{ row }">
+                  <el-button size="small" :type="projectEvidenceButtonType(row)" plain @click="openProjectTaskEvidence(row)">
+                    证据 {{ row.evidence_count || 0 }}
+                  </el-button>
+                </template>
+              </el-table-column>
+              <el-table-column label="岗位/成果" min-width="210" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <strong>{{ row.owner_role || '-' }}</strong>
+                    <small>{{ row.epc_deliverable || row.epc_standard || row.description || '-' }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="截止时间" min-width="150">
+                <template #default="{ row }">{{ formatDate(row.due_at) }}</template>
+              </el-table-column>
+              <el-table-column label="阻塞/下一步" min-width="210" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <strong v-if="row.status === 'blocked'">{{ row.blocked_reason || '-' }}</strong>
+                    <span v-else>{{ row.next_action || '-' }}</span>
+                    <small v-if="row.status === 'blocked'">{{ row.next_action || '待解除阻塞' }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="420" fixed="right">
+                <template #default="{ row }">
+                  <div class="row-actions">
+                    <el-button size="small" plain :disabled="row.status !== 'todo'" @click="advanceProjectTask(row, 'start')">开始</el-button>
+                    <el-button size="small" plain :disabled="!['todo', 'started'].includes(row.status)" @click="advanceProjectTask(row, 'progress')">推进</el-button>
+                    <el-button size="small" plain :disabled="!['todo', 'started', 'progressing'].includes(row.status)" @click="advanceProjectTask(row, 'submit')">提交</el-button>
+                    <el-button size="small" plain :disabled="!canRollbackProjectTask(row)" @click="rollbackProjectTask(row)">回退</el-button>
+                    <el-button size="small" type="success" plain :disabled="row.status !== 'blocked'" @click="unblockProjectTask(row)">解除</el-button>
+                    <el-button size="small" type="warning" plain :disabled="['blocked', 'done', 'cancelled'].includes(row.status)" @click="blockProjectTask(row)">阻塞</el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-pagination
+              v-if="myProjectTaskTotal > myProjectTaskPageSize"
+              v-model:current-page="myProjectTaskPage"
+              :page-size="myProjectTaskPageSize"
+              :total="myProjectTaskTotal"
+              layout="total, prev, pager, next"
+              small
+              @current-change="loadMyProjectTasks"
+            />
+          </div>
+
+          <div v-else>
+            <div class="content-heading">
+              <div>
+                <p class="eyebrow">BIZ-3a</p>
+                <h2>{{ projectDetail?.name || '项目详情' }}</h2>
+              </div>
+              <div class="heading-actions">
+                <el-button :icon="Tickets" plain @click="navigate('/admin/projects')">返回列表</el-button>
+                <el-button v-if="canManageProjectProgress" :icon="Plus" type="primary" @click="openProjectTaskCreate()">新建任务</el-button>
+                <el-button :icon="Refresh" plain @click="loadProjectDetail">刷新</el-button>
+              </div>
+            </div>
+            <div v-if="!projectDetail" class="center-state">
+              <el-icon class="spin"><Refresh /></el-icon>
+              <span>加载中</span>
+            </div>
+            <template v-else>
+              <section class="project-detail-focus-bar">
+                <div class="project-detail-focus-main">
+                  <el-tag :type="projectRiskTag(projectDetail.risk_level)" effect="plain">
+                    {{ projectRiskLabel(projectDetail.risk_level) }}
+                  </el-tag>
+                  <div>
+                    <strong>{{ projectDetail.project_code || '未设置编号' }}</strong>
+                    <span>{{ projectDetail.client_name || '未填写客户' }} · {{ projectDetail.project_manager_username || '未设置项目经理' }}</span>
+                  </div>
+                </div>
+                <div class="project-detail-focus-cards">
+                  <article
+                    v-for="card in projectDetailFocusCards"
+                    :key="card.key"
+                    :class="['project-overview-card', card.tone]"
+                  >
+                    <span>{{ card.title }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <small>{{ card.detail }}</small>
+                  </article>
+                </div>
+              </section>
+              <div class="metric-grid response-grid">
+                <div class="metric-card">
+                  <span>总进度</span>
+                  <strong>{{ projectDetail.progress_percent || 0 }}%</strong>
+                  <small>{{ projectStatusLabel(projectDetail.status) }}</small>
+                </div>
+                <div class="metric-card">
+                  <span>当前阶段</span>
+                  <strong>{{ projectDetail.current_stage_name || '-' }}</strong>
+                  <small>按首个未完成阶段判断</small>
+                </div>
+                <div class="metric-card">
+                  <span>风险状态</span>
+                  <strong>{{ projectRiskLabel(projectDetail.risk_level) }}</strong>
+                  <small>阻塞优先，其次逾期</small>
+                </div>
+                <div class="metric-card">
+                  <span>项目经理</span>
+                  <strong>{{ projectDetail.project_manager_username || '-' }}</strong>
+                  <small>{{ projectDetail.owner_department || '未设置部门' }}</small>
+                </div>
+                <div class="metric-card">
+                  <span>任务闭环</span>
+                  <strong>{{ projectDetail.done_task_count || 0 }} / {{ projectDetail.task_count || 0 }}</strong>
+                  <small>阻塞 {{ projectDetail.blocked_task_count || 0 }} · 逾期 {{ projectDetail.overdue_task_count || 0 }}</small>
+                </div>
+              </div>
+
+              <section class="dashboard-section project-section-gap">
+                <div class="section-title">
+                  <el-icon><Document /></el-icon>
+                  <span>成果证据完整性</span>
+                </div>
+                <div class="metric-grid response-grid">
+                  <button
+                    type="button"
+                    :class="['metric-card metric-card-button', { active: projectTaskEvidenceFilter === 'required' }]"
+                    @click="setProjectTaskEvidenceFilter('required')"
+                  >
+                    <span>有成果要求节点</span>
+                    <strong>{{ projectEvidenceSummary.required_task_count || 0 }}</strong>
+                    <small>来自 EPC 成果文件要求</small>
+                  </button>
+                  <button
+                    type="button"
+                    :class="['metric-card metric-card-button', { active: projectTaskEvidenceFilter === 'evidenced' }]"
+                    @click="setProjectTaskEvidenceFilter('evidenced')"
+                  >
+                    <span>已留证据节点</span>
+                    <strong>{{ projectEvidenceSummary.evidenced_task_count || 0 }}</strong>
+                    <small>完成度 {{ projectEvidenceSummary.evidence_completion_percent || 0 }}%</small>
+                  </button>
+                  <button
+                    type="button"
+                    :class="['metric-card metric-card-button warning', { active: projectTaskEvidenceFilter === 'missing' }]"
+                    @click="setProjectTaskEvidenceFilter('missing')"
+                  >
+                    <span>缺证据节点</span>
+                    <strong>{{ projectEvidenceSummary.missing_evidence_task_count || 0 }}</strong>
+                    <small>点击只看缺证据任务</small>
+                  </button>
+                  <button
+                    type="button"
+                    :class="['metric-card metric-card-button danger', { active: projectTaskEvidenceFilter === 'done_missing' }]"
+                    @click="setProjectTaskEvidenceFilter('done_missing')"
+                  >
+                    <span>无证据已完成</span>
+                    <strong>{{ projectEvidenceSummary.done_without_evidence_task_count || 0 }}</strong>
+                    <small>复盘时优先补齐</small>
+                  </button>
+                  <button
+                    type="button"
+                    :class="['metric-card metric-card-button', { active: projectTaskEvidenceFilter === 'open_missing' }]"
+                    @click="setProjectTaskEvidenceFilter('open_missing')"
+                  >
+                    <span>未完成且缺证据</span>
+                    <strong>{{ projectEvidenceSummary.open_missing_evidence_task_count || 0 }}</strong>
+                    <small>推进前可先补充依据</small>
+                  </button>
+                </div>
+              </section>
+
+              <section class="dashboard-section">
+                <div class="section-title">
+                  <el-icon><TrendCharts /></el-icon>
+                  <span>阶段进度</span>
+                </div>
+                <el-table :data="projectDetail.stages || []" row-key="id" class="users-table" empty-text="暂无阶段">
+                  <el-table-column prop="stage_name" label="阶段" min-width="140" />
+                  <el-table-column prop="owner_role" label="责任岗位" min-width="150" />
+                  <el-table-column prop="weight_percent" label="权重" width="90">
+                    <template #default="{ row }">{{ row.weight_percent }}%</template>
+                  </el-table-column>
+                  <el-table-column label="进度" min-width="180">
+                    <template #default="{ row }"><el-progress :percentage="row.progress_percent || 0" :stroke-width="8" /></template>
+                  </el-table-column>
+                  <el-table-column label="任务" width="110">
+                    <template #default="{ row }">{{ row.task_count || 0 }}</template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="110">
+                    <template #default="{ row }">
+                      <el-button v-if="canManageProjectProgress" size="small" plain @click="openProjectTaskCreate(row)">加任务</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </section>
+
+              <section class="dashboard-section project-section-gap">
+                <div class="section-title">
+                  <el-icon><Tickets /></el-icon>
+                  <span>岗位任务</span>
+                  <el-tag v-if="projectTaskEvidenceFilter !== 'all'" type="warning" effect="plain">{{ projectTaskEvidenceFilterLabel(projectTaskEvidenceFilter) }}</el-tag>
+                  <el-button v-if="projectTaskEvidenceFilter !== 'all'" size="small" plain @click="setProjectTaskEvidenceFilter('all')">清除筛选</el-button>
+                </div>
+                <el-table :data="visibleProjectDetailTasks" row-key="id" class="users-table" empty-text="暂无任务">
+                  <el-table-column label="任务" min-width="240" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.title }}</strong>
+                        <small>{{ row.stage_name }} · {{ row.owner_username || '-' }}</small>
+                        <span v-if="row.is_key_node || row.evidence_policy === 'complete_required'" class="project-task-badges">
+                          <el-tag v-if="row.is_key_node" size="small" effect="plain">关键节点</el-tag>
+                          <el-tag v-if="row.evidence_policy === 'complete_required'" size="small" type="danger" effect="plain">需证据</el-tag>
+                        </span>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="进度" min-width="140">
+                    <template #default="{ row }"><el-progress :percentage="row.progress_percent || 0" :stroke-width="8" /></template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="110">
+                    <template #default="{ row }"><el-tag :type="projectTaskStatusTag(row.status)" effect="plain">{{ projectTaskStatusLabel(row.status) }}</el-tag></template>
+                  </el-table-column>
+                  <el-table-column label="证据" width="105">
+                    <template #default="{ row }">
+                      <el-button size="small" :type="projectEvidenceButtonType(row)" plain @click="openProjectTaskEvidence(row)">
+                        证据 {{ row.evidence_count || 0 }}
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="EPC要求" min-width="230" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.owner_role || '-' }}</strong>
+                        <small>{{ row.epc_deliverable || row.epc_standard || row.description || '-' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="截止时间" min-width="150">
+                    <template #default="{ row }">{{ formatDate(row.due_at) }}</template>
+                  </el-table-column>
+                  <el-table-column label="阻塞/下一步" min-width="210" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong v-if="row.status === 'blocked'">{{ row.blocked_reason || '-' }}</strong>
+                        <span v-else>{{ row.next_action || '-' }}</span>
+                        <small v-if="row.status === 'blocked'">{{ row.next_action || '待解除阻塞' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="480" fixed="right">
+                    <template #default="{ row }">
+                      <div class="row-actions">
+                        <el-button size="small" plain :disabled="row.status !== 'todo'" @click="advanceProjectTask(row, 'start')">开始</el-button>
+                        <el-button size="small" plain :disabled="!['todo', 'started'].includes(row.status)" @click="advanceProjectTask(row, 'progress')">推进</el-button>
+                        <el-button size="small" plain :disabled="!['todo', 'started', 'progressing'].includes(row.status)" @click="advanceProjectTask(row, 'submit')">提交</el-button>
+                        <el-button v-if="canManageProjectProgress" size="small" type="success" plain :disabled="row.status !== 'submitted'" @click="advanceProjectTask(row, 'complete')">完成</el-button>
+                        <el-button size="small" plain :disabled="!canRollbackProjectTask(row)" @click="rollbackProjectTask(row)">回退</el-button>
+                        <el-button size="small" type="success" plain :disabled="row.status !== 'blocked'" @click="unblockProjectTask(row)">解除</el-button>
+                        <el-button size="small" type="warning" plain :disabled="['blocked', 'done', 'cancelled'].includes(row.status)" @click="blockProjectTask(row)">阻塞</el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </section>
+
+              <section class="dashboard-section project-section-gap">
+                <div class="section-title">
+                  <el-icon><Clock /></el-icon>
+                  <span>项目动态</span>
+                </div>
+                <div class="status-list">
+                  <div v-for="event in projectEvents" :key="event.id" class="status-row stacked">
+                    <span>{{ projectEventLabel(event.event_type) }}</span>
+                    <strong>{{ event.actor_username || '-' }}</strong>
+                    <small>{{ formatDate(event.created_at) }} · {{ event.message || '-' }}</small>
+                  </div>
+                  <el-empty v-if="!projectEvents.length" description="暂无动态" />
+                </div>
+              </section>
+            </template>
+          </div>
         </template>
 
         <template v-else-if="routeName === 'execution'">
@@ -1139,49 +1909,6 @@
                 状态与流向
               </el-button>
               <el-button
-                v-if="canApproveCostDb"
-                :icon="Select"
-                plain
-                :loading="costAllSelecting"
-                :disabled="costDbFeatureDisabled || costDbLoading || costAllSelecting || costItemTotal === 0"
-                @click="toggleSelectAllCostItems"
-              >
-                {{ selectedCostItemIds.length ? '取消全选' : '全选全部' }}
-              </el-button>
-              <el-button
-                v-if="canApproveCostDb"
-                :icon="Tickets"
-                type="success"
-                plain
-                :loading="costBulkSubmitting"
-                :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedDraftCostItemCount === 0"
-                @click="bulkActivateCostItems"
-              >
-                批量核定 active
-              </el-button>
-              <el-button
-                v-if="canApproveCostDb"
-                :icon="Refresh"
-                type="warning"
-                plain
-                :loading="costBulkSubmitting"
-                :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedActiveCostItemCount === 0"
-                @click="bulkRestoreCostItemsToDraft"
-              >
-                批量恢复 draft
-              </el-button>
-              <el-button
-                v-if="canApproveCostDb"
-                :icon="Delete"
-                type="danger"
-                plain
-                :loading="costBulkSubmitting"
-                :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedArchivableCostItemCount === 0"
-                @click="bulkArchiveCostItems"
-              >
-                批量归档
-              </el-button>
-              <el-button
                 v-if="canEditCostDb"
                 :icon="Plus"
                 type="primary"
@@ -1219,6 +1946,26 @@
               </template>
               <div>{{ costRagSyncStatus.message || '暂无同步状态' }}</div>
             </el-alert>
+            <section class="cost-workbench-panel">
+              <div class="cost-workbench-title">
+                <el-tag effect="plain">成本主库</el-tag>
+                <div>
+                  <strong>成本库维护工作台</strong>
+                  <span>先筛选待审核 draft，再核定 active；归档和 RAG 同步均保留审计记录。</span>
+                </div>
+              </div>
+              <div class="cost-workbench-cards">
+                <article
+                  v-for="card in costDbOverviewCards"
+                  :key="card.key"
+                  :class="['cost-workbench-card', card.tone]"
+                >
+                  <span>{{ card.title }}</span>
+                  <strong>{{ card.value }}</strong>
+                  <small>{{ card.detail }}</small>
+                </article>
+              </div>
+            </section>
             <div class="cost-db-filters cost-item-filters">
               <el-input
                 v-model="costItemFilters.category"
@@ -1282,6 +2029,53 @@
                 @clear="applyCostItemFilters"
               ></el-input>
               <el-button size="small" type="primary" plain @click="applyCostItemFilters">查询</el-button>
+            </div>
+            <div v-if="canApproveCostDb" class="cost-bulk-bar">
+              <div class="cost-bulk-summary">
+                <strong>批量操作</strong>
+                <span>{{ costDbSelectionSummary }}</span>
+              </div>
+              <div class="cost-bulk-actions">
+                <el-button
+                  :icon="Select"
+                  plain
+                  :loading="costAllSelecting"
+                  :disabled="costDbFeatureDisabled || costDbLoading || costAllSelecting || costItemTotal === 0"
+                  @click="toggleSelectAllCostItems"
+                >
+                  {{ selectedCostItemIds.length ? '取消全选' : '全选全部' }}
+                </el-button>
+                <el-button
+                  :icon="Tickets"
+                  type="success"
+                  plain
+                  :loading="costBulkSubmitting"
+                  :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedDraftCostItemCount === 0"
+                  @click="bulkActivateCostItems"
+                >
+                  批量核定 active
+                </el-button>
+                <el-button
+                  :icon="Refresh"
+                  type="warning"
+                  plain
+                  :loading="costBulkSubmitting"
+                  :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedActiveCostItemCount === 0"
+                  @click="bulkRestoreCostItemsToDraft"
+                >
+                  批量恢复 draft
+                </el-button>
+                <el-button
+                  :icon="Delete"
+                  type="danger"
+                  plain
+                  :loading="costBulkSubmitting"
+                  :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedArchivableCostItemCount === 0"
+                  @click="bulkArchiveCostItems"
+                >
+                  批量归档
+                </el-button>
+              </div>
             </div>
 
             <el-table
@@ -3203,6 +3997,266 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="projectDialog.visible" title="新建项目" width="560px">
+      <el-form label-position="top" :model="projectDialog.form">
+        <el-form-item label="项目名称">
+          <el-input v-model="projectDialog.form.name" maxlength="120" />
+        </el-form-item>
+        <el-form-item label="客户名称">
+          <el-input v-model="projectDialog.form.client_name" maxlength="80" />
+        </el-form-item>
+        <el-form-item label="项目经理">
+          <el-select v-model="projectDialog.form.project_manager_id" class="full-width" filterable placeholder="请选择项目经理">
+            <el-option v-for="user in projectUserOptions" :key="user.id" :label="user.username" :value="user.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="所属部门">
+          <el-input v-model="projectDialog.form.owner_department" maxlength="80" />
+        </el-form-item>
+        <el-form-item label="项目地址">
+          <el-input v-model="projectDialog.form.address" maxlength="160" />
+        </el-form-item>
+        <div class="ledger-form-grid">
+          <el-form-item label="计划开始">
+            <el-date-picker v-model="projectDialog.form.planned_start_at" class="full-width" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" />
+          </el-form-item>
+          <el-form-item label="计划完成">
+            <el-date-picker v-model="projectDialog.form.planned_finish_at" class="full-width" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" />
+          </el-form-item>
+        </div>
+        <el-form-item label="项目说明">
+          <el-input v-model="projectDialog.form.description" type="textarea" :rows="3" maxlength="800" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="projectDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="createProject">创建项目</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="projectTrialDialog.visible" title="单人试运行项目" width="560px">
+      <el-form label-position="top" :model="projectTrialDialog.form">
+        <el-form-item label="项目名称">
+          <el-input v-model="projectTrialDialog.form.name" maxlength="120" />
+        </el-form-item>
+        <el-form-item label="客户名称">
+          <el-input v-model="projectTrialDialog.form.client_name" maxlength="80" />
+        </el-form-item>
+        <el-form-item label="负责部门">
+          <el-input v-model="projectTrialDialog.form.owner_department" maxlength="80" />
+        </el-form-item>
+        <el-form-item label="项目地址">
+          <el-input v-model="projectTrialDialog.form.address" maxlength="160" />
+        </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="计划开始">
+              <el-date-picker v-model="projectTrialDialog.form.planned_start_at" class="full-width" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="计划完成">
+              <el-date-picker v-model="projectTrialDialog.form.planned_finish_at" class="full-width" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="备注">
+          <el-input v-model="projectTrialDialog.form.description" type="textarea" :rows="3" maxlength="800" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="projectTrialDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="createProjectTrial">创建试运行项目</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="projectEpcDialog.visible" title="旗胜EPC流程模板" width="620px">
+      <el-form label-position="top" :model="projectEpcDialog.form">
+        <el-form-item label="项目名称">
+          <el-input v-model="projectEpcDialog.form.name" maxlength="120" />
+        </el-form-item>
+        <el-form-item label="客户名称">
+          <el-input v-model="projectEpcDialog.form.client_name" maxlength="80" />
+        </el-form-item>
+        <div class="ledger-form-grid">
+          <el-form-item label="负责部门">
+            <el-input v-model="projectEpcDialog.form.owner_department" maxlength="80" />
+          </el-form-item>
+          <el-form-item label="模板模式">
+            <el-radio-group v-model="projectEpcDialog.form.mode">
+              <el-radio-button label="compact">精简节点</el-radio-button>
+              <el-radio-button label="full">完整82节点</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+        </div>
+        <el-form-item label="项目地址">
+          <el-input v-model="projectEpcDialog.form.address" maxlength="160" />
+        </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="计划开始">
+              <el-date-picker v-model="projectEpcDialog.form.planned_start_at" class="full-width" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="计划完成">
+              <el-date-picker v-model="projectEpcDialog.form.planned_finish_at" class="full-width" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="备注">
+          <el-input v-model="projectEpcDialog.form.description" type="textarea" :rows="3" maxlength="800" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="projectEpcDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="createProjectEpc">创建EPC项目</el-button>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="projectEvidenceDrawer.visible" size="720px" :title="`成果证据 - ${projectEvidenceDrawer.task?.title || ''}`">
+      <div class="evidence-summary">
+        <div class="section-title">
+          <el-icon><Document /></el-icon>
+          <span>成果要求</span>
+        </div>
+        <p>{{ projectEvidenceDrawer.summary.requirement || projectEvidenceDrawer.task?.evidence_requirement || '未设置成果要求' }}</p>
+      </div>
+
+      <el-table
+        :data="projectEvidenceDrawer.items"
+        row-key="id"
+        class="users-table"
+        empty-text="暂无成果证据"
+        v-loading="projectEvidenceDrawer.loading"
+      >
+        <el-table-column label="类型" width="90">
+          <template #default="{ row }">
+            <el-tag :type="projectEvidenceTypeTag(row.evidence_type)" effect="plain">{{ projectEvidenceTypeLabel(row.evidence_type) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="成果" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="operation-client">
+              <strong>{{ row.title }}</strong>
+              <small>
+                {{ row.file_original_filename || row.external_url || row.description || '-' }}
+                <template v-if="row.file_size_bytes"> · {{ formatFileSize(row.file_size_bytes) }}</template>
+              </small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="登记人" width="110">
+          <template #default="{ row }">{{ row.created_by_username || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="时间" width="150">
+          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="180" fixed="right">
+          <template #default="{ row }">
+            <div class="row-actions">
+              <el-button v-if="row.evidence_type !== 'text'" size="small" plain @click="openProjectEvidence(row)">打开</el-button>
+              <el-button size="small" type="danger" plain @click="removeProjectEvidence(row)">删除</el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-divider />
+
+      <el-form label-position="top" :model="projectEvidenceDrawer.form">
+        <div class="ledger-form-grid">
+          <el-form-item label="证据类型">
+            <el-select v-model="projectEvidenceDrawer.form.evidence_type" class="full-width" @change="resetProjectEvidencePayload">
+              <el-option v-for="option in projectEvidenceTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="成果标题">
+            <el-input v-model="projectEvidenceDrawer.form.title" maxlength="120" />
+          </el-form-item>
+        </div>
+        <el-form-item v-if="projectEvidenceDrawer.form.evidence_type === 'file'" label="上传文件">
+          <el-upload
+            class="full-width"
+            action="#"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleProjectEvidenceFileChange"
+            :on-remove="clearProjectEvidenceFile"
+          >
+            <el-button plain :icon="Upload">选择文件</el-button>
+          </el-upload>
+        </el-form-item>
+        <template v-if="projectEvidenceDrawer.form.evidence_type === 'link'">
+          <div class="ledger-form-grid">
+            <el-form-item label="外部链接">
+              <el-input v-model="projectEvidenceDrawer.form.external_url" maxlength="500" />
+            </el-form-item>
+            <el-form-item label="来源">
+              <el-select v-model="projectEvidenceDrawer.form.external_provider" class="full-width">
+                <el-option label="钉钉" value="dingtalk" />
+                <el-option label="企微" value="wecom" />
+                <el-option label="其他" value="other" />
+              </el-select>
+            </el-form-item>
+          </div>
+        </template>
+        <el-form-item label="说明">
+          <el-input v-model="projectEvidenceDrawer.form.description" type="textarea" :rows="3" maxlength="800" show-word-limit />
+        </el-form-item>
+        <div class="dialog-actions">
+          <el-button :loading="projectEvidenceDrawer.loading" @click="loadProjectTaskEvidences">刷新</el-button>
+          <el-button type="primary" :loading="state.submitting" @click="createProjectEvidence">新增证据</el-button>
+        </div>
+      </el-form>
+    </el-drawer>
+
+    <el-dialog v-model="projectTaskDialog.visible" title="新建项目任务" width="560px">
+      <el-form label-position="top" :model="projectTaskDialog.form">
+        <el-form-item label="所属阶段">
+          <el-select v-model="projectTaskDialog.form.stage_id" class="full-width" filterable placeholder="请选择阶段">
+            <el-option v-for="stage in projectDetail?.stages || []" :key="stage.id" :label="stage.stage_name" :value="stage.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="任务标题">
+          <el-input v-model="projectTaskDialog.form.title" maxlength="120" />
+        </el-form-item>
+        <el-form-item label="负责人">
+          <el-select v-model="projectTaskDialog.form.owner_user_id" class="full-width" filterable placeholder="请选择负责人">
+            <el-option v-for="user in projectUserOptions" :key="user.id" :label="user.username" :value="user.id" />
+          </el-select>
+        </el-form-item>
+        <div class="ledger-form-grid">
+          <el-form-item label="责任岗位">
+            <el-input v-model="projectTaskDialog.form.owner_role" maxlength="64" />
+          </el-form-item>
+          <el-form-item label="优先级">
+            <el-select v-model="projectTaskDialog.form.priority" class="full-width">
+              <el-option v-for="option in projectPriorityOptions" :key="option.value" :label="option.label" :value="option.value" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <div class="ledger-form-grid">
+          <el-form-item label="计划开始">
+            <el-date-picker v-model="projectTaskDialog.form.planned_start_at" class="full-width" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" />
+          </el-form-item>
+          <el-form-item label="截止时间">
+            <el-date-picker v-model="projectTaskDialog.form.due_at" class="full-width" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" />
+          </el-form-item>
+        </div>
+        <el-form-item label="下一步动作">
+          <el-input v-model="projectTaskDialog.form.next_action" maxlength="300" />
+        </el-form-item>
+        <el-form-item label="任务说明">
+          <el-input v-model="projectTaskDialog.form.description" type="textarea" :rows="3" maxlength="800" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="projectTaskDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="createProjectTask">创建任务</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="executionDialog.visible" title="新建执行任务" width="520px">
       <el-form label-position="top" :model="executionDialog.form">
         <el-form-item label="任务标题">
@@ -3503,6 +4557,7 @@ import {
   SwitchButton,
   Tickets,
   TrendCharts,
+  Upload,
   User,
   Warning,
 } from '@element-plus/icons-vue'
@@ -3541,6 +4596,9 @@ const roleOptions = [
   { value: 'cost_editor', label: 'cost_editor', hint: '维护成本库 draft' },
   { value: 'cost_approver', label: 'cost_approver', hint: '启用/归档成本价' },
   { value: 'cost_exporter', label: 'cost_exporter', hint: '成本数据导出预留' },
+  { value: 'project_viewer', label: 'project_viewer', hint: '查看参与项目' },
+  { value: 'project_member', label: 'project_member', hint: '更新本人项目任务' },
+  { value: 'project_manager', label: 'project_manager', hint: '管理项目进度' },
   { value: 'staff', label: 'staff', hint: '旧报价工作台' },
   { value: 'manager', label: 'manager', hint: '执行任务上线后生效' },
   { value: 'viewer', label: 'viewer', hint: '看板开启后生效' },
@@ -3580,6 +4638,47 @@ const executionStatusOptions = [
   { value: 'in_progress', label: '进行中' },
   { value: 'done', label: '已完成' },
   { value: 'cancelled', label: '已取消' },
+]
+
+const projectStatusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'planning', label: '筹备中' },
+  { value: 'active', label: '进行中' },
+  { value: 'paused', label: '已暂停' },
+  { value: 'completed', label: '已完成' },
+  { value: 'cancelled', label: '已取消' },
+]
+
+const projectRiskOptions = [
+  { value: '', label: '全部风险' },
+  { value: 'normal', label: '正常' },
+  { value: 'warning', label: '临期' },
+  { value: 'delayed', label: '延期' },
+  { value: 'blocked', label: '阻塞' },
+]
+
+const projectTaskStatusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'todo', label: '未开始' },
+  { value: 'started', label: '已开始' },
+  { value: 'progressing', label: '进行中' },
+  { value: 'submitted', label: '待确认' },
+  { value: 'done', label: '已完成' },
+  { value: 'blocked', label: '已阻塞' },
+  { value: 'cancelled', label: '已取消' },
+]
+
+const projectEvidenceTypeOptions = [
+  { value: 'text', label: '文字说明' },
+  { value: 'link', label: '外部链接' },
+  { value: 'file', label: '上传文件' },
+]
+
+const projectPriorityOptions = [
+  { value: 'low', label: '低' },
+  { value: 'normal', label: '普通' },
+  { value: 'high', label: '高' },
+  { value: 'urgent', label: '紧急' },
 ]
 
 const executionSourceOptions = [
@@ -3664,9 +4763,11 @@ const loginForm = reactive({ username: '', password: '' })
 const session = reactive({ user: null })
 const users = ref([])
 const roleEvents = ref([])
+const businessDashboard = ref(null)
 const quoteDashboard = ref(null)
 const responseDashboard = ref(null)
 const executionDashboard = ref(null)
+const projectDashboard = ref(null)
 const clientInquiries = ref([])
 const clientInquiryTotal = ref(0)
 const clientInquiryPage = ref(1)
@@ -3679,6 +4780,18 @@ const executionTasks = ref([])
 const executionTaskTotal = ref(0)
 const executionTaskPage = ref(1)
 const executionTaskPageSize = 20
+const projects = ref([])
+const projectTotal = ref(0)
+const projectPage = ref(1)
+const projectPageSize = 20
+const projectDetail = ref(null)
+const projectTaskEvidenceFilter = ref('all')
+const projectEvents = ref([])
+const myProjectTasks = ref([])
+const myProjectTaskTotal = ref(0)
+const myProjectTaskPage = ref(1)
+const myProjectTaskPageSize = 20
+const projectUsers = ref([])
 const meetings = ref([])
 const meetingTotal = ref(0)
 const meetingPage = ref(1)
@@ -3759,6 +4872,15 @@ const executionTaskFilters = reactive({
   source: '',
   keyword: '',
 })
+const projectFilters = reactive({
+  status: '',
+  risk_level: '',
+  keyword: '',
+})
+const myProjectTaskFilters = reactive({
+  status: '',
+  keyword: '',
+})
 const meetingFilters = reactive({
   status: '',
   keyword: '',
@@ -3784,10 +4906,11 @@ const costLineageFilters = reactive({
   has_quote_usage: '',
 })
 const dashboardRange = ref('last_30_days')
-const dashboardTab = ref('quote')
+const dashboardTab = ref('business')
 const executionPageTab = ref('tasks')
-const dashboardFeature = reactive({ quoteDisabled: false, responseDisabled: false, executionDisabled: false })
+const dashboardFeature = reactive({ businessDisabled: false, quoteDisabled: false, responseDisabled: false, executionDisabled: false, projectDisabled: false })
 const executionFeatureDisabled = ref(false)
+const projectFeatureDisabled = ref(false)
 const meetingFeatureDisabled = ref(false)
 const businessLedgerFeatureDisabled = ref(false)
 const costDbFeatureDisabled = ref(false)
@@ -3834,6 +4957,78 @@ const executionDialog = reactive({
     source: 'manual',
     source_ref_id: '',
     notes: '',
+  },
+})
+
+const projectDialog = reactive({
+  visible: false,
+  form: {
+    name: '',
+    client_name: '',
+    project_manager_id: null,
+    owner_department: '',
+    address: '',
+    planned_start_at: '',
+    planned_finish_at: '',
+    description: '',
+  },
+})
+
+const projectTrialDialog = reactive({
+  visible: false,
+  form: {
+    name: '',
+    client_name: '',
+    owner_department: '工程部',
+    address: '',
+    planned_start_at: '',
+    planned_finish_at: '',
+    description: '',
+  },
+})
+
+const projectEpcDialog = reactive({
+  visible: false,
+  form: {
+    name: '',
+    client_name: '',
+    owner_department: '项目管理部',
+    address: '',
+    mode: 'compact',
+    planned_start_at: '',
+    planned_finish_at: '',
+    description: '',
+  },
+})
+
+const projectTaskDialog = reactive({
+  visible: false,
+  form: {
+    stage_id: null,
+    title: '',
+    owner_user_id: null,
+    owner_role: '',
+    priority: 'normal',
+    planned_start_at: '',
+    due_at: '',
+    next_action: '',
+    description: '',
+  },
+})
+
+const projectEvidenceDrawer = reactive({
+  visible: false,
+  loading: false,
+  task: null,
+  summary: {},
+  items: [],
+  file: null,
+  form: {
+    evidence_type: 'text',
+    title: '',
+    description: '',
+    external_url: '',
+    external_provider: 'other',
   },
 })
 
@@ -3965,6 +5160,8 @@ const canViewQuoteOperations = computed(() => canAccessPermissions.value)
 const canViewExecution = computed(() => canAccessPermissions.value || roles.value.includes('staff') || roles.value.includes('manager'))
 const canCreateExecutionTask = computed(() => canAccessPermissions.value)
 const canCreateMeetingNote = computed(() => canViewExecution.value)
+const canViewProjectProgress = computed(() => canAccessPermissions.value || hasRole('staff', 'manager', 'project_viewer', 'project_member', 'project_manager'))
+const canManageProjectProgress = computed(() => canAccessPermissions.value || hasRole('manager', 'project_manager'))
 const canViewBusinessLedger = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canManageBusinessLedger = computed(() => canAccessPermissions.value)
 const canViewCostDb = computed(() => canAccessPermissions.value || hasRole('cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter'))
@@ -3980,11 +5177,260 @@ const selectableCostItems = computed(() => costItems.value.filter((item) => cost
 const selectedDraftCostItemCount = computed(() => selectedCostItems.value.filter((item) => item.status === 'draft').length)
 const selectedActiveCostItemCount = computed(() => selectedCostItems.value.filter((item) => item.status === 'active').length)
 const selectedArchivableCostItemCount = computed(() => selectedCostItems.value.filter((item) => item.status === 'draft' || item.status === 'active').length)
+const costCurrentPageStatusCounts = computed(() => costItems.value.reduce((acc, item) => {
+  const status = item.status || 'unknown'
+  acc[status] = (acc[status] || 0) + 1
+  return acc
+}, {}))
+const costDbActiveFilterSummary = computed(() => {
+  const parts = []
+  if (costItemFilters.category) parts.push(`类别 ${costItemFilters.category}`)
+  if (costItemFilters.status?.length) parts.push(`状态 ${costItemFilters.status.map(costStatusLabel).join('/')}`)
+  if (costItemFilters.price_type) parts.push(`价格类型 ${costPriceTypeLabel(costItemFilters.price_type)}`)
+  if (costItemFilters.source) parts.push(`来源 ${costSourceLabel(costItemFilters.source)}`)
+  if (costItemFilters.keyword) parts.push(`关键词 ${costItemFilters.keyword}`)
+  return parts.length ? parts.join(' · ') : '当前未限定筛选条件'
+})
+const costDbSelectionSummary = computed(() => {
+  if (!selectedCostItemIds.value.length) {
+    return `未选择条目；当前筛选共 ${costItemTotal.value || 0} 条，可先按状态/来源筛出待审核项。`
+  }
+  return `已选 ${selectedCostItemIds.value.length} 条：draft ${selectedDraftCostItemCount.value}，active ${selectedActiveCostItemCount.value}，可归档 ${selectedArchivableCostItemCount.value}。`
+})
+const costDbOverviewCards = computed(() => {
+  const counts = costCurrentPageStatusCounts.value
+  const statusDetail = `当前页 draft ${counts.draft || 0} · active ${counts.active || 0} · archived ${counts.archived || 0}`
+  const ragLabel = costRagSyncStatus.value?.status_label || costRagSyncSummaryLabel(costRagSyncStatus.value?.status)
+  return [
+    {
+      key: 'result',
+      title: '筛选结果',
+      value: `${costItemTotal.value || 0} 条`,
+      detail: costDbActiveFilterSummary.value,
+      tone: 'is-info',
+    },
+    {
+      key: 'status',
+      title: '当前页状态',
+      value: `${counts.draft || 0}/${counts.active || 0}/${counts.archived || 0}`,
+      detail: statusDetail,
+      tone: (counts.draft || 0) > 0 ? 'is-warning' : 'is-success',
+    },
+    {
+      key: 'selection',
+      title: '已选条目',
+      value: `${selectedCostItemIds.value.length}`,
+      detail: selectedCostItemIds.value.length
+        ? `draft ${selectedDraftCostItemCount.value} · active ${selectedActiveCostItemCount.value}`
+        : '用于批量核定、恢复或归档',
+      tone: selectedCostItemIds.value.length ? 'is-warning' : 'is-info',
+    },
+    {
+      key: 'rag',
+      title: 'RAG 同步',
+      value: ragLabel || '-',
+      detail: `active ${costRagSyncStatus.value?.active_count || 0} · 最近成功 ${formatShanghaiDate(costRagSyncStatus.value?.latest_successful_run?.finished_at)}`,
+      tone: costRagSyncSummaryAlertType(costRagSyncStatus.value?.status) === 'success' ? 'is-success' : 'is-warning',
+    },
+  ]
+})
 const visibleDailyTrends = computed(() => (quoteDashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
 const visibleResponseSources = computed(() => (responseDashboard.value?.by_source || []).slice(0, 12))
 const visibleResponseResponders = computed(() => (responseDashboard.value?.by_responder || []).slice(0, 12))
 const visibleExecutionTrends = computed(() => (executionDashboard.value?.daily_trends || []).filter((item) => item.task_count > 0).slice(-12))
 const visibleExecutionAssignees = computed(() => (executionDashboard.value?.by_assignee || []).slice(0, 12))
+const visibleProjectManagers = computed(() => (projectDashboard.value?.by_project_manager || []).slice(0, 12))
+const businessSectionErrorCount = computed(() => (businessDashboard.value?.section_errors || []).length)
+const businessRisks = computed(() => businessDashboard.value?.risks || [])
+const businessQuoteTrendRows = computed(() => visibleBusinessTrendRows(businessDashboard.value?.quote?.daily_trend || [], [
+  'task_count',
+  'success_count',
+  'failed_or_timeout_count',
+  'pushed_count',
+]))
+const businessProjectTrendRows = computed(() => visibleBusinessTrendRows(businessDashboard.value?.project_progress?.daily_trend || [], [
+  'bypass_gate_event_count',
+  'bypassed_missing_evidence_count',
+  'soft_reminder_event_count',
+]))
+const businessQuoteTrendMax = computed(() => maxBusinessTrendValue(businessQuoteTrendRows.value, [
+  'task_count',
+  'success_count',
+  'failed_or_timeout_count',
+  'pushed_count',
+]))
+const businessProjectTrendMax = computed(() => maxBusinessTrendValue(businessProjectTrendRows.value, [
+  'bypass_gate_event_count',
+  'bypassed_missing_evidence_count',
+  'soft_reminder_event_count',
+]))
+const businessQuickLinks = computed(() => {
+  const links = businessDashboard.value?.links || []
+  const preferred = ['quote_workspace', 'cost_db', 'project_progress', 'ops_dashboard']
+  return preferred.map((key) => links.find((item) => item.key === key)).filter(Boolean)
+})
+const businessDistributionGroups = computed(() => {
+  const data = businessDashboard.value || {}
+  const cost = data.cost || {}
+  const project = data.project_progress || {}
+  return [
+    {
+      key: 'cost_status',
+      title: '成本库状态',
+      rows: buildBusinessDistributionRows(cost.status_distribution || [], 'status'),
+    },
+    {
+      key: 'cost_source',
+      title: '成本库来源',
+      rows: buildBusinessDistributionRows(cost.source_distribution || [], 'source'),
+    },
+    {
+      key: 'project_status',
+      title: '项目状态',
+      rows: buildBusinessDistributionRows(project.project_status_distribution || [], 'status'),
+    },
+    {
+      key: 'task_status',
+      title: '任务状态',
+      rows: buildBusinessDistributionRows(project.task_status_distribution || [], 'status'),
+    },
+  ]
+})
+const businessMetricCards = computed(() => {
+  const data = businessDashboard.value || {}
+  const quote = data.quote || {}
+  const cost = data.cost || {}
+  const project = data.project_progress || {}
+  const environment = data.environment || {}
+  return [
+    {
+      key: 'quote_tasks',
+      title: '报价任务',
+      value: String(quote.task_count ?? 0),
+      subtitle: `成功 ${quote.success_count ?? 0} · 失败 ${quote.failed_count ?? 0} · 草稿 ${quote.draft_count ?? 0}`,
+      targetPath: '/admin/dashboard',
+    },
+    {
+      key: 'quote_push',
+      title: '报价下发',
+      value: String(quote.pushed_count ?? 0),
+      subtitle: `下发总价 ${formatAmount(quote.pushed_total_amount ?? 0)}`,
+      targetPath: '/admin/dashboard',
+    },
+    {
+      key: 'cost_status',
+      title: '成本库状态',
+      value: `${cost.active_count ?? 0} / ${cost.draft_count ?? 0} / ${cost.archived_count ?? 0}`,
+      subtitle: 'active / draft / archived',
+      targetPath: '/admin/cost-db',
+    },
+    {
+      key: 'rag_sync',
+      title: 'RAG 同步',
+      value: cost.rag_status_label || cost.rag_status || '-',
+      subtitle: `最近成功 ${formatDate(cost.last_success_sync_at)}`,
+      targetPath: '/admin/cost-db',
+    },
+    {
+      key: 'no_cost_draft',
+      title: '无底价待审',
+      value: String(cost.no_cost_draft_count ?? 0),
+      subtitle: `成本库 draft 共 ${cost.draft_count ?? 0} 条`,
+      targetPath: '/admin/cost-db',
+    },
+    {
+      key: 'project_progress',
+      title: '项目进度',
+      value: String(project.active_project_count ?? 0),
+      subtitle: `阻塞任务 ${project.blocked_task_count ?? 0} · 逾期 ${project.overdue_task_count ?? 0}`,
+      targetPath: '/admin/projects',
+    },
+    {
+      key: 'evidence',
+      title: '成果证据',
+      value: String(project.missing_evidence_task_count ?? 0),
+      subtitle: `硬门禁 ${project.complete_required_task_count ?? 0} · 放行未补 ${project.hard_gate_bypassed_missing_evidence_count ?? 0}`,
+      targetPath: '/admin/projects',
+    },
+    {
+      key: 'system',
+      title: '系统健康',
+      value: businessOverallLabel(environment.overall_status),
+      subtitle: `局部降级 ${businessSectionErrorCount.value} 个区块`,
+      targetPath: '/api/v1/admin/ops/dashboard',
+    },
+  ]
+})
+const businessTrialReadinessCards = computed(() => {
+  const data = businessDashboard.value || {}
+  const quote = data.quote || {}
+  const cost = data.cost || {}
+  const project = data.project_progress || {}
+  const environment = data.environment || {}
+  return [
+    {
+      key: 'quote',
+      label: '报价试运行',
+      value: `${quote.success_count ?? 0}/${quote.task_count ?? 0}`,
+      detail: `成功/总任务，失败 ${quote.failed_count ?? 0}，超时 ${quote.timeout_count ?? 0}`,
+      tone: (quote.failed_count || quote.timeout_count) ? 'is-warning' : 'is-success',
+    },
+    {
+      key: 'cost',
+      label: '成本库准备',
+      value: `${cost.active_count ?? 0} active`,
+      detail: `draft ${cost.draft_count ?? 0}，无底价待审 ${cost.no_cost_draft_count ?? 0}`,
+      tone: (cost.no_cost_draft_count || cost.draft_count) ? 'is-warning' : 'is-success',
+    },
+    {
+      key: 'project',
+      label: '项目证据',
+      value: `${project.missing_evidence_task_count ?? 0}`,
+      detail: `缺证据任务；放行未补 ${project.hard_gate_bypassed_missing_evidence_count ?? 0}`,
+      tone: (project.missing_evidence_task_count || project.hard_gate_bypassed_missing_evidence_count) ? 'is-danger' : 'is-success',
+    },
+    {
+      key: 'system',
+      label: '系统运行',
+      value: businessOverallLabel(environment.overall_status),
+      detail: `局部降级 ${businessSectionErrorCount.value} 个区块，环境 ${businessModeLabel(environment.mode)}`,
+      tone: environment.overall_status === 'degraded' ? 'is-danger' : (environment.overall_status === 'warning' ? 'is-warning' : 'is-success'),
+    },
+  ]
+})
+const businessSummaryRows = computed(() => {
+  const data = businessDashboard.value || {}
+  const quote = data.quote || {}
+  const cost = data.cost || {}
+  const project = data.project_progress || {}
+  const system = data.system_health || {}
+  return [
+    {
+      key: 'quote',
+      label: '报价链路',
+      value: `${quote.success_count ?? 0} 成功 / ${quote.failed_count ?? 0} 失败`,
+      detail: `平均耗时 ${formatMs(quote.avg_duration_ms)}，超时 ${quote.timeout_count ?? 0}`,
+    },
+    {
+      key: 'cost',
+      label: '成本库',
+      value: `${cost.active_count ?? 0} active`,
+      detail: `draft ${cost.draft_count ?? 0}，审计事件 ${cost.audit_event_count ?? 0}`,
+    },
+    {
+      key: 'project',
+      label: '项目进度',
+      value: `${project.project_count ?? 0} 个项目`,
+      detail: `进行中 ${project.active_project_count ?? 0}，缺证据 ${project.missing_evidence_task_count ?? 0}`,
+    },
+    {
+      key: 'mode',
+      label: '运行模式',
+      value: businessModeLabel(data.environment?.mode),
+      detail: `开关 ${system.feature_flags?.dashboard_business_lite ? '已开启' : '未开启'}，head ${data.environment?.database_head || '-'}`,
+    },
+  ]
+})
 const requirementSheetMappings = computed(() => requirementPreview.value?.sheet_mappings || [])
 const requirementSummary = computed(() => requirementPreview.value?.summary || {})
 const selectedRequirementRows = computed(() => requirementRows.value.filter((row) => row.include))
@@ -4062,6 +5508,150 @@ const executionAssigneeOptions = computed(() => {
     return user.roles.some((role) => ['system_admin', 'admin', 'staff', 'manager'].includes(role))
   })
 })
+const projectUserOptions = computed(() => {
+  const source = projectUsers.value.length ? projectUsers.value : (session.user ? [session.user] : [])
+  return source.filter((user) => user.is_active !== false)
+})
+const projectEvidenceSummary = computed(() => {
+  const backendSummary = projectDetail.value?.evidence_summary
+  if (backendSummary) return backendSummary
+  const tasks = projectDetail.value?.tasks || []
+  const requiredTasks = tasks.filter((task) => projectTaskNeedsEvidence(task))
+  const evidencedTasks = requiredTasks.filter((task) => Number(task.evidence_count || 0) > 0)
+  const missingTasks = requiredTasks.filter((task) => Number(task.evidence_count || 0) <= 0)
+  const doneWithoutEvidence = missingTasks.filter((task) => task.status === 'done')
+  return {
+    required_task_count: requiredTasks.length,
+    evidenced_task_count: evidencedTasks.length,
+    missing_evidence_task_count: missingTasks.length,
+    done_without_evidence_task_count: doneWithoutEvidence.length,
+    open_missing_evidence_task_count: missingTasks.filter((task) => task.status !== 'done').length,
+    evidence_completion_percent: requiredTasks.length ? Math.round((evidencedTasks.length * 100) / requiredTasks.length) : 0,
+  }
+})
+const projectListOverviewCards = computed(() => {
+  const rows = projects.value || []
+  const activeCount = rows.filter((item) => item.status === 'active').length
+  const riskCount = rows.filter((item) => ['warning', 'delayed', 'blocked'].includes(item.risk_level)).length
+  const blockedCount = rows.filter((item) => item.risk_level === 'blocked').length
+  const taskCount = rows.reduce((sum, item) => sum + Number(item.task_count || 0), 0)
+  const doneTaskCount = rows.reduce((sum, item) => sum + Number(item.done_task_count || 0), 0)
+  const avgProgress = rows.length
+    ? Math.round(rows.reduce((sum, item) => sum + Number(item.progress_percent || 0), 0) / rows.length)
+    : 0
+  return [
+    {
+      key: 'total',
+      title: '筛选项目',
+      value: `${projectTotal.value || rows.length} 个`,
+      detail: rows.length ? `当前页 ${rows.length} 个项目` : '暂无项目数据',
+      tone: 'is-info',
+    },
+    {
+      key: 'active',
+      title: '进行中',
+      value: `${activeCount}`,
+      detail: `当前页平均进度 ${avgProgress}%`,
+      tone: activeCount ? 'is-success' : 'is-info',
+    },
+    {
+      key: 'risk',
+      title: '风险项目',
+      value: `${riskCount}`,
+      detail: `其中阻塞 ${blockedCount} 个`,
+      tone: blockedCount ? 'is-danger' : (riskCount ? 'is-warning' : 'is-success'),
+    },
+    {
+      key: 'tasks',
+      title: '任务闭环',
+      value: `${doneTaskCount}/${taskCount}`,
+      detail: taskCount ? `当前页完成率 ${Math.round((doneTaskCount * 100) / taskCount)}%` : '暂无任务统计',
+      tone: taskCount && doneTaskCount < taskCount ? 'is-warning' : 'is-success',
+    },
+  ]
+})
+const myProjectTaskOverviewCards = computed(() => {
+  const rows = myProjectTasks.value || []
+  const todoCount = rows.filter((item) => item.status === 'todo').length
+  const progressingCount = rows.filter((item) => ['started', 'progressing'].includes(item.status)).length
+  const submittedCount = rows.filter((item) => item.status === 'submitted').length
+  const blockedCount = rows.filter((item) => item.status === 'blocked').length
+  const evidenceRequiredCount = rows.filter((item) => projectTaskNeedsEvidence(item)).length
+  const missingEvidenceCount = rows.filter((item) => projectTaskNeedsEvidence(item) && Number(item.evidence_count || 0) <= 0).length
+  return [
+    {
+      key: 'total',
+      title: '我的任务',
+      value: `${myProjectTaskTotal.value || rows.length}`,
+      detail: `当前页 ${rows.length} 条，未开始 ${todoCount}`,
+      tone: 'is-info',
+    },
+    {
+      key: 'progress',
+      title: '推进中',
+      value: `${progressingCount}`,
+      detail: `待确认 ${submittedCount} 条`,
+      tone: progressingCount || submittedCount ? 'is-warning' : 'is-info',
+    },
+    {
+      key: 'blocked',
+      title: '阻塞任务',
+      value: `${blockedCount}`,
+      detail: blockedCount ? '优先解除阻塞或补充下一步' : '当前页无阻塞',
+      tone: blockedCount ? 'is-danger' : 'is-success',
+    },
+    {
+      key: 'evidence',
+      title: '成果证据',
+      value: `${missingEvidenceCount}/${evidenceRequiredCount}`,
+      detail: '缺证据/需证据任务',
+      tone: missingEvidenceCount ? 'is-warning' : 'is-success',
+    },
+  ]
+})
+const projectDetailFocusCards = computed(() => {
+  const detail = projectDetail.value || {}
+  const summary = projectEvidenceSummary.value || {}
+  return [
+    {
+      key: 'progress',
+      title: '总进度',
+      value: `${detail.progress_percent || 0}%`,
+      detail: `当前阶段 ${detail.current_stage_name || '-'}`,
+      tone: 'is-info',
+    },
+    {
+      key: 'blocked',
+      title: '阻塞/逾期',
+      value: `${detail.blocked_task_count || 0}/${detail.overdue_task_count || 0}`,
+      detail: '阻塞任务/逾期任务',
+      tone: (detail.blocked_task_count || detail.overdue_task_count) ? 'is-danger' : 'is-success',
+    },
+    {
+      key: 'evidence',
+      title: '证据完整性',
+      value: `${summary.evidence_completion_percent || 0}%`,
+      detail: `缺证据 ${summary.missing_evidence_task_count || 0} 个节点`,
+      tone: (summary.missing_evidence_task_count || 0) > 0 ? 'is-warning' : 'is-success',
+    },
+    {
+      key: 'tasks',
+      title: '任务闭环',
+      value: `${detail.done_task_count || 0}/${detail.task_count || 0}`,
+      detail: `${projectStatusLabel(detail.status)} · ${projectRiskLabel(detail.risk_level)}`,
+      tone: detail.risk_level === 'blocked' || detail.risk_level === 'delayed' ? 'is-danger' : 'is-info',
+    },
+  ]
+})
+const visibleProjectDetailTasks = computed(() => {
+  const tasks = projectDetail.value?.tasks || []
+  if (projectTaskEvidenceFilter.value === 'required') return tasks.filter((task) => projectTaskNeedsEvidence(task))
+  if (projectTaskEvidenceFilter.value === 'evidenced') return tasks.filter((task) => projectTaskNeedsEvidence(task) && Number(task.evidence_count || 0) > 0)
+  if (projectTaskEvidenceFilter.value === 'missing') return tasks.filter((task) => projectTaskNeedsEvidence(task) && Number(task.evidence_count || 0) <= 0)
+  if (projectTaskEvidenceFilter.value === 'done_missing') return tasks.filter((task) => projectTaskNeedsEvidence(task) && Number(task.evidence_count || 0) <= 0 && task.status === 'done')
+  if (projectTaskEvidenceFilter.value === 'open_missing') return tasks.filter((task) => projectTaskNeedsEvidence(task) && Number(task.evidence_count || 0) <= 0 && task.status !== 'done')
+  return tasks
+})
 const businessLedgerResponderOptions = computed(() => {
   const source = users.value.length ? users.value : (session.user ? [session.user] : [])
   return source.filter((user) => user.is_active !== false)
@@ -4077,6 +5667,9 @@ function routeFromPath(path) {
   if (path === '/login') return 'login'
   if (path === '/admin/dashboard') return 'dashboard'
   if (path === '/admin/execution') return 'execution'
+  if (path === '/admin/projects') return 'projects'
+  if (path === '/admin/project-tasks/my') return 'projectMyTasks'
+  if (/^\/admin\/projects\/\d+$/.test(path)) return 'projectDetail'
   if (path === '/admin/business-ledger') return 'businessLedger'
   if (path === '/admin/cost-db') return 'costDb'
   if (path === '/admin/requirement-standardization') return 'requirementStandardization'
@@ -4089,6 +5682,12 @@ function responseData(response) {
 
 function apiErrorMessage(error, fallback = '请求失败') {
   const detail = error.response?.data?.detail
+  const detailMessages = {
+    EVIDENCE_HARD_GATE_BLOCKED: '该关键节点要求成果证据，请先登记证据再完成，或联系项目经理放行',
+    EVIDENCE_BYPASS_REASON_REQUIRED: '请填写至少 6 个字的关键节点放行原因',
+    EVIDENCE_CONFIRM_REASON_REQUIRED: '请填写无证据确认说明',
+  }
+  if (detailMessages[detail]) return detailMessages[detail]
   if (typeof detail === 'string') return detail
   if (detail?.message) return detail.message
   if (error.response?.data?.message) return error.response.data.message
@@ -4107,10 +5706,121 @@ function openLegacy(path) {
   window.location.href = path
 }
 
+async function openBusinessTarget(path) {
+  if (!path) return
+  if (path === '/api/v1/admin/ops/dashboard') {
+    await showOpsDashboardSummary()
+    return
+  }
+  if (path.startsWith('/api/v1/')) {
+    try {
+      const response = await api.get(path.replace('/api/v1', ''))
+      const data = responseData(response)
+      ElMessage.success(`运维接口已返回：${data?.overall_status || '已响应'}`)
+    } catch (error) {
+      ElMessage.error(apiErrorMessage(error, '运维接口检查失败'))
+    }
+    return
+  }
+  if (path.startsWith('/admin/')) {
+    navigate(path)
+    return
+  }
+  if (path.endsWith('.html')) {
+    openLegacy(path)
+    return
+  }
+  window.open(path, '_blank', 'noopener')
+}
+
+async function showOpsDashboardSummary() {
+  const loading = ElMessage({
+    type: 'info',
+    message: '正在检查运维接口...',
+    duration: 0,
+  })
+  try {
+    const response = await api.get('/admin/ops/dashboard')
+    const data = responseData(response) || {}
+    const services = data.services || []
+    const alerts = data.alerts || []
+    const jobs = data.jobs || {}
+    const logs = data.logs || []
+    const okCount = services.filter((item) => item.ok).length
+    const statusText = data.overall_status === 'ready' ? 'ready' : data.overall_status || 'unknown'
+    const lines = [
+      `状态：${statusText}`,
+      `生成时间：${data.generated_at || '-'}`,
+      `服务检查：${okCount}/${services.length} 正常`,
+      `告警数量：${alerts.length}`,
+      `活跃报价任务：${jobs.active_count ?? 0}`,
+      `卡住任务：${jobs.stuck_count ?? 0}`,
+      `日志事件：${Array.isArray(logs) ? logs.length : 0}`,
+    ]
+    loading.close()
+    await ElMessageBox.alert(lines.join('\n'), '运维接口状态', {
+      confirmButtonText: '知道了',
+      customClass: 'ops-dashboard-message',
+    })
+  } catch (error) {
+    loading.close()
+    const detail = error.response?.data?.detail
+    const message = detail === 'PERMISSION_DENIED'
+      ? '当前账号没有运维接口查看权限。该接口需要管理员权限，请使用 admin 账号或让管理员查看。'
+      : apiErrorMessage(error, '运维接口检查失败')
+    await ElMessageBox.alert(message, '运维接口状态', {
+      confirmButtonText: '知道了',
+      customClass: 'ops-dashboard-message',
+    })
+  }
+}
+
+function visibleBusinessTrendRows(rows, fields) {
+  return (rows || [])
+    .filter((row) => fields.some((field) => Number(row?.[field] || 0) > 0))
+    .slice(-12)
+    .map((row) => {
+      const result = { date: row.date || '-' }
+      fields.forEach((field) => {
+        result[field] = Number(row?.[field] || 0)
+      })
+      return result
+    })
+}
+
+function maxBusinessTrendValue(rows, fields) {
+  return Math.max(
+    1,
+    ...((rows || []).flatMap((row) => fields.map((field) => Number(row?.[field] || 0)))),
+  )
+}
+
+function businessBarWidth(value, maxValue) {
+  const numeric = Number(value || 0)
+  const max = Number(maxValue || 0)
+  if (numeric <= 0 || max <= 0) return '0%'
+  return `${Math.max(8, Math.round((numeric / max) * 100))}%`
+}
+
+function buildBusinessDistributionRows(rows, keyName) {
+  const max = Math.max(1, ...((rows || []).map((row) => Number(row?.count || 0))))
+  return (rows || []).map((row) => {
+    const count = Number(row?.count || 0)
+    const key = row?.[keyName] || row?.status || row?.source || row?.label || 'unknown'
+    return {
+      key,
+      label: row?.label || key,
+      count,
+      percent: count <= 0 ? 0 : Math.max(8, Math.round((count / max) * 100)),
+    }
+  })
+}
+
 function roleTagType(role) {
   if (role === 'system_admin') return 'danger'
   if (role === 'admin') return 'warning'
   if (role?.startsWith('cost_')) return 'warning'
+  if (role?.startsWith('project_')) return 'primary'
   if (role === 'staff') return 'success'
   if (role === 'manager') return 'primary'
   return 'info'
@@ -4119,6 +5829,13 @@ function roleTagType(role) {
 function formatDate(value) {
   if (!value) return '-'
   return value.replace('T', ' ').slice(0, 19)
+}
+
+function formatDateTimeInput(value) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (item) => String(item).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 function formatShanghaiDate(value) {
@@ -4153,6 +5870,45 @@ function formatMs(value) {
 function formatRate(value) {
   if (value === null || value === undefined) return '-'
   return `${(value * 100).toFixed(1)}%`
+}
+
+function businessOverallLabel(status) {
+  const labels = {
+    ok: '正常',
+    warning: '有风险',
+    degraded: '局部降级',
+  }
+  return labels[status] || status || '-'
+}
+
+function businessOverallTagType(status) {
+  if (status === 'ok') return 'success'
+  if (status === 'degraded') return 'danger'
+  if (status === 'warning') return 'warning'
+  return 'info'
+}
+
+function businessModeLabel(mode) {
+  const labels = {
+    internal_trial: '内网试运行',
+    public_access: '公网访问',
+  }
+  return labels[mode] || mode || '-'
+}
+
+function businessSeverityLabel(severity) {
+  const labels = {
+    critical: '严重',
+    warning: '提醒',
+    info: '提示',
+  }
+  return labels[severity] || severity || '-'
+}
+
+function businessSeverityTag(severity) {
+  if (severity === 'critical') return 'danger'
+  if (severity === 'warning') return 'warning'
+  return 'info'
 }
 
 function formatMinutes(value) {
@@ -4201,6 +5957,92 @@ function executionStatusTag(status) {
   if (status === 'cancelled') return 'info'
   if (status === 'in_progress') return 'warning'
   return 'primary'
+}
+
+function projectStatusLabel(status) {
+  const option = projectStatusOptions.find((item) => item.value === status)
+  return option?.label || status || '-'
+}
+
+function projectStatusTag(status) {
+  if (status === 'completed') return 'success'
+  if (status === 'cancelled') return 'info'
+  if (status === 'paused') return 'warning'
+  if (status === 'active') return 'primary'
+  return 'info'
+}
+
+function projectRiskLabel(risk) {
+  const option = projectRiskOptions.find((item) => item.value === risk)
+  return option?.label || risk || '-'
+}
+
+function projectRiskTag(risk) {
+  if (risk === 'blocked') return 'danger'
+  if (risk === 'delayed') return 'danger'
+  if (risk === 'warning') return 'warning'
+  return 'success'
+}
+
+function projectTaskStatusLabel(status) {
+  const option = projectTaskStatusOptions.find((item) => item.value === status)
+  return option?.label || status || '-'
+}
+
+function projectTaskStatusTag(status) {
+  if (status === 'done') return 'success'
+  if (status === 'blocked') return 'danger'
+  if (status === 'cancelled') return 'info'
+  if (status === 'submitted') return 'warning'
+  if (status === 'progressing') return 'primary'
+  return 'info'
+}
+
+function projectEvidenceTypeLabel(type) {
+  const option = projectEvidenceTypeOptions.find((item) => item.value === type)
+  return option?.label || type || '-'
+}
+
+function projectEvidenceTypeTag(type) {
+  if (type === 'file') return 'success'
+  if (type === 'link') return 'primary'
+  return 'info'
+}
+
+function formatFileSize(size) {
+  const value = Number(size || 0)
+  if (!value) return '-'
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
+}
+
+function projectEventLabel(eventType) {
+  const labels = {
+    project_created: '创建项目',
+    project_updated: '更新项目',
+    project_started: '启动项目',
+    project_paused: '暂停项目',
+    project_completed: '完成项目',
+    project_cancelled: '取消项目',
+    stage_updated: '更新阶段',
+    task_created: '创建任务',
+    task_updated: '更新任务',
+    task_started: '开始任务',
+    task_progressing: '推进任务',
+    task_submitted: '提交确认',
+    task_completed: '确认完成',
+    task_blocked: '任务阻塞',
+    task_unblocked: '解除阻塞',
+    task_rolled_back: '回退任务',
+    task_cancelled: '取消任务',
+    task_evidence_added: '新增成果证据',
+    task_evidence_removed: '删除成果证据',
+    task_submitted_without_evidence: '无证据提交',
+    task_completed_without_evidence: '无证据完成',
+    task_completed_bypass_gate: '关键节点放行完成',
+  }
+  return labels[eventType] || eventType || '-'
 }
 
 function meetingStatusLabel(status) {
@@ -5563,6 +7405,16 @@ async function loadExecutionUsers() {
   }
 }
 
+async function loadProjectUsers() {
+  if (!canManageProjectProgress.value || projectUsers.value.length) return
+  try {
+    const response = await api.get('/admin/projects/users')
+    projectUsers.value = responseData(response) || []
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '项目人员加载失败'))
+  }
+}
+
 async function loadBusinessLedgerUsers() {
   if (!canManageBusinessLedger.value || users.value.length) return
   try {
@@ -6438,6 +8290,643 @@ async function confirmCostImport() {
   }
 }
 
+function currentProjectId() {
+  const match = window.location.pathname.match(/^\/admin\/projects\/(\d+)$/)
+  return match ? Number(match[1]) : null
+}
+
+async function loadProjectDashboard() {
+  dashboardFeature.projectDisabled = false
+  try {
+    const response = await api.get('/admin/dashboard/projects')
+    projectDashboard.value = responseData(response)
+    return true
+  } catch (error) {
+    projectDashboard.value = null
+    if (isFeatureDisabled(error) || error.response?.data?.detail === 'NOT_FOUND') {
+      dashboardFeature.projectDisabled = true
+      return false
+    }
+    else throw error
+  }
+}
+
+async function loadProjects() {
+  projectFeatureDisabled.value = false
+  const params = {
+    page: projectPage.value,
+    page_size: projectPageSize,
+  }
+  if (projectFilters.status) params.status = projectFilters.status
+  if (projectFilters.risk_level) params.risk_level = projectFilters.risk_level
+  const keyword = projectFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
+  try {
+    const response = await api.get('/admin/projects', { params })
+    projects.value = responseData(response) || []
+    projectTotal.value = response.data?.total ?? projects.value.length
+  } catch (error) {
+    projects.value = []
+    projectTotal.value = 0
+    if (error.response?.status === 404) {
+      projectFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '项目加载失败'))
+  }
+}
+
+function applyProjectFilters() {
+  projectPage.value = 1
+  loadProjects()
+}
+
+async function loadProjectEvents(projectId = currentProjectId()) {
+  if (!projectId) return
+  try {
+    const response = await api.get(`/admin/projects/${projectId}/events`)
+    projectEvents.value = responseData(response) || []
+  } catch (error) {
+    projectEvents.value = []
+    ElMessage.error(apiErrorMessage(error, '项目动态加载失败'))
+  }
+}
+
+async function loadProjectDetail() {
+  projectFeatureDisabled.value = false
+  const projectId = currentProjectId()
+  if (!projectId) {
+    state.error = 'forbidden'
+    return
+  }
+  try {
+    const response = await api.get(`/admin/projects/${projectId}`)
+    projectDetail.value = responseData(response)
+    await loadProjectEvents(projectId)
+  } catch (error) {
+    projectDetail.value = null
+    projectEvents.value = []
+    if (error.response?.status === 404) {
+      projectFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '项目详情加载失败'))
+  }
+}
+
+async function loadMyProjectTasks() {
+  projectFeatureDisabled.value = false
+  const params = {
+    page: myProjectTaskPage.value,
+    page_size: myProjectTaskPageSize,
+  }
+  if (myProjectTaskFilters.status) params.status = myProjectTaskFilters.status
+  const keyword = myProjectTaskFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
+  try {
+    const response = await api.get('/admin/project-tasks/my', { params })
+    myProjectTasks.value = responseData(response) || []
+    myProjectTaskTotal.value = response.data?.total ?? myProjectTasks.value.length
+  } catch (error) {
+    myProjectTasks.value = []
+    myProjectTaskTotal.value = 0
+    if (error.response?.status === 404) {
+      projectFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '我的项目任务加载失败'))
+  }
+}
+
+function applyMyProjectTaskFilters() {
+  myProjectTaskPage.value = 1
+  loadMyProjectTasks()
+}
+
+async function openProjectCreate() {
+  if (!canManageProjectProgress.value) return
+  await loadProjectUsers()
+  projectDialog.form.name = ''
+  projectDialog.form.client_name = ''
+  projectDialog.form.project_manager_id = projectUserOptions.value[0]?.id ?? session.user?.id ?? null
+  projectDialog.form.owner_department = ''
+  projectDialog.form.address = ''
+  projectDialog.form.planned_start_at = ''
+  projectDialog.form.planned_finish_at = ''
+  projectDialog.form.description = ''
+  projectDialog.visible = true
+}
+
+async function createProject() {
+  if (!projectDialog.form.name.trim() || !projectDialog.form.project_manager_id) {
+    ElMessage.warning('请填写项目名称并选择项目经理')
+    return
+  }
+  state.submitting = true
+  try {
+    const response = await api.post('/admin/projects', {
+      name: projectDialog.form.name,
+      client_name: projectDialog.form.client_name,
+      project_manager_id: projectDialog.form.project_manager_id,
+      owner_department: projectDialog.form.owner_department,
+      address: projectDialog.form.address,
+      planned_start_at: projectDialog.form.planned_start_at || null,
+      planned_finish_at: projectDialog.form.planned_finish_at || null,
+      description: projectDialog.form.description,
+    })
+    projectDialog.visible = false
+    ElMessage.success('已创建项目')
+    const project = responseData(response)
+    navigate(`/admin/projects/${project.id}`)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '创建项目失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+function openProjectTrialCreate() {
+  if (!canManageProjectProgress.value) return
+  const start = new Date()
+  start.setMinutes(0, 0, 0)
+  const finish = new Date(start)
+  finish.setDate(finish.getDate() + 30)
+  const dateText = `${start.getFullYear()}${String(start.getMonth() + 1).padStart(2, '0')}${String(start.getDate()).padStart(2, '0')}`
+  projectTrialDialog.form.name = `单人试运行项目-${dateText}`
+  projectTrialDialog.form.client_name = ''
+  projectTrialDialog.form.owner_department = '工程部'
+  projectTrialDialog.form.address = ''
+  projectTrialDialog.form.planned_start_at = formatDateTimeInput(start)
+  projectTrialDialog.form.planned_finish_at = formatDateTimeInput(finish)
+  projectTrialDialog.form.description = ''
+  projectTrialDialog.visible = true
+}
+
+async function createProjectTrial() {
+  if (!projectTrialDialog.form.name.trim()) {
+    ElMessage.warning('请填写项目名称')
+    return
+  }
+  state.submitting = true
+  try {
+    const response = await api.post('/admin/projects/trial-template', {
+      name: projectTrialDialog.form.name,
+      client_name: projectTrialDialog.form.client_name,
+      owner_department: projectTrialDialog.form.owner_department,
+      address: projectTrialDialog.form.address,
+      planned_start_at: projectTrialDialog.form.planned_start_at || null,
+      planned_finish_at: projectTrialDialog.form.planned_finish_at || null,
+      description: projectTrialDialog.form.description,
+    })
+    projectTrialDialog.visible = false
+    ElMessage.success('已创建单人试运行项目')
+    const project = responseData(response)
+    navigate(`/admin/projects/${project.id}`)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '创建试运行项目失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+function openProjectEpcCreate() {
+  if (!canManageProjectProgress.value) return
+  const start = new Date()
+  start.setMinutes(0, 0, 0)
+  const finish = new Date(start)
+  finish.setDate(finish.getDate() + 180)
+  const dateText = `${start.getFullYear()}${String(start.getMonth() + 1).padStart(2, '0')}${String(start.getDate()).padStart(2, '0')}`
+  projectEpcDialog.form.name = `旗胜EPC项目-${dateText}`
+  projectEpcDialog.form.client_name = ''
+  projectEpcDialog.form.owner_department = '项目管理部'
+  projectEpcDialog.form.address = ''
+  projectEpcDialog.form.mode = 'compact'
+  projectEpcDialog.form.planned_start_at = formatDateTimeInput(start)
+  projectEpcDialog.form.planned_finish_at = formatDateTimeInput(finish)
+  projectEpcDialog.form.description = ''
+  projectEpcDialog.visible = true
+}
+
+async function createProjectEpc() {
+  if (!projectEpcDialog.form.name.trim()) {
+    ElMessage.warning('请填写项目名称')
+    return
+  }
+  state.submitting = true
+  try {
+    const response = await api.post('/admin/projects/epc-template', {
+      name: projectEpcDialog.form.name,
+      client_name: projectEpcDialog.form.client_name,
+      owner_department: projectEpcDialog.form.owner_department,
+      address: projectEpcDialog.form.address,
+      mode: projectEpcDialog.form.mode,
+      planned_start_at: projectEpcDialog.form.planned_start_at || null,
+      planned_finish_at: projectEpcDialog.form.planned_finish_at || null,
+      description: projectEpcDialog.form.description,
+    })
+    projectEpcDialog.visible = false
+    const project = responseData(response)
+    ElMessage.success(`已创建EPC流程项目（${project.template?.task_count || 0}个节点）`)
+    navigate(`/admin/projects/${project.id}`)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '创建EPC项目失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function openProjectTaskCreate(stage = null) {
+  if (!canManageProjectProgress.value || !projectDetail.value) return
+  await loadProjectUsers()
+  projectTaskDialog.form.stage_id = stage?.id || projectDetail.value.current_stage_id || projectDetail.value.stages?.[0]?.id || null
+  projectTaskDialog.form.title = ''
+  projectTaskDialog.form.owner_user_id = projectUserOptions.value[0]?.id ?? session.user?.id ?? null
+  projectTaskDialog.form.owner_role = stage?.owner_role || ''
+  projectTaskDialog.form.priority = 'normal'
+  projectTaskDialog.form.planned_start_at = ''
+  projectTaskDialog.form.due_at = ''
+  projectTaskDialog.form.next_action = ''
+  projectTaskDialog.form.description = ''
+  projectTaskDialog.visible = true
+}
+
+async function createProjectTask() {
+  if (!projectDetail.value) return
+  if (!projectTaskDialog.form.stage_id || !projectTaskDialog.form.title.trim() || !projectTaskDialog.form.owner_user_id) {
+    ElMessage.warning('请补齐阶段、任务标题和负责人')
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/admin/projects/${projectDetail.value.id}/tasks`, {
+      stage_id: projectTaskDialog.form.stage_id,
+      title: projectTaskDialog.form.title,
+      owner_user_id: projectTaskDialog.form.owner_user_id,
+      owner_role: projectTaskDialog.form.owner_role,
+      priority: projectTaskDialog.form.priority,
+      planned_start_at: projectTaskDialog.form.planned_start_at || null,
+      due_at: projectTaskDialog.form.due_at || null,
+      next_action: projectTaskDialog.form.next_action,
+      description: projectTaskDialog.form.description,
+    })
+    projectTaskDialog.visible = false
+    ElMessage.success('已创建项目任务')
+    await loadProjectDetail()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '创建项目任务失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+function resetProjectEvidencePayload() {
+  projectEvidenceDrawer.form.title = ''
+  projectEvidenceDrawer.form.description = ''
+  projectEvidenceDrawer.form.external_url = ''
+  projectEvidenceDrawer.form.external_provider = 'other'
+  projectEvidenceDrawer.file = null
+}
+
+function resetProjectEvidenceForm(type = 'text') {
+  projectEvidenceDrawer.form.evidence_type = type
+  resetProjectEvidencePayload()
+}
+
+async function openProjectTaskEvidence(row) {
+  projectEvidenceDrawer.task = row
+  projectEvidenceDrawer.summary = {
+    requirement: row.evidence_requirement || row.epc_deliverable || '',
+    evidence_count: row.evidence_count || 0,
+  }
+  projectEvidenceDrawer.items = []
+  resetProjectEvidenceForm('text')
+  projectEvidenceDrawer.visible = true
+  await loadProjectTaskEvidences()
+}
+
+async function loadProjectTaskEvidences() {
+  if (!projectEvidenceDrawer.task?.id) return
+  projectEvidenceDrawer.loading = true
+  try {
+    const response = await api.get(`/admin/project-tasks/${projectEvidenceDrawer.task.id}/evidences`)
+    const data = responseData(response) || {}
+    projectEvidenceDrawer.summary = data
+    projectEvidenceDrawer.items = data.items || []
+    projectEvidenceDrawer.task.evidence_count = data.evidence_count || 0
+    projectEvidenceDrawer.task.has_evidence = Boolean(data.evidence_count)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '加载成果证据失败'))
+  } finally {
+    projectEvidenceDrawer.loading = false
+  }
+}
+
+function handleProjectEvidenceFileChange(uploadFile) {
+  projectEvidenceDrawer.file = uploadFile?.raw || null
+  if (!projectEvidenceDrawer.form.title && projectEvidenceDrawer.file?.name) {
+    projectEvidenceDrawer.form.title = projectEvidenceDrawer.file.name
+  }
+}
+
+function clearProjectEvidenceFile() {
+  projectEvidenceDrawer.file = null
+}
+
+async function createProjectEvidence() {
+  const task = projectEvidenceDrawer.task
+  if (!task?.id) return
+  const type = projectEvidenceDrawer.form.evidence_type
+  const title = projectEvidenceDrawer.form.title.trim()
+  if (!title) {
+    ElMessage.warning('请填写成果标题')
+    return
+  }
+  const payload = {
+    evidence_type: type,
+    title,
+    description: projectEvidenceDrawer.form.description,
+  }
+  if (type === 'link') {
+    if (!projectEvidenceDrawer.form.external_url.trim()) {
+      ElMessage.warning('请填写外部链接')
+      return
+    }
+    payload.external_url = projectEvidenceDrawer.form.external_url
+    payload.external_provider = projectEvidenceDrawer.form.external_provider
+  }
+  state.submitting = true
+  try {
+    if (type === 'file') {
+      if (!projectEvidenceDrawer.file) {
+        ElMessage.warning('请选择文件')
+        return
+      }
+      const formData = new FormData()
+      formData.append('file', projectEvidenceDrawer.file)
+      formData.append('purpose', 'project_task_evidence')
+      const uploadResponse = await api.post('/files', formData)
+      payload.file_object_id = responseData(uploadResponse)?.file_id
+    }
+    await api.post(`/admin/project-tasks/${task.id}/evidences`, payload)
+    ElMessage.success('已新增成果证据')
+    resetProjectEvidenceForm(type)
+    await loadProjectTaskEvidences()
+    if (routeName.value === 'projectDetail') await loadProjectDetail()
+    if (routeName.value === 'projectMyTasks') await loadMyProjectTasks()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '新增成果证据失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function openProjectEvidence(row) {
+  if (row.evidence_type === 'link' && row.external_url) {
+    window.open(row.external_url, '_blank', 'noopener')
+    return
+  }
+  if (row.evidence_type !== 'file') return
+  try {
+    const response = await api.get(`/admin/project-task-evidences/${row.id}/download_url`)
+    const data = responseData(response)
+    if (data?.download_url) window.open(data.download_url, '_blank', 'noopener')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '打开成果文件失败'))
+  }
+}
+
+async function removeProjectEvidence(row) {
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt('请填写删除原因', '删除成果证据', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '删除原因不能为空',
+      confirmButtonText: '确认删除',
+      cancelButtonText: '返回',
+      type: 'warning',
+    })
+    reason = result.value
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.delete(`/admin/project-task-evidences/${row.id}`, { data: { reason } })
+    ElMessage.success('已删除成果证据')
+    await loadProjectTaskEvidences()
+    if (routeName.value === 'projectDetail') await loadProjectDetail()
+    if (routeName.value === 'projectMyTasks') await loadMyProjectTasks()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '删除成果证据失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+function rollbackTargetStatus(row) {
+  const targets = {
+    started: 'todo',
+    progressing: 'started',
+    submitted: 'progressing',
+    done: 'submitted',
+  }
+  return targets[row?.status] || ''
+}
+
+function canRollbackProjectTask(row) {
+  if (!row || ['todo', 'blocked', 'cancelled'].includes(row.status)) return false
+  if (row.status === 'done' && !canManageProjectProgress.value) return false
+  return Boolean(rollbackTargetStatus(row))
+}
+
+function projectTaskNeedsEvidence(row) {
+  return Boolean(row?.evidence_requirement || row?.epc_deliverable)
+}
+
+function projectTaskRequiresHardGate(row) {
+  return row?.evidence_policy === 'complete_required'
+}
+
+function projectEvidenceButtonType(row) {
+  if (projectTaskRequiresHardGate(row) && !row?.evidence_count) return 'danger'
+  if (row?.evidence_count) return 'primary'
+  return 'warning'
+}
+
+function setProjectTaskEvidenceFilter(filter) {
+  projectTaskEvidenceFilter.value = filter || 'all'
+}
+
+function projectTaskEvidenceFilterLabel(filter) {
+  const labels = {
+    required: '只看有成果要求',
+    evidenced: '只看已留证据',
+    missing: '只看缺证据',
+    done_missing: '只看无证据已完成',
+    open_missing: '只看未完成且缺证据',
+  }
+  return labels[filter] || '全部任务'
+}
+
+async function advanceProjectTask(row, action) {
+  const messages = {
+    start: '已开始',
+    progress: '已推进到 50%',
+    submit: '已提交确认',
+    complete: '已确认完成',
+    unblock: '已解除阻塞',
+  }
+  const payload = {}
+  if (projectTaskNeedsEvidence(row) && !row.evidence_count && action === 'submit') {
+    try {
+      await ElMessageBox.confirm('当前节点尚未登记成果证据，建议补充后再提交。是否仍继续提交？', '缺少成果证据', {
+        confirmButtonText: '继续提交',
+        cancelButtonText: '先补证据',
+        type: 'warning',
+      })
+      payload.confirm_without_evidence_reason = '用户确认无证据提交'
+    } catch {
+      return
+    }
+  }
+  if (projectTaskNeedsEvidence(row) && !row.evidence_count && action === 'complete') {
+    if (projectTaskRequiresHardGate(row)) {
+      if (!canManageProjectProgress.value) {
+        await ElMessageBox.alert('该关键节点要求成果证据，请先登记证据再完成，或联系项目经理放行。', '关键节点缺成果证据', {
+          confirmButtonText: '知道了',
+          type: 'warning',
+        })
+        return
+      }
+      try {
+        const result = await ElMessageBox.prompt('当前关键节点尚未登记成果证据。若确认线下已有依据，请填写放行原因。', '关键节点缺成果证据', {
+          inputValidator: (value) => (value || '').trim().length >= 6 || '放行原因至少 6 个字',
+          confirmButtonText: '放行完成',
+          cancelButtonText: '先补证据',
+          type: 'warning',
+        })
+        payload.bypass_reason = result.value.trim()
+      } catch {
+        return
+      }
+    } else {
+      try {
+        const result = await ElMessageBox.prompt('当前节点尚未登记成果证据，请填写仍确认完成的说明', '无证据确认完成', {
+          inputPattern: /\S+/,
+          inputErrorMessage: '确认说明不能为空',
+          confirmButtonText: '确认完成',
+          cancelButtonText: '先补证据',
+          type: 'warning',
+        })
+        payload.confirm_without_evidence_reason = result.value
+      } catch {
+        return
+      }
+    }
+  }
+  state.submitting = true
+  try {
+    await api.post(`/admin/project-tasks/${row.id}/${action}`, Object.keys(payload).length ? payload : undefined)
+    ElMessage.success(messages[action] || '任务已更新')
+    if (routeName.value === 'projectDetail') await loadProjectDetail()
+    if (routeName.value === 'projectMyTasks') await loadMyProjectTasks()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '任务更新失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function rollbackProjectTask(row) {
+  const targetStatus = rollbackTargetStatus(row)
+  if (!targetStatus) return
+  const targetLabel = projectTaskStatusLabel(targetStatus)
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt(`回退到「${targetLabel}」，请填写原因`, '回退任务进度', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '回退原因不能为空',
+      confirmButtonText: '确认回退',
+      cancelButtonText: '返回',
+      type: 'warning',
+    })
+    reason = result.value
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/admin/project-tasks/${row.id}/rollback`, { target_status: targetStatus, reason })
+    ElMessage.success(`已回退到${targetLabel}`)
+    if (routeName.value === 'projectDetail') await loadProjectDetail()
+    if (routeName.value === 'projectMyTasks') await loadMyProjectTasks()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '回退任务失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function blockProjectTask(row) {
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt('请输入阻塞原因', '标记任务阻塞', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '阻塞原因不能为空',
+      confirmButtonText: '确认阻塞',
+      cancelButtonText: '返回',
+      type: 'warning',
+    })
+    reason = result.value
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/admin/project-tasks/${row.id}/block`, { reason })
+    ElMessage.success('已标记阻塞')
+    if (routeName.value === 'projectDetail') await loadProjectDetail()
+    if (routeName.value === 'projectMyTasks') await loadMyProjectTasks()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '标记阻塞失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function unblockProjectTask(row) {
+  let resolution = ''
+  try {
+    const result = await ElMessageBox.prompt('请填写阻塞如何解决', '解除任务阻塞', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '解决说明不能为空',
+      confirmButtonText: '确认解除',
+      cancelButtonText: '返回',
+      type: 'success',
+    })
+    resolution = result.value
+  } catch {
+    return
+  }
+  state.submitting = true
+  try {
+    await api.post(`/admin/project-tasks/${row.id}/unblock`, { resolution, next_action: row.next_action || '' })
+    ElMessage.success('已解除阻塞')
+    if (routeName.value === 'projectDetail') await loadProjectDetail()
+    if (routeName.value === 'projectMyTasks') await loadMyProjectTasks()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '解除阻塞失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
 async function refreshExecutionPage() {
   await loadExecutionTasks()
   await loadMeetings()
@@ -6901,13 +9390,27 @@ async function cancelMeeting(row) {
 async function loadDashboards() {
   state.loading = true
   state.error = ''
+  dashboardFeature.businessDisabled = false
   dashboardFeature.quoteDisabled = false
   dashboardFeature.responseDisabled = false
   dashboardFeature.executionDisabled = false
+  dashboardFeature.projectDisabled = false
   clientInquiryPage.value = 1
   quoteJobPage.value = 1
   let loadedCount = 0
   try {
+    try {
+      const response = await api.get('/admin/dashboard/business-lite', {
+        params: { range: dashboardRange.value },
+      })
+      businessDashboard.value = responseData(response)
+      loadedCount += 1
+    } catch (error) {
+      businessDashboard.value = null
+      if (isFeatureDisabled(error)) dashboardFeature.businessDisabled = true
+      else throw error
+    }
+
     try {
       const response = await api.get('/admin/dashboard/quote-speed', {
         params: { range: dashboardRange.value },
@@ -6947,6 +9450,14 @@ async function loadDashboards() {
       else throw error
     }
 
+    try {
+      if (await loadProjectDashboard()) loadedCount += 1
+    } catch (error) {
+      projectDashboard.value = null
+      if (isFeatureDisabled(error)) dashboardFeature.projectDisabled = true
+      else throw error
+    }
+
     if (canViewQuoteOperations.value) {
       await loadQuoteJobs()
       loadedCount += 1
@@ -6956,17 +9467,21 @@ async function loadDashboards() {
       return
     }
     const availableTabs = []
+    if (!dashboardFeature.businessDisabled) availableTabs.push('business')
     if (!dashboardFeature.quoteDisabled) availableTabs.push('quote')
     if (!dashboardFeature.responseDisabled) availableTabs.push('response')
     if (canViewQuoteOperations.value) availableTabs.push('operations')
     if (!dashboardFeature.executionDisabled) availableTabs.push('execution')
+    if (!dashboardFeature.projectDisabled) availableTabs.push('projects')
     if (!availableTabs.includes(dashboardTab.value)) {
       dashboardTab.value = availableTabs[0] || 'quote'
     }
   } catch (error) {
+    businessDashboard.value = null
     quoteDashboard.value = null
     responseDashboard.value = null
     executionDashboard.value = null
+    projectDashboard.value = null
     clientInquiries.value = []
     clientInquiryTotal.value = 0
     quoteJobs.value = []
@@ -7004,6 +9519,31 @@ async function bootstrap() {
       if (executionFeatureDisabled.value && !meetingFeatureDisabled.value) {
         executionPageTab.value = 'meetings'
       }
+      return
+    }
+    if (routeName.value === 'projects') {
+      if (!canViewProjectProgress.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadProjects()
+      return
+    }
+    if (routeName.value === 'projectDetail') {
+      if (!canViewProjectProgress.value) {
+        state.error = 'forbidden'
+        return
+      }
+      if (canManageProjectProgress.value) await loadProjectUsers()
+      await loadProjectDetail()
+      return
+    }
+    if (routeName.value === 'projectMyTasks') {
+      if (!canViewProjectProgress.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadMyProjectTasks()
       return
     }
     if (routeName.value === 'businessLedger') {

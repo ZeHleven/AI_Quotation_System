@@ -1,0 +1,7 @@
+sample_id,source_file,scenario,operator,operator_role,cost_reviewer,admin_owner,item_count,includes_excel,includes_large_list,includes_no_cost,includes_multi_candidate,includes_manual_price,includes_draft_restore,includes_cost_draft,includes_permission_check,expected_focus,status,quote_job_id,feedback_ids,notes
+TRIAL-01,待填写,普通 active 成本库命中,待填写,staff,待填写,待填写,待填写,yes,no,no,no,no,no,no,no,验证成本参考价 AI价差 证据链 合计来源,未开始,,,
+TRIAL-02,待填写,无底价项目,待填写,staff,待填写,待填写,待填写,yes,no,yes,no,yes,no,yes,no,验证人工确认后只沉淀 draft 且不自动 active,未开始,,,
+TRIAL-03,待填写,多个 active 候选,待填写,staff,待填写,待填写,待填写,yes,no,no,yes,no,no,no,no,验证未确认成本依据前阻断下发,未开始,,,
+TRIAL-04,待填写,标准清单发起报价,待填写,staff,待填写,待填写,待填写,yes,no,no,no,no,no,no,no,验证已确认行进入报价且阻断行不进入报价,未开始,,,
+TRIAL-05,待填写,大清单或 AI 缺失行,待填写,staff,待填写,待填写,待填写,yes,yes,yes,no,yes,yes,yes,no,验证占位行未补价前阻断下发,未开始,,,
+TRIAL-06,待填写,权限边界抽查,待填写,staff,待填写,待填写,待填写,no,no,no,no,no,no,no,yes,验证 staff 不能浏览完整成本库且成本专项角色按钮边界正确,未开始,,,

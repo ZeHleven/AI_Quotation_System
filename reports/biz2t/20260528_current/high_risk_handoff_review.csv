@@ -1,0 +1,6 @@
+﻿issue_id,cost_item_id,item_name,decision,review_status,trial_blocker,missing_fields,invalid_fields,need_rag_sync,reviewer,done_at,review_note
+BIZ2T-0001,203,临时静音保护棉铺设,accepted_risk,accepted_risk,no,,,no,管理员,2026-05-28,成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。
+BIZ2T-0002,204,定制异形铝合金收口条安装,accepted_risk,accepted_risk,no,,,no,管理员,2026-05-28,成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。
+BIZ2T-0003,206,高空局部防尘围挡加固,accepted_risk,accepted_risk,no,,,no,管理员,2026-05-28,成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。
+BIZ2T-0004,207,高空局部防尘围挡加固,accepted_risk,accepted_risk,no,,,no,管理员,2026-05-28,成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。
+BIZ2T-0005,208,甲方指定品牌成品检修口更换,accepted_risk,accepted_risk,no,,,no,管理员,2026-05-28,成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。

@@ -1,0 +1,90 @@
+{
+  "summary": {
+    "generated_at": "2026-05-28T05:35:17+00:00",
+    "input_record_count": 5,
+    "expected_record_count": 5,
+    "status_counts": {
+      "accepted_risk": 5
+    },
+    "cleared_count": 0,
+    "accepted_risk_count": 5,
+    "pending_count": 0,
+    "invalid_count": 0,
+    "trial_blocker_count": 0,
+    "need_rag_sync_count": 0,
+    "recommendation": "ready_with_known_risks",
+    "conclusion": "5 条高风险项均有处理结论，但包含 accepted_risk，需要在试运行样例中登记为已知风险。"
+  },
+  "reviews": [
+    {
+      "issue_id": "BIZ2T-0001",
+      "cost_item_id": "203",
+      "item_name": "临时静音保护棉铺设",
+      "decision": "accepted_risk",
+      "review_status": "accepted_risk",
+      "trial_blocker": "no",
+      "missing_fields": [],
+      "invalid_fields": [],
+      "need_rag_sync": "no",
+      "reviewer": "管理员",
+      "done_at": "2026-05-28",
+      "review_note": "成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。"
+    },
+    {
+      "issue_id": "BIZ2T-0002",
+      "cost_item_id": "204",
+      "item_name": "定制异形铝合金收口条安装",
+      "decision": "accepted_risk",
+      "review_status": "accepted_risk",
+      "trial_blocker": "no",
+      "missing_fields": [],
+      "invalid_fields": [],
+      "need_rag_sync": "no",
+      "reviewer": "管理员",
+      "done_at": "2026-05-28",
+      "review_note": "成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。"
+    },
+    {
+      "issue_id": "BIZ2T-0003",
+      "cost_item_id": "206",
+      "item_name": "高空局部防尘围挡加固",
+      "decision": "accepted_risk",
+      "review_status": "accepted_risk",
+      "trial_blocker": "no",
+      "missing_fields": [],
+      "invalid_fields": [],
+      "need_rag_sync": "no",
+      "reviewer": "管理员",
+      "done_at": "2026-05-28",
+      "review_note": "成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。"
+    },
+    {
+      "issue_id": "BIZ2T-0004",
+      "cost_item_id": "207",
+      "item_name": "高空局部防尘围挡加固",
+      "decision": "accepted_risk",
+      "review_status": "accepted_risk",
+      "trial_blocker": "no",
+      "missing_fields": [],
+      "invalid_fields": [],
+      "need_rag_sync": "no",
+      "reviewer": "管理员",
+      "done_at": "2026-05-28",
+      "review_note": "成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。"
+    },
+    {
+      "issue_id": "BIZ2T-0005",
+      "cost_item_id": "208",
+      "item_name": "甲方指定品牌成品检修口更换",
+      "decision": "accepted_risk",
+      "review_status": "accepted_risk",
+      "trial_blocker": "no",
+      "missing_fields": [],
+      "invalid_fields": [],
+      "need_rag_sync": "no",
+      "reviewer": "管理员",
+      "done_at": "2026-05-28",
+      "review_note": "成本部已明确接受风险并给出说明，可作为已知风险进入试运行准入判断。"
+    }
+  ]
+}

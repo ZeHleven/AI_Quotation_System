@@ -19,6 +19,7 @@ from app.models import (  # noqa: F401,E402
     model_call_log,
     cost_audit,
     prompt_regression,
+    project_progress,
     quote_cost_evidence,
     quote_feedback,
     quote_history,

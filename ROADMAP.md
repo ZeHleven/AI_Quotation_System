@@ -1,6 +1,6 @@
 # 系统升级路线图
 
-> 最后更新：2026-05-29
+> 最后更新：2026-06-02
 
 > 业务优化 P4 更新：真实用户体验优化代码层已落地，`index.html` 新增失败原因建议、预审风险提示和人工修改沉淀知识入口；本阶段不新增 Alembic revision。
 > P4 运行态手工验收已完成（2026-05-08）：22/22 项全部通过，详见 `AI_Middle_Office/P4_ACCEPTANCE.md`。
@@ -61,14 +61,20 @@
 > BIZ-2w-4 AI 备注与成本依据一致性校验已通过当前环境手工验收（2026-05-29）：当预审行已命中 active 成本参考但 AI 原始备注仍声称“未包含相关条目、无法提供报价、建议补充”等时，系统保留 AI 原始备注作审计、替换预审可见备注为成本依据一致的系统建议备注，并要求人工确认备注处理；未确认前旧预审弹窗和 `/confirm_push` 均阻断下发；详见 `docs/biz-2w-4-ai-note-cost-basis-consistency.md`。专项与相关回归 `34 passed, 1 warning`，报价任务回归 `26 passed, 1 warning`，`compileall app tests`、`ai-web` build 和旧 `index.html` inline script 检查通过；不新增 Alembic，不改报价规则、价格口径、RAG、N8N/Dify 或成本库 active 规则。
 > BIZ-2w-5 自由文本同名不同规格拆行与工程量识别修复已完成代码层验证，待当前环境手工验收（2026-05-29）：修复“石膏板吊顶 9.5mm，8㎡、石膏板吊顶 12mm，8㎡”这类手输需求没有按顿号拆成两条前置成本参考、且 `9.5mm` 被误识别为 `9.5m` 工程量的问题；前置成本上下文现在会分别保留 `9.5mm` / `12mm` 规格，并取末尾真实 `8㎡` 作为工程量；详见 `docs/biz-2w-5-text-multi-spec-quantity-guard.md`。专项相关测试 `28 passed, 1 warning`，`compileall app tests` 通过；不新增 Alembic，不改报价规则、价格口径、RAG、N8N/Dify 或成本库 active 规则，不自动新增报价行或改总价。
 > BIZ-2w-6 报价来源口径与预审列名调整已通过当前环境手工验收（2026-05-29）：旧预审弹窗将“AI 建议单价”调整为“预审参考单价”，将“成本库参考 / 人工改价 / 系统合计”调整为“成本库依据 / 人工确认价 / 人工确认合计”，并按行显示“成本库依据价 / 无成本库参考，AI估价 / 偏离成本库依据”等来源标签；补充修复 AI 返回 `item_1` / `item_2` 等占位项目名时预审项目名丢失的问题；详见 `docs/biz-2w-6-quote-source-wording.md`、`docs/biz-2w-6-placeholder-project-name-hotfix.md`。旧 `index.html` inline script 检查通过，AI 占位项目名保护专项并入成本上下文/成本匹配回归 `30 passed, 1 warning`；不新增 Alembic，不改报价规则、价格口径、RAG、N8N/Dify 或成本库 active 规则，不自动新增报价行或改总价。
+> BIZ-3b-3-0 关键节点证据硬门禁实现规划已评审通过（2026-06-01）：新增 `docs/biz-3b-3-0-key-node-hard-gate-planning.md`，硬门禁开发前先定三件事——A 级节点（竣工精装验收、隐蔽工程验收、结算确认、设计成果交付）首批升级为 `complete_required`，B 级（含 `compact=1` 收款节点）待确认，C 级保持 `soft_reminder`；缺证据为有条件硬门禁，普通成员阻断返回 `409 EVIDENCE_HARD_GATE_BLOCKED`、真正无操作权限返回 `403 PERMISSION_DENIED`、项目经理/管理员可填 `bypass_reason`（缺则 `422 EVIDENCE_BYPASS_REASON_REQUIRED`）放行，门禁只卡完成（100%）不卡提交；放行事件 `task_completed_bypass_gate` 复用 `project_task_events.payload_json` 记录决策快照，不新增列。实现拆两步：BIZ-3b-3-1 显式字段（`evidence_requirement`/`evidence_policy`/`is_key_node`）落库与存量回填，不引入阻断、完成仍走 3b-2a 软提醒；BIZ-3b-3-2 再实现 `complete_required` 硬门禁与放行事件，两步均完成后硬门禁才正式生效。本阶段只规划、不改库、不改代码、不新增 Alembic。BIZ-3 工程项目进度文档总目录见 `AI_Middle_Office/docs/biz-3-project-progress-index.md`。
+> BIZ-3b-3-1 显式字段落库与存量回填已完成当前环境验证（2026-06-01）：新增 Alembic `20260601_0028`，`project_tasks` 新增 `evidence_requirement` / `evidence_policy` / `is_key_node`，模板实例化与手工任务创建已直接写入显式字段，运行时优先读取显式列并保留 EPC `description` 解析兜底；存量回填真实环境任务 `146` 个，其中 EPC compact `41`、EPC full `82`、单人模板 `18`、手工/其他 `5`，回填更新 `123` 个，`soft_reminder=123`、`none=23`、`complete_required=0`，回填后 dry-run `updated_task_count=0`，无模板匹配失败/成果解析失败。本阶段不启用硬门禁，不新增 `bypass_reason` / `task_completed_bypass_gate`，完成动作仍沿用 BIZ-3b-2a 软提醒。后端全量 `290 passed`，`ai-web npm run build` 通过，当前数据库 head `20260601_0028`。
+> BIZ-3b-3-2 complete_required 硬门禁与放行事件已通过当前环境业务验收（2026-06-02）：新建 EPC 模板任务会将 A 级 4 个节点（设计成果交付、隐蔽工程验收、竣工精装验收、结算确认）写为 `complete_required`；存量任务通过 `scripts/biz3b32_activate_project_task_hard_gates.py --apply` 激活，当前库 `total=146`、`a_level_candidate=8`、`complete_required=8`、`soft_reminder=115`、`none=23`，再次 dry-run `updated_task_count=0`；完成接口对缺证据硬门禁节点返回 `409 EVIDENCE_HARD_GATE_BLOCKED`，项目经理/管理员必须填 `bypass_reason`（少于 6 字返回 `422 EVIDENCE_BYPASS_REASON_REQUIRED`）才可放行，放行写 `task_completed_bypass_gate` 决策快照；Vite 项目任务表已展示关键节点/需证据标记和三态完成交互；重启后业务走读已确认普通成员阻断、项目经理/管理员放行、项目动态事件、补证据后正常完成、提交到 80% 不阻断和 B 级节点保持软提醒均无问题。后端全量 `292 passed, 11 warnings`，`ai-web npm run build` 通过；不新增 Alembic，数据库 head 仍为 `20260601_0028`，不接钉钉/企微自动同步。
+> BIZ-3c 经营驾驶舱轻量 MVP 已推进至 BIZ-3c-3 趋势图 + 风险规则精化代码层验证（2026-06-02）：BIZ-3c-1 新增 `AI_Middle_Office/app/services/business_lite_dashboard.py`、`FEATURE_DASHBOARD_BUSINESS_LITE` 和 `GET /api/v1/admin/dashboard/business-lite`，复用 dashboard viewer 权限，默认 `range=last_30_days`，沿用 `today/week/month/last_30_days` 范围；接口只读聚合报价、成本库、项目进度和系统健康摘要，返回风险列表、跳转入口和 `section_errors` 局部降级信息。BIZ-3c-2 已在 Vite `/admin/dashboard` 新增“经营总览”标签页，展示 8 个经营指标卡、风险与待处理列表、运行摘要、跳转入口和局部降级告警。BIZ-3c-3 已补 `quote.daily_trend`、`cost.status_distribution`、`cost.source_distribution`、`project_progress.daily_trend` 和 `project_progress.hard_gate_bypassed_missing_evidence_count`，前端展示报价趋势、项目证据趋势和分布概览，并将硬门禁风险精化为“放行后当前仍缺 active 证据”；不新增经营数据表、不新增 Alembic、不计算合同额/回款率/毛利、不展示成本敏感明细，不引入重型图表库。BIZ-3c-3 后端聚焦测试 `5 passed, 1 warning`，经营总览 / 成本 RAG 同步 / 成本审计 / 项目进度交叉依赖测试 `31 passed, 6 warnings`，前端 `npm.cmd run build` 通过。下一步建议 BIZ-3c 轻量 MVP 进入小范围试运行观察，完整合同/回款/成本/毛利驾驶舱留到 BIZ-3d。
+> FE-UX-1 前端保守型体验重构一期已完成并通过人工验收（2026-06-02）：新增 `AI_Middle_Office/docs/fe-ux-1-admin-experience-refactor-planning.md` 和 `AI_Middle_Office/docs/fe-ux-1-trial-experience-acceptance.md`；不更换 Vue3 + Vite + Element Plus 技术栈，不整站套模板，不一次性迁移旧 `index.html`。FE-UX-1-1 应用外壳与视觉基础、FE-UX-1-2 报价工作台流程优化、FE-UX-1-3 AI 预审弹窗重构、FE-UX-1-4 成本库高级表格优化、FE-UX-1-5 经营总览与项目进度体验补强均已通过人工验收；FE-UX-1-6 已形成试运行体验验收包。不改报价接口、价格口径、成本库 active 规则、项目硬门禁、草稿保存、推送或审计规则。`index.html` 内联脚本解析通过，9000 的 `/admin/cost-db`、`/admin/dashboard`、`/admin/projects` 返回 200，`npm.cmd run build` 通过。
+> FE-UX-2 Apple-like 正式视觉增强第一版已完成并通过人工视觉验收（2026-06-02）：新增 `AI_Middle_Office/docs/fe-ux-2-apple-like-visual-upgrade.md`，在不套 Apple 官网模板、不引入新 UI 库、不改业务逻辑的前提下，把 Vite 管理台和旧 `index.html` 报价工作台的视觉底座调整为浅色、克制、正式风格；Vite 管理台新增品牌 lockup、登录页品牌介绍区、浅色磨砂 topbar、Element Plus 通用控件增强和指标/工作台卡片统一；旧报价页同步浅色导航、流程条、消息区、输入区和 AI 预审弹窗卡片质感。`npm.cmd run build` 通过，旧 `index.html` 内联脚本解析通过，9000 的 `/login`、`/admin/dashboard`、`/admin/cost-db`、`/admin/projects`、`/index.html` 返回 200；本轮 Browser 截图验收未完成，但用户已确认人工视觉验收通过。
 > 商务/市场部提效路线阶段性收束（2026-05-20）：BIZ-1a 台账已完成，但后续提醒、流水等低收益延展暂不继续推进；真正高价值方向调整为"外部项目源自动搜索/收集 + 公司标准筛选 + 联系方式输出"，因外部项目搜索引擎调用成功率未知、外部项目收集平台合作和 API 权限尚未确定，标记为待定。
 
 ---
 
-## 当前冻结状态（2026-05-26）
+## 当前冻结状态（2026-06-01）
 
 - **后端基础设施优化已收束**：后端重构 P0-P3、补充一致性优化、运维告警收敛、Alembic 迁移纪律均已落地；后续不再做无触发的基础设施打磨。
-- **数据库规范**：当前代码迁移 head 为 `20260528_0025`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账、BIZ-2a 成本数据库、BIZ-2c RAG 同步记录、BIZ-2l 确认需求行对账记录、大清单预审结果持久化能力、BIZ-2q 预审草稿保存能力和 BIZ-2v-3 成本库审计日志。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
+- **数据库规范**：当前代码迁移 head 为 `20260601_0028`；内网验证数据库若低于 head，需执行 Alembic 升级后启用完整报价反馈、Prompt 回归、知识候选记录、Phase 0 RBAC、Phase 2 响应速度追踪、Phase 3 执行速度追踪、Phase 4a 会议纪要草稿确认、BIZ-1a 商务台账、BIZ-2a 成本数据库、BIZ-2c RAG 同步记录、BIZ-2l 确认需求行对账记录、大清单预审结果持久化能力、BIZ-2q 预审草稿保存能力、BIZ-2v-3 成本库审计日志、BIZ-3a 项目进度底座、BIZ-3b-1 任务成果证据表和 BIZ-3b-3-1 显式证据策略字段。后续新增字段或表必须新增 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` / 启动兼容迁移。
 - **业务优化 P0-P4 已完成到代码层**：P0 报价反馈闭环、P1 Admin 反馈分析、P2 Prompt 回归评测、P3 知识库候选治理、P4 真实用户体验优化均已落地。
 - **前端优化 P0-P3 已完成**：已完成 `FRONTEND_ACCEPTANCE.md`、`static/js/shared.js`、`admin.html` 模块拆分，以及报价进度、失败恢复、上传/推送状态优化。
 - **AI 平台升级 Phase 0 已完成开发与当前环境验证**：Vite 壳、登录鉴权统一、RBAC 与 SPA fallback 已通过；旧 `index.html` / `admin.html` / `app.html` 继续保留，后续按设计文档逐步收拢入口。正式生产上线待单独 Runbook。
@@ -76,6 +82,8 @@
 - **AI 平台升级 Phase 2 响应速度追踪已完成当前环境运行态验收**：已新增 `client_inquiries`、`quote_jobs.client_inquiry_id`、咨询查询/修正接口、响应速度聚合接口和 Vite 响应速度视图；当前环境 Alembic 已升级到 `20260514_0012 (head)`，`FEATURE_CLIENT_INQUIRY=true`、`FEATURE_DASHBOARD_RESPONSE=true`、`PUBLIC_ACCESS_ENABLED=false`；内网 smoke 已展示 1 条可信样本，平均首次响应 15 分钟，SLA 达标率 100%，并修复 Celery worker Phase 2 元数据加载问题。
 - **AI 平台升级 Phase 3 执行速度追踪已完成当前环境验证**：已新增执行任务 schema、任务接口、事件记录、执行速度聚合和 Vite 执行任务页面；当前环境已打开 `FEATURE_EXECUTION=true`、`FEATURE_DASHBOARD_EXECUTION=true` 且 `PUBLIC_ACCESS_ENABLED=false`，已验证任务创建、开始、完成、取消、详情事件和执行速度看板，执行趋势已补充取消数量。
 - **AI 平台升级 Phase 4a 手动会议纪要 + 草稿确认已完成当前环境运行态验收**：已新增会议纪要、纪要更正、任务草稿 schema、会议接口、固定 JSON Schema 提取器和 Vite 会议纪要标签页；当前环境已打开 `FEATURE_MEETING_AI=true` 且 `PUBLIC_ACCESS_ENABLED=false`，确认草稿可写入既有 `execution_tasks`，不依赖 `FEATURE_EXECUTION=true`；内网 smoke 已验证自动提取并确认任务、人工补充后作废、revision 补充任务和 `/admin/execution` 访问。当前不启动语音转写、钉钉会议导入、经营驾驶舱或旧 HTML 迁移。
+- **AI 平台升级 BIZ Track BIZ-3 已推进至 BIZ-3c-3 经营驾驶舱轻量 MVP 趋势图 + 风险规则精化**：BIZ-3a 项目/阶段/任务/2580 进度、EPC 流程模板、BIZ-3b 成果证据 MVP、无证据软提醒、缺证据汇总、证据策略显式字段落库与存量回填、A 级 `complete_required` 硬门禁与放行事件均已完成并通过当前环境业务验收；当前 head `20260601_0028`，当前库 `complete_required=8`。BIZ-3c-1 已新增 `FEATURE_DASHBOARD_BUSINESS_LITE` 和 `/api/v1/admin/dashboard/business-lite` 只读聚合接口；BIZ-3c-2 已在 `/admin/dashboard` 增加“经营总览”指标卡 + 风险列表；BIZ-3c-3 已补趋势/分布和硬门禁放行后缺证据精确风险，后端聚焦测试 `5 passed, 1 warning`，交叉依赖测试 `31 passed, 6 warnings`，`npm.cmd run build` 通过。下一步建议轻量 MVP 进入试运行观察，完整合同/回款/成本/毛利驾驶舱留到 BIZ-3d。
+- **FE-UX-1 前端保守型体验重构一期已完成并通过人工验收**：已新增 `AI_Middle_Office/docs/fe-ux-1-admin-experience-refactor-planning.md` 和 `AI_Middle_Office/docs/fe-ux-1-trial-experience-acceptance.md`，定位为小范围试运行前的中后台体验补强；主参考 `vue-pure-admin` / `Vue3 Element Admin`，但不搬模板、不换 UI 库、不整站重写。FE-UX-1-1 至 FE-UX-1-5 均已通过人工验收，FE-UX-1-6 已形成试运行体验验收包。前端构建、旧页脚本解析和关键页面 9000 可达验证通过。
 - **AI 平台升级 BIZ Track BIZ-1a 商务台账 v1 已完成当前环境验证**：已新增 `FEATURE_BUSINESS_LEDGER`、`client_inquiries.direction/stage/next_followup_at/cancelled_*`、`client_inquiry_events`、商务台账 service/schema/API、Vite `/admin/business-ledger` 内联页面和 `scripts/biz1a_business_ledger_smoke.ps1`；当前环境 smoke 已验证 admin/staff 权限、逾期筛选、作废、Phase 2 数据隔离、response-speed 口径不变和 XFF 审计。BIZ-1a v1 已落地字段为 `client_name` / `client_phone`；项目名 / 公司名暂由 `notes` 承载，后续是否拆字段待真实台账数据积累后评估。
 - **AI 平台升级 BIZ Track BIZ-2a 成本数据库初始化已完成当前环境验证**：已新增 `FEATURE_COST_DB`、`cost_items`、`cost_item_history`、成本库 service/schema/API、Excel 导入预览/确认、Vite `/admin/cost-db` 页面和 `scripts/biz2a_cost_db_smoke.ps1`；当前环境 Alembic 已升级到 `20260520_0018 (head)`，smoke 已验证 admin/staff 权限、价格变更历史、`draft -> active -> archived` 状态机、归档原因校验、重复 activate/archive 幂等、旧 Excel 解析 191 条、人工/主材/辅材拆分价映射和重复 confirm 幂等。2026-05-21 已补充“撤回启用”和批量状态流转，支持单条/批量 `draft -> active`、`active -> draft`、原因审计和 `archived` 冻结保护。初始 Excel 路径为 `AI_Middle_Office/data/imports/cost_seed_readable.xlsx`。
 - **AI 平台升级 BIZ Track BIZ-2b 报价时材料底价查询已完成代码层验证**：已新增报价结果成本参考匹配服务，接入同步 `/chat` 与异步 `quote_jobs` preview 结果；预审弹窗展示“成本库参考价 vs AI 生成价”、匹配类型、价差与偏离底价风险；全量测试通过，Vite build 通过。当前环境成本库 `active=190`，已具备真实运行态成本参考匹配数据基础。
@@ -630,15 +638,21 @@ cost_item_history
 
 ---
 
-### BIZ-3 经营驾驶舱
+### BIZ-3 企业内部工程项目进度中台 / 经营驾驶舱后续
 
-**目标**：管理层可在一个页面看到公司的合同签约、回款、项目成本、毛利等经营指标，辅助决策。
+**当前优先目标**：先把企业内部工程项目进度透明化，围绕项目、阶段、任务、2580 进度、成果证据、缺证据提醒和关键节点门禁建立可审计的项目进度中台。
+
+**当前状态（2026-06-02）**：项目进度中台已推进至 BIZ-3b-3-2 并通过当前环境业务验收；经营驾驶舱轻量 MVP 已推进至 BIZ-3c-3，后端只读聚合接口、前端经营总览标签页、趋势/分布和硬门禁放行后缺证据精确风险均已完成代码层验证。项目进度底座、单人试运行模板、旗胜 EPC 流程模板、任务成果证据 MVP、无证据软提醒、缺证据汇总、证据策略显式字段落库与存量回填、A 级 `complete_required` 硬门禁与放行事件均已完成；当前库已激活 8 条 A 级硬门禁任务。BIZ-3c 规划与验收记录详见 `AI_Middle_Office/docs/biz-3c-business-dashboard-lite-mvp-planning.md`。
+
+**当前经营驾驶舱轻量 MVP 目标**：先复用现有报价、成本库、项目进度和系统健康数据，在管理台提供只读经营总览，用于内网试运行和管理层汇报；不新增经营数据表，不计算合同额、回款率、毛利和逾期应收。
+
+**后续完整经营驾驶舱目标**：待项目进度、合同、回款、成本数据稳定后，再在管理层页面汇总合同签约、回款、项目成本、毛利等经营指标，辅助决策。
 
 **前置依赖**：
 - BIZ-1 商务数据稳定（项目/合同关联已建立）
 - 合同、回款、项目成本数据模型已设计并有真实数据录入
 
-**计划内容（BIZ-1 稳定后再详细规划）**：
+**后续计划内容（项目进度与 BIZ-1 稳定后再详细规划）**：
 - 合同模型：`contracts`（draft/signed/archived/cancelled）
 - 回款模型：`payments`（pending/paid/cancelled）
 - 项目成本模型：`project_costs`（active/cancelled）
@@ -714,7 +728,22 @@ cost_item_history
 
 | 子项 | 内容 | 状态 |
 |------|------|------|
-| BIZ-3 | 经营驾驶舱（合同/回款/成本/毛利） | 未启动 |
+| BIZ-3a/BIZ-3b | 企业内部工程项目进度中台 | 已推进至 BIZ-3b-3-2（2026-06-02）；A 级硬门禁与放行事件完成并通过当前环境业务验收，当前库 `complete_required=8`，B 级节点暂不自动纳入 |
+| BIZ-3c | 经营驾驶舱轻量 MVP | BIZ-3c-1 后端只读聚合接口、BIZ-3c-2 `/admin/dashboard` 经营总览指标卡 + 风险列表、BIZ-3c-3 趋势/分布和硬门禁放行后缺证据精确风险均已完成代码层验证；下一步进入小范围试运行观察 |
+| BIZ-3d | 完整经营驾驶舱 | 合同/回款/成本/毛利经营指标汇总暂缓；待数据口径稳定后再启动 |
+
+**前端体验专项（小范围试运行前补强）**
+
+| 子项 | 内容 | 状态 |
+|------|------|------|
+| FE-UX-1-0 | 前端体验重构一期规划 | 已完成；见 `AI_Middle_Office/docs/fe-ux-1-admin-experience-refactor-planning.md` |
+| FE-UX-1-1 | 应用外壳与视觉基础 | 已通过人工验收；已统一 Vite 管理台视觉 token、侧边栏分组、内容区、指标卡、状态面板和通用 toolbar/filter/action/tag/empty 类 |
+| FE-UX-1-2 | 报价工作台流程优化 | 已通过人工验收；旧报价工作台已新增顶部流程面板、底部固定操作区和任务恢复下一步提示卡；脚本解析、9000 `/index.html`、`npm.cmd run build` 通过 |
+| FE-UX-1-3 | AI 预审弹窗重构 | 已通过人工验收；已新增顶部指挥区、摘要卡、阻断与复核面板、逐行表格导读和底部状态操作区；不改 `/confirm_push` 阻断、价格口径、成本依据、草稿或推送规则 |
+| FE-UX-1-4 | 成本库高级表格优化 | 已通过人工验收；已新增成本库维护工作台摘要、当前筛选/状态/RAG/选择概览和独立批量操作条；不改成本库接口、权限、active 规则、价格口径、RAG 同步或审计 |
+| FE-UX-1-5 | 经营总览与项目进度体验补强 | 已通过人工验收；已新增经营总览试运行读数条、项目列表概览、我的任务概览和项目详情焦点条；保持运营工作台风格，不做炫酷大屏 |
+| FE-UX-1-6 | 试运行体验验收包 | 已完成；见 `AI_Middle_Office/docs/fe-ux-1-trial-experience-acceptance.md`，覆盖页面优先级、角色清单、核心链路、窄屏检查和问题登记模板 |
+| FE-UX-2-1 | Apple-like 正式视觉增强第一版 | 已完成并通过人工视觉验收；见 `AI_Middle_Office/docs/fe-ux-2-apple-like-visual-upgrade.md`，已统一 Vite 管理台与旧报价工作台浅色正式视觉底座，不套模板、不换 UI 库、不改业务逻辑 |
 
 **暂缓评估（触发条件明确后再启动）**
 

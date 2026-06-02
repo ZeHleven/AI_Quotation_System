@@ -16,6 +16,9 @@ VALID_ROLES = (
     "cost_editor",
     "cost_approver",
     "cost_exporter",
+    "project_viewer",
+    "project_member",
+    "project_manager",
     "staff",
     "manager",
     "viewer",
@@ -65,6 +68,16 @@ def _roles_with_implications(user: User) -> set[str]:
         roles.update({"cost_viewer", "cost_editor"})
     if "cost_editor" in roles:
         roles.add("cost_viewer")
+    if "system_admin" in roles or "admin" in roles:
+        roles.update({"project_viewer", "project_member", "project_manager"})
+    if "manager" in roles:
+        roles.update({"project_viewer", "project_member", "project_manager"})
+    if "staff" in roles:
+        roles.update({"project_viewer", "project_member"})
+    if "project_manager" in roles:
+        roles.update({"project_viewer", "project_member"})
+    if "project_member" in roles:
+        roles.add("project_viewer")
     return roles
 
 
@@ -139,6 +152,15 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_execution or settings.feature_meeting_ai else "pending",
             }
         )
+    if {"system_admin", "admin", "staff", "manager", "project_viewer", "project_member", "project_manager"} & roles:
+        modules.append(
+            {
+                "key": "project_progress",
+                "name": "项目进度",
+                "path": "/admin/projects",
+                "status": "available" if settings.feature_project_progress else "pending",
+            }
+        )
     if {"system_admin", "admin", "cost_viewer", "cost_editor", "cost_approver", "cost_exporter"} & roles:
         modules.append(
             {
@@ -161,6 +183,8 @@ def get_available_modules(user: User) -> list[dict]:
             settings.feature_dashboard_quote
             or settings.feature_dashboard_response
             or settings.feature_dashboard_execution
+            or settings.feature_dashboard_project
+            or settings.feature_dashboard_business_lite
         )
         modules.append(
             {

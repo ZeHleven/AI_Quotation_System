@@ -546,3 +546,52 @@ C:\Users\12521\miniconda3\python.exe -m celery -A app.tasks.celery_app.celery_ap
 - **权限与审计**：staff 仅查看/编辑自己负责的 outbound 记录，PATCH 字段限 `stage`、`next_followup_at`、`client_phone`、`notes`；admin / system_admin 可查看全员、按负责人筛选、转交 `responder_id`、修改 `source/client_name` 并作废。审计上下文优先取 `X-Forwarded-For` 首段，以适配 Caddy 反向代理。
 - **字段约定**：BIZ-1a v1 已落地字段为 `client_name` / `client_phone`；项目名 / 公司名暂由 `notes` 承载，是否拆字段待真实台账数据积累后评估。
 - **时间口径**：BIZ-1a 时间字段为 naive Asia/Shanghai，与 Phase 2 `client_inquiries` 当前口径一致；后续若 BIZ-3 经营驾驶舱需要跨时区聚合，再统一切换到 timezone-aware UTC。
+
+# 2026-06-01 升级补充（BIZ-3b-3-1 显式字段落库与存量回填）
+
+- **定位**：BIZ-3 当前主线为「企业内部工程项目进度中台」，已推进至 BIZ-3b-3-1；本阶段只落硬门禁所需的数据底座，仍不启用硬门禁。
+- **数据库**：新增 Alembic `20260601_0028`，`project_tasks` 新增 `evidence_requirement` / `evidence_policy` / `is_key_node`，并为 `evidence_policy`、`is_key_node` 建索引；当前数据库 head 为 `20260601_0028`。
+- **读写侧**：EPC 模板、单人试运行模板、手工任务创建时直接写入显式字段；运行时优先读取显式列，EPC `description` 解析仅作为旧数据兜底。
+- **存量回填**：当前环境任务总数 `146`，回填更新 `123`；EPC compact `41`、EPC full `82`、单人模板 `18`、手工/其他 `5`；`soft_reminder=123`、`none=23`、`complete_required=0`；回填后 dry-run `updated_task_count=0`，无模板匹配失败、无成果解析失败。
+- **明确未做**：无 `409 EVIDENCE_HARD_GATE_BLOCKED`，无 `bypass_reason`，无 `task_completed_bypass_gate`，A 级 4 个节点本阶段仍为 `soft_reminder`。
+- **验收基线**：后端全量 `290 passed, 9 warnings`，`ai-web npm run build` 通过。下一步进入 BIZ-3b-3-2 硬门禁与放行事件；BIZ-3 工程项目进度文档总目录见 `AI_Middle_Office/docs/biz-3-project-progress-index.md`。
+
+# 2026-06-02 升级补充（BIZ-3b-3-2 complete_required 硬门禁与放行事件）
+
+- **定位**：BIZ-3b-3-2 已完成 A 级 EPC 关键节点硬门禁代码落地、当前库策略激活，并已通过当前环境业务验收；本阶段不新增数据库结构，Alembic head 仍为 `20260601_0028`。
+- **节点范围**：首批仅 `设计成果交付`、`隐蔽工程验收`、`竣工精装验收`、`结算确认` 进入 `complete_required`；B 级节点继续保持 `soft_reminder`。
+- **后端行为**：`POST /api/v1/admin/project-tasks/{task_id}/complete` 对缺证据的 `complete_required` 节点执行硬门禁；普通任务负责人返回 `409 EVIDENCE_HARD_GATE_BLOCKED`，项目经理 / 管理员必须传 `bypass_reason`，缺失或少于 6 字返回 `422 EVIDENCE_BYPASS_REASON_REQUIRED`；放行成功写 `task_completed_bypass_gate`，payload 冻结证据策略、成果要求、证据数量、放行原因、决策人和任务状态。
+- **当前库激活**：新增并已执行 `scripts/biz3b32_activate_project_task_hard_gates.py --apply`；当前环境 `total_task_count=146`、`a_level_candidate_count=8`、`complete_required_count=8`、`soft_reminder_count=115`、`none_count=23`，二次 dry-run `updated_task_count=0`。
+- **前端交互**：`ai-web/src/App.vue` 任务列表/详情显示 `关键节点`、`需证据` 标签；缺证据硬门禁完成时按权限展示阻断提示或放行原因输入框；项目动态显示 `关键节点放行完成`。
+- **验收基线**：后端全量 `292 passed, 11 warnings`，`ai-web npm run build` 通过。重启后业务走读已确认普通成员阻断、项目经理/管理员放行、项目动态事件、补证据后正常完成、提交到 80% 不阻断和 B 级节点保持软提醒均无问题。
+
+# 2026-06-02 升级补充（BIZ-3c 经营驾驶舱轻量 MVP）
+
+- **规划文档**：`AI_Middle_Office/docs/biz-3c-business-dashboard-lite-mvp-planning.md`。
+- **定位**：BIZ-3c 先做只读经营总览，复用现有报价、成本库、项目进度和系统健康数据，用于内网试运行和管理层汇报；完整合同/回款/项目成本/毛利模型留到 BIZ-3d。
+- **BIZ-3c-1 状态**：后端只读聚合接口已完成代码层验证；新增 `FEATURE_DASHBOARD_BUSINESS_LITE`、`GET /api/v1/admin/dashboard/business-lite` 和 `app/services/business_lite_dashboard.py`，复用 `require_dashboard_viewer`，默认 `range=last_30_days`，沿用 `today/week/month/last_30_days`。
+- **BIZ-3c-2 状态**：前端经营总览标签页已完成代码层验证；`/admin/dashboard` 新增“经营总览”，展示 8 个经营指标卡、风险与待处理列表、运行摘要、跳转入口和 `section_errors` 局部降级提示。
+- **BIZ-3c-3 状态**：趋势图 + 风险规则精化已完成代码层验证；后端新增 `quote.daily_trend`、`cost.status_distribution`、`cost.source_distribution`、`project_progress.daily_trend`、`project_progress.hard_gate_bypassed_missing_evidence_count`，前端经营总览展示报价趋势、项目证据趋势和分布概览。
+- **边界**：BIZ-3c-1 / BIZ-3c-2 / BIZ-3c-3 不新增数据库结构、不新增 Alembic、不计算毛利/回款率/逾期应收、不展示成本敏感明细；成本审计事件使用 `cost_access_audit_logs`；完整经营模型留到 BIZ-3d。
+- **验证**：BIZ-3c-3 后端聚焦测试 `5 passed, 1 warning`；经营总览 / 成本 RAG 同步 / 成本审计 / 项目进度交叉依赖测试 `31 passed, 6 warnings`；`ai-web` 执行 `npm.cmd run build` 通过。
+- **建议下一步**：BIZ-3c 轻量 MVP 进入小范围试运行观察；完整合同/回款/项目成本/毛利驾驶舱等 BIZ-3d 业务口径确认后再启动。
+
+# 2026-06-02 升级补充（FE-UX-1 前端体验重构一期）
+
+- **规划文档**：`AI_Middle_Office/docs/fe-ux-1-admin-experience-refactor-planning.md`。
+- **定位**：小范围内网试运行前的中后台体验补强，不是新业务模块，也不是整站前端重写。
+- **模板参考**：主参考 `vue-pure-admin` / `Vue3 Element Admin`，信息架构参考 `Ant Design Pro`，视觉干净度参考 `PrimeVue Sakai`；不搬模板工程、不换 UI 库、不迁移到 React。
+- **边界**：继续使用 Vue3 + Vite + Element Plus；不新增数据库结构、不新增 Alembic、不改变报价、成本库、项目进度、权限和审计规则；不一次性迁移旧 `index.html`。
+- **分期**：FE-UX-1-1 应用外壳与视觉基础；FE-UX-1-2 报价工作台流程优化；FE-UX-1-3 AI 预审弹窗重构；FE-UX-1-4 成本库高级表格优化；FE-UX-1-5 经营总览与项目进度体验补强；FE-UX-1-6 试运行体验验收包。
+- **当前进度**：FE-UX-1 前端保守型体验重构一期已完成并通过人工验收。FE-UX-1-1 应用外壳与视觉基础、FE-UX-1-2 报价工作台流程优化、FE-UX-1-3 AI 预审弹窗重构、FE-UX-1-4 成本库高级表格优化、FE-UX-1-5 经营总览与项目进度体验补强均已验收通过；FE-UX-1-6 已形成 `AI_Middle_Office/docs/fe-ux-1-trial-experience-acceptance.md` 试运行体验验收包。不改报价接口、价格口径、成本库 active 规则、项目硬门禁、草稿保存、推送或审计规则。
+- **验证**：`index.html` 内联脚本解析通过；9000 的 `/admin/cost-db`、`/admin/dashboard`、`/admin/projects` 返回 200；`ai-web` 执行 `npm.cmd run build` 通过。
+- **建议下一步**：FE-UX-1 暂时收束；后续如需更明显的界面变化，可单独规划“视觉统一增强”专项。
+
+# 2026-06-02 升级补充（FE-UX-2 Apple-like 正式视觉增强第一版）
+
+- **规划文档**：`AI_Middle_Office/docs/fe-ux-2-apple-like-visual-upgrade.md`。
+- **定位**：在 FE-UX-1 保守型体验重构后，进行第一版更明显的视觉统一增强；参考“浅色、精致、正式、克制”的 Apple-like 气质，但不套 Apple 官网模板、不复刻品牌、不做营销页。
+- **边界**：不新增数据库结构、不新增 Alembic、不改变报价接口、价格口径、成本库 active 规则、项目硬门禁、草稿保存、推送、RAG 同步或审计规则；不引入新 UI 库、不换技术栈、不整站重写。
+- **已落地**：Vite 管理台新增品牌 lockup、登录页品牌介绍区、浅色磨砂 topbar、Element Plus 通用控件增强、指标卡/经营总览/成本库/项目概览卡片统一；旧 `index.html` 报价工作台同步浅色导航、流程条、消息区、输入区和 AI 预审弹窗卡片质感。
+- **当前进度**：FE-UX-2-1 第一版已完成并通过人工视觉验收；后续可做 FE-UX-2-2 逐页精修报价工作台、预审弹窗、经营总览和成本库表格。
+- **验证**：`ai-web` 执行 `npm.cmd run build` 通过；旧 `index.html` 内联脚本解析通过；`git diff --check` 未发现空白错误；9000 的 `/login`、`/admin/dashboard`、`/admin/cost-db`、`/admin/projects`、`/index.html` 返回 200。本轮内置 Browser 截图验收未完成，用户已确认人工视觉验收通过。

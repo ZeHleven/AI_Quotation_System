@@ -59,6 +59,18 @@ function Import-DotEnvToProcess {
         }
 }
 
+function Normalize-ProcessPathEnvironment {
+    $envVars = [Environment]::GetEnvironmentVariables("Process")
+    if ($envVars.Contains("Path") -and $envVars.Contains("PATH")) {
+        $pathValue = [Environment]::GetEnvironmentVariable("Path", "Process")
+        if (-not $pathValue) {
+            $pathValue = [Environment]::GetEnvironmentVariable("PATH", "Process")
+        }
+        [Environment]::SetEnvironmentVariable("PATH", $null, "Process")
+        [Environment]::SetEnvironmentVariable("Path", $pathValue, "Process")
+    }
+}
+
 function Get-ListeningProcessIds {
     param([int]$Port)
 
@@ -193,6 +205,7 @@ function Wait-FastApiReady {
 Set-Location $WorkDir
 $ResolvedPythonPath = Find-Python
 Import-DotEnvToProcess
+Normalize-ProcessPathEnvironment
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " Restart FastAPI backend"

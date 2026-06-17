@@ -1,0 +1,36 @@
+{
+  "version": "biz2x-standard-library-index-v1",
+  "generated_at": "2026-06-16 19:40:16",
+  "standards": [
+    {
+      "standard_code": "GBT50854-2024",
+      "standard_name": "房屋建筑与装饰工程工程量计算标准",
+      "library_type": "quantity_item_library",
+      "status": "active",
+      "path": "AI_Middle_Office/data/standards/gbtn50854_2024_word_active_20260610_024610.json",
+      "item_count": 457,
+      "feature_field_count": 1679,
+      "scope": "房屋建筑与装饰工程"
+    },
+    {
+      "standard_code": "GBT50856-2024",
+      "standard_name": "通用安装工程工程量计算标准",
+      "library_type": "quantity_item_library",
+      "status": "active",
+      "path": "AI_Middle_Office/data/standards/gbtn508562024_word_active_20260616_194005.json",
+      "item_count": 1155,
+      "feature_field_count": 4672,
+      "scope": "通用安装工程"
+    },
+    {
+      "standard_code": "GBT50500-2024",
+      "standard_name": "建设工程工程量清单计价标准",
+      "library_type": "pricing_rule_library",
+      "status": "active",
+      "path": "AI_Middle_Office/data/standards/gbtn505002024_rule_active_20260616_194016.json",
+      "rule_count": 865,
+      "table_count": 43,
+      "scope": "工程量清单编制、计价、合同计量、价款调整和结算规则"
+    }
+  ]
+}

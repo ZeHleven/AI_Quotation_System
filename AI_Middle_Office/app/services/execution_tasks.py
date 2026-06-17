@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.time_utils import APP_TZ, app_local_naive, parse_iso_datetime
 from app.models.execution_task import ExecutionTask, ExecutionTaskEvent
 from app.models.user import User
 from app.services.rbac import has_admin_role, has_any_role
 
 
-CN_TZ = ZoneInfo("Asia/Shanghai")
 VALID_EXECUTION_SOURCES = {"manual", "meeting", "quote"}
+CN_TZ = APP_TZ
 VALID_EXECUTION_STATUSES = {"pending", "in_progress", "done", "cancelled"}
 TERMINAL_EXECUTION_STATUSES = {"done", "cancelled"}
 PROGRESS_TRANSITIONS = {
@@ -24,15 +24,13 @@ PROGRESS_TRANSITIONS = {
 
 
 def _now_local_naive() -> datetime:
-    return datetime.now(CN_TZ).replace(tzinfo=None)
+    return app_local_naive()
 
 
 def _to_local_naive(value: datetime | None) -> datetime | None:
     if value is None:
         return None
-    if value.tzinfo is None:
-        return value
-    return value.astimezone(CN_TZ).replace(tzinfo=None)
+    return app_local_naive(value)
 
 
 def parse_local_datetime(value: str | None, *, field_name: str = "datetime") -> datetime | None:
@@ -42,7 +40,7 @@ def parse_local_datetime(value: str | None, *, field_name: str = "datetime") -> 
     if not raw_value:
         return None
     try:
-        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+        parsed = parse_iso_datetime(raw_value)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"INVALID_{field_name.upper()}") from exc
     return _to_local_naive(parsed)

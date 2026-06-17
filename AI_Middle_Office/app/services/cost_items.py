@@ -27,12 +27,14 @@ from app.models.cost_item import (
     CostRagSyncRun,
 )
 from app.models.quote_cost_evidence import QuoteCostEvidence
+from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.cost_duplicate_guard import (
     DUPLICATE_CONFLICT_CODE,
     active_duplicate_conflicts,
     active_duplicate_conflicts_for_item,
 )
+from app.services.quote_job_numbers import quote_job_number
 from app.services.rbac import has_any_role
 
 
@@ -470,14 +472,31 @@ def _parse_cost_notes_metadata(notes: str | None) -> dict[str, str]:
     return metadata
 
 
-def _source_origin(item: CostItem, usernames: dict[int, str]) -> dict[str, Any]:
+def _quote_job_number_map(db: Session, job_ids: list[str | None]) -> dict[str, str]:
+    values = list({job_id for job_id in job_ids if job_id})
+    if not values:
+        return {}
+    return {
+        job.job_id: number
+        for job in db.query(QuoteJob).filter(QuoteJob.job_id.in_(values)).all()
+        if (number := quote_job_number(job))
+    }
+
+
+def _source_origin(
+    item: CostItem,
+    usernames: dict[int, str],
+    quote_job_numbers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     metadata = _parse_cost_notes_metadata(item.notes)
+    quote_job_id = metadata.get("quote_job_id")
     return {
         "source": item.source,
         "created_by": item.created_by,
         "created_by_username": usernames.get(item.created_by or 0),
         "created_at": _format_dt(item.created_at),
-        "quote_job_id": metadata.get("quote_job_id"),
+        "quote_job_id": quote_job_id,
+        "quote_job_number": (quote_job_numbers or {}).get(quote_job_id or ""),
         "quote_history_id": _parse_int(metadata.get("quote_history_id")),
         "line_no": _parse_int(metadata.get("line_no")),
         "requirement_row_key": metadata.get("requirement_row_key"),
@@ -555,11 +574,13 @@ def _quote_usage_stats(db: Session, item_ids: list[int]) -> dict[int, dict[str, 
     for row in latest_rows:
         if row.cost_item_id and row.cost_item_id not in latest_by_item:
             latest_by_item[int(row.cost_item_id)] = row
+    quote_job_numbers = _quote_job_number_map(db, [row.quote_job_id for row in latest_by_item.values()])
     return {
         item_id: {
             "quote_usage_count": counts.get(item_id, 0),
             "latest_quote_used_at": _format_dt(latest_by_item[item_id].created_at) if item_id in latest_by_item else None,
             "latest_quote_job_id": latest_by_item[item_id].quote_job_id if item_id in latest_by_item else None,
+            "latest_quote_job_number": quote_job_numbers.get(latest_by_item[item_id].quote_job_id) if item_id in latest_by_item else None,
             "latest_quote_history_id": latest_by_item[item_id].quote_history_id if item_id in latest_by_item else None,
         }
         for item_id in item_ids
@@ -572,16 +593,18 @@ def _lineage_item(
     usernames: dict[int, str],
     usage: dict[str, Any] | None = None,
     latest_rag_run: CostRagSyncRun | None = None,
+    quote_job_numbers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     usage = usage or {}
     quote_usage_count = int(usage.get("quote_usage_count") or 0)
     data = serialize_cost_item(item)
-    data["origin"] = _source_origin(item, usernames)
+    data["origin"] = _source_origin(item, usernames, quote_job_numbers)
     data["destination"] = _lineage_destination(item, quote_usage_count, latest_rag_run)
     data["quote_usage"] = {
         "count": quote_usage_count,
         "latest_used_at": usage.get("latest_quote_used_at"),
         "latest_quote_job_id": usage.get("latest_quote_job_id"),
+        "latest_quote_job_number": usage.get("latest_quote_job_number"),
         "latest_quote_history_id": usage.get("latest_quote_history_id"),
     }
     return data
@@ -673,12 +696,16 @@ def list_cost_item_lineage(
     usage_by_item = _quote_usage_stats(db, item_ids)
     usernames = _usernames_for_ids(db, {item.created_by for item in items})
     latest_rag_run = _latest_successful_rag_sync_run(db)
+    origin_job_ids = [_parse_cost_notes_metadata(item.notes).get("quote_job_id") for item in items]
+    usage_job_ids = [usage.get("latest_quote_job_id") for usage in usage_by_item.values()]
+    quote_job_numbers = _quote_job_number_map(db, origin_job_ids + usage_job_ids)
     return [
         _lineage_item(
             item,
             usernames=usernames,
             usage=usage_by_item.get(int(item.id)),
             latest_rag_run=latest_rag_run,
+            quote_job_numbers=quote_job_numbers,
         )
         for item in items
     ], total
@@ -698,11 +725,16 @@ def get_cost_item_lineage(db: Session, user: User, item_id: int) -> dict[str, An
     user_ids.update(history.changed_by for history in item.history)
     usernames = _usernames_for_ids(db, user_ids)
     usage_by_item = _quote_usage_stats(db, [int(item.id)])
+    origin_job_ids = [_parse_cost_notes_metadata(item.notes).get("quote_job_id")]
+    usage_job_ids = [usage.get("latest_quote_job_id") for usage in usage_by_item.values()]
+    evidence_job_ids = [row.quote_job_id for row in evidence_rows]
+    quote_job_numbers = _quote_job_number_map(db, origin_job_ids + usage_job_ids + evidence_job_ids)
     data = _lineage_item(
         item,
         usernames=usernames,
         usage=usage_by_item.get(int(item.id)),
         latest_rag_run=_latest_successful_rag_sync_run(db),
+        quote_job_numbers=quote_job_numbers,
     )
     data["history"] = [
         _history_snapshot_with_user(history, usernames)
@@ -710,15 +742,19 @@ def get_cost_item_lineage(db: Session, user: User, item_id: int) -> dict[str, An
     ]
     data["status_history"] = [event for event in data["history"] if event.get("change_type") == CHANGE_TYPE_STATUS]
     data["price_history"] = [event for event in data["history"] if event.get("change_type") == CHANGE_TYPE_PRICE]
-    data["quote_usages"] = [_serialize_lineage_quote_usage(row) for row in evidence_rows]
+    data["quote_usages"] = [_serialize_lineage_quote_usage(row, quote_job_numbers) for row in evidence_rows]
     return data
 
 
-def _serialize_lineage_quote_usage(row: QuoteCostEvidence) -> dict[str, Any]:
+def _serialize_lineage_quote_usage(
+    row: QuoteCostEvidence,
+    quote_job_numbers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     return {
         "id": row.id,
         "quote_id": row.quote_id,
         "quote_job_id": row.quote_job_id,
+        "quote_job_number": (quote_job_numbers or {}).get(row.quote_job_id or ""),
         "quote_history_id": row.quote_history_id,
         "username": row.username,
         "status": row.status,

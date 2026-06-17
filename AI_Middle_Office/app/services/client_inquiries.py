@@ -2,23 +2,22 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.time_utils import app_local_naive, parse_iso_datetime
 from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
 from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.rbac import has_admin_role, has_any_role
 
 
-CN_TZ = ZoneInfo("Asia/Shanghai")
 VALID_TIME_SOURCES = {"manual", "default", "integration"}
 
 
 def _now_local_naive() -> datetime:
-    return datetime.now(CN_TZ).replace(tzinfo=None)
+    return app_local_naive()
 
 
 def _parse_local_datetime(value: str | None) -> datetime | None:
@@ -28,12 +27,10 @@ def _parse_local_datetime(value: str | None) -> datetime | None:
     if not raw_value:
         return None
     try:
-        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+        parsed = parse_iso_datetime(raw_value)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="INVALID_DATETIME") from exc
-    if parsed.tzinfo is None:
-        return parsed
-    return parsed.astimezone(CN_TZ).replace(tzinfo=None)
+    return app_local_naive(parsed)
 
 
 def _clean_text(value: str | None, max_length: int) -> str | None:

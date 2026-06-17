@@ -14,12 +14,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
 from uuid import uuid4
-from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.time_utils import app_local_naive, parse_iso_datetime
 from app.models.client_inquiry import (
     DIRECTION_OUTBOUND,
     STAGE_FOLLOWUP_NEGOTIATION,
@@ -44,7 +44,6 @@ from app.models.user import User
 from app.services.rbac import has_admin_role, has_any_role
 
 
-CN_TZ = ZoneInfo("Asia/Shanghai")
 STAFF_UPDATE_FIELDS = {"stage", "next_followup_at", "client_phone", "notes"}
 ADMIN_UPDATE_FIELDS = STAFF_UPDATE_FIELDS | {"client_name", "source", "responder_id"}
 FORBIDDEN_PATCH_FIELDS = {
@@ -78,15 +77,13 @@ class EventContext:
 
 
 def _now_local_naive() -> datetime:
-    return datetime.now(CN_TZ).replace(tzinfo=None)
+    return app_local_naive()
 
 
 def _to_local_naive(value: datetime | None) -> datetime | None:
     if value is None:
         return None
-    if value.tzinfo is None:
-        return value
-    return value.astimezone(CN_TZ).replace(tzinfo=None)
+    return app_local_naive(value)
 
 
 def parse_local_datetime(value: str | datetime | None, *, field_name: str = "datetime") -> datetime | None:
@@ -96,7 +93,7 @@ def parse_local_datetime(value: str | datetime | None, *, field_name: str = "dat
     if not raw_value:
         return None
     try:
-        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+        parsed = parse_iso_datetime(raw_value)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"INVALID_{field_name.upper()}") from exc
     return _to_local_naive(parsed)

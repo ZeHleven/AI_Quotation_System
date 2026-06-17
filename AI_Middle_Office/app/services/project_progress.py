@@ -3,18 +3,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.time_utils import app_local_naive, parse_iso_datetime
 from app.models.project_progress import Project, ProjectStage, ProjectTask, ProjectTaskEvent, ProjectTaskEvidence
 from app.models.user import User
 from app.services.rbac import has_any_role
 
-
-CN_TZ = ZoneInfo("Asia/Shanghai")
 
 PROJECT_STATUSES = {"planning", "active", "paused", "completed", "cancelled"}
 PROJECT_RISK_LEVELS = {"normal", "warning", "delayed", "blocked"}
@@ -325,15 +323,13 @@ class EventContext:
 
 
 def now_local_naive() -> datetime:
-    return datetime.now(CN_TZ).replace(tzinfo=None)
+    return app_local_naive()
 
 
 def to_local_naive(value: datetime | None) -> datetime | None:
     if value is None:
         return None
-    if value.tzinfo is None:
-        return value
-    return value.astimezone(CN_TZ).replace(tzinfo=None)
+    return app_local_naive(value)
 
 
 def parse_local_datetime(value: str | None, *, field_name: str = "datetime") -> datetime | None:
@@ -343,7 +339,7 @@ def parse_local_datetime(value: str | None, *, field_name: str = "datetime") -> 
     if not raw_value:
         return None
     try:
-        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+        parsed = parse_iso_datetime(raw_value)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"INVALID_{field_name.upper()}") from exc
     return to_local_naive(parsed)

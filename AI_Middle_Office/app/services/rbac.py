@@ -12,6 +12,8 @@ from app.models.user import User, UserRole, UserRoleEvent
 VALID_ROLES = (
     "system_admin",
     "admin",
+    "quote_operator",
+    "quote_user",
     "cost_viewer",
     "cost_editor",
     "cost_approver",
@@ -61,9 +63,13 @@ def _roles_with_implications(user: User) -> set[str]:
     roles = set(get_effective_roles(user))
     if "system_admin" in roles:
         roles.add("admin")
+        roles.update({"quote_operator", "quote_user"})
         roles.update({"cost_viewer", "cost_editor", "cost_approver", "cost_exporter"})
     if "admin" in roles:
+        roles.update({"quote_operator", "quote_user"})
         roles.update({"cost_viewer", "cost_editor", "cost_approver"})
+    if "staff" in roles:
+        roles.add("quote_user")
     if "cost_approver" in roles:
         roles.update({"cost_viewer", "cost_editor"})
     if "cost_editor" in roles:
@@ -116,7 +122,7 @@ def get_available_modules(user: User) -> list[dict]:
     roles = set(_roles_with_implications(user))
     modules: list[dict] = []
 
-    if {"system_admin", "admin", "staff"} & roles:
+    if {"system_admin", "admin", "staff", "quote_user"} & roles:
         modules.append(
             {
                 "key": "legacy_quote",
@@ -170,6 +176,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_cost_db else "pending",
             }
         )
+    if {"system_admin", "admin", "staff", "quote_user"} & roles:
         modules.append(
             {
                 "key": "requirement_standardization",
@@ -178,13 +185,23 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_requirement_standardization else "pending",
             }
         )
-    if {"system_admin", "admin", "viewer"} & roles:
+    if {"system_admin", "admin", "staff", "quote_user", "quote_operator"} & roles:
+        modules.append(
+            {
+                "key": "agent_center",
+                "name": "AI助手中心",
+                "path": "/admin/agent-center",
+                "status": "available" if settings.feature_agent_assistants else "pending",
+            }
+        )
+    if {"system_admin", "admin", "viewer", "quote_operator"} & roles:
         dashboard_enabled = (
             settings.feature_dashboard_quote
             or settings.feature_dashboard_response
             or settings.feature_dashboard_execution
             or settings.feature_dashboard_project
             or settings.feature_dashboard_business_lite
+            or "quote_operator" in roles
         )
         modules.append(
             {

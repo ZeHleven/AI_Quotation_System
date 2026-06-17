@@ -1,6 +1,12 @@
 # AI Middle Office - Windows Auto-Start Service Installer (Task Scheduler, no NSSM needed)
 # Run as Administrator in PowerShell
 
+[CmdletBinding()]
+param(
+    [string]$HostAddress = "",
+    [switch]$Lan
+)
+
 $TaskName = "AI_MiddleOffice"
 $TaskPath = "\"
 $WorkDir  = $PSScriptRoot
@@ -34,6 +40,20 @@ if (-not (Test-Path $Launcher)) {
     exit 1
 }
 
+if ($Lan -and $HostAddress -in @("127.0.0.1", "localhost")) {
+    Write-Error "-Lan cannot be combined with -HostAddress $HostAddress. Use -Lan alone, -HostAddress 0.0.0.0, or a real LAN IPv4 address."
+    exit 1
+}
+
+$BindHost = $HostAddress
+if (-not $BindHost) {
+    if ($Lan) {
+        $BindHost = "0.0.0.0"
+    } else {
+        $BindHost = "127.0.0.1"
+    }
+}
+
 # 2. Create log directory
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
 
@@ -47,9 +67,26 @@ if (Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction Silen
 # 4. Register scheduled task
 Write-Host "[Install] Registering scheduled task..." -ForegroundColor Cyan
 
+$watchdogArgs = @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "`"$Launcher`"",
+    "-RetryIntervalSeconds",
+    "180",
+    "-MaxMinutes",
+    "60",
+    "-HostAddress",
+    $BindHost
+)
+if ($Lan) {
+    $watchdogArgs += "-Lan"
+}
+
 $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -RetryIntervalSeconds 180 -MaxMinutes 60" `
+    -Argument ($watchdogArgs -join " ") `
     -WorkingDirectory $WorkDir
 
 $trigger = New-ScheduledTaskTrigger -AtStartup
@@ -82,7 +119,11 @@ $state = (Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName).State
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host " Task state: $state" -ForegroundColor Green
-Write-Host " URL: http://localhost:9000/" -ForegroundColor Green
+Write-Host " Local URL: http://127.0.0.1:9000/" -ForegroundColor Green
+Write-Host " Bind: $BindHost" -ForegroundColor Green
+if ($Lan -or $BindHost -ne "127.0.0.1") {
+    Write-Host " LAN mode: enabled. After startup, see logs\current_access_urls.txt for the current LAN URL." -ForegroundColor Green
+}
 Write-Host " Startup mode: watchdog retry every 3 minutes for 60 minutes" -ForegroundColor Green
 Write-Host " Logs: $LogDir" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green

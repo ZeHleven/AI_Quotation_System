@@ -1,4 +1,6 @@
-# AI 智能报价中台启动说明
+# AI 智能报价中台启动说明（内网试运行版）
+
+更新时间：2026-06-03
 
 适用路径：
 
@@ -6,105 +8,121 @@
 C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test
 ```
 
-系统访问地址：
+详细说明见：
 
 ```text
-http://localhost:9000/
+AI_Middle_Office/docs/internal-trial-delivery-index.md
+AI_Middle_Office/docs/windows-lan-startup-runbook.md
+AI_Middle_Office/docs/trial-account-permission-runbook.md
+AI_Middle_Office/docs/trial-backup-restore-runbook.md
+AI_Middle_Office/docs/trial-stage4-frontend-demo-sandbox-runbook.md
+AI_Middle_Office/docs/trial-stage5-rule-template-and-production-readiness-runbook.md
 ```
 
-管理员账号：
+## 1. 当前部署边界
 
-```text
-admin / 123
-```
+当前 Windows 电脑只是临时内网服务器。其他电脑通过浏览器访问这台 Windows 电脑的内网 IP。
 
----
+这只适合小范围内网试运行，不是正式生产环境。如果 Windows 电脑关机、断网、换网络、IP 变化或服务停止，其他电脑都会打不开。正式上线前需要迁移到公司内网服务器或云服务器，并配置固定 IP/域名、HTTPS、备份、日志监控和基础运维机制。
 
-## 一、正常重启电脑后怎么启动
+## 2. 推荐启动方式
 
-现在系统已经做了第 20 步“一键启动与自愈编排”，正常情况下重启电脑后不需要手动启动很多东西。
+### 本机开发模式
 
-推荐顺序：
-
-1. 先打开 CentOS 虚拟机。
-2. 等 CentOS 进入系统后，`ens33` 会自动获取 `192.168.88.128`。
-3. Docker 会自动恢复 RAG、MySQL、Redis、MinIO 等服务。
-4. Windows 的任务计划程序 `AI_MiddleOffice` 会自动执行启动看门狗。
-5. 启动看门狗会每 3 分钟尝试一次启动编排，最多持续 60 分钟。
-6. 直接打开：
-
-```text
-http://localhost:9000/
-```
-
----
-
-## 二、如果网页打不开，手动一键启动
-
-在 Windows PowerShell 中执行：
+只允许本机访问：
 
 ```powershell
 cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1
 ```
 
-看到下面类似输出，就表示系统已就绪：
+本机访问：
 
 ```text
-System is ready
-URL: http://localhost:9000/
-Queue: celery / ok=True
+http://127.0.0.1:9000/
 ```
 
-说明：`start_all.ps1` 会在启动 FastAPI 前自动执行数据库迁移：
+### 内网试运行模式
 
-```text
-python -c "from alembic.config import main; main()" -c alembic.ini upgrade head
-```
-
-如果只是临时排查启动问题，可以跳过迁移：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1 -SkipMigrations
-```
-
----
-
-## 三、健康检查
-
-启动后检查后端、数据库、队列是否正常：
-
-```powershell
-Invoke-RestMethod http://localhost:9000/health/ready
-```
-
-正常结果应包含：
-
-```text
-status          : ready
-database        : ok
-task_queue_mode : celery
-task_queue.ok   : True
-```
-
-也可以运行固定验收脚本，一次性检查 FastAPI、worker、RAG、n8n、MinIO、MySQL、Redis：
+允许同一局域网其他电脑访问：
 
 ```powershell
 cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify_startup.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1 -Lan
 ```
 
-正常结果：
+启动成功后看终端里的：
 
 ```text
-[PASS] Acceptance check passed
+LAN URL: http://<当前 Windows 内网 IP>:9000/
 ```
 
----
+也可以查看：
 
-## 四、检查 CentOS 服务是否可达
+```powershell
+Get-Content C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office\logs\current_access_urls.txt
+```
 
-如果系统打不开，先在 Windows PowerShell 检查这些端口：
+## 3. 健康检查
+
+本机检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:9000/health/ready
+```
+
+完整检查：
+
+```powershell
+cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify_startup.ps1 -AppUrl http://127.0.0.1:9000
+```
+
+通过标准：
+
+```text
+status        = ready
+database      = ok
+task_queue.ok = True
+```
+
+`start_all.ps1` 会在第一次 ready 后短暂等待并复查，避免刚启动就退出的情况被误判为成功。
+
+## 4. Windows 防火墙
+
+内网试运行模式需要 Windows 允许 TCP `9000` 入站。建议只在公司内网/专用网络放行，不要对公网开放。
+
+管理员 PowerShell 示例：
+
+```powershell
+New-NetFirewallRule `
+  -DisplayName "AI Middle Office FastAPI 9000" `
+  -Direction Inbound `
+  -Action Allow `
+  -Protocol TCP `
+  -LocalPort 9000 `
+  -Profile Private
+```
+
+启动脚本不会自动修改防火墙。是否放行由操作者确认后执行。
+
+## 5. 常用恢复命令
+
+### 内网模式完整重启
+
+```powershell
+cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1 -Lan -Restart
+```
+
+### 只重启 FastAPI
+
+```powershell
+cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\restart_backend.ps1 -HostAddress 0.0.0.0 -AppPort 9000
+```
+
+### 查看 CentOS 依赖
 
 ```powershell
 Test-NetConnection 192.168.88.128 -Port 5455
@@ -114,97 +132,26 @@ Test-NetConnection 192.168.88.128 -Port 5678
 Test-NetConnection 192.168.88.128 -Port 9002
 ```
 
-含义：
+端口含义：
 
 ```text
-5455  = MySQL
-6380  = Redis / Celery broker
-8001  = RAG 服务
-5678  = n8n
-9002  = MinIO 文件存储
+5455 = MySQL
+6380 = Redis / Celery broker
+8001 = RAG service
+5678 = N8N
+9002 = MinIO
 ```
 
-如果 `TcpTestSucceeded : True`，说明该服务端口可达。
+## 6. 开机自启
 
----
-
-## 五、如果 CentOS 没有拿到 IP
-
-正常情况下已经配置了自动 DHCP，不需要再手动执行。
-
-如果 `192.168.88.128` 不通，可以进入 CentOS 临时修复：
-
-```bash
-sudo dhclient ens33
-```
-
-然后在 Windows 再检查：
-
-```powershell
-Test-NetConnection 192.168.88.128 -Port 5455
-```
-
----
-
-## 六、如果 Docker 服务没起来
-
-进入 CentOS：
-
-```bash
-cd /opt/rag_service
-docker compose up -d
-docker compose ps
-```
-
-如果只需要检查 Redis：
-
-```bash
-docker exec quote-redis redis-cli ping
-```
-
-正常返回：
-
-```text
-PONG
-```
-
----
-
-## 七、如果 Celery 队列异常
-
-先看健康检查：
-
-```powershell
-Invoke-RestMethod http://localhost:9000/health/ready
-```
-
-如果看到：
-
-```text
-worker=no_reply
-worker_count=0
-```
-
-手动启动 Celery：
+管理员 PowerShell 安装计划任务：
 
 ```powershell
 cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_celery_worker.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_service.ps1 -Lan
 ```
 
-如果提示 pid 文件已存在，当前脚本已经会自动识别并清理大多数 stale pid 问题。
-
----
-
-## 八、任务计划程序
-
-Windows 开机自启任务名：
-
-```text
-AI_MiddleOffice
-```
-
-查看状态：
+查看任务：
 
 ```powershell
 Get-ScheduledTask -TaskPath "\" -TaskName AI_MiddleOffice
@@ -216,15 +163,6 @@ Get-ScheduledTask -TaskPath "\" -TaskName AI_MiddleOffice
 Start-ScheduledTask -TaskPath "\" -TaskName AI_MiddleOffice
 ```
 
-重新安装开机自启任务，需要用管理员 PowerShell：
-
-```powershell
-cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_service.ps1
-```
-
-说明：任务状态显示 `Ready` 不一定是异常。`AI_MiddleOffice` 是启动看门狗任务，会在后台反复调用 `start_all.ps1 -NoBrowser`，直到系统 ready 或 60 分钟超时。是否真正可用，以 `/health/ready` 为准。
-
 看门狗日志：
 
 ```powershell
@@ -234,19 +172,12 @@ Get-ChildItem C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI
   Get-Content -Tail 80
 ```
 
----
+## 7. 重要说明
 
-## 九、最短应急启动命令
-
-如果不想逐项排查，直接执行这一条：
-
-```powershell
-cd C:\Users\12521\Documents\Codex\2026-04-25\ai-pycharm\Clear_test\AI_Middle_Office
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1
-```
-
-然后打开：
-
-```text
-http://localhost:9000/
-```
+- 不再把 `admin / 123` 作为正常账号口径。
+- 账号创建、权限分配和密码维护以 `AI_Middle_Office/docs/trial-account-permission-runbook.md` 为准。
+- 备份与恢复以 `AI_Middle_Office/docs/trial-backup-restore-runbook.md` 为准。
+- 核心前端体验、演示脚本和沙盒样例以 `AI_Middle_Office/docs/trial-stage4-frontend-demo-sandbox-runbook.md` 为准。
+- 规则模板、正式上线清单和试运行转生产差距说明以 `AI_Middle_Office/docs/trial-stage5-rule-template-and-production-readiness-runbook.md` 为准。
+- `PUBLIC_ACCESS_ENABLED` 在内网试运行阶段应保持 `false`。
+- 内网试运行只验证系统可用性和流程体验，不代表正式生产 SLA。

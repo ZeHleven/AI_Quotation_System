@@ -253,6 +253,15 @@ def collect_service_statuses() -> List[dict]:
     ]
 
 
+def collect_external_dependency_statuses() -> List[dict]:
+    return [
+        check_redis_service(),
+        check_rag_service(),
+        check_minio_service(),
+        check_n8n_service(),
+    ]
+
+
 def _format_dt(value: Optional[datetime]) -> Optional[str]:
     if not value:
         return None

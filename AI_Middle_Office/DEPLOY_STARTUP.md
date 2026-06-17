@@ -46,6 +46,26 @@ Run from `AI_Middle_Office`:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1
 ```
 
+This is the local development mode. It binds FastAPI to `127.0.0.1:9000`.
+
+For small LAN trials where other PCs need to access this Windows machine, run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1 -Lan
+```
+
+This binds FastAPI to `0.0.0.0:9000`, prints the current LAN URL, and writes it to:
+
+```text
+logs\current_access_urls.txt
+```
+
+If the Windows host has multiple network adapters, bind to a specific LAN IP:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1 -HostAddress 192.168.x.x
+```
+
 The script waits for:
 
 - MySQL `192.168.88.128:5455`
@@ -58,14 +78,28 @@ Then it starts:
 
 - Alembic database migrations through `alembic upgrade head`
 - Celery worker through `start_celery_worker.ps1`
-- FastAPI on `http://127.0.0.1:9000`
+- FastAPI on the selected bind host, defaulting to `http://127.0.0.1:9000`
 
-It finishes only after `/health/ready` returns `ready`.
+It finishes only after `/health/ready` returns `ready` and stays ready through the short `ReadyStabilitySeconds` confirmation window.
+
+The script does not change Windows Firewall rules. For LAN trials, manually allow inbound TCP `9000` on the private/company network before asking other PCs to connect.
 
 To temporarily skip database migrations during troubleshooting:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1 -SkipMigrations
+```
+
+To shorten or disable the ready stability window during local troubleshooting:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1 -ReadyStabilitySeconds 3
+```
+
+To restart in LAN trial mode:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_all.ps1 -Lan -Restart
 ```
 
 ## 3. Windows boot autostart
@@ -78,6 +112,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_service.ps1
 ```
 
 This registers the `AI_MiddleOffice` scheduled task to execute `start_watchdog.ps1` at startup.
+
+For LAN trial autostart, install it with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_service.ps1 -Lan
+```
 
 The watchdog retries every 3 minutes for up to 60 minutes. This handles the common boot order where Windows starts before the CentOS virtual machine is fully online.
 

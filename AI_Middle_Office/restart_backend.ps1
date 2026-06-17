@@ -173,8 +173,12 @@ function Start-FastApi {
 }
 
 function Wait-FastApiReady {
-    $readyUrl = "http://${HostAddress}:$AppPort/health/ready"
-    $liveUrl = "http://${HostAddress}:$AppPort/health/live"
+    $ProbeHost = $HostAddress
+    if ($HostAddress -eq "0.0.0.0" -or $HostAddress -eq "::") {
+        $ProbeHost = "127.0.0.1"
+    }
+    $readyUrl = "http://${ProbeHost}:$AppPort/health/ready"
+    $liveUrl = "http://${ProbeHost}:$AppPort/health/live"
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = ""
 

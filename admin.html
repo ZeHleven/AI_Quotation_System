@@ -423,6 +423,9 @@
               layout="total, prev, pager, next" @current-change="fetchJobs" small />
           </div>
           <el-table :data="jobData" border stripe style="width:100%" v-loading="jobLoading">
+            <el-table-column label="任务号" width="165" show-overflow-tooltip>
+              <template #default="scope">{{ displayJobNumber(scope.row) }}</template>
+            </el-table-column>
             <el-table-column prop="created_at" label="创建时间" width="160"></el-table-column>
             <el-table-column prop="username" label="用户" width="120"></el-table-column>
             <el-table-column prop="status" label="状态" width="100" align="center">
@@ -914,7 +917,7 @@
         <div v-if="feedbackDetail">
           <el-descriptions :column="3" border size="small" style="margin-bottom:16px;">
             <el-descriptions-item label="反馈 ID">{{ feedbackDetail.id }}</el-descriptions-item>
-            <el-descriptions-item label="Job ID">{{ feedbackDetail.quote_job_id || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="任务号">{{ displayJobNumber(feedbackDetail) }}</el-descriptions-item>
             <el-descriptions-item label="Trace ID">{{ feedbackDetail.trace_id || '—' }}</el-descriptions-item>
             <el-descriptions-item label="用户">{{ feedbackDetail.username }}</el-descriptions-item>
             <el-descriptions-item label="状态">
@@ -989,8 +992,9 @@
       <div v-loading="jobDetailLoading" style="min-height:200px;">
         <div v-if="jobDetail">
           <el-descriptions :column="3" border size="small" style="margin-bottom:16px;">
-            <el-descriptions-item label="Job ID" :span="2">{{ jobDetail.job_id }}</el-descriptions-item>
+            <el-descriptions-item label="任务号" :span="2">{{ displayJobNumber(jobDetail) }}</el-descriptions-item>
             <el-descriptions-item label="Trace ID">{{ jobDetail.trace_id || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="内部ID" :span="3">{{ jobDetail.job_id }}</el-descriptions-item>
             <el-descriptions-item label="用户">{{ jobDetail.username }}</el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag :type="statusTagType(jobDetail.status)" size="small">{{ jobDetail.status }}</el-tag>

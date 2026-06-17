@@ -573,6 +573,7 @@
       </div>
       <div class="sys-nav">
         <span class="sys-user" v-if="isLoggedIn">{{ currentUser }}</span>
+        <a v-if="canOpenAdminShell" :href="adminShellPath">管理后台</a>
         <a href="/app.html">← 返回门户</a>
       </div>
     </header>
@@ -856,7 +857,7 @@
               <div class="detail-summary">{{ scope.row.project_summary || scope.row.request_text || '—' }}</div>
               <div class="quote-meta" style="margin-top:6px;">
                 <span v-if="scope.row.source_file_name" class="quote-meta-tag">{{ scope.row.source_file_name }}</span>
-                <span v-if="scope.row.quote_job_id" class="quote-meta-tag">任务 {{ scope.row.quote_job_id }}</span>
+                <span v-if="scope.row.quote_job_id" class="quote-meta-tag">任务 {{ displayQuoteJobNumber(scope.row) }}</span>
                 <span v-if="scope.row.client_inquiry?.source" class="quote-meta-tag">来源 {{ scope.row.client_inquiry.source }}</span>
                 <span v-if="scope.row.client_inquiry?.client_name" class="quote-meta-tag">客户 {{ scope.row.client_inquiry.client_name }}</span>
                 <span v-if="scope.row.client_inquiry?.client_phone" class="quote-meta-tag">电话 {{ scope.row.client_inquiry.client_phone }}</span>
@@ -1225,7 +1226,7 @@
               <span>{{ previewFooterHint }}</span>
             </div>
             <div class="preview-footer-actions">
-              <el-button :loading="previewDraftSaving" :disabled="pushing || !previewContext.quoteJobId || !previewData.length" @click="savePreviewDraftNow()">
+              <el-button :loading="previewDraftSaving" :disabled="pushing || !previewContext.quoteJobId || !previewData.length || isPreviewDraftTerminal()" @click="savePreviewDraftNow()">
                 保存草稿
               </el-button>
               <el-button :loading="previewDraftSaving" :disabled="pushing" @click="closePreviewAndKeepDraft">
@@ -1533,6 +1534,19 @@
               if (!roles.includes(role)) roles.push(role);
             });
           }
+          if (roles.includes('staff') && !roles.includes('quote_user')) roles.push('quote_user');
+          if (roles.includes('staff')) {
+            ['project_viewer', 'project_member'].forEach((role) => {
+              if (!roles.includes(role)) roles.push(role);
+            });
+          }
+          if (roles.includes('manager')) {
+            ['project_viewer', 'project_member', 'project_manager'].forEach((role) => {
+              if (!roles.includes(role)) roles.push(role);
+            });
+          }
+          if (roles.includes('project_manager') && !roles.includes('project_member')) roles.push('project_member');
+          if (roles.includes('project_member') && !roles.includes('project_viewer')) roles.push('project_viewer');
           if (roles.includes('cost_approver') && !roles.includes('cost_editor')) roles.push('cost_editor');
           if (roles.includes('cost_editor') && !roles.includes('cost_viewer')) roles.push('cost_viewer');
           return roles;
@@ -1545,6 +1559,16 @@
           'cost_approver',
           'cost_exporter',
         ].includes(role)));
+        const adminShellPath = computed(() => {
+          const roles = currentRoleList.value;
+          if (roles.includes('system_admin') || roles.includes('admin')) return '/admin/permissions';
+          if (roles.includes('quote_operator') || roles.includes('viewer')) return '/admin/dashboard';
+          if (roles.some((role) => ['cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter'].includes(role))) return '/admin/cost-db';
+          if (roles.includes('quote_user')) return '/admin/requirement-standardization';
+          if (roles.some((role) => ['project_viewer', 'project_member', 'project_manager'].includes(role))) return '/admin/projects';
+          return '';
+        });
+        const canOpenAdminShell = computed(() => Boolean(adminShellPath.value));
         const previewData       = ref([]);
         const previewOriginalData = ref([]);
         const omissionSuggestions = ref([]);
@@ -1562,6 +1586,7 @@
         const previewDraftVersion = ref(null);
         const previewDraftError = ref('');
         const previewDraftRestored = ref(false);
+        const PREVIEW_DRAFT_TERMINAL_STATUSES = new Set(['pushed', 'discarded']);
         let previewDraftSaveTimer = null;
         const reviewDetail = ref(null);
         const reviewDetailLoading = ref(false);
@@ -1731,6 +1756,11 @@
             const res = await axios.post(`${API_BASE_URL}/history/${row.id}/resend`, {}, { headers: authHeaders() });
             const data = apiData(res, {});
             ElMessage.success(`已再次发送到钉钉：${data.item_count || row.item_count || 0} 行，合计 ¥${formatMoney(data.total_amount ?? row.total_amount)}`);
+            try {
+              await fetchHistory(historyPage.value || 1);
+            } catch (refreshError) {
+              console.warn('刷新报价历史失败', refreshError);
+            }
           } catch (error) {
             if (error.response?.status === 401) handleUnauthorized();
             ElMessage.error(apiErrorMessage(error, '再次发送报价失败'));
@@ -1783,7 +1813,7 @@
 
         const editPreviewDraft = async (row = {}) => {
           if (!row.quote_job_id) {
-            ElMessage.warning('这条草稿缺少报价任务编号，无法继续编辑');
+            ElMessage.warning('这条草稿缺少报价任务号，无法继续编辑');
             return;
           }
           historyDetail.value = row;
@@ -1847,7 +1877,7 @@
             return { reason: '外部模型或工作流响应超时', actions: ['先点击查看任务状态确认是否已完成', '仍失败时重新提交一次'] };
           }
           if (text.includes('worker') || text.includes('celery') || text.includes('redis') || text.includes('队列')) {
-            return { reason: '后台任务队列或 Worker 异常', actions: ['不要连续重复提交', '把任务编号和追踪ID发给管理员检查运维面板'] };
+            return { reason: '后台任务队列或 Worker 异常', actions: ['不要连续重复提交', '把任务号和追踪ID发给管理员检查运维面板'] };
           }
           if (text.includes('rag') || text.includes('知识库') || text.includes('milvus')) {
             return { reason: '知识库检索链路异常', actions: ['可先用更具体的项目名称重试', '通知管理员检查 RAG 服务和 Milvus'] };
@@ -1858,7 +1888,7 @@
           if (text.includes('file') || text.includes('minio') || text.includes('upload') || text.includes('附件')) {
             return { reason: '附件读取或上传异常', actions: ['确认文件没有被占用后重新上传', '图片过大时先压缩或改传清晰截图'] };
           }
-          return { reason: '报价链路未返回明确原因', actions: ['点击重试或查看任务状态', '连续失败时把任务编号和追踪ID发给管理员'] };
+          return { reason: '报价链路未返回明确原因', actions: ['点击重试或查看任务状态', '连续失败时把任务号和追踪ID发给管理员'] };
         };
 
         const workflowSteps = computed(() => [
@@ -2031,6 +2061,8 @@
           if (!previewContext.value.quoteJobId) return '当前预审未绑定异步任务，暂不支持草稿恢复';
           if (previewDraftSaving.value) return '正在自动保存预审草稿...';
           if (previewDraftError.value) return previewDraftError.value;
+          if (previewDraftStatus.value === 'pushed') return '预审单已确认下发，草稿已锁定';
+          if (previewDraftStatus.value === 'discarded') return '预审草稿已放弃';
           if (previewDraftRestored.value && previewDraftSavedAt.value) return `已恢复未完成预审草稿，上次保存 ${previewDraftSavedAt.value}`;
           if (previewDraftSavedAt.value) return `已自动保存 ${previewDraftSavedAt.value}`;
           if (previewDraftStatus.value === 'editing') return '预审草稿已创建';
@@ -2039,6 +2071,8 @@
 
         const previewDraftAlertType = computed(() => {
           if (previewDraftError.value) return 'error';
+          if (previewDraftStatus.value === 'pushed') return 'success';
+          if (previewDraftStatus.value === 'discarded') return 'info';
           if (previewDraftRestored.value || previewDraftSavedAt.value) return 'success';
           return 'info';
         });
@@ -2386,9 +2420,29 @@
           omission_summary: omissionSummary.value || {},
         });
 
+        const isPreviewDraftTerminal = () => PREVIEW_DRAFT_TERMINAL_STATUSES.has(previewDraftStatus.value);
+
+        const markPreviewDraftTerminal = (status, data = {}) => {
+          previewDraftStatus.value = status;
+          previewDraftVersion.value = data.version || previewDraftVersion.value;
+          previewDraftSavedAt.value = data.updated_at || data.pushed_at || previewDraftSavedAt.value || '';
+          previewDraftError.value = '';
+          previewDraftRestored.value = false;
+          if (previewDraftSaveTimer) {
+            clearTimeout(previewDraftSaveTimer);
+            previewDraftSaveTimer = null;
+          }
+        };
+
+        const isPreviewDraftPushedConflict = (error) => {
+          const detail = error?.response?.data?.detail ?? error?.response?.data?.message ?? '';
+          return error?.response?.status === 409 && String(detail).includes('PREVIEW_DRAFT_PUSHED');
+        };
+
         const savePreviewDraftNow = async (options = {}) => {
           const quoteJobId = previewContext.value.quoteJobId;
           if (!quoteJobId || pushing.value || !previewData.value.length) return null;
+          if (isPreviewDraftTerminal()) return { status: previewDraftStatus.value, terminal: true };
           if (previewDraftSaveTimer) {
             clearTimeout(previewDraftSaveTimer);
             previewDraftSaveTimer = null;
@@ -2409,6 +2463,11 @@
             return data;
           } catch (error) {
             if (error.response?.status === 401) handleUnauthorized();
+            if (isPreviewDraftPushedConflict(error)) {
+              markPreviewDraftTerminal('pushed');
+              if (!options.silent) ElMessage.info('预审单已确认下发，草稿已锁定');
+              return { status: 'pushed', terminal: true };
+            }
             previewDraftError.value = apiErrorMessage(error, '预审草稿保存失败，请检查网络');
             if (!options.silent) ElMessage.error(previewDraftError.value);
             return null;
@@ -2419,6 +2478,7 @@
 
         const schedulePreviewDraftSave = () => {
           if (!previewContext.value.quoteJobId || pushing.value || !previewData.value.length) return;
+          if (isPreviewDraftTerminal()) return;
           previewDraftError.value = '';
           if (previewDraftSaveTimer) clearTimeout(previewDraftSaveTimer);
           previewDraftSaveTimer = setTimeout(() => {
@@ -2449,6 +2509,10 @@
           try {
             const response = await axios.get(`${API_BASE_URL}/quote/jobs/${quoteJobId}/preview-draft`, { headers: authHeaders() });
             const data = apiData(response, {});
+            if (data.exists && PREVIEW_DRAFT_TERMINAL_STATUSES.has(data.status)) {
+              markPreviewDraftTerminal(data.status, data);
+              return false;
+            }
             if (!data.exists || data.status !== 'editing' || !Array.isArray(data.draft?.project_details)) return false;
             previewData.value = cloneRows(data.draft.project_details);
             globalNotes.value = data.draft.customer_questions_answered || globalNotes.value;
@@ -3218,9 +3282,13 @@
           if (current.unit_price === null || current.unit_price <= 0) risks.push('单价异常');
           if (current.total_price === null || current.total_price <= 0) risks.push('合计异常');
           if (!current.notes) risks.push('缺少备注');
-          if (original.total_price !== null && current.total_price !== null && original.total_price > 0) {
-            const ratio = Math.abs(current.total_price - original.total_price) / original.total_price;
-            if (ratio >= 0.25) risks.push('改动较大');
+          if (original.quantity !== null && current.quantity !== null && original.quantity > 0) {
+            const quantityRatio = Math.abs(current.quantity - original.quantity) / original.quantity;
+            if (quantityRatio >= 0.25) risks.push('人工工程量改动过大');
+          }
+          if (original.manual_unit_price !== null && current.manual_unit_price !== null && original.manual_unit_price > 0) {
+            const unitPriceRatio = Math.abs(current.manual_unit_price - original.manual_unit_price) / original.manual_unit_price;
+            if (unitPriceRatio >= 0.25) risks.push('人工单价改动过大');
           }
           const reference = costReference(row);
           const refRate = Math.abs(Number(reference.price_delta_rate));
@@ -3451,7 +3519,11 @@
             const body = apiBody(res);
             const authData = apiData(res, body);
             setToken(authData.access_token);
-            setUserInfo({ username: authData.username || authForm.value.username, role: authData.role });
+            setUserInfo({
+              username: authData.username || authForm.value.username,
+              role: authData.role,
+              roles: Array.isArray(authData.roles) ? authData.roles : [],
+            });
             currentUser.value = authData.username || authForm.value.username;
             resetClientInfoDefaults();
             isLoggedIn.value = true;
@@ -3651,6 +3723,14 @@
           return labels[status] || status || '未知状态';
         };
 
+        const displayQuoteJobNumber = (value) => {
+          if (!value) return '';
+          if (typeof value === 'object') {
+            return value.job_number || value.quote_job_number || value.job_id || value.quote_job_id || value.jobId || '';
+          }
+          return String(value);
+        };
+
         const formatJobFailure = (job) => {
           const statusText = quoteJobStatusLabel(job?.status);
           return formatApiError(`报价任务${statusText}`, job?.error_message || '可以重新提交本次报价。', job?.trace_id);
@@ -3688,7 +3768,7 @@
               return true;
             }
             markRecoverable(msgIndex, { jobId: job.job_id, traceId: job.trace_id });
-            appendAssistantContent(msgIndex, '\n报价任务已完成，但没有解析出可预审的明细。请重试，或把任务编号发给管理员排查。');
+            appendAssistantContent(msgIndex, '\n报价任务已完成，但没有解析出可预审的明细。请重试，或把任务号发给管理员排查。');
             return false;
           }
 
@@ -3831,6 +3911,7 @@
           const handoff = readQuoteJobHandoff();
           return {
             jobId,
+            jobNumber: params.get('quote_job_number') || handoff.quote_job_number || '',
             traceId: params.get('trace_id') || handoff.trace_id || '',
             source: params.get('from') || handoff.source || '',
             sourceFileName: handoff.source_file_name || '',
@@ -3946,10 +4027,11 @@
           messageHistory.value.push({ role: 'user', content: sourceText });
           messageHistory.value.push({
             role: 'assistant',
-            content: `⏳ 已接管报价任务\n任务编号：${incoming.jobId}\n\n`,
+            content: `⏳ 已接管报价任务\n任务号：${incoming.jobNumber || incoming.jobId}\n\n`,
             canRetry: false,
             canCheckStatus: true,
             jobId: incoming.jobId,
+            jobNumber: incoming.jobNumber || incoming.jobId,
             traceId: incoming.traceId,
             sourceText,
             sourceFileName: incoming.sourceFileName || '',
@@ -3986,6 +4068,7 @@
             const job = apiPayloadData(statusBody, statusBody);
             updateAssistantMessage(msgIndex, {
               jobId: job.job_id || incoming.jobId,
+              jobNumber: displayQuoteJobNumber(job) || incoming.jobNumber || incoming.jobId,
               traceId: job.trace_id || incoming.traceId,
               canCheckStatus: !!(job.job_id || incoming.jobId),
             });
@@ -4110,10 +4193,11 @@
             createdJob = job;
             updateAssistantMessage(msgIndex, {
               jobId: job.job_id || '',
+              jobNumber: displayQuoteJobNumber(job),
               traceId: job.trace_id || '',
               canCheckStatus: !!job.job_id,
             });
-            charQueue.push(...(`✅ 异步报价任务已创建\n任务编号：${job.job_id}\n\n`).split(''));
+            charQueue.push(...(`✅ 异步报价任务已创建\n任务号：${displayQuoteJobNumber(job)}\n\n`).split(''));
 
             const eventResponse = await fetch(`${API_BASE_URL}/quote/jobs/${job.job_id}/events`, {
               method: 'GET',
@@ -4231,7 +4315,13 @@
 
         const closePreviewDraftMessage = () => {
           if (previewContext.value.quoteJobId) {
-            ElMessage.success('预审单已关闭，草稿可在“我的报价历史”中继续编辑');
+            if (previewDraftStatus.value === 'pushed') {
+              ElMessage.success('已下发预审单已关闭');
+            } else if (previewDraftStatus.value === 'discarded') {
+              ElMessage.info('已放弃的预审单已关闭');
+            } else {
+              ElMessage.success('预审单已关闭，草稿可在“我的报价历史”中继续编辑');
+            }
           }
         };
 
@@ -4473,7 +4563,7 @@
         return {
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
           showPreviewDialog, previewData, previewOriginalData, previewContext, pushing, pushError, finalTotalAmount,
-          canOpenFullCostDb,
+          canOpenFullCostDb, adminShellPath, canOpenAdminShell,
           showEvidenceDialog, evidenceDialogData, openEvidenceCostDetail,
           showCostSwitchDialog, costSwitchRows, costSwitchLoading, costSwitchKeyword, costSwitchCurrentTitle,
           loadCostSwitchCandidates, openCostSwitchDialog, applyCostSwitch, costItemReferencePriceText, costItemPriceSourceLabel,
@@ -4489,7 +4579,7 @@
           aiRewriteConfirmationBlocked, aiRewriteConfirmationMessage, needsAiRewriteConfirmation, aiRewriteWarningText, confirmAiRewriteCostReference,
           aiNoteConfirmationBlocked, aiNoteConfirmationMessage, needsAiNoteConfirmation, aiNoteConflictWarningText, confirmAiNoteCostBasis, handleNotesChange,
           acceptAiSuggestedPrice, canAcceptAiSuggestedPrice,
-          previewDraftSaving, previewDraftStatusText, previewDraftAlertType, savePreviewDraftNow, schedulePreviewDraftSave,
+          previewDraftSaving, previewDraftStatusText, previewDraftAlertType, savePreviewDraftNow, schedulePreviewDraftSave, isPreviewDraftTerminal,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
           previewReadyForPush, previewSummaryCards, previewBlockerCards, previewBlockerSummaryText, previewFooterTitle, previewFooterHint,
           omissionSuggestions, omissionSummary, omissionSummaryText,
@@ -4514,7 +4604,7 @@
           viewDetail, editPreviewDraft, historyPushText, historyPushTagType,
           canResendHistory, resendHistoryQuote,
           closePreviewAndKeepDraft, handlePreviewDialogClose,
-          formatMoney
+          formatMoney, displayQuoteJobNumber
         };
       }
     };

@@ -93,7 +93,7 @@
           </div>
           <div
             class="nav-group"
-            v-if="canViewExecution || canViewProjectProgress || canViewBusinessLedger || canViewCostDb || canViewRequirementStandardization"
+            v-if="canViewExecution || canViewProjectProgress || canViewBusinessLedger || canViewCostDb || canViewRequirementStandardization || canViewDwgTrial || canViewAgentCenter"
           >
             <p class="nav-group-label">业务运营</p>
         <button
@@ -141,6 +141,24 @@
           <el-icon><Tickets /></el-icon>
           <span>需求单标准化</span>
         </button>
+        <button
+          v-if="canViewDwgTrial"
+          :class="['nav-item', { active: routeName === 'dwgTrial' }]"
+          type="button"
+          @click="navigate('/admin/dwg-trial')"
+        >
+          <el-icon><Upload /></el-icon>
+          <span>图纸试运行</span>
+        </button>
+        <button
+          v-if="canViewAgentCenter"
+          :class="['nav-item', { active: routeName === 'agentCenter' }]"
+          type="button"
+          @click="navigate('/admin/agent-center')"
+        >
+          <el-icon><DataAnalysis /></el-icon>
+          <span>AI助手中心</span>
+        </button>
           </div>
           <div class="nav-group" v-if="canOpenLegacyQuote || canOpenLegacyAdmin">
             <p class="nav-group-label">旧版入口</p>
@@ -177,6 +195,922 @@
           <h2>功能未开启</h2>
           <p>驾驶舱看板开关尚未打开。</p>
         </div>
+
+        <template v-else-if="routeName === 'agentCenter'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">Agentic Middle Office · Audit</p>
+              <h2>AI助手中心</h2>
+            </div>
+            <div class="heading-actions">
+              <el-button :icon="Refresh" plain @click="refreshAgentCenter">刷新</el-button>
+            </div>
+          </div>
+
+          <el-alert
+            v-if="agentCenterFeatureDisabled"
+            class="dashboard-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="Agent 助手开关尚未打开"
+            description="请在内网试运行环境开启 FEATURE_AGENT_ASSISTANTS=true 后使用。"
+          />
+          <template v-else>
+            <section v-if="canManageAgentDailyReview" class="dashboard-section agent-daily-panel">
+              <div class="section-title">
+                <el-icon><Clock /></el-icon>
+                <span>每日自动后审计</span>
+                <small>已下发报价单 · 定时扫描 · 不生成待办</small>
+              </div>
+              <div class="agent-daily-toolbar">
+                <el-date-picker
+                  v-model="agentDailyDate"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  placeholder="选择复核日期"
+                  @change="refreshAgentDailyReview"
+                />
+                <el-button :icon="Refresh" plain :loading="agentDailyLoading" @click="refreshAgentDailyReview">
+                  刷新概览
+                </el-button>
+                <el-button v-if="false" type="primary" plain :loading="agentDailyLoading" @click="runDailyQuoteReview(false)">
+                  扫描当天已下发报价
+                </el-button>
+              </div>
+              <el-alert
+                v-if="agentDailyFeatureDisabled"
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="每日自动后审计开关尚未打开"
+                description="打开 FEATURE_AGENT_DAILY_REVIEW=true 后，系统会按定时任务扫描当天确认下发的报价单。"
+              />
+              <template v-else>
+                <div
+                  v-if="false && agentTodoSummary"
+                  class="agent-todo-strip"
+                  :class="{ urgent: agentTodoSummary.urgent_count > 0 }"
+                >
+                  <div class="agent-todo-main">
+                    <span>今日后审计</span>
+                    <strong>{{ agentTodoStatusLabel(agentTodoSummary.status) }}</strong>
+                    <small>
+                      待处理 {{ agentTodoSummary.todo_count || 0 }} 项 · 高风险 {{ agentTodoSummary.metrics?.high_risk_run_count || 0 }} 单 · 预计可省 {{ formatAmount(agentTodoSummary.metrics?.open_estimated_saving_amount || 0) }}
+                    </small>
+                  </div>
+                  <div class="agent-todo-list">
+                    <el-tag
+                      v-for="todo in (agentTodoSummary.todos || []).slice(0, 3)"
+                      :key="todo.key"
+                      size="small"
+                      :type="agentTodoSeverityTagType(todo.severity)"
+                    >
+                      {{ todo.title }}{{ todo.count ? ` ${todo.count}` : '' }}
+                    </el-tag>
+                    <span v-if="!(agentTodoSummary.todos || []).length">暂无待处理事项</span>
+                  </div>
+                  <el-button
+                    size="small"
+                    :type="agentTodoSummary.urgent_count > 0 ? 'danger' : 'primary'"
+                    plain
+                    :loading="agentDailyLoading"
+                    @click="handleAgentTodoPrimaryAction"
+                  >
+                    {{ agentTodoPrimaryActionLabel(agentTodoSummary.primary_action) }}
+                  </el-button>
+                </div>
+                <div v-if="false && agentClosureSummary" class="agent-closure-panel">
+                  <div class="agent-closure-header">
+                    <div>
+                      <strong>闭环效果</strong>
+                      <small>处理时限、闭环率和已确认节省金额。</small>
+                    </div>
+                    <div class="agent-closure-actions">
+                      <el-radio-group
+                        v-model="agentClosureDays"
+                        size="small"
+                        @change="refreshAgentClosureSummary"
+                      >
+                        <el-radio-button :label="7">7 天</el-radio-button>
+                        <el-radio-button :label="30">30 天</el-radio-button>
+                      </el-radio-group>
+                      <el-button :icon="Refresh" size="small" plain :loading="agentClosureLoading" @click="loadAgentClosureSummary">
+                        刷新
+                      </el-button>
+                    </div>
+                  </div>
+                  <div class="metric-grid agent-closure-metrics">
+                    <div class="metric-card">
+                      <span>闭环率</span>
+                      <strong>{{ formatRate(agentClosureSummary.metrics?.closure_rate ?? 1) }}</strong>
+                      <small>已处理 {{ agentClosureSummary.metrics?.handled_count || 0 }} / 总建议 {{ agentClosureSummary.metrics?.suggestion_count || 0 }}</small>
+                    </div>
+                    <div class="metric-card">
+                      <span>未闭环</span>
+                      <strong>{{ agentClosureSummary.metrics?.open_count || 0 }}</strong>
+                      <small>超期 {{ agentClosureSummary.metrics?.overdue_count || 0 }} 条</small>
+                    </div>
+                    <div class="metric-card">
+                      <span>已确认节省</span>
+                      <strong>{{ formatAmount(agentClosureSummary.metrics?.confirmed_saving_amount || 0) }}</strong>
+                      <small>仍可省 {{ formatAmount(agentClosureSummary.metrics?.estimated_open_saving_amount || 0) }}</small>
+                    </div>
+                    <div class="metric-card">
+                      <span>处理结果</span>
+                      <strong>{{ agentClosureSummary.metrics?.final_confirmed_count || 0 }}</strong>
+                      <small>拒绝 {{ agentClosureSummary.metrics?.rejected_count || 0 }} · 人工另改 {{ agentClosureSummary.metrics?.human_modified_count || 0 }}</small>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="false" class="agent-scheduler-status">
+                  <div>
+                    <span>调度状态</span>
+                    <strong>{{ agentSchedulerStatusLabel(agentSchedulerStatus?.status) }}</strong>
+                  </div>
+                  <el-tag size="small" :type="agentSchedulerStatusTagType(agentSchedulerStatus?.status)">
+                    {{ agentSchedulerStatusLabel(agentSchedulerStatus?.status) }}
+                  </el-tag>
+                  <small>
+                    计划 {{ agentSchedulerStatus?.scheduled_at || '-' }} · 最近执行 {{ agentSchedulerStatus?.run?.started_at || '-' }}
+                  </small>
+                  <small v-if="agentSchedulerStatus?.run">
+                    候选 {{ agentSchedulerStatus.run.candidate_count || 0 }} 单 · 新增 {{ agentSchedulerStatus.run.created_run_count || 0 }} 单 · 跳过 {{ agentSchedulerStatus.run.skipped_duplicate_count || 0 }} 单 · 失败 {{ agentSchedulerStatus.run.failed_count || 0 }} 单
+                  </small>
+                </div>
+                <el-alert
+                  v-if="agentSchedulerStatus?.status === 'failed' || agentSchedulerStatus?.status === 'missed'"
+                  class="dashboard-alert"
+                  type="warning"
+                  show-icon
+                  :closable="false"
+                  :title="agentSchedulerStatus.status === 'failed' ? '今日自动复核执行失败' : '今日自动复核错过补跑窗口'"
+                  :description="agentSchedulerStatus?.run?.error_message || '请查看调度记录和后端日志，确认自动扫描是否需要重新触发。'"
+                />
+                <div class="metric-grid agent-daily-metrics">
+                  <div class="metric-card">
+                    <span>当天已下发</span>
+                    <strong>{{ agentDailySummary?.candidate_count ?? 0 }}</strong>
+                    <small>来自报价历史</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>已复核</span>
+                    <strong>{{ agentDailySummary?.run_count ?? 0 }}</strong>
+                    <small>高风险 {{ agentDailySummary?.high_risk_run_count ?? 0 }} 单</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>风险记录</span>
+                    <strong>{{ agentDailySummary?.audit_record_count ?? 0 }}</strong>
+                    <small>高风险 {{ agentDailySummary?.audit_high_risk_record_count ?? 0 }} 条</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>人工改价</span>
+                    <strong>{{ agentDailySummary?.audit_manual_modified_count ?? 0 }}</strong>
+                    <small>记录修改前后</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>联网市场价参考</span>
+                    <strong>{{ agentDailySummary?.audit_market_search_result_count ?? 0 }}</strong>
+                    <small>覆盖 {{ agentDailySummary?.audit_market_search_covered_line_count ?? 0 }} 条</small>
+                  </div>
+                </div>
+                <el-table
+                  v-if="false"
+                  v-loading="agentDailyLoading"
+                  :data="agentPendingSuggestions"
+                  size="small"
+                  class="operations-table"
+                  empty-text="暂无待处理建议"
+                >
+                  <el-table-column prop="created_at" label="时间" min-width="145">
+                    <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+                  </el-table-column>
+                  <el-table-column label="报价任务" min-width="150" show-overflow-tooltip>
+                    <template #default="{ row }">{{ displayQuoteJobNumber(row.run?.target_number || row.target_id) }}</template>
+                  </el-table-column>
+                  <el-table-column label="建议" min-width="240" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.title }}</template>
+                  </el-table-column>
+                  <el-table-column label="预计节省" width="120">
+                    <template #default="{ row }">{{ formatAmount(row.estimated_saving_amount || 0) }}</template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="105">
+                    <template #default="{ row }">
+                      <el-tag size="small" :type="agentSuggestionStatusTagType(row.status)">
+                        {{ agentSuggestionStatusLabel(row.status) }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="220" fixed="right">
+                    <template #default="{ row }">
+                      <div class="agent-pending-actions">
+                        <el-button size="small" text type="primary" @click="openAgentRunAndFocus(row.run)">查看定位</el-button>
+                        <template v-if="row.status === 'pending_review' || row.status === 'approved' || row.status === 'draft_generated'">
+                          <el-button
+                            v-if="isAgentActionableSuggestion(row)"
+                            size="small"
+                            text
+                            type="success"
+                            @click="adoptAgentSuggestionOneClick(row)"
+                          >
+                            一键采用
+                          </el-button>
+                          <el-button
+                            v-else-if="row.status === 'pending_review'"
+                            size="small"
+                            text
+                            type="primary"
+                            @click="markAgentSuggestionReviewed(row)"
+                          >
+                            标记已处理
+                          </el-button>
+                          <el-button
+                            v-if="row.status === 'pending_review' && isAgentActionableSuggestion(row)"
+                            size="small"
+                            text
+                            @click="decideAgentSuggestion(row, 'reject')"
+                          >
+                            不采用
+                          </el-button>
+                        </template>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <div v-if="false" class="table-pagination">
+                  <el-pagination
+                    v-model:current-page="agentPendingSuggestionPage"
+                    layout="prev, pager, next"
+                    :page-size="agentPendingSuggestionPageSize"
+                    :total="agentPendingSuggestionTotal"
+                    @current-change="loadAgentPendingSuggestions"
+                  />
+                </div>
+                <div v-if="false" class="agent-scheduler-history">
+                  <div class="agent-scheduler-history-header">
+                    <div>
+                      <strong>最近调度记录</strong>
+                      <small>自动复核执行留痕，可用于试运行验收和失败补扫。</small>
+                    </div>
+                    <div class="agent-scheduler-history-actions">
+                      <el-radio-group
+                        v-model="agentSchedulerHistoryDays"
+                        size="small"
+                        @change="refreshAgentSchedulerHistory"
+                      >
+                        <el-radio-button :label="7">7 天</el-radio-button>
+                        <el-radio-button :label="30">30 天</el-radio-button>
+                      </el-radio-group>
+                      <el-button :icon="Refresh" size="small" plain :loading="agentSchedulerHistoryLoading" @click="loadAgentSchedulerHistory">
+                        刷新
+                      </el-button>
+                    </div>
+                  </div>
+                  <el-table
+                    v-loading="agentSchedulerHistoryLoading"
+                    :data="agentSchedulerHistory"
+                    size="small"
+                    class="operations-table"
+                    empty-text="暂无调度记录"
+                  >
+                    <el-table-column prop="run_date" label="日期" width="110" />
+                    <el-table-column label="状态" width="120">
+                      <template #default="{ row }">
+                        <el-tag size="small" :type="agentSchedulerStatusTagType(row.status)">
+                          {{ agentSchedulerStatusLabel(row.status) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="调度结果" min-width="230" show-overflow-tooltip>
+                      <template #default="{ row }">
+                        候选 {{ row.candidate_count || 0 }} 单 · 新增 {{ row.created_run_count || 0 }} 单 · 跳过 {{ row.skipped_duplicate_count || 0 }} 单 · 失败 {{ row.failed_count || 0 }} 单
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="风险与建议" min-width="220" show-overflow-tooltip>
+                      <template #default="{ row }">
+                        已复核 {{ row.daily_summary?.run_count || 0 }} 单 · 高风险 {{ row.daily_summary?.high_risk_run_count || 0 }} 单 · 待处理 {{ row.daily_summary?.open_suggestion_count || 0 }} 条
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="预计可省" width="120">
+                      <template #default="{ row }">{{ formatAmount(row.daily_summary?.open_estimated_saving_amount || 0) }}</template>
+                    </el-table-column>
+                    <el-table-column label="闭环 SLA" min-width="180" show-overflow-tooltip>
+                      <template #default="{ row }">
+                        闭环率 {{ formatRate(row.daily_summary?.closure_rate ?? 1) }} · 已处理 {{ row.daily_summary?.handled_count || 0 }} · 超期 {{ row.daily_summary?.overdue_count || 0 }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="150" fixed="right">
+                      <template #default="{ row }">
+                        <el-button
+                          v-if="false && row.manual_rescan_available"
+                          size="small"
+                          text
+                          type="primary"
+                          :loading="agentDailyLoading"
+                          @click="rescanAgentSchedulerHistoryRow(row)"
+                        >
+                          查看结果
+                        </el-button>
+                        <span v-else>{{ agentSchedulerNextActionLabel(row.next_action) }}</span>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                  <div class="table-pagination">
+                    <el-pagination
+                      v-model:current-page="agentSchedulerHistoryPage"
+                      layout="prev, pager, next"
+                      :page-size="agentSchedulerHistoryPageSize"
+                      :total="agentSchedulerHistoryTotal"
+                      @current-change="loadAgentSchedulerHistory"
+                    />
+                  </div>
+                </div>
+              </template>
+            </section>
+
+            <section class="dashboard-section agent-run-panel">
+              <div class="section-title">
+                <el-icon><DataAnalysis /></el-icon>
+                <span>手动后审计</span>
+                <small>仅审计已确认下发报价 · 不自动改价 · 不自动下发</small>
+              </div>
+              <div class="agent-run-form">
+                <el-input
+                  v-model="agentQuoteJobId"
+                  clearable
+                  placeholder="输入已下发报价任务号 / ID"
+                  @keyup.enter="runQuoteReviewAgent()"
+                />
+                <el-button
+                  type="primary"
+                  :icon="Search"
+                  :loading="agentCenterLoading"
+                  @click="runQuoteReviewAgent()"
+                >
+                  立即审计
+                </el-button>
+              </div>
+            </section>
+
+            <div class="dashboard-split agent-center-grid">
+              <section class="dashboard-section agent-run-history-panel">
+                <div class="section-title">
+                  <el-icon><Document /></el-icon>
+                  <span>运行记录</span>
+                  <small>共 {{ agentRunTotal }} 条</small>
+                </div>
+                <div
+                  v-loading="agentCenterLoading"
+                  class="agent-run-compact-list"
+                >
+                  <button
+                    v-for="row in agentRuns"
+                    :key="row.run_id"
+                    :class="['agent-run-compact-item', { active: row.run_id === agentRunDetail?.run_id }]"
+                    type="button"
+                    @click="openAgentRun(row)"
+                  >
+                    <span class="agent-run-compact-top">
+                      <el-tag size="small" :type="agentRiskTagType(row.risk_level)">
+                        {{ agentRiskLabel(row.risk_level) }}
+                      </el-tag>
+                      <small>{{ formatDate(row.created_at) }}</small>
+                    </span>
+                    <strong>{{ displayQuoteJobNumber(row.target_number || row.target_id) }}</strong>
+                    <small>{{ agentRecommendationLabel(row.recommendation) }}</small>
+                  </button>
+                  <el-empty v-if="!agentRuns.length" description="暂无 Agent 运行记录" />
+                </div>
+                <div class="table-pagination">
+                  <el-pagination
+                    v-model:current-page="agentRunPage"
+                    layout="prev, pager, next"
+                    :page-size="agentRunPageSize"
+                    :total="agentRunTotal"
+                    @current-change="loadAgentRuns"
+                  />
+                </div>
+              </section>
+
+              <section class="dashboard-section agent-result-panel">
+                <div class="section-title">
+                  <el-icon><Warning /></el-icon>
+                  <span>后审计结果</span>
+                  <small>{{ agentRunDetail?.run_id || '未选择' }}</small>
+                </div>
+                <el-empty v-if="!agentRunDetail" description="选择一条运行记录查看后审计详情" />
+                <template v-else>
+                  <div v-if="false" class="metric-grid agent-metric-grid">
+                    <div class="metric-card">
+                      <span>风险等级</span>
+                      <strong>{{ agentRiskLabel(agentRunDetail.risk_level) }}</strong>
+                      <small>{{ agentRecommendationLabel(agentRunDetail.recommendation) }}</small>
+                    </div>
+                    <div class="metric-card">
+                      <span>确认行</span>
+                      <strong>{{ agentRunDetail.output?.metrics?.requirement_row_count ?? 0 }}</strong>
+                      <small>预审 {{ agentRunDetail.output?.metrics?.preview_row_count ?? 0 }} 行</small>
+                    </div>
+                    <div class="metric-card">
+                      <span>缺失/占位</span>
+                      <strong>{{ agentRunDetail.output?.metrics?.missing_count ?? 0 }} / {{ agentRunDetail.output?.metrics?.placeholder_count ?? 0 }}</strong>
+                      <small>下发前重点复核</small>
+                    </div>
+                  </div>
+                  <p class="agent-summary">{{ agentRunDetail.summary }}</p>
+                  <div v-if="agentIsAuditRun" class="agent-audit-kpi-grid">
+                    <div class="agent-audit-kpi">
+                      <span>审计记录</span>
+                      <strong>{{ agentAuditSummary.audit_record_count ?? 0 }}</strong>
+                    </div>
+                    <div class="agent-audit-kpi">
+                      <span>高风险</span>
+                      <strong>{{ agentAuditSummary.high_risk_count ?? 0 }}</strong>
+                    </div>
+                    <div class="agent-audit-kpi">
+                      <span>人工改价</span>
+                      <strong>{{ agentAuditSummary.manual_modified_count ?? 0 }}</strong>
+                    </div>
+                    <div class="agent-audit-kpi">
+                      <span>联网来源</span>
+                      <strong>{{ agentAuditSummary.market_search_result_count ?? 0 }}</strong>
+                    </div>
+                  </div>
+                  <div v-else class="agent-saving-strip">
+                    <span>预计节省</span>
+                    <strong>{{ formatAmount(agentRunDetail.output?.saving_summary?.estimated_total_saving_amount ?? 0) }}</strong>
+                    <small>{{ agentRunDetail.output?.saving_summary?.saving_suggestion_count ?? 0 }} 条省钱建议</small>
+                  </div>
+                  <div class="agent-review-toolbar">
+                    <el-button size="small" plain @click="toggleAgentExplanation">
+                      {{ agentShowExplanation ? '收起 AI 解释' : '查看 AI 解释' }}
+                    </el-button>
+                  </div>
+
+                  <div v-if="agentShowExplanation" class="agent-llm-panel" v-loading="agentLlmExplanationLoading">
+                    <div class="agent-llm-header">
+                      <div>
+                        <strong>AI解释增强</strong>
+                        <small>风险解释、修改前后与市场价辅助说明。</small>
+                      </div>
+                      <div class="agent-llm-actions">
+                        <el-tag
+                          v-if="agentLlmExplanation"
+                          size="small"
+                          :type="agentLlmSourceTagType(agentLlmExplanation)"
+                        >
+                          {{ agentLlmSourceLabel(agentLlmExplanation) }}
+                        </el-tag>
+                        <el-button
+                          size="small"
+                          plain
+                          :loading="agentLlmExplanationLoadingMode === 'rule'"
+                          :disabled="agentLlmExplanationLoadingMode === 'deepseek'"
+                          @click="loadAgentLlmExplanation('rule')"
+                        >
+                          规则解释
+                        </el-button>
+                        <el-button
+                          size="small"
+                          type="primary"
+                          plain
+                          :loading="agentLlmExplanationLoadingMode === 'deepseek'"
+                          :disabled="agentLlmExplanationLoadingMode === 'rule'"
+                          @click="loadAgentLlmExplanation('deepseek')"
+                        >
+                          DeepSeek解释
+                        </el-button>
+                      </div>
+                    </div>
+                    <template v-if="agentLlmExplanation">
+                      <section class="agent-llm-brief">
+                        <strong>{{ agentLlmExplanation.headline }}</strong>
+                        <small v-if="agentLlmExplanation.business_summary">
+                          {{ agentLlmExplanation.business_summary }}
+                        </small>
+                      </section>
+
+                      <div
+                        v-if="(agentLlmExplanation.review_focus || []).length || (agentLlmExplanation.decision_checklist || []).length"
+                        class="agent-llm-focus-grid"
+                      >
+                        <section v-if="(agentLlmExplanation.review_focus || []).length">
+                          <strong>复核重点</strong>
+                          <ul>
+                            <li v-for="item in agentLlmExplanation.review_focus" :key="item">{{ item }}</li>
+                          </ul>
+                        </section>
+                        <section v-if="(agentLlmExplanation.decision_checklist || []).length">
+                          <strong>确认清单</strong>
+                          <ul>
+                            <li v-for="item in agentLlmExplanation.decision_checklist" :key="item">{{ item }}</li>
+                          </ul>
+                        </section>
+                      </div>
+
+                      <section v-if="agentLlmBeforeAfterRows.length" class="agent-llm-block">
+                        <div class="agent-llm-section-title">
+                          <strong>修改前后解释</strong>
+                          <small>{{ agentLlmBeforeAfterRows.length }} 条</small>
+                        </div>
+                        <el-table
+                          :data="agentLlmBeforeAfterRows"
+                          size="small"
+                          border
+                          class="agent-llm-table"
+                        >
+                          <el-table-column label="条目" min-width="220">
+                            <template #default="{ row }">
+                              <div class="agent-table-main-cell">
+                                <strong>{{ row.target_label || '未定位到具体报价行' }}</strong>
+                                <el-tag size="small" :type="row.manual_modified ? 'warning' : 'info'">
+                                  {{ row.manual_modified ? '人工改价' : '下发留痕' }}
+                                </el-tag>
+                              </div>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="原预审风险" min-width="180">
+                            <template #default="{ row }">
+                              <span class="agent-table-muted">{{ row.original_risk || '-' }}</span>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="最终下发状态" min-width="180">
+                            <template #default="{ row }">
+                              <span class="agent-table-muted">{{ row.confirmed_state || '-' }}</span>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="解释" min-width="260">
+                            <template #default="{ row }">
+                              <span class="agent-table-muted">{{ row.explanation || '-' }}</span>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </section>
+
+                      <section v-if="agentMarketReferenceRows.length" class="agent-llm-block">
+                        <div class="agent-llm-section-title">
+                          <strong>联网价格来源</strong>
+                          <small>按报价条目对应深圳 / 东莞搜索结果</small>
+                        </div>
+                        <el-table
+                          :data="agentMarketReferenceRows"
+                          size="small"
+                          border
+                          class="agent-llm-table agent-market-table"
+                        >
+                          <el-table-column type="expand" width="42">
+                            <template #default="{ row }">
+                              <div class="agent-audit-expand">
+                                <section>
+                                  <strong>联网摘要</strong>
+                                  <p>{{ row.explanation || '暂无可用联网摘要。' }}</p>
+                                </section>
+                                <section v-if="row.sources.length">
+                                  <strong>来源明细</strong>
+                                  <div class="agent-market-source-table">
+                                    <div
+                                      v-for="source in row.sources"
+                                      :key="`${row._row_key}-${source.url}`"
+                                      class="agent-market-source-row"
+                                    >
+                                      <span>{{ source.city || '-' }}</span>
+                                      <a :href="source.url" target="_blank" rel="noreferrer">
+                                        {{ source.title || source.url }}
+                                      </a>
+                                      <small>{{ source.price_text || '未提取到明确价格' }}</small>
+                                      <small>{{ source.date || '-' }}</small>
+                                    </div>
+                                  </div>
+                                </section>
+                                <el-empty v-else description="本条没有返回可点击来源" />
+                              </div>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="报价条目" min-width="220">
+                            <template #default="{ row }">
+                              <div class="agent-table-main-cell">
+                                <strong>{{ row.item_name || '未命名报价条目' }}</strong>
+                                <small v-if="row.target_label">{{ row.target_label }}</small>
+                              </div>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="下发单价" width="120" align="right">
+                            <template #default="{ row }">{{ formatPrice(row.confirmed_unit_price) }}</template>
+                          </el-table-column>
+                          <el-table-column label="深圳搜索价" min-width="150">
+                            <template #default="{ row }">
+                              <span class="agent-table-muted">{{ row.city_price_texts['深圳'] || '-' }}</span>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="东莞搜索价" min-width="150">
+                            <template #default="{ row }">
+                              <span class="agent-table-muted">{{ row.city_price_texts['东莞'] || '-' }}</span>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="可信度/来源" width="130">
+                            <template #default="{ row }">
+                              <div class="agent-audit-status-cell">
+                                <el-tag size="small" :type="agentMarketConfidenceTag(row.confidence)">
+                                  {{ agentMarketConfidenceLabel(row.confidence) }}
+                                </el-tag>
+                                <small>{{ row.sources.length }} 条来源</small>
+                              </div>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </section>
+
+                      <section v-if="agentLlmRiskRows.length" class="agent-llm-block">
+                        <div class="agent-llm-section-title">
+                          <strong>风险解释</strong>
+                          <small>{{ agentLlmRiskRows.length }} 条</small>
+                        </div>
+                        <el-table :data="agentLlmRiskRows" size="small" border class="agent-llm-table">
+                          <el-table-column label="级别" width="86">
+                            <template #default="{ row }">
+                              <el-tag size="small" :type="agentSeverityTagType(row.severity)">
+                                {{ row.severity_label || agentSeverityLabel(row.severity) }}
+                              </el-tag>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="风险" min-width="220">
+                            <template #default="{ row }">
+                              <div class="agent-table-main-cell">
+                                <strong>{{ row.title }}</strong>
+                                <small v-if="row.target_label">{{ row.target_label }}</small>
+                              </div>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="解释" min-width="260">
+                            <template #default="{ row }">
+                              <span class="agent-table-muted">{{ row.explanation || '-' }}</span>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="处理口径" min-width="220">
+                            <template #default="{ row }">
+                              <span class="agent-table-muted">{{ row.handling_advice || '-' }}</span>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </section>
+
+                      <section v-if="agentLlmSuggestionRows.length" class="agent-llm-block">
+                        <div class="agent-llm-section-title">
+                          <strong>建议优先级</strong>
+                          <small>{{ agentLlmSuggestionRows.length }} 条</small>
+                        </div>
+                        <el-table :data="agentLlmSuggestionRows" size="small" border class="agent-llm-table">
+                          <el-table-column label="优先级" width="96">
+                            <template #default="{ row }">
+                              <el-tag size="small" :type="agentPriorityTagType(row.priority)">
+                                {{ row.priority_label || agentPriorityLabel(row.priority) }}
+                              </el-tag>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="建议" min-width="220">
+                            <template #default="{ row }">
+                              <div class="agent-table-main-cell">
+                                <strong>{{ row.title }}</strong>
+                                <small v-if="row.target_label">{{ row.target_label }}</small>
+                              </div>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="原因" min-width="260">
+                            <template #default="{ row }">
+                              <span class="agent-table-muted">{{ row.reason || '-' }}</span>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="预计节省" width="120" align="right">
+                            <template #default="{ row }">
+                              {{ row.estimated_saving_amount ? formatAmount(row.estimated_saving_amount) : '-' }}
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </section>
+
+                      <section v-if="(agentLlmExplanation.uncertainties || []).length" class="agent-llm-block">
+                        <div class="agent-llm-section-title">
+                          <strong>不确定性</strong>
+                        </div>
+                        <div class="agent-llm-note-list">
+                          <span v-for="item in agentLlmExplanation.uncertainties" :key="item">{{ item }}</span>
+                        </div>
+                      </section>
+                    </template>
+                    <el-empty v-else description="暂无解释增强" />
+                  </div>
+
+                  <div v-if="agentAuditTableRows.length" class="agent-result-subtitle">修改前后审计</div>
+                  <div v-if="agentAuditTableRows.length" class="agent-audit-card-list">
+                    <article
+                      v-for="row in agentAuditTableRows"
+                      :key="row._row_key"
+                      :class="['agent-audit-card', `risk-${row.risk_level || 'low'}`]"
+                    >
+                      <div class="agent-audit-card-head">
+                        <div>
+                          <el-tag size="small" :type="agentRiskTagType(row.risk_level)">
+                            {{ agentRiskLabel(row.risk_level) }}
+                          </el-tag>
+                          <strong>{{ row.project_name || '未命名报价条目' }}</strong>
+                        </div>
+                        <el-tag size="small" :type="row.confirmed_quote?.manual_modified ? 'warning' : 'info'">
+                          {{ agentAuditConfirmedState(row) }}
+                        </el-tag>
+                      </div>
+                      <small v-if="row.target_label" class="agent-audit-card-target">{{ row.target_label }}</small>
+
+                      <div class="agent-audit-reason-tags">
+                        <el-tag
+                          v-for="reason in agentAuditRiskReasonItems(row)"
+                          :key="`${row._row_key}-${reason.type || reason.label}`"
+                          size="small"
+                          :type="agentSeverityTagType(reason.severity)"
+                        >
+                          {{ reason.label }}
+                        </el-tag>
+                      </div>
+
+                      <div class="agent-audit-compare-grid">
+                        <div class="agent-audit-compare-card">
+                          <span>工程量</span>
+                          <strong>{{ agentAuditQuantity(row.original_preview?.quantity, row.unit) }}</strong>
+                          <small>下发 {{ agentAuditQuantity(row.confirmed_quote?.quantity, row.unit) }}</small>
+                          <el-tag
+                            v-if="agentAuditDeltaText(row, 'quantity') !== '-'"
+                            size="small"
+                            :type="agentAuditDeltaTagType(row.price_change?.quantity_delta)"
+                          >
+                            {{ agentAuditDeltaText(row, 'quantity') }}
+                          </el-tag>
+                        </div>
+                        <div class="agent-audit-compare-card">
+                          <span>单价</span>
+                          <strong>{{ formatPrice(row.original_preview?.unit_price) }}</strong>
+                          <small>下发 {{ formatPrice(row.confirmed_quote?.unit_price) }}</small>
+                          <el-tag
+                            v-if="agentAuditDeltaText(row, 'unit_price') !== '-'"
+                            size="small"
+                            :type="agentAuditDeltaTagType(row.price_change?.unit_price_delta)"
+                          >
+                            {{ agentAuditDeltaText(row, 'unit_price') }}
+                          </el-tag>
+                        </div>
+                        <div class="agent-audit-compare-card">
+                          <span>合计</span>
+                          <strong>{{ formatAmount(row.original_preview?.total_price) }}</strong>
+                          <small>下发 {{ formatAmount(row.confirmed_quote?.total_price) }}</small>
+                          <el-tag
+                            v-if="agentAuditDeltaText(row, 'total_price') !== '-'"
+                            size="small"
+                            :type="agentAuditDeltaTagType(row.price_change?.total_price_delta)"
+                          >
+                            {{ agentAuditDeltaText(row, 'total_price') }}
+                          </el-tag>
+                        </div>
+                      </div>
+
+                      <div class="agent-audit-card-sections">
+                        <section>
+                          <strong>修改前后解释</strong>
+                          <p>{{ row.before_after_summary || '-' }}</p>
+                        </section>
+                        <section>
+                          <strong>联网市场价辅助</strong>
+                          <p>{{ row.market_search_explanation || '本条暂无联网市场价说明。' }}</p>
+                        </section>
+                        <section v-if="agentAuditMarketCities(row).length">
+                          <strong>深圳 / 东莞价格摘要</strong>
+                          <div class="agent-audit-city-grid">
+                            <span
+                              v-for="city in agentAuditMarketCities(row)"
+                              :key="`${row._row_key}-${city.name}`"
+                            >
+                              {{ city.name }}：{{ city.text }}
+                            </span>
+                          </div>
+                        </section>
+                        <section v-if="agentAuditMarketSources(row).length">
+                          <strong>联网来源</strong>
+                          <div class="agent-audit-source-list">
+                            <a
+                              v-for="source in agentAuditMarketSources(row)"
+                              :key="`${source.city || ''}-${source.url || source.title}`"
+                              :href="source.url"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {{ source.city ? `${source.city} · ` : '' }}{{ source.title || source.url || '来源链接' }}
+                            </a>
+                          </div>
+                        </section>
+                      </div>
+                    </article>
+                  </div>
+
+                  <div v-if="!agentIsAuditRun" class="agent-result-subtitle">需要执行的调价 / 省钱建议</div>
+                  <div v-if="!agentIsAuditRun" class="agent-detail-list agent-suggestion-list">
+                    <article
+                      v-for="suggestion in agentActionableSuggestions"
+                      :key="suggestion.suggestion_id"
+                      class="agent-suggestion-row"
+                    >
+                      <div class="agent-suggestion-head">
+                        <el-tag size="small" :type="agentPriorityTagType(suggestion.priority)">
+                          {{ agentPriorityLabel(suggestion.priority) }}
+                        </el-tag>
+                        <el-tag size="small" type="info">{{ agentSuggestionTypeLabel(suggestion.suggestion_type) }}</el-tag>
+                        <el-tag size="small" :type="agentSuggestionStatusTagType(suggestion.status)">
+                          {{ agentSuggestionStatusLabel(suggestion.status) }}
+                        </el-tag>
+                      </div>
+                      <div class="agent-suggestion-body">
+                        <strong>{{ suggestion.title }}</strong>
+                        <small v-if="suggestion.target_label" class="agent-target-label">
+                          定位：{{ suggestion.target_label }}
+                        </small>
+                        <small>{{ suggestion.rationale }}</small>
+                        <small v-if="suggestion.risk_note">风险控制：{{ suggestion.risk_note }}</small>
+                        <div v-if="suggestion.estimated_saving_amount" class="agent-saving-line">
+                          <span>预计节省 {{ formatAmount(suggestion.estimated_saving_amount) }}</span>
+                          <span v-if="suggestion.estimated_saving_rate">降幅 {{ formatPercent(suggestion.estimated_saving_rate) }}</span>
+                        </div>
+                        <div v-if="suggestion.execution_result?.quote_line_patch" class="agent-draft-line">
+                          <span>草案单价：{{ formatPrice(suggestion.execution_result.quote_line_patch.unit_price_before) }} → {{ formatPrice(suggestion.execution_result.quote_line_patch.unit_price_after) }}</span>
+                          <span>草案合计：{{ formatAmount(suggestion.execution_result.quote_line_patch.total_price_before) }} → {{ formatAmount(suggestion.execution_result.quote_line_patch.total_price_after) }}</span>
+                        </div>
+                      </div>
+                      <div class="agent-suggestion-actions">
+                        <template v-if="suggestion.status === 'pending_review' || suggestion.status === 'approved' || suggestion.status === 'draft_generated'">
+                          <el-button size="small" type="success" plain @click="adoptAgentSuggestionOneClick(suggestion)">
+                            一键采用
+                          </el-button>
+                          <el-button
+                            v-if="suggestion.status === 'pending_review'"
+                            size="small"
+                            plain
+                            @click="decideAgentSuggestion(suggestion, 'reject')"
+                          >
+                            不采用
+                          </el-button>
+                        </template>
+                      </div>
+                    </article>
+                    <el-empty v-if="!agentActionableSuggestions.length" description="暂无需要执行的调价 / 省钱建议" />
+                  </div>
+
+                  <div class="agent-result-subtitle">风险发现</div>
+                  <el-table
+                    v-if="(agentRunDetail.findings || []).length"
+                    :data="agentRunDetail.findings || []"
+                    class="agent-finding-table"
+                    size="small"
+                    border
+                  >
+                    <el-table-column label="级别" width="86">
+                      <template #default="{ row }">
+                        <el-tag size="small" :type="agentSeverityTagType(row.severity)">
+                          {{ agentSeverityLabel(row.severity) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="风险" min-width="220">
+                      <template #default="{ row }">
+                        <div class="agent-table-main-cell">
+                          <strong>{{ row.title }}</strong>
+                          <small v-if="row.target_label">{{ row.target_label }}</small>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="审计建议" min-width="260">
+                      <template #default="{ row }">
+                        <span class="agent-table-muted">{{ row.suggestion || '-' }}</span>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                  <el-empty v-else description="暂无风险发现" />
+
+                  <el-collapse v-if="false" class="agent-tool-collapse">
+                    <el-collapse-item title="工具调用轨迹" name="tools">
+                      <div
+                        v-for="toolCall in agentRunDetail.tool_calls || []"
+                        :key="toolCall.id"
+                        class="agent-tool-row"
+                      >
+                        <span>{{ toolCall.tool_name }}</span>
+                        <el-tag size="small" :type="toolCall.status === 'success' ? 'success' : 'danger'">
+                          {{ toolCall.status }}
+                        </el-tag>
+                        <small>{{ toolCall.duration_ms ?? 0 }} ms</small>
+                      </div>
+                    </el-collapse-item>
+                  </el-collapse>
+                </template>
+              </section>
+            </div>
+          </template>
+        </template>
 
         <template v-else-if="routeName === 'dashboard'">
           <div class="content-heading">
@@ -737,7 +1671,7 @@
                   />
                   <el-button size="small" type="primary" plain @click="applyQuoteJobFilters">查询</el-button>
                   <el-button size="small" :icon="Refresh" plain @click="loadQuoteJobs">刷新</el-button>
-                  <el-button size="small" :icon="Clock" plain @click="markQuoteTimeouts">标记超时</el-button>
+                  <el-button v-if="canManageQuoteOperations" size="small" :icon="Clock" plain @click="markQuoteTimeouts">标记超时</el-button>
                 </div>
                 <el-table
                   :data="quoteJobs"
@@ -745,6 +1679,9 @@
                   class="users-table"
                   empty-text="暂无报价任务"
                 >
+                  <el-table-column label="任务号" min-width="160" show-overflow-tooltip>
+                    <template #default="{ row }">{{ displayQuoteJobNumber(row) }}</template>
+                  </el-table-column>
                   <el-table-column prop="created_at" label="提交时间" min-width="150">
                     <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
                   </el-table-column>
@@ -784,10 +1721,21 @@
                   <el-table-column label="异常" min-width="180" show-overflow-tooltip>
                     <template #default="{ row }">{{ row.error_message || '-' }}</template>
                   </el-table-column>
-                  <el-table-column label="操作" width="250" fixed="right">
+                  <el-table-column label="操作" width="320" fixed="right">
                     <template #default="{ row }">
                       <div class="row-actions">
                         <el-button size="small" :icon="Document" plain @click="openQuoteJobDetail(row)">详情</el-button>
+                        <el-button
+                          size="small"
+                          :icon="DataAnalysis"
+                          type="primary"
+                          plain
+                          :disabled="!canManualAuditQuoteJob(row)"
+                          :loading="agentCenterLoading"
+                          @click="manualAuditQuoteJob(row)"
+                        >
+                          审计
+                        </el-button>
                         <el-button
                           size="small"
                           :icon="Refresh"
@@ -2195,6 +3143,350 @@
           </template>
         </template>
 
+        <template v-else-if="routeName === 'dwgTrial'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">BIZ-2x · DWG Trial</p>
+              <h2>图纸识图试运行</h2>
+            </div>
+            <div class="heading-actions">
+              <el-upload
+                :auto-upload="false"
+                :show-file-list="true"
+                :limit="10"
+                multiple
+                accept=".dwg"
+                :on-change="handleDwgTrialFileChange"
+                :on-remove="clearDwgTrialFile"
+              >
+                <el-button :icon="Document" plain>选择 DWG 图纸</el-button>
+              </el-upload>
+              <el-button
+                type="primary"
+                :icon="DataAnalysis"
+                :loading="dwgTrialLoading"
+                :disabled="!dwgTrialUploadFiles.length"
+                @click="convertDwgTrial"
+              >
+                上传 DWG 识别项目
+              </el-button>
+              <el-button :icon="Refresh" plain :loading="dwgTrialLoading" @click="loadDwgTrialLatest">最近结果</el-button>
+              <el-button
+                type="success"
+                :icon="Download"
+                plain
+                :disabled="!dwgTrialQuantityListFile"
+                @click="downloadDwgTrialFile(dwgTrialQuantityListFile)"
+              >
+                下载四字段Excel
+              </el-button>
+              <el-button :icon="Delete" plain @click="resetDwgTrial">清空</el-button>
+            </div>
+          </div>
+
+          <div v-if="false && dwgTrialResult" class="metric-grid">
+            <div class="metric-card">
+              <span>DWG 图纸</span>
+              <strong>{{ dwgTrialSummary.dwg_file_count || 0 }}</strong>
+              <small>DXF {{ dwgTrialSummary.dxf_file_count || 0 }}</small>
+            </div>
+            <div class="metric-card">
+              <span>图纸线索</span>
+              <strong>{{ dwgTrialSummary.source_signal_count || 0 }}</strong>
+              <small>已匹配 {{ dwgTrialSummary.matched_signal_count || 0 }}</small>
+            </div>
+            <div class="metric-card">
+              <span>识别项目</span>
+              <strong>{{ dwgTrialSummary.recognized_project_count || dwgTrialProjectRows.length || 0 }}</strong>
+              <small>标准候选 {{ dwgTrialSummary.item_row_count || 0 }} 条</small>
+            </div>
+            <div class="metric-card">
+              <span>项目-CAD绑定</span>
+              <strong>{{ dwgTrialSummary.project_geometry_binding_ready_count || 0 }}</strong>
+              <small>待选择 {{ dwgTrialSummary.project_geometry_ambiguous_count || 0 }} / 未绑定 {{ dwgTrialSummary.project_geometry_unbound_count || 0 }}</small>
+            </div>
+            <div class="metric-card">
+              <span>候选选择</span>
+              <strong>{{ dwgTrialSelectedCount }}</strong>
+              <small>采纳 {{ dwgTrialAdoptedCount }} 条 / 项目候选 {{ dwgTrialSummary.project_geometry_candidate_option_count || dwgTrialProjectGeometryCandidateRows.length || 0 }} 个</small>
+            </div>
+          </div>
+
+          <el-alert
+            v-if="!dwgTrialResult"
+            class="dashboard-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="上传 DWG 图纸后，系统会展示识别到的四字段清单：项目名称、项目特征、单位、工程量"
+          ></el-alert>
+
+          <section v-if="dwgTrialResult" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><DocumentChecked /></el-icon>
+              <span>识图四字段清单</span>
+              <small>{{ dwgTrialQuantityListRows.length }} 项</small>
+            </div>
+            <el-table
+              :data="dwgTrialQuantityListRows"
+              row-key="__row_key"
+              class="users-table"
+              empty-text="暂无识别项目"
+            >
+              <el-table-column prop="项目名称" label="项目名称" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="项目特征" label="项目特征" min-width="420" show-overflow-tooltip />
+              <el-table-column prop="单位" label="单位" width="100" />
+              <el-table-column prop="工程量" label="工程量" width="160" show-overflow-tooltip />
+            </el-table>
+          </section>
+
+          <section v-if="false && dwgTrialProjectRows.length" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><DocumentChecked /></el-icon>
+              <span>图纸项目识别结果</span>
+              <small>{{ dwgTrialProjectRows.length }} 项</small>
+            </div>
+            <el-table :data="dwgTrialProjectRows" row-key="识别项目编号" class="users-table" empty-text="暂无图纸项目">
+              <el-table-column prop="识别项目编号" label="编号" width="130" />
+              <el-table-column prop="图纸项目名称" label="图纸项目" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="项目名称" label="标准项目名称" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="项目特征" label="项目特征" min-width="320" show-overflow-tooltip />
+              <el-table-column prop="单位" label="单位" width="80" />
+              <el-table-column prop="工程量状态" label="工程量状态" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="来源类型" label="来源类型" min-width="150" show-overflow-tooltip />
+              <el-table-column prop="来源文件" label="来源文件" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="识别证据" label="识别证据" min-width="300" show-overflow-tooltip />
+            </el-table>
+          </section>
+
+          <section v-if="false && dwgTrialProjectGeometryBindingRows.length" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><DataAnalysis /></el-icon>
+              <span>项目与 CAD 区域绑定建议</span>
+              <small>{{ dwgTrialProjectGeometryBindingRows.length }} 项</small>
+            </div>
+            <el-table
+              :data="dwgTrialProjectGeometryBindingRows"
+              row-key="识别项目编号"
+              class="users-table"
+              empty-text="暂无项目-CAD绑定建议"
+            >
+              <el-table-column prop="识别项目编号" label="编号" width="130" />
+              <el-table-column prop="图纸项目名称" label="图纸项目" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="项目名称" label="标准项目名称" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="期望算量类型" label="算量类型" width="120">
+                <template #default="{ row }">
+                  <el-tag effect="plain">{{ dwgTrialQuantityKindLabel(row.期望算量类型) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="绑定状态" label="绑定状态" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="建议工程量" label="建议工程量" width="120" />
+              <el-table-column prop="建议单位" label="单位" width="80" />
+              <el-table-column prop="绑定置信度" label="置信度" width="120" />
+              <el-table-column prop="候选数量" label="候选" width="90" />
+              <el-table-column prop="推荐CAD候选编号" label="推荐候选" width="150" />
+              <el-table-column prop="绑定说明" label="绑定说明" min-width="320" show-overflow-tooltip />
+            </el-table>
+          </section>
+
+          <section v-if="false && dwgTrialItemRows.length" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><DataAnalysis /></el-icon>
+              <span>标准列项与 CAD 候选明细</span>
+              <small>{{ dwgTrialItemRows.length }} 条</small>
+            </div>
+            <el-table :data="dwgTrialItemRows" row-key="序号" class="users-table" empty-text="暂无列项候选">
+              <el-table-column type="expand" width="52">
+                <template #default="{ row }">
+                  <div class="dwg-candidate-panel">
+                    <div class="dwg-candidate-heading">
+                      <div>
+                        <strong>{{ row.项目名称 }}</strong>
+                        <span>{{ row.图纸识别名称 || '暂无图纸线索' }}</span>
+                      </div>
+                      <div class="dwg-candidate-tags">
+                        <el-tag effect="plain">{{ dwgTrialRowCandidateOptions(row).length }} 个CAD候选</el-tag>
+                        <el-tag
+                          v-if="dwgTrialRowDecision(row)"
+                          :type="dwgTrialDecisionTagType(dwgTrialRowDecision(row).action)"
+                          effect="plain"
+                        >
+                          {{ dwgTrialRowDecision(row).action }} {{ dwgTrialRowDecision(row).suggestion_key }}
+                        </el-tag>
+                        <el-button
+                          v-if="dwgTrialRowDecision(row)"
+                          size="small"
+                          link
+                          type="info"
+                          @click="clearDwgTrialCandidateDecision(row)"
+                        >
+                          清除
+                        </el-button>
+                      </div>
+                    </div>
+                    <el-alert
+                      v-if="!dwgTrialRowCandidateOptions(row).length"
+                      type="info"
+                      show-icon
+                      :closable="false"
+                      title="当前列项没有可选择的 CAD 候选量"
+                    ></el-alert>
+                    <el-table
+                      v-else
+                      :data="dwgTrialRowCandidateOptions(row)"
+                      size="small"
+                      class="users-table dwg-candidate-table"
+                      empty-text="暂无候选"
+                    >
+                      <el-table-column prop="建议编号" label="建议编号" min-width="150" show-overflow-tooltip />
+                      <el-table-column prop="建议工程量" label="建议量" width="110" />
+                      <el-table-column prop="建议单位" label="单位" width="80" />
+                      <el-table-column prop="推荐动作" label="推荐动作" width="120" />
+                      <el-table-column prop="绑定置信度" label="置信度" width="110" />
+                      <el-table-column prop="CAD来源" label="CAD来源" min-width="220" show-overflow-tooltip />
+                      <el-table-column prop="CAD公式" label="CAD公式" min-width="240" show-overflow-tooltip />
+                      <el-table-column prop="CAD来源图元行号" label="CAD行号" min-width="140" show-overflow-tooltip />
+                      <el-table-column prop="推荐原因" label="推荐原因" min-width="260" show-overflow-tooltip />
+                      <el-table-column label="处理" width="230" fixed="right">
+                        <template #default="optionScope">
+                          <el-button
+                            size="small"
+                            type="primary"
+                            plain
+                            :icon="Select"
+                            @click="setDwgTrialCandidateDecision(row, optionScope.row, '采纳')"
+                          >
+                            采纳
+                          </el-button>
+                          <el-button
+                            size="small"
+                            plain
+                            :icon="Delete"
+                            @click="setDwgTrialCandidateDecision(row, optionScope.row, '不采纳')"
+                          >
+                            不采纳
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="warning"
+                            plain
+                            :icon="Warning"
+                            @click="setDwgTrialCandidateDecision(row, optionScope.row, '有问题')"
+                          >
+                            有问题
+                          </el-button>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="标准项目编码" label="标准编码" width="130" />
+              <el-table-column prop="项目名称" label="项目名称" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="单位" label="单位" width="130" show-overflow-tooltip />
+              <el-table-column prop="匹配置信度" label="置信度" width="100" />
+              <el-table-column prop="CAD候选数量" label="候选数" width="90" />
+              <el-table-column prop="图纸识别名称" label="图纸线索" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="逐条绑定状态" label="绑定状态" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="绑定置信度" label="绑定置信度" width="120" show-overflow-tooltip />
+              <el-table-column prop="系统建议工程量" label="系统建议工程量" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="建议量状态" label="建议量状态" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="工程量状态" label="工程量状态" width="180" show-overflow-tooltip />
+              <el-table-column prop="绑定说明" label="绑定说明" min-width="260" show-overflow-tooltip />
+            </el-table>
+          </section>
+
+          <section v-if="false && dwgTrialQuantityTraceRows.length" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><Histogram /></el-icon>
+              <span>工程量建议 trace</span>
+              <small>{{ dwgTrialQuantityTraceRows.length }} 条</small>
+            </div>
+            <el-table :data="dwgTrialQuantityTraceRows" row-key="建议编号" class="users-table" empty-text="暂无工程量建议">
+              <el-table-column prop="标准项目编码" label="标准编码" width="130" />
+              <el-table-column prop="标准项目名称" label="项目名称" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="建议工程量" label="建议工程量" width="130" />
+              <el-table-column prop="建议单位" label="单位" width="90" />
+              <el-table-column prop="是否可复核" label="可复核" width="90" />
+              <el-table-column prop="trace状态" label="trace状态" min-width="240" show-overflow-tooltip />
+              <el-table-column prop="CAD公式" label="CAD公式" min-width="260" show-overflow-tooltip />
+              <el-table-column prop="未解决事项" label="未解决事项" min-width="260" show-overflow-tooltip />
+            </el-table>
+          </section>
+
+          <section v-if="false && dwgTrialResult" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><Download /></el-icon>
+              <span>输出文件</span>
+              <small>{{ dwgTrialResult.generated_at || '-' }}</small>
+            </div>
+            <el-table :data="dwgTrialFiles" row-key="filename" class="users-table" empty-text="暂无输出文件">
+              <el-table-column prop="label" label="文件" width="180" />
+              <el-table-column prop="filename" label="名称" min-width="320" show-overflow-tooltip />
+              <el-table-column label="操作" width="120" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" type="primary" plain :icon="Download" @click="downloadDwgTrialFile(row)">
+                    下载
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </section>
+
+          <section v-if="false && dwgTrialFinalizationResult" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><Download /></el-icon>
+              <span>最终清单结果</span>
+              <small>可导出 {{ dwgTrialFinalizationSummary.final_ready_count || 0 }} 行</small>
+            </div>
+            <el-alert
+              v-if="!dwgTrialFinalizationResult.has_final_excel"
+              class="dashboard-alert"
+              type="warning"
+              show-icon
+              :closable="false"
+              title="本次采纳结果未通过最终四字段校验，请查看问题文件或识别提示"
+            ></el-alert>
+            <el-table :data="dwgTrialFinalizationFiles" row-key="filename" class="users-table" empty-text="暂无最终清单文件">
+              <el-table-column prop="label" label="文件" width="190" />
+              <el-table-column prop="filename" label="名称" min-width="320" show-overflow-tooltip />
+              <el-table-column label="操作" width="120" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" type="primary" plain :icon="Download" @click="downloadDwgTrialFile(row)">
+                    下载
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </section>
+
+          <section v-if="false && dwgTrialFinalizationIssues.length" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><Warning /></el-icon>
+              <span>最终清单校验问题</span>
+              <small>{{ dwgTrialFinalizationIssues.length }} 条</small>
+            </div>
+            <el-table :data="dwgTrialFinalizationIssues" row-key="问题说明" class="users-table" empty-text="暂无问题">
+              <el-table-column prop="列项序号" label="列项" width="110" />
+              <el-table-column prop="建议编号" label="建议编号" min-width="170" show-overflow-tooltip />
+              <el-table-column prop="问题说明" label="问题说明" min-width="320" show-overflow-tooltip />
+              <el-table-column prop="处理建议" label="处理建议" min-width="280" show-overflow-tooltip />
+            </el-table>
+          </section>
+
+          <section v-if="false && dwgTrialIssues.length" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><Warning /></el-icon>
+              <span>识别提示</span>
+              <small>{{ dwgTrialIssues.length }} 条</small>
+            </div>
+            <el-table :data="dwgTrialIssues" row-key="说明" class="users-table" empty-text="暂无识别提示">
+              <el-table-column prop="级别" label="级别" width="100" />
+              <el-table-column prop="说明" label="说明" min-width="420" show-overflow-tooltip />
+            </el-table>
+          </section>
+        </template>
+
         <template v-else-if="routeName === 'requirementStandardization'">
           <div class="content-heading">
             <div>
@@ -2638,7 +3930,7 @@
                 type="success"
                 show-icon
                 :closable="false"
-                :title="`已创建报价任务：${requirementQuoteJob.job_id}`"
+                :title="`已创建报价任务：${displayQuoteJobNumber(requirementQuoteJob)}`"
               >
                 <template #default>
                   <div class="requirement-quote-result">
@@ -2845,6 +4137,23 @@
             <strong>{{ formatDate(businessLedgerDrawer.ledger.updated_at) }}</strong>
           </div>
         </div>
+        <section class="drawer-section" v-if="canViewAgentCenter">
+          <div class="section-title">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>报价后审计</span>
+            <small>已下发报价可手动生成审计记录</small>
+          </div>
+          <el-button
+            type="primary"
+            plain
+            :icon="DataAnalysis"
+            :disabled="!canManualAuditQuoteJob(quoteJobDrawer.job)"
+            :loading="agentCenterLoading"
+            @click="manualAuditQuoteJob(quoteJobDrawer.job)"
+          >
+            手动审计此报价
+          </el-button>
+        </section>
         <section class="drawer-section">
           <div class="section-title">
             <el-icon><Document /></el-icon>
@@ -3279,7 +4588,7 @@
                 <template #default="{ row }">
                   <div class="operation-client">
                     <strong>{{ row.item_name || '-' }}</strong>
-                    <small>{{ costSourceLabel(row.source) }} · {{ row.origin?.quote_job_id || row.origin?.created_by_username || '-' }}</small>
+                    <small>{{ costSourceLabel(row.source) }} · {{ row.origin?.quote_job_number || row.origin?.quote_job_id || row.origin?.created_by_username || '-' }}</small>
                   </div>
                 </template>
               </el-table-column>
@@ -3330,7 +4639,7 @@
                 </div>
                 <div>
                   <small>来源报价任务</small>
-                  <strong>{{ costLineageDrawer.detail.origin?.quote_job_id || '-' }}</strong>
+                  <strong>{{ costLineageDrawer.detail.origin?.quote_job_number || costLineageDrawer.detail.origin?.quote_job_id || '-' }}</strong>
                 </div>
                 <div>
                   <small>来源历史 ID</small>
@@ -3386,7 +4695,7 @@
                 </div>
                 <div v-for="usage in costLineageDrawer.detail.quote_usages" :key="usage.id" class="lineage-usage-item">
                   <strong>{{ usage.project_name || '-' }}</strong>
-                  <span>{{ usage.quote_job_id || '-' }} · 历史 #{{ usage.quote_history_id || '-' }}</span>
+                  <span>{{ usage.quote_job_number || usage.quote_job_id || '-' }} · 历史 #{{ usage.quote_history_id || '-' }}</span>
                   <span>参考 {{ formatPrice(usage.reference_price) }}，最终 {{ formatPrice(usage.final_unit_price) }}</span>
                   <small>{{ formatDate(usage.confirmed_at || usage.created_at) }}</small>
                 </div>
@@ -3650,7 +4959,7 @@
         <div class="detail-grid">
           <div>
             <small>任务号</small>
-            <strong>{{ quoteJobDrawer.job.job_id }}</strong>
+            <strong>{{ displayQuoteJobNumber(quoteJobDrawer.job) }}</strong>
           </div>
           <div>
             <small>状态</small>
@@ -3750,11 +5059,12 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="AI单价/合计" width="140">
+            <el-table-column label="确认价/合计" width="160">
               <template #default="{ row }">
                 <div class="operation-client">
-                  <strong>{{ formatPrice(row.ai_unit_price) }}</strong>
-                  <small>合计 {{ formatPrice(row.system_total_price) }}</small>
+                  <strong>{{ formatPrice(reviewDisplayUnitPrice(row)) }}</strong>
+                  <small>合计 {{ formatPrice(reviewDisplayTotalPrice(row)) }}</small>
+                  <small v-if="reviewPriceSourceLabel(row)">{{ reviewPriceSourceLabel(row) }}</small>
                 </div>
               </template>
             </el-table-column>
@@ -4546,6 +5856,7 @@ import {
   DataAnalysis,
   Delete,
   Document,
+  DocumentChecked,
   Download,
   Histogram,
   Lock,
@@ -4563,6 +5874,7 @@ import {
 } from '@element-plus/icons-vue'
 
 const TOKEN_KEY = 'ai_token'
+const USER_INFO_KEY = 'app_user_info'
 const REQUIREMENT_HISTORY_DB_NAME = 'ai_requirement_standardization_history'
 const REQUIREMENT_HISTORY_DB_VERSION = 1
 const REQUIREMENT_HISTORY_RECORD_STORE = 'records'
@@ -4584,6 +5896,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(USER_INFO_KEY)
     }
     return Promise.reject(error)
   },
@@ -4592,6 +5905,8 @@ api.interceptors.response.use(
 const roleOptions = [
   { value: 'system_admin', label: 'system_admin', hint: '权限与系统配置' },
   { value: 'admin', label: 'admin', hint: '报价与知识库管理' },
+  { value: 'quote_operator', label: 'quote_operator', hint: '报价运营只读复核' },
+  { value: 'quote_user', label: 'quote_user', hint: '报价工作台与需求单标准化' },
   { value: 'cost_viewer', label: 'cost_viewer', hint: '完整成本库只读' },
   { value: 'cost_editor', label: 'cost_editor', hint: '维护成本库 draft' },
   { value: 'cost_approver', label: 'cost_approver', hint: '启用/归档成本价' },
@@ -4839,6 +6154,12 @@ const requirementLoading = ref(false)
 const requirementConfirming = ref(false)
 const requirementQuoting = ref(false)
 const requirementFeatureDisabled = ref(false)
+const dwgTrialUploadFiles = ref([])
+const dwgTrialResult = ref(null)
+const dwgTrialLoading = ref(false)
+const dwgTrialFinalizing = ref(false)
+const dwgTrialFinalizationResult = ref(null)
+const dwgTrialCandidateSelections = reactive({})
 const requirementMappings = reactive({})
 const requirementCurrentRecordId = ref('')
 const requirementHistoryRecords = ref([])
@@ -4914,7 +6235,96 @@ const projectFeatureDisabled = ref(false)
 const meetingFeatureDisabled = ref(false)
 const businessLedgerFeatureDisabled = ref(false)
 const costDbFeatureDisabled = ref(false)
+const agentCenterFeatureDisabled = ref(false)
+const agentCenterLoading = ref(false)
+const agentQuoteJobId = ref('')
+const agentRuns = ref([])
+const agentRunTotal = ref(0)
+const agentRunPage = ref(1)
+const agentRunPageSize = 15
+const agentRunDetail = ref(null)
+const agentLlmExplanation = ref(null)
+const agentLlmExplanationLoading = ref(false)
+const agentLlmExplanationLoadingMode = ref('')
+const agentShowExplanation = ref(false)
+const agentDailyDate = ref('')
+const agentDailySummary = ref(null)
+const agentTodoSummary = ref(null)
+const agentClosureSummary = ref(null)
+const agentClosureDays = ref(7)
+const agentClosureLoading = ref(false)
+const agentSchedulerStatus = ref(null)
+const agentSchedulerHistory = ref([])
+const agentSchedulerHistoryTotal = ref(0)
+const agentSchedulerHistoryPage = ref(1)
+const agentSchedulerHistoryPageSize = 10
+const agentSchedulerHistoryDays = ref(7)
+const agentSchedulerHistoryLoading = ref(false)
+const agentDailyLoading = ref(false)
+const agentDailyFeatureDisabled = ref(false)
+const agentPendingSuggestions = ref([])
+const agentPendingSuggestionTotal = ref(0)
+const agentPendingSuggestionPage = ref(1)
+const agentPendingSuggestionPageSize = 10
 const state = reactive({ loading: false, submitting: false, error: '' })
+
+const agentIsAuditRun = computed(() =>
+  agentRunDetail.value?.output?.audit_mode === 'confirmed_quote_risk_audit'
+)
+const agentAuditSummary = computed(() => agentRunDetail.value?.output?.audit_summary || {})
+const agentAuditRecords = computed(() => agentRunDetail.value?.output?.audit_records || [])
+const agentAuditTableRows = computed(() =>
+  agentAuditRecords.value.map((record, index) => ({
+    ...record,
+    _index: index + 1,
+    _row_key: record.target_ref || record.target_label || `audit-${index}`,
+  }))
+)
+const agentLlmBeforeAfterRows = computed(() =>
+  (agentLlmExplanation.value?.before_after_explanations || []).map((item, index) => ({
+    ...item,
+    _row_key: item.target_label || item.explanation || `before-after-${index}`,
+  }))
+)
+const agentLlmRiskRows = computed(() =>
+  (agentLlmExplanation.value?.risk_explanations || []).map((item, index) => ({
+    ...item,
+    _row_key: item.target_ref || item.target_label || item.title || `risk-${index}`,
+  }))
+)
+const agentLlmSuggestionRows = computed(() =>
+  (agentLlmExplanation.value?.suggestion_priorities || []).map((item, index) => ({
+    ...item,
+    _row_key: item.suggestion_id || item.target_ref || item.title || `suggestion-${index}`,
+  }))
+)
+const agentMarketReferenceRows = computed(() =>
+  agentAuditTableRows.value
+    .map((record) => {
+      const context = agentAuditMarketContext(record)
+      const sources = agentAuditMarketSources(record)
+      const cities = context.cities && typeof context.cities === 'object' ? context.cities : {}
+      return {
+        _row_key: record._row_key,
+        target_label: record.target_label,
+        item_name: context.item_name || record.project_name,
+        spec: context.spec || record.original_preview?.notes,
+        confirmed_unit_price: context.confirmed_unit_price ?? record.confirmed_quote?.unit_price,
+        confidence: context.confidence,
+        explanation: context.explanation || record.market_search_explanation,
+        city_price_texts: {
+          深圳: agentAuditCitySummary(cities.深圳),
+          东莞: agentAuditCitySummary(cities.东莞),
+        },
+        sources,
+      }
+    })
+    .filter((row) => row.explanation || row.sources.length || row.city_price_texts['深圳'] !== '-' || row.city_price_texts['东莞'] !== '-')
+)
+const agentActionableSuggestions = computed(() => {
+  if (agentIsAuditRun.value) return []
+  return (agentRunDetail.value?.suggestions || []).filter((suggestion) => isAgentActionableSuggestion(suggestion))
+})
 const routeName = ref(routeFromPath(window.location.pathname))
 
 const grantDialog = reactive({
@@ -5155,8 +6565,10 @@ const roles = computed(() => session.user?.roles || [])
 const hasRole = (...roleNames) => roles.value.some((role) => roleNames.includes(role))
 const canMutateRoles = computed(() => roles.value.includes('system_admin'))
 const canAccessPermissions = computed(() => roles.value.includes('system_admin') || roles.value.includes('admin'))
-const canViewDashboard = computed(() => canAccessPermissions.value || roles.value.includes('viewer'))
-const canViewQuoteOperations = computed(() => canAccessPermissions.value)
+const canViewDashboardMetrics = computed(() => canAccessPermissions.value || roles.value.includes('viewer'))
+const canViewDashboard = computed(() => canViewDashboardMetrics.value || roles.value.includes('quote_operator'))
+const canViewQuoteOperations = computed(() => canAccessPermissions.value || roles.value.includes('quote_operator'))
+const canManageQuoteOperations = computed(() => canAccessPermissions.value)
 const canViewExecution = computed(() => canAccessPermissions.value || roles.value.includes('staff') || roles.value.includes('manager'))
 const canCreateExecutionTask = computed(() => canAccessPermissions.value)
 const canCreateMeetingNote = computed(() => canViewExecution.value)
@@ -5169,8 +6581,11 @@ const canEditCostDb = computed(() => canAccessPermissions.value || hasRole('cost
 const canApproveCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
 const canExportCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_exporter'))
 const canViewCostAudit = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
-const canViewRequirementStandardization = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
-const canOpenLegacyQuote = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
+const canViewRequirementStandardization = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
+const canViewDwgTrial = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
+const canViewAgentCenter = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user', 'quote_operator'))
+const canManageAgentDailyReview = computed(() => canAccessPermissions.value || hasRole('quote_operator'))
+const canOpenLegacyQuote = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
 const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
 const selectedCostItemIds = computed(() => selectedCostItems.value.map((item) => item.id).filter(Boolean))
 const selectableCostItems = computed(() => costItems.value.filter((item) => costItemSelectable(item)))
@@ -5433,6 +6848,42 @@ const businessSummaryRows = computed(() => {
 })
 const requirementSheetMappings = computed(() => requirementPreview.value?.sheet_mappings || [])
 const requirementSummary = computed(() => requirementPreview.value?.summary || {})
+const dwgTrialSummary = computed(() => dwgTrialResult.value?.summary || {})
+const dwgTrialFiles = computed(() => dwgTrialResult.value?.files || [])
+const dwgTrialIssues = computed(() => dwgTrialResult.value?.issues || [])
+const dwgTrialProjectRows = computed(() => dwgTrialResult.value?.project_rows || [])
+const dwgTrialProjectGeometryBindingRows = computed(() => dwgTrialResult.value?.project_geometry_binding_rows || [])
+const dwgTrialProjectGeometryCandidateRows = computed(() => dwgTrialResult.value?.project_geometry_candidate_rows || [])
+const dwgTrialItemRows = computed(() => dwgTrialResult.value?.item_rows || [])
+const dwgTrialQuantityTraceRows = computed(() => dwgTrialResult.value?.quantity_trace_rows || [])
+const dwgTrialLineQuantityCandidateRows = computed(() => dwgTrialResult.value?.line_quantity_candidate_rows || [])
+const dwgTrialQuantityListRows = computed(() => {
+  const directRows = dwgTrialResult.value?.quantity_list_rows
+  const sourceRows = Array.isArray(directRows) && directRows.length
+    ? directRows
+    : (dwgTrialResult.value?.project_rows || []).map((row) => ({
+      项目名称: row?.项目名称 || row?.图纸项目名称 || '',
+      项目特征: row?.项目特征 || '',
+      单位: row?.单位 || '',
+      工程量: row?.工程量 || '待算量',
+    }))
+  return sourceRows.map((row, index) => ({
+    ...row,
+    工程量: row?.工程量 || '待算量',
+    __row_key: `${index + 1}:${row?.项目名称 || ''}:${row?.项目特征 || ''}`,
+  }))
+})
+const dwgTrialSelectedCount = computed(() => Object.keys(dwgTrialCandidateSelections).length)
+const dwgTrialAdoptedSelections = computed(() => Object.values(dwgTrialCandidateSelections).filter((item) => item.action === '采纳'))
+const dwgTrialAdoptedCount = computed(() => dwgTrialAdoptedSelections.value.length)
+const dwgTrialResultJsonFile = computed(() => dwgTrialFiles.value.find((item) => item.key === 'item_list_json' || item.key === 'json'))
+const dwgTrialQuantityListFile = computed(() => (
+  dwgTrialFiles.value.find((item) => item.key === 'quantity_list_xlsx')
+  || dwgTrialFiles.value.find((item) => item.key === 'project_draft_four_field_xlsx')
+))
+const dwgTrialFinalizationSummary = computed(() => dwgTrialFinalizationResult.value?.summary || {})
+const dwgTrialFinalizationFiles = computed(() => dwgTrialFinalizationResult.value?.files || [])
+const dwgTrialFinalizationIssues = computed(() => dwgTrialFinalizationResult.value?.issues || [])
 const selectedRequirementRows = computed(() => requirementRows.value.filter((row) => row.include))
 const visibleRequirementRows = computed(() => (
   requirementRows.value.filter((row) => row.row_type === 'data_row' || row.include || row.confirmed)
@@ -5673,6 +7124,8 @@ function routeFromPath(path) {
   if (path === '/admin/business-ledger') return 'businessLedger'
   if (path === '/admin/cost-db') return 'costDb'
   if (path === '/admin/requirement-standardization') return 'requirementStandardization'
+  if (path === '/admin/dwg-trial') return 'dwgTrial'
+  if (path === '/admin/agent-center') return 'agentCenter'
   return 'permissions'
 }
 
@@ -5829,6 +7282,21 @@ function roleTagType(role) {
 function formatDate(value) {
   if (!value) return '-'
   return value.replace('T', ' ').slice(0, 19)
+}
+
+function formatDateParam(value) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (item) => String(item).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function displayQuoteJobNumber(value) {
+  if (!value) return '-'
+  if (typeof value === 'object') {
+    return value.job_number || value.quote_job_number || value.job_id || value.quote_job_id || value.target_number || value.target_id || '-'
+  }
+  return String(value)
 }
 
 function formatDateTimeInput(value) {
@@ -6123,6 +7591,31 @@ function formatPrice(value) {
   })
 }
 
+function formatPercent(value) {
+  if (value === null || value === undefined || value === '') return '-'
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
+  return `${(number * 100).toFixed(1)}%`
+}
+
+function reviewDisplayUnitPrice(row) {
+  return row?.display_unit_price ?? row?.final_unit_price ?? row?.ai_unit_price
+}
+
+function reviewDisplayTotalPrice(row) {
+  return row?.display_total_price ?? row?.final_total_price ?? row?.system_total_price
+}
+
+function reviewPriceSourceLabel(row) {
+  if (!row) return ''
+  const hasFinal = row.final_unit_price !== null && row.final_unit_price !== undefined
+  if (!hasFinal) return 'AI预审价'
+  const aiText = row.ai_unit_price !== null && row.ai_unit_price !== undefined
+    ? `AI原始 ${formatPrice(row.ai_unit_price)}`
+    : 'AI原始 -'
+  return row.manual_modified ? `人工确认价，${aiText}` : `最终确认价，${aiText}`
+}
+
 function costStatusLabel(status) {
   const option = costStatusOptions.find((item) => item.value === status)
   return option?.label || status || '-'
@@ -6304,11 +7797,11 @@ function reviewCheckTagType(check) {
 }
 
 function canRetryQuoteJob(row) {
-  return ['failed', 'canceled', 'timed_out'].includes(row.status)
+  return canManageQuoteOperations.value && ['failed', 'canceled', 'timed_out'].includes(row.status)
 }
 
 function canCancelQuoteJob(row) {
-  return ['queued', 'running'].includes(row.status)
+  return canManageQuoteOperations.value && ['queued', 'running'].includes(row.status)
 }
 
 function businessStageTag(stage) {
@@ -6351,6 +7844,13 @@ function landingPath(user) {
   const redirect = new URLSearchParams(window.location.search).get('redirect')
   if (redirect?.startsWith('/')) return redirect
   if (user.roles?.includes('system_admin') || user.roles?.includes('admin')) return '/admin/permissions'
+  if (user.roles?.includes('quote_operator') || user.roles?.includes('viewer')) return '/admin/dashboard'
+  if (user.roles?.some((role) => ['cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter'].includes(role))) {
+    return '/admin/cost-db'
+  }
+  if (user.roles?.includes('project_viewer') || user.roles?.includes('project_member') || user.roles?.includes('project_manager')) {
+    return '/admin/projects'
+  }
   if (user.roles?.includes('staff')) return '/index.html'
   const firstModule = user.available_modules?.find((item) => item.status === 'available')
   return firstModule?.path || '/admin/permissions'
@@ -6381,6 +7881,14 @@ async function login() {
 async function loadMe() {
   const response = await api.get('/auth/me')
   session.user = responseData(response)
+  localStorage.setItem(
+    USER_INFO_KEY,
+    JSON.stringify({
+      username: session.user.username,
+      role: session.user.role,
+      roles: Array.isArray(session.user.roles) ? session.user.roles : [],
+    }),
+  )
   return session.user
 }
 
@@ -6750,6 +8258,197 @@ function resetRequirementStandardization() {
   requirementRowFilters.status = 'all'
   requirementCurrentRecordId.value = ''
   Object.keys(requirementMappings).forEach((key) => delete requirementMappings[key])
+}
+
+function handleDwgTrialFileChange(_file, fileList = []) {
+  dwgTrialUploadFiles.value = fileList.map((item) => item.raw || item).filter(Boolean)
+  dwgTrialResult.value = null
+  dwgTrialFinalizationResult.value = null
+  clearDwgTrialCandidateSelections()
+}
+
+function clearDwgTrialFile(_file, fileList = []) {
+  dwgTrialUploadFiles.value = fileList.map((item) => item.raw || item).filter(Boolean)
+  dwgTrialFinalizationResult.value = null
+  clearDwgTrialCandidateSelections()
+}
+
+function resetDwgTrial() {
+  dwgTrialUploadFiles.value = []
+  dwgTrialResult.value = null
+  dwgTrialFinalizationResult.value = null
+  clearDwgTrialCandidateSelections()
+}
+
+async function loadDwgTrialLatest(options = {}) {
+  if (!canViewDwgTrial.value) return
+  dwgTrialLoading.value = true
+  try {
+    const response = await api.get('/admin/dwg-quantity-trial/latest')
+    const data = responseData(response)
+    dwgTrialResult.value = data?.has_result === false ? null : data
+    dwgTrialFinalizationResult.value = null
+    clearDwgTrialCandidateSelections()
+    if (!dwgTrialResult.value && !options.quiet) {
+      ElMessage.info('暂无最近转换结果')
+    }
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '最近结果加载失败'))
+  } finally {
+    dwgTrialLoading.value = false
+  }
+}
+
+async function convertDwgTrial() {
+  if (!dwgTrialUploadFiles.value.length) {
+    ElMessage.warning('请先选择 DWG 图纸')
+    return
+  }
+  dwgTrialLoading.value = true
+  try {
+    const form = new FormData()
+    for (const file of dwgTrialUploadFiles.value) {
+      form.append('files', file)
+    }
+    const response = await api.post('/admin/dwg-quantity-trial/list-items', form)
+    dwgTrialResult.value = responseData(response)
+    dwgTrialFinalizationResult.value = null
+    clearDwgTrialCandidateSelections()
+    if (dwgTrialResult.value?.has_quantity_list_excel || dwgTrialQuantityListRows.value.length) {
+      ElMessage.success('DWG 识图四字段清单已生成')
+    } else {
+      ElMessage.warning('已完成识别，暂未形成四字段清单')
+    }
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, 'DWG 识图失败'))
+  } finally {
+    dwgTrialLoading.value = false
+  }
+}
+
+function clearDwgTrialCandidateSelections() {
+  for (const key of Object.keys(dwgTrialCandidateSelections)) {
+    delete dwgTrialCandidateSelections[key]
+  }
+}
+
+function dwgTrialRowKey(row) {
+  return [
+    row?.序号 || '',
+    row?.标准项目编码 || '',
+    row?.图纸识别名称 || '',
+    row?.图纸识别规格或做法 || '',
+  ].join('|')
+}
+
+function dwgTrialRowCandidateOptions(row) {
+  return Array.isArray(row?.CAD候选列表) ? row.CAD候选列表 : []
+}
+
+function dwgTrialRowDecision(row) {
+  return dwgTrialCandidateSelections[dwgTrialRowKey(row)]
+}
+
+function setDwgTrialCandidateDecision(row, option, action) {
+  const key = dwgTrialRowKey(row)
+  dwgTrialCandidateSelections[key] = {
+    action,
+    suggestion_key: option?.建议编号 || '',
+    quantity: option?.建议工程量 || '',
+    unit: option?.建议单位 || '',
+    item_name: row?.项目名称 || '',
+    row_no: row?.序号 || '',
+    project_name: row?.项目名称 || '',
+    project_feature: buildDwgTrialProjectFeature(row),
+    quantity_source_note: buildDwgTrialQuantitySource(option),
+  }
+  ElMessage.success(`${action}：${option?.建议编号 || 'CAD候选'}`)
+}
+
+function clearDwgTrialCandidateDecision(row) {
+  delete dwgTrialCandidateSelections[dwgTrialRowKey(row)]
+}
+
+function dwgTrialDecisionTagType(action) {
+  if (action === '采纳') return 'success'
+  if (action === '有问题') return 'warning'
+  if (action === '不采纳') return 'info'
+  return 'primary'
+}
+
+function dwgTrialQuantityKindLabel(kind) {
+  const labels = {
+    area: '面积',
+    length: '长度',
+    count: '数量',
+  }
+  return labels[kind] || kind || '-'
+}
+
+function buildDwgTrialProjectFeature(row) {
+  const sourceValue = Array.from(new Set([row?.图纸识别规格或做法, row?.图纸识别名称, row?.来源证据].filter(Boolean)))
+    .join('；')
+  const fields = String(row?.项目特征字段 || '')
+    .split(/[；;、]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const uniqueFields = Array.from(new Set(fields))
+  if (!uniqueFields.length) return sourceValue
+  if (!sourceValue) return ''
+  return uniqueFields.map((field) => `${field}：${sourceValue}`).join('；')
+}
+
+function buildDwgTrialQuantitySource(option) {
+  const parts = ['页面采纳 CAD 候选量，并按标准库工程量计算规则进入校验']
+  if (option?.CAD公式) parts.push(`CAD公式：${option.CAD公式}`)
+  if (option?.CAD来源图元行号) parts.push(`CAD行号：${option.CAD来源图元行号}`)
+  return parts.join('；')
+}
+
+async function finalizeDwgTrialSelection() {
+  if (!dwgTrialAdoptedCount.value) {
+    ElMessage.warning('请先采纳至少一条 CAD 候选量')
+    return
+  }
+  if (!dwgTrialResultJsonFile.value?.filename) {
+    ElMessage.warning('缺少本次 DWG 列项结果 JSON，请重新上传或加载最近结果')
+    return
+  }
+  dwgTrialFinalizing.value = true
+  try {
+    const response = await api.post('/admin/dwg-quantity-trial/finalize-selection', {
+      result_filename: dwgTrialResultJsonFile.value.filename,
+      selections: Object.values(dwgTrialCandidateSelections),
+    })
+    dwgTrialFinalizationResult.value = responseData(response)
+    if (dwgTrialFinalizationResult.value?.has_final_excel) {
+      ElMessage.success('最终四字段 Excel 已生成')
+    } else {
+      ElMessage.warning('采纳结果已提交，但最终四字段校验未通过')
+    }
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '最终清单生成失败'))
+  } finally {
+    dwgTrialFinalizing.value = false
+  }
+}
+
+async function downloadDwgTrialFile(file) {
+  if (!file?.download_url) return
+  try {
+    const response = await api.get(file.download_url.replace('/api/v1', ''), { responseType: 'blob' })
+    const blob = new Blob([response.data])
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = file.filename || 'dwg_trial_output.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '文件下载失败'))
+  }
 }
 
 function defaultRequirementInclude(row) {
@@ -7211,6 +8910,7 @@ function handoffRequirementQuoteJob(job) {
   try {
     window.sessionStorage.setItem('aimo_quote_job_handoff', JSON.stringify({
       quote_job_id: job.job_id,
+      quote_job_number: job.job_number || '',
       trace_id: job.trace_id || '',
       source: 'requirement_standardization',
       source_file_name: requirementPreview.value?.source?.file_name || '',
@@ -7221,6 +8921,7 @@ function handoffRequirementQuoteJob(job) {
   }
   const params = new URLSearchParams({
     quote_job_id: job.job_id,
+    quote_job_number: job.job_number || '',
     from: 'requirement_standardization',
   })
   if (job.trace_id) params.set('trace_id', job.trace_id)
@@ -7293,6 +8994,911 @@ async function loadQuoteJobs() {
 function applyQuoteJobFilters() {
   quoteJobPage.value = 1
   loadQuoteJobs()
+}
+
+async function loadAgentDailySummary() {
+  if (!canManageAgentDailyReview.value) return
+  agentDailyFeatureDisabled.value = false
+  agentDailyLoading.value = true
+  const params = {}
+  if (agentDailyDate.value) params.review_date = agentDailyDate.value
+  try {
+    const response = await api.get('/admin/agents/quote-review/daily-summary', {
+      params,
+    })
+    const data = responseData(response) || {}
+    agentDailySummary.value = data
+    if (data.review_date) {
+      agentDailyDate.value = data.review_date
+    }
+  } catch (error) {
+    agentDailySummary.value = null
+    if (isFeatureDisabled(error)) {
+      agentDailyFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '每日复核概览加载失败'))
+  } finally {
+    agentDailyLoading.value = false
+  }
+}
+
+async function loadAgentSchedulerStatus() {
+  if (!canManageAgentDailyReview.value) return
+  agentDailyFeatureDisabled.value = false
+  const params = {}
+  if (agentDailyDate.value) params.review_date = agentDailyDate.value
+  try {
+    const response = await api.get('/admin/agents/quote-review/scheduler-runs', { params })
+    const data = responseData(response) || {}
+    agentSchedulerStatus.value = data
+    if (data.review_date && !agentDailyDate.value) {
+      agentDailyDate.value = data.review_date
+    }
+  } catch (error) {
+    agentSchedulerStatus.value = null
+    if (isFeatureDisabled(error)) {
+      agentDailyFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '每日复核调度状态加载失败'))
+  }
+}
+
+async function loadAgentTodos() {
+  if (!canManageAgentDailyReview.value) return
+  agentDailyFeatureDisabled.value = false
+  const params = {}
+  if (agentDailyDate.value) params.review_date = agentDailyDate.value
+  try {
+    const response = await api.get('/admin/agents/quote-review/todos', { params })
+    const data = responseData(response) || {}
+    agentTodoSummary.value = data
+    if (data.review_date && !agentDailyDate.value) {
+      agentDailyDate.value = data.review_date
+    }
+  } catch (error) {
+    agentTodoSummary.value = null
+    if (isFeatureDisabled(error)) {
+      agentDailyFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '每日后审计状态加载失败'))
+  }
+}
+
+function offsetDateParam(dateText, offsetDays) {
+  const parts = String(dateText || '').split('-').map((item) => Number(item))
+  const date = parts.length === 3 && parts.every((item) => Number.isFinite(item))
+    ? new Date(parts[0], parts[1] - 1, parts[2])
+    : new Date()
+  date.setDate(date.getDate() + offsetDays)
+  return formatDateParam(date)
+}
+
+function agentDailyRangeParams(daysValue) {
+  const days = Number(daysValue) || 7
+  const dateTo = agentSchedulerStatus.value?.review_date || agentDailySummary.value?.review_date || formatDateParam(new Date())
+  return {
+    date_from: offsetDateParam(dateTo, -(days - 1)),
+    date_to: dateTo,
+  }
+}
+
+function agentSchedulerHistoryRangeParams() {
+  return agentDailyRangeParams(agentSchedulerHistoryDays.value)
+}
+
+function agentClosureRangeParams() {
+  return agentDailyRangeParams(agentClosureDays.value)
+}
+
+async function loadAgentSchedulerHistory() {
+  if (!canManageAgentDailyReview.value) return
+  agentDailyFeatureDisabled.value = false
+  agentSchedulerHistoryLoading.value = true
+  try {
+    const response = await api.get('/admin/agents/quote-review/scheduler-runs/history', {
+      params: {
+        page: agentSchedulerHistoryPage.value,
+        page_size: agentSchedulerHistoryPageSize,
+        ...agentSchedulerHistoryRangeParams(),
+      },
+    })
+    agentSchedulerHistory.value = responseData(response) || []
+    agentSchedulerHistoryTotal.value = response.data?.total ?? agentSchedulerHistory.value.length
+  } catch (error) {
+    agentSchedulerHistory.value = []
+    agentSchedulerHistoryTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      agentDailyFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '每日复核调度记录加载失败'))
+  } finally {
+    agentSchedulerHistoryLoading.value = false
+  }
+}
+
+function refreshAgentSchedulerHistory() {
+  agentSchedulerHistoryPage.value = 1
+  loadAgentSchedulerHistory()
+}
+
+async function loadAgentClosureSummary() {
+  if (!canManageAgentDailyReview.value) return
+  agentDailyFeatureDisabled.value = false
+  agentClosureLoading.value = true
+  try {
+    const response = await api.get('/admin/agents/quote-review/closure-summary', {
+      params: agentClosureRangeParams(),
+    })
+    agentClosureSummary.value = responseData(response) || null
+  } catch (error) {
+    agentClosureSummary.value = null
+    if (isFeatureDisabled(error)) {
+      agentDailyFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '闭环效果统计加载失败'))
+  } finally {
+    agentClosureLoading.value = false
+  }
+}
+
+function refreshAgentClosureSummary() {
+  loadAgentClosureSummary()
+}
+
+async function rescanAgentSchedulerHistoryRow(row) {
+  if (!row?.run_date) return
+  agentDailyDate.value = row.run_date
+  await runDailyQuoteReview(false)
+  await loadAgentSchedulerHistory()
+}
+
+async function loadAgentPendingSuggestions() {
+  if (!canManageAgentDailyReview.value) return
+  agentDailyFeatureDisabled.value = false
+  agentDailyLoading.value = true
+  const reviewDate = agentDailyDate.value || agentDailySummary.value?.review_date || ''
+  try {
+    const response = await api.get('/admin/agents/suggestions/pending', {
+      params: {
+        page: agentPendingSuggestionPage.value,
+        page_size: agentPendingSuggestionPageSize,
+        status: 'open',
+        trigger_source: 'scheduled_daily',
+        ...(reviewDate ? { review_date: reviewDate } : {}),
+      },
+    })
+    agentPendingSuggestions.value = responseData(response) || []
+    agentPendingSuggestionTotal.value = response.data?.total ?? agentPendingSuggestions.value.length
+  } catch (error) {
+    agentPendingSuggestions.value = []
+    agentPendingSuggestionTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      agentDailyFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '待处理建议加载失败'))
+  } finally {
+    agentDailyLoading.value = false
+  }
+}
+
+async function refreshAgentDailyReview() {
+  agentPendingSuggestionPage.value = 1
+  await loadAgentDailySummary()
+  agentTodoSummary.value = null
+  agentClosureSummary.value = null
+  agentPendingSuggestions.value = []
+  agentPendingSuggestionTotal.value = 0
+}
+
+async function refreshAgentCenter() {
+  await loadAgentRuns()
+  if (canManageAgentDailyReview.value) {
+    await refreshAgentDailyReview()
+  }
+}
+
+async function runDailyQuoteReview(dryRun = false) {
+  if (!canManageAgentDailyReview.value) return
+  agentDailyFeatureDisabled.value = false
+  agentDailyLoading.value = true
+  const payload = { dry_run: dryRun }
+  if (agentDailyDate.value) payload.review_date = agentDailyDate.value
+  try {
+    const response = await api.post('/admin/agents/quote-review/daily-runs', payload)
+    const data = responseData(response) || {}
+    await refreshAgentCenter()
+    const created = data.created_run_count ?? 0
+    const skipped = data.skipped_duplicate_count ?? 0
+    ElMessage.success(`每日复核完成：新增 ${created} 单，已跳过 ${skipped} 单`)
+  } catch (error) {
+    if (isFeatureDisabled(error)) {
+      agentDailyFeatureDisabled.value = true
+      return
+    }
+    ElMessage.error(apiErrorMessage(error, '每日自动复核失败'))
+  } finally {
+    agentDailyLoading.value = false
+  }
+}
+
+async function loadAgentRuns() {
+  if (!canViewAgentCenter.value) return
+  agentCenterFeatureDisabled.value = false
+  agentCenterLoading.value = true
+  const params = {
+    page: agentRunPage.value,
+    page_size: agentRunPageSize,
+    agent_type: 'quote_review_assistant',
+  }
+  try {
+    const response = await api.get('/admin/agents/runs', { params })
+    agentRuns.value = responseData(response) || []
+    agentRunTotal.value = response.data?.total ?? agentRuns.value.length
+  } catch (error) {
+    agentRuns.value = []
+    agentRunTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      agentCenterFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, 'Agent 运行记录加载失败'))
+  } finally {
+    agentCenterLoading.value = false
+  }
+}
+
+function agentLlmSourceLabel(data) {
+  if (!data) return '规则解释'
+  if (data.mode === 'deepseek') {
+    return data.llm_model ? `DeepSeek · ${data.llm_model}` : 'DeepSeek'
+  }
+  if (data.llm_provider === 'deepseek') {
+    if (data.fallback_reason === 'deepseek_api_key_missing') return '规则解释 · 未配置DeepSeek'
+    return '规则解释 · DeepSeek降级'
+  }
+  return '规则解释'
+}
+
+function agentLlmSourceTagType(data) {
+  if (data?.mode === 'deepseek') return 'success'
+  if (data?.llm_provider === 'deepseek') return 'warning'
+  return 'info'
+}
+
+async function loadAgentLlmExplanation(mode = 'rule') {
+  if (!agentRunDetail.value?.run_id) {
+    agentLlmExplanation.value = null
+    return
+  }
+  agentLlmExplanationLoading.value = true
+  agentLlmExplanationLoadingMode.value = mode
+  try {
+    const response = await api.get(`/admin/agents/runs/${agentRunDetail.value.run_id}/llm-explanation`, {
+      params: { mode },
+    })
+    agentLlmExplanation.value = responseData(response) || null
+  } catch (error) {
+    agentLlmExplanation.value = null
+    if (!isFeatureDisabled(error)) {
+      ElMessage.error(apiErrorMessage(error, mode === 'deepseek' ? 'DeepSeek解释加载失败' : '规则解释加载失败'))
+    }
+  } finally {
+    agentLlmExplanationLoading.value = false
+    agentLlmExplanationLoadingMode.value = ''
+  }
+}
+
+async function toggleAgentExplanation() {
+  agentShowExplanation.value = !agentShowExplanation.value
+  if (agentShowExplanation.value && !agentLlmExplanation.value) {
+    await loadAgentLlmExplanation('rule')
+  }
+}
+
+function canManualAuditQuoteJob(row) {
+  return Boolean(canViewAgentCenter.value && row?.history?.pushed_to_dingtalk && row?.job_id)
+}
+
+async function runQuoteReviewAgent(quoteJobId = agentQuoteJobId.value, options = {}) {
+  const targetId = String(quoteJobId || '').trim()
+  if (!targetId) {
+    ElMessage.warning('请先输入报价任务 ID')
+    return
+  }
+  agentCenterFeatureDisabled.value = false
+  agentCenterLoading.value = true
+  try {
+    const payload = {
+      quote_job_id: targetId,
+      confirmed_only: options.confirmedOnly !== false,
+    }
+    if (options.quoteHistoryId) payload.quote_history_id = options.quoteHistoryId
+    const response = await api.post('/admin/agents/quote-review/runs', payload)
+    agentRunDetail.value = responseData(response)
+    agentLlmExplanation.value = null
+    agentShowExplanation.value = false
+    agentQuoteJobId.value = targetId
+    agentRunPage.value = 1
+    await loadAgentRuns()
+    if (canManageAgentDailyReview.value) {
+      await refreshAgentDailyReview()
+    }
+    if (options.openAgentCenter) {
+      navigate('/admin/agent-center')
+    }
+    ElMessage.success('后审计已完成')
+  } catch (error) {
+    if (isFeatureDisabled(error)) {
+      agentCenterFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 409) {
+      ElMessage.error('该报价尚未确认下发，不能生成后审计记录')
+      return
+    }
+    ElMessage.error(apiErrorMessage(error, '后审计失败'))
+  } finally {
+    agentCenterLoading.value = false
+  }
+}
+
+async function manualAuditQuoteJob(row) {
+  if (!canManualAuditQuoteJob(row)) {
+    ElMessage.warning('请先确认下发报价，再生成后审计记录')
+    return
+  }
+  await runQuoteReviewAgent(row.job_id, {
+    confirmedOnly: true,
+    quoteHistoryId: row.history?.id,
+    openAgentCenter: true,
+  })
+}
+
+async function openAgentRun(row) {
+  if (!row?.run_id) return
+  agentCenterLoading.value = true
+  agentLlmExplanation.value = null
+  agentShowExplanation.value = false
+  try {
+    const response = await api.get(`/admin/agents/runs/${row.run_id}`)
+    agentRunDetail.value = responseData(response)
+    agentQuoteJobId.value = agentRunDetail.value?.target_id || ''
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, 'Agent 运行详情加载失败'))
+  } finally {
+    agentCenterLoading.value = false
+  }
+}
+
+async function openAgentRunAndFocus(row) {
+  await openAgentRun(row)
+  await scrollToAgentResult()
+}
+
+async function scrollToAgentResult() {
+  await nextTick()
+  const target = document.querySelector('.agent-result-panel')
+  if (target?.scrollIntoView) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
+function agentRiskLabel(riskLevel) {
+  const labels = {
+    high: '高风险',
+    medium: '中风险',
+    low: '低风险',
+  }
+  return labels[riskLevel] || '未评估'
+}
+
+function agentRiskTagType(riskLevel) {
+  if (riskLevel === 'high') return 'danger'
+  if (riskLevel === 'medium') return 'warning'
+  if (riskLevel === 'low') return 'success'
+  return 'info'
+}
+
+function agentAuditRiskReasons(record) {
+  const reasons = Array.isArray(record?.risk_reasons) ? record.risk_reasons : []
+  const typeLabels = {
+    manual_quantity_deviation: '人工工程量改动过大',
+    manual_unit_price_deviation: '人工单价改动过大',
+  }
+  const labels = reasons
+    .map((item) => item?.label || typeLabels[item?.type] || item?.type)
+    .filter(Boolean)
+  return labels.length ? labels.join('；') : '未记录明确预审风险'
+}
+
+function agentAuditRiskReasonItems(record) {
+  const reasons = Array.isArray(record?.risk_reasons) ? record.risk_reasons : []
+  const typeLabels = {
+    no_cost_reference: '无成本参考',
+    multiple_cost_candidates: '多成本候选',
+    cost_price_delta: '偏离底价',
+    manual_quantity_deviation: '工程量改动',
+    manual_unit_price_deviation: '单价改动',
+    manual_price_deviation: '价格改动',
+    ai_rewrite_conflict: 'AI改写冲突',
+    ai_note_conflict: '备注冲突',
+    invalid_unit_price: '单价异常',
+    invalid_total_price: '合计异常',
+    requirement_match_risk: '需求匹配风险',
+    cost_fallback_used: '底价兜底',
+    missing_requirement_row: '疑似漏报价',
+    preview_risk: '预审风险',
+  }
+  const items = reasons
+    .map((item) => ({
+      type: item?.type || item?.check_key || 'unknown',
+      label: item?.label || typeLabels[item?.type] || item?.type || '预审风险',
+      severity: item?.severity || 'medium',
+    }))
+    .filter((item) => item.label)
+  return items.length ? items : [{ type: 'none', label: '未记录明确风险', severity: 'low' }]
+}
+
+function agentAuditQuantity(value, unit) {
+  if (value === null || value === undefined || value === '') return '-'
+  const number = Number(value)
+  const text = Number.isFinite(number)
+    ? number.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+    : String(value)
+  return unit ? `${text} ${unit}` : text
+}
+
+function agentAuditDeltaText(record, field) {
+  const change = record?.price_change || {}
+  const fieldMap = {
+    quantity: ['quantity_delta', 'quantity_delta_rate'],
+    unit_price: ['unit_price_delta', 'unit_price_delta_rate'],
+    total_price: ['total_price_delta', 'total_price_delta_rate'],
+  }
+  const [deltaKey, rateKey] = fieldMap[field] || []
+  const delta = Number(change[deltaKey])
+  if (!Number.isFinite(delta) || Math.abs(delta) < 0.000001) return '-'
+  let text = ''
+  if (field === 'quantity') {
+    text = agentSignedPlainNumber(delta, record?.unit)
+  } else if (field === 'unit_price') {
+    text = agentSignedCurrency(delta, true)
+  } else {
+    text = agentSignedCurrency(delta, false)
+  }
+  const rate = Number(change[rateKey])
+  if (Number.isFinite(rate) && Math.abs(rate) >= 0.000001) {
+    return `${text} / ${agentSignedPercent(rate)}`
+  }
+  return text
+}
+
+function agentSignedPlainNumber(value, suffix = '') {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
+  const sign = number > 0 ? '+' : '-'
+  const text = Math.abs(number).toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+  return `${sign}${text}${suffix || ''}`
+}
+
+function agentSignedCurrency(value, keepCents = false) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
+  const sign = number > 0 ? '+' : '-'
+  const text = Math.abs(number).toLocaleString('zh-CN', {
+    style: 'currency',
+    currency: 'CNY',
+    minimumFractionDigits: keepCents ? 2 : 0,
+    maximumFractionDigits: keepCents ? 2 : 0,
+  })
+  return `${sign}${text}`
+}
+
+function agentSignedPercent(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
+  const sign = number > 0 ? '+' : '-'
+  return `${sign}${(Math.abs(number) * 100).toFixed(1)}%`
+}
+
+function agentAuditDeltaTagType(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number) || Math.abs(number) < 0.000001) return 'info'
+  return number > 0 ? 'warning' : 'success'
+}
+
+function agentAuditConfirmedState(record) {
+  if (record?.confirmed_quote?.price_source === 'not_found_in_preview') return '未找到下发行'
+  return record?.confirmed_quote?.manual_modified ? '人工已修改' : '沿用/未改'
+}
+
+function agentAuditMarketContext(record) {
+  return record?.market_search_context && typeof record.market_search_context === 'object'
+    ? record.market_search_context
+    : {}
+}
+
+function agentAuditMarketSources(record) {
+  const sources = agentAuditMarketContext(record).sources
+  return Array.isArray(sources) ? sources.filter((item) => item?.url).slice(0, 8) : []
+}
+
+function agentAuditMarketSourceCount(record) {
+  return agentAuditMarketSources(record).length
+}
+
+function agentAuditMarketCities(record) {
+  const cities = agentAuditMarketContext(record).cities
+  if (!cities || typeof cities !== 'object') return []
+  return Object.entries(cities)
+    .map(([name, value]) => ({
+      name,
+      text: agentAuditCitySummary(value),
+    }))
+    .filter((item) => item.text && item.text !== '-')
+}
+
+function agentAuditCitySummary(value) {
+  if (!value || typeof value !== 'object') return '-'
+  const range = value.price_range && typeof value.price_range === 'object' ? value.price_range : {}
+  const hasMin = range.min !== null && range.min !== undefined && range.min !== ''
+  const hasMax = range.max !== null && range.max !== undefined && range.max !== ''
+  const min = hasMin ? Number(range.min) : Number.NaN
+  const max = hasMax ? Number(range.max) : Number.NaN
+  const unit = value.unit ? ` / ${value.unit}` : ''
+  if (Number.isFinite(min) && Number.isFinite(max)) return `${formatPrice(min)} - ${formatPrice(max)}${unit}`
+  if (Number.isFinite(min)) return `约 ${formatPrice(min)}${unit}`
+  if (Number.isFinite(max)) return `最高 ${formatPrice(max)}${unit}`
+  return value.summary || '-'
+}
+
+function agentMarketConfidenceLabel(confidence) {
+  const labels = {
+    high: '高可信',
+    medium: '中可信',
+    low: '低可信',
+    none: '无来源',
+  }
+  return labels[confidence] || confidence || '未评估'
+}
+
+function agentMarketConfidenceTag(confidence) {
+  if (confidence === 'high') return 'success'
+  if (confidence === 'medium') return 'warning'
+  if (confidence === 'low') return 'info'
+  if (confidence === 'none') return 'danger'
+  return 'info'
+}
+
+function agentAuditRecordRowClass({ row }) {
+  if (row?.risk_level === 'high') return 'agent-audit-table-row-high'
+  if (row?.risk_level === 'medium') return 'agent-audit-table-row-medium'
+  return ''
+}
+
+function agentSeverityLabel(severity) {
+  const labels = {
+    high: '高',
+    medium: '中',
+    low: '低',
+  }
+  return labels[severity] || '提示'
+}
+
+function agentSeverityTagType(severity) {
+  if (severity === 'high') return 'danger'
+  if (severity === 'medium') return 'warning'
+  if (severity === 'low') return 'success'
+  return 'info'
+}
+
+function agentRecommendationLabel(recommendation) {
+  const labels = {
+    post_audit_recorded: '已留痕',
+    manual_review_required: '必须人工复核',
+    review_before_push: '下发前复核',
+    spot_check_before_push: '抽查后下发',
+    can_push_after_spot_check: '抽查后可下发',
+  }
+  return labels[recommendation] || '-'
+}
+
+function agentPriorityLabel(priority) {
+  const labels = {
+    high: '高优先级',
+    medium: '中优先级',
+    low: '低优先级',
+  }
+  return labels[priority] || '建议'
+}
+
+function agentPriorityTagType(priority) {
+  if (priority === 'high') return 'danger'
+  if (priority === 'medium') return 'warning'
+  if (priority === 'low') return 'success'
+  return 'info'
+}
+
+function agentSuggestionTypeLabel(type) {
+  const labels = {
+    price_adjustment: '调价建议',
+    cost_saving_replacement: '省钱替代',
+    risk_mitigation: '降风险',
+    manual_price_completion: '人工补价',
+  }
+  return labels[type] || '建议'
+}
+
+function agentSuggestionStatusLabel(status) {
+  const labels = {
+    pending_review: '待确认',
+    approved: '已采纳',
+    rejected: '已拒绝',
+    draft_generated: '草案已生成',
+    agent_result_confirmed: '人工已确认',
+    human_modified: '人工另改',
+  }
+  return labels[status] || status || '-'
+}
+
+function agentSuggestionStatusTagType(status) {
+  if (status === 'agent_result_confirmed') return 'success'
+  if (status === 'draft_generated' || status === 'approved') return 'primary'
+  if (status === 'rejected' || status === 'human_modified') return 'warning'
+  return 'info'
+}
+
+function agentSchedulerStatusLabel(status) {
+  const labels = {
+    disabled: '未启用',
+    not_due: '未到时间',
+    pending: '待自动执行',
+    running: '执行中',
+    success: '已自动执行',
+    failed: '执行失败',
+    missed: '已错过',
+    skipped: '已跳过',
+  }
+  return labels[status] || '未记录'
+}
+
+function agentSchedulerStatusTagType(status) {
+  if (status === 'success') return 'success'
+  if (status === 'failed' || status === 'missed') return 'warning'
+  if (status === 'running' || status === 'pending') return 'primary'
+  return 'info'
+}
+
+function agentSchedulerNextActionLabel(action) {
+  const labels = {
+    enable_feature_flags: '等待启用',
+    wait_for_run_time: '等待到点',
+    scheduler_will_run: '即将自动执行',
+    wait_for_finish: '执行中',
+    handle_pending_suggestions: '查看结果',
+    manual_rescan_available: '查看结果',
+    check_result: '查看结果',
+  }
+  return labels[action] || '-'
+}
+
+function agentTodoStatusLabel(status) {
+  const labels = {
+    action_required: '需要处理',
+    waiting: '等待自动复核',
+    clear: '暂无待处理项',
+  }
+  return labels[status] || '后审计状态'
+}
+
+function agentTodoSeverityTagType(severity) {
+  if (severity === 'critical') return 'danger'
+  if (severity === 'warning') return 'warning'
+  return 'info'
+}
+
+function agentTodoPrimaryActionLabel(action) {
+  const labels = {
+    manual_rescan: '刷新结果',
+    review_high_risk: '打开风险单',
+    open_pending_suggestions: '查看记录',
+    continue_suggestion_loop: '查看记录',
+    wait_for_scheduler: '刷新状态',
+    none: '刷新',
+  }
+  return labels[action] || '查看'
+}
+
+async function handleAgentTodoPrimaryAction() {
+  const action = agentTodoSummary.value?.primary_action
+  if (action === 'manual_rescan') {
+    await refreshAgentDailyReview()
+    return
+  }
+  if (action === 'wait_for_scheduler' || action === 'none') {
+    await refreshAgentDailyReview()
+    return
+  }
+  if (action === 'review_high_risk') {
+    if (!agentRuns.value.length) {
+      await loadAgentRuns()
+    }
+    const row = agentRuns.value.find((item) => item.risk_level === 'high') || agentRuns.value[0]
+    if (row) {
+      await openAgentRunAndFocus(row)
+      return
+    }
+  }
+  if (action === 'open_pending_suggestions') {
+    const firstPending = agentPendingSuggestions.value[0]
+    if (firstPending?.run) {
+      await openAgentRunAndFocus(firstPending.run)
+      return
+    }
+  }
+  const target = document.querySelector('.agent-result-panel') || document.querySelector('.agent-pending-actions')
+  if (target?.scrollIntoView) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
+async function refreshAgentRunDetail() {
+  if (!agentRunDetail.value?.run_id) return
+  const response = await api.get(`/admin/agents/runs/${agentRunDetail.value.run_id}`)
+  agentRunDetail.value = responseData(response)
+  if (agentShowExplanation.value) {
+    await loadAgentLlmExplanation(agentLlmExplanation.value?.mode === 'deepseek' ? 'deepseek' : 'rule')
+  }
+  await loadAgentRuns()
+  if (canManageAgentDailyReview.value) {
+    await refreshAgentDailyReview()
+  }
+}
+
+async function decideAgentSuggestion(suggestion, decision) {
+  const title = decision === 'approve' ? '采纳 Agent 建议' : '拒绝 Agent 建议'
+  try {
+    const result = await ElMessageBox.prompt('请填写确认说明（可简短填写）', title, {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      inputPlaceholder: decision === 'approve' ? '例如：采纳该调价草案' : '例如：现场条件不一致，暂不采纳',
+    })
+    await api.post(`/admin/agents/suggestions/${suggestion.suggestion_id}/decision`, {
+      decision,
+      note: result.value || '',
+    })
+    await refreshAgentRunDetail()
+    ElMessage.success(decision === 'approve' ? '已采纳建议' : '已拒绝建议')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(apiErrorMessage(error, '建议确认失败'))
+  }
+}
+
+function isAgentActionableSuggestion(suggestion) {
+  return ['price_adjustment', 'cost_saving_replacement'].includes(suggestion?.suggestion_type)
+}
+
+async function adoptAgentSuggestionOneClick(suggestion) {
+  if (!suggestion?.suggestion_id) return
+  try {
+    await ElMessageBox.confirm(
+      '确认采用该建议后，系统会自动完成采纳、生成草案和确认记录；不会直接修改报价单。',
+      '一键采用建议',
+      {
+        confirmButtonText: '确认采用',
+        cancelButtonText: '取消',
+        type: 'info',
+      }
+    )
+    let current = suggestion
+    if (current.status === 'pending_review') {
+      const decisionResponse = await api.post(`/admin/agents/suggestions/${current.suggestion_id}/decision`, {
+        decision: 'approve',
+        note: '一键采用建议',
+      })
+      current = responseData(decisionResponse) || current
+    }
+    if (current.status === 'approved') {
+      const executeResponse = await api.post(`/admin/agents/suggestions/${current.suggestion_id}/execute`, {
+        note: '一键生成草案',
+      })
+      current = responseData(executeResponse) || current
+    }
+    if (current.status === 'draft_generated') {
+      await api.post(`/admin/agents/suggestions/${current.suggestion_id}/final-confirm`, {
+        accepted_agent_result: true,
+        final_result: { accepted_patch: current.execution_result?.quote_line_patch || null },
+        note: '一键确认采用建议',
+      })
+    }
+    await refreshAgentRunDetail()
+    ElMessage.success('已一键采用并记录')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(apiErrorMessage(error, '一键采用失败'))
+  }
+}
+
+async function markAgentSuggestionReviewed(suggestion) {
+  if (!suggestion?.suggestion_id) return
+  try {
+    await ElMessageBox.confirm('确认该风险已人工查看，不生成草案。', '标记已处理', {
+      confirmButtonText: '标记已处理',
+      cancelButtonText: '取消',
+      type: 'info',
+    })
+    await api.post(`/admin/agents/suggestions/${suggestion.suggestion_id}/decision`, {
+      decision: 'reject',
+      note: '风险已人工查看，不生成草案',
+    })
+    await refreshAgentRunDetail()
+    ElMessage.success('已标记处理')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(apiErrorMessage(error, '标记处理失败'))
+  }
+}
+
+async function executeAgentSuggestion(suggestion) {
+  try {
+    await ElMessageBox.confirm('Agent 将只生成调整草案，不会直接修改报价单。', '生成执行草案', {
+      confirmButtonText: '生成草案',
+      cancelButtonText: '取消',
+      type: 'info',
+    })
+    await api.post(`/admin/agents/suggestions/${suggestion.suggestion_id}/execute`, {
+      note: '由 AI助手中心生成草案',
+    })
+    await refreshAgentRunDetail()
+    ElMessage.success('草案已生成')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(apiErrorMessage(error, '草案生成失败'))
+  }
+}
+
+async function finalConfirmAgentSuggestion(suggestion, acceptedAgentResult) {
+  const title = acceptedAgentResult ? '确认采用 Agent 草案' : '记录人工另改结果'
+  try {
+    const result = await ElMessageBox.prompt('请填写最终确认说明', title, {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      inputPlaceholder: acceptedAgentResult ? '例如：已核对，采用草案' : '例如：人工调整为其他单价',
+    })
+    await api.post(`/admin/agents/suggestions/${suggestion.suggestion_id}/final-confirm`, {
+      accepted_agent_result: acceptedAgentResult,
+      final_result: acceptedAgentResult
+        ? { accepted_patch: suggestion.execution_result?.quote_line_patch || null }
+        : { manual_modified: true },
+      note: result.value || '',
+    })
+    await refreshAgentRunDetail()
+    ElMessage.success(acceptedAgentResult ? '已确认 Agent 草案' : '已记录人工另改')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(apiErrorMessage(error, '最终确认失败'))
+  }
 }
 
 async function openQuoteJobDetail(row) {
@@ -9399,63 +12005,90 @@ async function loadDashboards() {
   quoteJobPage.value = 1
   let loadedCount = 0
   try {
-    try {
-      const response = await api.get('/admin/dashboard/business-lite', {
-        params: { range: dashboardRange.value },
-      })
-      businessDashboard.value = responseData(response)
-      loadedCount += 1
-    } catch (error) {
+    if (canViewDashboardMetrics.value) {
+      try {
+        const response = await api.get('/admin/dashboard/business-lite', {
+          params: { range: dashboardRange.value },
+        })
+        businessDashboard.value = responseData(response)
+        loadedCount += 1
+      } catch (error) {
+        businessDashboard.value = null
+        if (isFeatureDisabled(error)) dashboardFeature.businessDisabled = true
+        else throw error
+      }
+    } else {
       businessDashboard.value = null
-      if (isFeatureDisabled(error)) dashboardFeature.businessDisabled = true
-      else throw error
+      dashboardFeature.businessDisabled = true
     }
 
-    try {
-      const response = await api.get('/admin/dashboard/quote-speed', {
-        params: { range: dashboardRange.value },
-      })
-      quoteDashboard.value = responseData(response)
-      loadedCount += 1
-    } catch (error) {
+    if (canViewDashboardMetrics.value) {
+      try {
+        const response = await api.get('/admin/dashboard/quote-speed', {
+          params: { range: dashboardRange.value },
+        })
+        quoteDashboard.value = responseData(response)
+        loadedCount += 1
+      } catch (error) {
+        quoteDashboard.value = null
+        if (isFeatureDisabled(error)) dashboardFeature.quoteDisabled = true
+        else throw error
+      }
+    } else {
       quoteDashboard.value = null
-      if (isFeatureDisabled(error)) dashboardFeature.quoteDisabled = true
-      else throw error
+      dashboardFeature.quoteDisabled = true
     }
 
-    try {
-      const response = await api.get('/admin/dashboard/response-speed', {
-        params: { range: dashboardRange.value },
-      })
-      responseDashboard.value = responseData(response)
-      await loadClientInquiries()
-      loadedCount += 1
-    } catch (error) {
+    if (canViewDashboardMetrics.value) {
+      try {
+        const response = await api.get('/admin/dashboard/response-speed', {
+          params: { range: dashboardRange.value },
+        })
+        responseDashboard.value = responseData(response)
+        await loadClientInquiries()
+        loadedCount += 1
+      } catch (error) {
+        responseDashboard.value = null
+        clientInquiries.value = []
+        clientInquiryTotal.value = 0
+        if (isFeatureDisabled(error)) dashboardFeature.responseDisabled = true
+        else throw error
+      }
+    } else {
       responseDashboard.value = null
       clientInquiries.value = []
       clientInquiryTotal.value = 0
-      if (isFeatureDisabled(error)) dashboardFeature.responseDisabled = true
-      else throw error
+      dashboardFeature.responseDisabled = true
     }
 
-    try {
-      const response = await api.get('/admin/dashboard/execution-speed', {
-        params: { range: dashboardRange.value },
-      })
-      executionDashboard.value = responseData(response)
-      loadedCount += 1
-    } catch (error) {
+    if (canViewDashboardMetrics.value) {
+      try {
+        const response = await api.get('/admin/dashboard/execution-speed', {
+          params: { range: dashboardRange.value },
+        })
+        executionDashboard.value = responseData(response)
+        loadedCount += 1
+      } catch (error) {
+        executionDashboard.value = null
+        if (isFeatureDisabled(error)) dashboardFeature.executionDisabled = true
+        else throw error
+      }
+    } else {
       executionDashboard.value = null
-      if (isFeatureDisabled(error)) dashboardFeature.executionDisabled = true
-      else throw error
+      dashboardFeature.executionDisabled = true
     }
 
-    try {
-      if (await loadProjectDashboard()) loadedCount += 1
-    } catch (error) {
+    if (canViewDashboardMetrics.value) {
+      try {
+        if (await loadProjectDashboard()) loadedCount += 1
+      } catch (error) {
+        projectDashboard.value = null
+        if (isFeatureDisabled(error)) dashboardFeature.projectDisabled = true
+        else throw error
+      }
+    } else {
       projectDashboard.value = null
-      if (isFeatureDisabled(error)) dashboardFeature.projectDisabled = true
-      else throw error
+      dashboardFeature.projectDisabled = true
     }
 
     if (canViewQuoteOperations.value) {
@@ -9572,6 +12205,22 @@ async function bootstrap() {
         state.error = 'forbidden'
         return
       }
+      return
+    }
+    if (routeName.value === 'dwgTrial') {
+      if (!canViewDwgTrial.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadDwgTrialLatest({ quiet: true })
+      return
+    }
+    if (routeName.value === 'agentCenter') {
+      if (!canViewAgentCenter.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await refreshAgentCenter()
       return
     }
     if (!canAccessPermissions.value) {
@@ -9691,6 +12340,7 @@ async function revokeSelectedRole() {
 
 function logout() {
   localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_INFO_KEY)
   session.user = null
   window.location.href = '/login'
 }

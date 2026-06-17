@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.quote_job import QuoteJob
-from app.models.user import User
+from app.models.user import User, UserRole
 
 
 PASSWORD = "secret123"
@@ -21,7 +21,7 @@ def _set_flag(name: str, value: bool) -> bool:
     return old_value
 
 
-def _create_user(role: str = "user") -> User:
+def _create_user(role: str = "user", roles: list[str] | None = None) -> User:
     db = SessionLocal()
     try:
         user = User(
@@ -32,6 +32,9 @@ def _create_user(role: str = "user") -> User:
             quota=20,
         )
         db.add(user)
+        db.flush()
+        for assigned_role in roles or []:
+            db.add(UserRole(user_id=user.id, role=assigned_role, created_by=None, note="test seed"))
         db.commit()
         db.refresh(user)
         return user
@@ -159,6 +162,23 @@ def test_requirement_standardization_remap_and_confirm_are_stateless(client):
         assert "数量: 12m" in confirmed["quote_text"]
     finally:
         _set_flag("feature_requirement_standardization", old_flag)
+
+
+def test_quote_user_can_preview_requirement_standardization(client):
+    user = _create_user("user", roles=["quote_user"])
+    headers = _login(client, user)
+    old_flag = _set_flag("feature_requirement_standardization", True)
+    try:
+        response = client.post(
+            "/api/v1/admin/requirement-standardization/preview",
+            headers=headers,
+            files={"file": ("manual.xlsx", _workbook_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+    finally:
+        _set_flag("feature_requirement_standardization", old_flag)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["rows"]
 
 
 def test_confirmed_requirement_quote_text_can_create_quote_job(client):

@@ -1,7 +1,7 @@
 import json
+import re
 import uuid
 import asyncio
-import re
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
@@ -13,11 +13,12 @@ from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.client_inquiry import ClientInquiry
 from app.models.cost_item import COST_STATUS_ACTIVE, CostItem
+from app.models.quote_cost_evidence import QuoteCostEvidence
 from app.models.quote_feedback import QuoteFeedback
 from app.models.quote_history import QuoteHistory
 from app.models.quote_job import QuoteJob, QuoteJobEvent
 from app.models.quote_requirement_row import QuoteRequirementRow
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services import quote_job_runner
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
 
@@ -45,6 +46,26 @@ def _admin_headers(client):
     response = client.post("/api/v1/auth/login", data={"username": username, "password": password})
     assert response.status_code == 200
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+def _role_headers(client, roles: list[str], *, username_prefix: str = "job_role"):
+    username = f"{username_prefix}_{uuid.uuid4().hex[:10]}"
+    password = "secret123"
+    legacy_role = "admin" if {"admin", "system_admin"} & set(roles) else "user"
+    db = SessionLocal()
+    try:
+        user = User(username=username, hashed_password=get_password_hash(password), role=legacy_role, quota=20)
+        db.add(user)
+        db.flush()
+        for role in roles:
+            db.add(UserRole(user_id=user.id, role=role, created_by=None, note="test seed"))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post("/api/v1/auth/login", data={"username": username, "password": password})
+    assert response.status_code == 200
+    return username, {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 def _response_data(response):
@@ -98,6 +119,7 @@ def test_create_quote_job_returns_queued_status(client):
     assert response.status_code == 202
     body = _response_data(response)
     assert body["job_id"]
+    assert re.fullmatch(r"BJ-\d{8}-\d{6,}", body["job_number"])
     assert body["status"] == "queued"
     assert body["stage"] == "queued"
     assert body["trace_id"]
@@ -109,7 +131,20 @@ def test_create_quote_job_returns_queued_status(client):
     assert status_response.status_code == 200
     detail = _response_data(status_response)
     assert detail["job_id"] == body["job_id"]
+    assert detail["job_number"] == body["job_number"]
     assert detail["events"][0]["event_type"] == "queued"
+
+    number_response = client.get(f"/api/v1/quote/jobs/{body['job_number']}", headers=headers)
+    assert number_response.status_code == 200
+    assert _response_data(number_response)["job_id"] == body["job_id"]
+
+    search_response = client.get(
+        "/api/v1/quote/jobs",
+        params={"keyword": body["job_number"], "page_size": 20},
+        headers=headers,
+    )
+    assert search_response.status_code == 200
+    assert any(row["job_id"] == body["job_id"] for row in _response_data(search_response))
 
     db = SessionLocal()
     try:
@@ -118,6 +153,60 @@ def test_create_quote_job_returns_queued_status(client):
         assert event.stage == "queued"
     finally:
         db.close()
+
+
+def test_quote_operator_can_read_all_quote_jobs_without_mutating(client):
+    owner_username, _ = _role_headers(client, ["staff"], username_prefix="job_owner")
+    other_username, _ = _role_headers(client, ["staff"], username_prefix="job_other")
+    _, operator_headers = _role_headers(client, ["quote_operator"], username_prefix="job_operator")
+
+    owner_job_id = str(uuid.uuid4())
+    other_job_id = str(uuid.uuid4())
+    db = SessionLocal()
+    try:
+        db.add_all(
+            [
+                QuoteJob(
+                    job_id=owner_job_id,
+                    username=owner_username,
+                    status="succeeded",
+                    stage="completed",
+                    message="operator visible owner job",
+                    request_summary="operator visible owner job",
+                ),
+                QuoteJob(
+                    job_id=other_job_id,
+                    username=other_username,
+                    status="queued",
+                    stage="queued",
+                    message="operator visible other job",
+                    request_summary="operator visible other job",
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    list_response = client.get(
+        "/api/v1/quote/jobs",
+        headers=operator_headers,
+        params={"keyword": "operator visible", "page_size": 50},
+    )
+    assert list_response.status_code == 200
+    rows = _response_data(list_response)
+    job_ids = {row["job_id"] for row in rows}
+    assert {owner_job_id, other_job_id} <= job_ids
+
+    detail_response = client.get(f"/api/v1/quote/jobs/{other_job_id}", headers=operator_headers)
+    assert detail_response.status_code == 200
+    assert _response_data(detail_response)["job_id"] == other_job_id
+
+    review_response = client.get(f"/api/v1/quote/jobs/{other_job_id}/review-detail", headers=operator_headers)
+    assert review_response.status_code == 200
+
+    cancel_response = client.post(f"/api/v1/quote/jobs/{other_job_id}/cancel", headers=operator_headers)
+    assert cancel_response.status_code == 404
 
 
 def test_quote_job_review_detail_persists_confirmed_requirement_rows(client):
@@ -287,6 +376,205 @@ def test_quote_job_review_detail_matches_requirement_row_key(client):
     assert detail["summary"]["matched_count"] == 2
     assert detail["summary"]["missing_count"] == 0
     assert detail["missing_requirement_rows"] == []
+
+
+def test_quote_job_review_detail_prefers_confirmed_manual_price(client):
+    headers = _login_headers(client)
+    username = client.get("/api/v1/auth/me", headers=headers).json()["username"]
+    job_id = str(uuid.uuid4())
+    quote_id = str(uuid.uuid4())
+
+    db = SessionLocal()
+    try:
+        db.add(
+            QuoteJob(
+                job_id=job_id,
+                username=username,
+                status="succeeded",
+                stage="completed",
+                result_json=json.dumps(
+                    {
+                        "project_details": [
+                            {
+                                "project_name": "AI 未补价高风险项",
+                                "quantity": 10,
+                                "unit": "m2",
+                                "unit_price": 0,
+                                "total_price": 0,
+                                "notes": "AI 未返回价格，人工已确认",
+                                "cost_reference": {"matched": False},
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        db.flush()
+        feedback = QuoteFeedback(
+            quote_id=quote_id,
+            quote_job_id=job_id,
+            username=username,
+            source="async_job",
+            status="confirmed",
+            pushed_to_dingtalk=True,
+        )
+        db.add(feedback)
+        db.flush()
+        db.add(
+            QuoteCostEvidence(
+                feedback_id=feedback.id,
+                quote_id=quote_id,
+                quote_job_id=job_id,
+                username=username,
+                source="async_job",
+                status="confirmed",
+                item_index=0,
+                project_name="AI 未补价高风险项",
+                quantity=10,
+                unit="m2",
+                ai_unit_price=0,
+                ai_total_price=0,
+                final_unit_price=58,
+                final_total_price=580,
+                line_total_price=580,
+                line_total_source="manual_final",
+                manual_modified=True,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/v1/quote/jobs/{job_id}/review-detail", headers=headers)
+
+    assert response.status_code == 200
+    detail = _response_data(response)
+    row = detail["preview_rows"][0]
+    assert row["ai_unit_price"] == 0
+    assert row["system_total_price"] == 0
+    assert row["final_unit_price"] == 58
+    assert row["final_total_price"] == 580
+    assert row["display_unit_price"] == 58
+    assert row["display_total_price"] == 580
+    assert row["display_price_source"] == "final_confirmed"
+    assert row["checks"]["ai_unit_price_positive"]["passed"] is True
+    assert row["checks"]["ai_unit_price_positive"]["label"] == "最终确认单价大于 0"
+    assert row["checks"]["system_total_positive"]["passed"] is True
+    assert row["risk"]["type"] != "danger"
+    assert detail["summary"]["high_risk_count"] == 0
+
+
+def test_quote_job_review_detail_splits_manual_quantity_and_unit_price_risks(client):
+    headers = _login_headers(client)
+    username = client.get("/api/v1/auth/me", headers=headers).json()["username"]
+    job_id = str(uuid.uuid4())
+    quote_id = str(uuid.uuid4())
+
+    db = SessionLocal()
+    try:
+        db.add(
+            QuoteJob(
+                job_id=job_id,
+                username=username,
+                status="succeeded",
+                stage="completed",
+                result_json=json.dumps(
+                    {
+                        "project_details": [
+                            {
+                                "project_name": "quantity changed item",
+                                "quantity": 10,
+                                "unit": "m2",
+                                "unit_price": 100,
+                                "total_price": 1000,
+                                "notes": "quantity risk",
+                                "cost_reference": {"matched": True, "reference_price": 100, "price_delta_rate": 0},
+                            },
+                            {
+                                "project_name": "unit price changed item",
+                                "quantity": 5,
+                                "unit": "m",
+                                "unit_price": 100,
+                                "total_price": 500,
+                                "notes": "price risk",
+                                "cost_reference": {"matched": True, "reference_price": 100, "price_delta_rate": 0},
+                            },
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        db.flush()
+        feedback = QuoteFeedback(
+            quote_id=quote_id,
+            quote_job_id=job_id,
+            username=username,
+            source="async_job",
+            status="confirmed",
+            pushed_to_dingtalk=True,
+        )
+        db.add(feedback)
+        db.flush()
+        db.add_all(
+            [
+                QuoteCostEvidence(
+                    feedback_id=feedback.id,
+                    quote_id=quote_id,
+                    quote_job_id=job_id,
+                    username=username,
+                    source="async_job",
+                    status="confirmed",
+                    item_index=0,
+                    project_name="quantity changed item",
+                    quantity=14,
+                    unit="m2",
+                    ai_unit_price=100,
+                    ai_total_price=1000,
+                    final_unit_price=100,
+                    final_total_price=1400,
+                    line_total_price=1400,
+                    line_total_source="manual_final",
+                    manual_modified=True,
+                ),
+                QuoteCostEvidence(
+                    feedback_id=feedback.id,
+                    quote_id=quote_id,
+                    quote_job_id=job_id,
+                    username=username,
+                    source="async_job",
+                    status="confirmed",
+                    item_index=1,
+                    project_name="unit price changed item",
+                    quantity=5,
+                    unit="m",
+                    ai_unit_price=100,
+                    ai_total_price=500,
+                    final_unit_price=140,
+                    final_total_price=700,
+                    line_total_price=700,
+                    line_total_source="manual_final",
+                    manual_modified=True,
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/v1/quote/jobs/{job_id}/review-detail", headers=headers)
+
+    assert response.status_code == 200
+    rows = _response_data(response)["preview_rows"]
+    quantity_row = rows[0]
+    unit_price_row = rows[1]
+    assert quantity_row["final_quantity"] == 14
+    assert quantity_row["checks"]["manual_quantity_change_not_large"]["passed"] is False
+    assert quantity_row["checks"]["manual_unit_price_change_not_large"]["passed"] is True
+    assert unit_price_row["final_quantity"] == 5
+    assert unit_price_row["checks"]["manual_quantity_change_not_large"]["passed"] is True
+    assert unit_price_row["checks"]["manual_unit_price_change_not_large"]["passed"] is False
 
 
 def test_confirm_push_rejects_incomplete_requirement_preview(client):

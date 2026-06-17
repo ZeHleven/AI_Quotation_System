@@ -27,13 +27,18 @@ from app.models.user import User
 from app.services.file_storage import StorageDisabledError, store_file_bytes
 from app.services.client_inquiries import _parse_local_datetime, create_or_reuse_client_inquiry, serialize_client_inquiry
 from app.services.quote_dispatcher import dispatch_quote_job
-from app.services.rbac import has_admin_role
+from app.services.rbac import has_admin_role, has_any_role
 from app.services.quote_job_readability import (
     apply_job_duration,
     apply_job_failure,
     apply_job_request_summary,
     event_rows_from_json,
     serialize_event_row,
+)
+from app.services.quote_job_numbers import (
+    find_quote_job_by_identifier,
+    quote_job_number,
+    quote_job_number_database_id,
 )
 from app.services.quote_job_runner import (
     RETRYABLE_STATUSES,
@@ -187,6 +192,7 @@ def _serialize_job(
 ) -> dict:
     data = {
         "job_id": job.job_id,
+        "job_number": quote_job_number(job),
         "username": job.username,
         "status": job.status,
         "stage": job.stage,
@@ -221,11 +227,22 @@ def _serialize_job(
     return data
 
 
-def _get_accessible_job(job_id: str, current_user: User, db: Session) -> QuoteJob:
-    job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).first()
+def _can_view_quote_operations(user: User) -> bool:
+    return has_admin_role(user) or has_any_role(user, {"quote_operator"})
+
+
+def _get_accessible_job(
+    job_id: str,
+    current_user: User,
+    db: Session,
+    *,
+    allow_quote_operations: bool = False,
+) -> QuoteJob:
+    job = find_quote_job_by_identifier(db, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="报价任务不存在")
-    if not has_admin_role(current_user) and job.username != current_user.username:
+    can_view_all = allow_quote_operations and _can_view_quote_operations(current_user)
+    if not has_admin_role(current_user) and not can_view_all and job.username != current_user.username:
         raise HTTPException(status_code=404, detail="报价任务不存在")
     return job
 
@@ -415,7 +432,7 @@ async def list_quote_jobs(
 ):
     query = db.query(QuoteJob)
     joined_inquiry = False
-    if not has_admin_role(current_user):
+    if not _can_view_quote_operations(current_user):
         query = query.filter(QuoteJob.username == current_user.username)
     elif username:
         query = query.filter(QuoteJob.username == username)
@@ -456,17 +473,23 @@ async def list_quote_jobs(
                 )
                 joined_inquiry = True
             pattern = f"%{keyword_value}%"
+            job_number_id = quote_job_number_database_id(keyword_value)
+            keyword_conditions = [
+                QuoteJob.job_id.like(pattern),
+                QuoteJob.username.like(pattern),
+                QuoteJob.message.like(pattern),
+                QuoteJob.request_summary.like(pattern),
+                QuoteJob.source_file_name.like(pattern),
+                QuoteJob.file_name.like(pattern),
+                ClientInquiry.source.like(pattern),
+                ClientInquiry.client_name.like(pattern),
+                ClientInquiry.client_phone.like(pattern),
+            ]
+            if job_number_id is not None:
+                keyword_conditions.append(QuoteJob.id == job_number_id)
             query = query.filter(
                 or_(
-                    QuoteJob.job_id.like(pattern),
-                    QuoteJob.username.like(pattern),
-                    QuoteJob.message.like(pattern),
-                    QuoteJob.request_summary.like(pattern),
-                    QuoteJob.source_file_name.like(pattern),
-                    QuoteJob.file_name.like(pattern),
-                    ClientInquiry.source.like(pattern),
-                    ClientInquiry.client_name.like(pattern),
-                    ClientInquiry.client_phone.like(pattern),
+                    *keyword_conditions,
                 )
             )
 
@@ -503,7 +526,10 @@ async def get_quote_job(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    data = _serialize_job_with_context(db, _get_accessible_job(job_id, current_user, db))
+    data = _serialize_job_with_context(
+        db,
+        _get_accessible_job(job_id, current_user, db, allow_quote_operations=True),
+    )
     return api_ok(data)
 
 
@@ -513,7 +539,7 @@ async def get_quote_job_review_detail(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    job = _get_accessible_job(job_id, current_user, db)
+    job = _get_accessible_job(job_id, current_user, db, allow_quote_operations=True)
     return api_ok(build_quote_review_detail(db, job))
 
 
@@ -523,8 +549,8 @@ async def get_quote_preview_draft(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_accessible_job(job_id, current_user, db)
-    return api_ok(get_preview_draft(db, job_id))
+    job = _get_accessible_job(job_id, current_user, db)
+    return api_ok(get_preview_draft(db, job.job_id))
 
 
 @router.put("/quote/jobs/{job_id}/preview-draft", summary="保存报价预审草稿")
@@ -553,8 +579,8 @@ async def discard_quote_preview_draft(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_accessible_job(job_id, current_user, db)
-    data = discard_preview_draft(db, quote_job_id=job_id)
+    job = _get_accessible_job(job_id, current_user, db)
+    data = discard_preview_draft(db, quote_job_id=job.job_id)
     db.commit()
     return api_ok(data)
 
@@ -565,8 +591,8 @@ async def mark_quote_preview_draft_pushed(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    _get_accessible_job(job_id, current_user, db)
-    data = mark_preview_draft_pushed(db, quote_job_id=job_id) or get_preview_draft(db, job_id)
+    job = _get_accessible_job(job_id, current_user, db)
+    data = mark_preview_draft_pushed(db, quote_job_id=job.job_id) or get_preview_draft(db, job.job_id)
     db.commit()
     return api_ok(data)
 
@@ -642,10 +668,11 @@ async def retry_quote_job(
     append_job_event(
         retry_job,
         "queued",
-        f"报价任务已由 {source_job.job_id} 重试创建",
+        f"报价任务已由 {quote_job_number(source_job) or source_job.job_id} 重试创建",
         trace_id=retry_job.trace_id,
         stage="queued",
         source_job_id=source_job.job_id,
+        source_job_number=quote_job_number(source_job),
     )
     db.add(retry_job)
     db.commit()
@@ -679,7 +706,7 @@ async def stream_quote_job_events(
         while True:
             db = SessionLocal()
             try:
-                job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).first()
+                job = find_quote_job_by_identifier(db, job_id)
                 if not job or (not is_admin and job.username != username):
                     payload = {"status": "error", "message": "报价任务不存在", "trace_id": get_trace_id()}
                     yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"

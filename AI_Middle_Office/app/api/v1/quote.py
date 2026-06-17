@@ -37,6 +37,7 @@ from app.services.quote_excel_parser import (
 from app.services.quote_feedback import record_ai_preview, record_confirmed_quote
 from app.services.quote_history import create_quote_history_record, parse_amount
 from app.services.quote_helpers import attach_quote_filename, normalize_quote_request_text, sign_payload
+from app.services.quote_job_numbers import find_quote_job_by_identifier
 from app.services.quote_review import build_quote_review_detail
 from app.services.rbac import has_admin_role
 
@@ -113,7 +114,7 @@ def _unconfirmed_ai_note_conflict_rows(details: list[dict]) -> list[dict]:
 def _get_accessible_quote_job_for_push(db: Session, current_user: User, quote_job_id: str | None) -> QuoteJob | None:
     if not quote_job_id:
         return None
-    job = db.query(QuoteJob).filter(QuoteJob.job_id == quote_job_id).first()
+    job = find_quote_job_by_identifier(db, quote_job_id)
     if not job:
         raise HTTPException(status_code=404, detail="报价任务不存在")
     if not has_admin_role(current_user) and job.username != current_user.username:
@@ -349,6 +350,9 @@ async def confirm_and_push(
         payload = payload.model_dump(mode="json")
         quote_job_id = payload.get("quote_job_id")
         job = _get_accessible_quote_job_for_push(db, current_user, quote_job_id)
+        if job:
+            quote_job_id = job.job_id
+            payload["quote_job_id"] = quote_job_id
         if job:
             review_detail = build_quote_review_detail(db, job)
             summary = review_detail.get("summary") or {}

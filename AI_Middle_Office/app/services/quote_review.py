@@ -411,11 +411,21 @@ def build_preview_review_row(
     reference = row.get("cost_reference") or row.get("costReference") or {}
     if not isinstance(reference, dict):
         reference = {}
+    final_unit_price = evidence.final_unit_price if evidence else None
+    final_total_price = evidence.final_total_price if evidence else None
+    final_quantity = evidence.quantity if evidence and evidence.manual_modified else None
+    display_unit_price = final_unit_price if final_unit_price is not None else unit_price
+    display_total_price = final_total_price if final_total_price is not None else total_price
+    display_price_source = "final_confirmed" if final_unit_price is not None or final_total_price is not None else "ai_preview"
 
     checks = _preview_checks(
         project_name=project_name,
+        quantity=quantity,
         unit_price=unit_price,
         total_price=total_price,
+        final_quantity=final_quantity,
+        final_unit_price=final_unit_price,
+        final_total_price=final_total_price,
         notes=notes,
         reference=reference,
         evidence=evidence,
@@ -431,6 +441,9 @@ def build_preview_review_row(
         "unit": unit,
         "ai_unit_price": unit_price,
         "system_total_price": total_price,
+        "display_unit_price": display_unit_price,
+        "display_total_price": display_total_price,
+        "display_price_source": display_price_source,
         "notes": notes,
         "requirement_row_key": requirement_row_key,
         "source_sheet": source_sheet,
@@ -441,8 +454,9 @@ def build_preview_review_row(
         "checks": checks,
         "risk": risk,
         "manual_modified": bool(evidence.manual_modified) if evidence else False,
-        "final_unit_price": evidence.final_unit_price if evidence else None,
-        "final_total_price": evidence.final_total_price if evidence else None,
+        "final_quantity": final_quantity,
+        "final_unit_price": final_unit_price,
+        "final_total_price": final_total_price,
     }
 
 
@@ -467,8 +481,12 @@ def serialize_requirement_row(row: QuoteRequirementRow) -> dict[str, Any]:
 def _preview_checks(
     *,
     project_name: str,
+    quantity: float | None,
     unit_price: float | None,
     total_price: float | None,
+    final_quantity: float | None,
+    final_unit_price: float | None,
+    final_total_price: float | None,
     notes: str,
     reference: dict[str, Any],
     evidence: QuoteCostEvidence | None,
@@ -478,7 +496,9 @@ def _preview_checks(
     matched = bool(reference.get("matched"))
     fallback_applied = bool(reference.get("fallback_applied") or reference.get("fallbackApplied"))
     delta_rate = parse_amount(reference.get("price_delta_rate"))
-    manual_large = _manual_change_large(evidence)
+    manual_quantity_large = _manual_quantity_change_large(quantity, final_quantity, evidence)
+    manual_unit_price_large = _manual_unit_price_change_large(evidence)
+    manual_large = False
     matched_requirement = reconciliation is not None and reconciliation.get("status") == "matched"
     candidate_unconfirmed = bool(reference.get("requires_manual_cost_candidate_confirmation")) and not bool(
         reference.get("manual_cost_candidate_confirmed")
@@ -489,18 +509,24 @@ def _preview_checks(
     ai_note_unconfirmed = bool(reference.get("requires_manual_ai_note_confirmation")) and not bool(
         reference.get("manual_ai_note_confirmed")
     )
+    effective_unit_price = final_unit_price if final_unit_price is not None else unit_price
+    effective_total_price = final_total_price if final_total_price is not None else total_price
+    unit_price_label = "最终确认单价大于 0" if final_unit_price is not None else "AI 单价大于 0"
+    unit_price_failed_label = "最终确认单价为空、0 或负数" if final_unit_price is not None else "AI 单价为空、0 或负数"
+    total_price_label = "最终确认合计大于 0" if final_total_price is not None else "系统合计大于 0"
+    total_price_failed_label = "最终确认合计为空、0 或负数" if final_total_price is not None else "系统合计为空、0 或负数"
     return {
         "project_name_present": _check(bool(project_name), "施工项目不为空", "施工项目为空", severity="danger"),
         "ai_unit_price_positive": _check(
-            unit_price is not None and unit_price > 0,
-            "AI 单价大于 0",
-            "AI 单价为空、0 或负数",
+            effective_unit_price is not None and effective_unit_price > 0,
+            unit_price_label,
+            unit_price_failed_label,
             severity="danger",
         ),
         "system_total_positive": _check(
-            total_price is not None and total_price > 0,
-            "系统合计大于 0",
-            "系统合计为空、0 或负数",
+            effective_total_price is not None and effective_total_price > 0,
+            total_price_label,
+            total_price_failed_label,
             severity="danger",
         ),
         "notes_present": _check(bool(notes), "备注不为空", "备注为空", severity="warning"),
@@ -538,6 +564,20 @@ def _preview_checks(
             "未使用成本库兜底",
             "使用了成本库兜底",
             severity="warning",
+        ),
+        "manual_quantity_change_not_large": _check(
+            not manual_quantity_large,
+            "人工工程量改动未超过阈值",
+            "人工工程量改动过大",
+            severity="warning",
+            skipped=evidence is None or not evidence.manual_modified or final_quantity is None,
+        ),
+        "manual_unit_price_change_not_large": _check(
+            not manual_unit_price_large,
+            "人工单价改动未超过阈值",
+            "人工单价改动过大",
+            severity="warning",
+            skipped=evidence is None or not evidence.manual_modified,
         ),
         "manual_change_not_large": _check(
             not manual_large,
@@ -579,6 +619,28 @@ def _risk_from_checks(checks: dict[str, dict[str, Any]]) -> dict[str, Any]:
     high = [item["label"] for item in failed if item["severity"] == "danger"]
     reasons = [item["label"] for item in failed]
     return {"label": "高风险" if high else "需复核", "type": "danger" if high else "warning", "reasons": reasons}
+
+
+def _manual_quantity_change_large(
+    preview_quantity: float | None,
+    final_quantity: float | None,
+    evidence: QuoteCostEvidence | None,
+) -> bool:
+    if not evidence or not evidence.manual_modified:
+        return False
+    return _manual_delta_large(preview_quantity, final_quantity)
+
+
+def _manual_unit_price_change_large(evidence: QuoteCostEvidence | None) -> bool:
+    if not evidence or not evidence.manual_modified:
+        return False
+    return _manual_delta_large(evidence.ai_unit_price, evidence.final_unit_price)
+
+
+def _manual_delta_large(before: float | None, after: float | None) -> bool:
+    if before is None or after is None or before <= 0:
+        return False
+    return abs(after - before) / before >= MANUAL_CHANGE_THRESHOLD
 
 
 def _manual_change_large(evidence: QuoteCostEvidence | None) -> bool:

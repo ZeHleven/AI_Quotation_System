@@ -244,6 +244,7 @@ def test_resend_history_quote_reuses_saved_details(client, monkeypatch):
     response = client.post(f"/api/v1/history/{history_id}/resend", headers=headers)
 
     assert response.status_code == 200
+    data = response.json()["data"]
     payload = captured["json_payload"]
     assert payload["resend"] is True
     assert payload["resend_from_history_id"] == history_id
@@ -251,3 +252,30 @@ def test_resend_history_quote_reuses_saved_details(client, monkeypatch):
     assert payload["excel_base64"]
     assert payload["excel_base64"] != "<base64:123>"
     assert captured["endpoint_type"] == "quote_push"
+    assert data["history_id"] != history_id
+    assert data["source_history_id"] == history_id
+    assert data["resend_from_history_id"] == history_id
+    assert data["quote_job_id"]
+    assert data["quote_job_number"].startswith("BJ-")
+
+    db = SessionLocal()
+    try:
+        resend_job = db.query(QuoteJob).filter(QuoteJob.job_id == data["quote_job_id"]).one()
+        assert resend_job.status == "succeeded"
+        assert resend_job.stage == "history_resend"
+        assert resend_job.result_total_amount == 200
+        resend_history = db.query(QuoteHistory).filter(QuoteHistory.id == data["history_id"]).one()
+        assert resend_history.quote_job_id == resend_job.job_id
+        resend_payload = json.loads(resend_history.payload_json)
+        assert resend_payload["resend"] is True
+        assert resend_payload["resend_from_history_id"] == history_id
+    finally:
+        db.close()
+
+    jobs_response = client.get(
+        "/api/v1/quote/jobs",
+        params={"keyword": data["quote_job_id"], "page_size": 20},
+        headers=headers,
+    )
+    assert jobs_response.status_code == 200
+    assert any(item["job_id"] == data["quote_job_id"] for item in jobs_response.json()["data"])

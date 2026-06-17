@@ -1,6 +1,7 @@
 import logging
+import uuid
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,6 +25,8 @@ from app.services.rbac import has_admin_role
 from app.services.quote_history import (
     build_display_title,
     build_project_summary,
+    create_quote_history_record,
+    json_dumps,
     json_loads,
     project_details,
     project_names,
@@ -31,6 +34,9 @@ from app.services.quote_history import (
     total_amount,
 )
 from app.services.quote_helpers import attach_quote_filename, sign_payload
+from app.services.quote_job_readability import apply_job_result_summary
+from app.services.quote_job_numbers import quote_job_number
+from app.services.quote_job_runner import append_job_event
 
 
 router = APIRouter()
@@ -94,6 +100,7 @@ def _history_keyword_text(row: dict) -> str:
         row.get("project_summary"),
         row.get("request_text"),
         row.get("source_file_name"),
+        row.get("quote_job_number"),
         row.get("quote_job_id"),
         row.get("quote_id"),
         row.get("trace_id"),
@@ -222,12 +229,14 @@ def _history_row(
     record: QuoteHistory,
     include_payload_json: bool = True,
     client_inquiry: Optional[ClientInquiry] = None,
+    job: Optional[QuoteJob] = None,
 ) -> dict:
     data = {
         "id": record.id,
         "username": record.username,
         "quote_id": record.quote_id,
         "quote_job_id": record.quote_job_id,
+        "quote_job_number": quote_job_number(job),
         "trace_id": record.trace_id,
         "request_text": record.request_text,
         "source_file_name": record.source_file_name,
@@ -267,6 +276,7 @@ def _preview_draft_history_row(
         "username": draft.username,
         "quote_id": draft.quote_id,
         "quote_job_id": draft.quote_job_id,
+        "quote_job_number": quote_job_number(job),
         "trace_id": draft.trace_id or job.trace_id,
         "request_text": job.message,
         "source_file_name": source_file_name,
@@ -307,6 +317,7 @@ def _rejected_feedback_history_row(
         "username": feedback.username,
         "quote_id": feedback.quote_id,
         "quote_job_id": feedback.quote_job_id,
+        "quote_job_number": quote_job_number(job),
         "trace_id": feedback.trace_id or (job.trace_id if job else None),
         "request_text": feedback.request_text or (job.message if job else None),
         "source_file_name": source_file_name,
@@ -351,6 +362,71 @@ def _project_details_from_history(record: QuoteHistory, items: list[QuoteHistory
         raw = serialized.get("raw")
         fallback_details.append(raw if isinstance(raw, dict) and raw else serialized)
     return dict(payload), fallback_details
+
+
+def _record_resend_quote(
+    db: Session,
+    *,
+    source_history: QuoteHistory,
+    payload: dict,
+    details: list[dict],
+    username: str,
+    trace_id: Optional[str],
+) -> tuple[QuoteJob, QuoteHistory]:
+    new_job_id = str(uuid.uuid4())
+    resend_trace_id = trace_id or source_history.trace_id or uuid.uuid4().hex
+    now = datetime.now(timezone.utc)
+    history_payload = dict(payload)
+    history_payload.pop("quote_history_id", None)
+    history_payload.update(
+        {
+            "project_details": details,
+            "quote_id": new_job_id,
+            "quote_job_id": new_job_id,
+            "job_id": new_job_id,
+            "trace_id": resend_trace_id,
+            "request_text": source_history.request_text,
+            "source_file_name": source_history.source_file_name,
+            "resend": True,
+            "resend_from_history_id": source_history.id,
+            "original_quote_id": source_history.quote_id,
+            "original_quote_job_id": source_history.quote_job_id,
+        }
+    )
+    job = QuoteJob(
+        job_id=new_job_id,
+        username=username,
+        status="succeeded",
+        stage="history_resend",
+        message=source_history.request_text or f"Resend quote history #{source_history.id}",
+        file_name=source_history.source_file_name,
+        source_file_name=source_history.source_file_name,
+        request_summary=f"Resend quote history #{source_history.id}",
+        trace_id=resend_trace_id,
+        result_json=json_dumps(history_payload),
+        duration_ms=0,
+        created_at=now,
+        updated_at=now,
+        finished_at=now,
+    )
+    apply_job_result_summary(job, history_payload)
+    append_job_event(
+        job,
+        "succeeded",
+        f"Resent quote history #{source_history.id}",
+        trace_id=resend_trace_id,
+        stage="history_resend",
+        source_history_id=source_history.id,
+    )
+    db.add(job)
+    db.flush()
+    new_history = create_quote_history_record(
+        db,
+        username=username,
+        payload=history_payload,
+        confirmed_by=username,
+    )
+    return job, new_history
 
 
 @router.get("/history", summary="查询报价历史（本人；admin 可查全部）")
@@ -405,15 +481,19 @@ async def get_history(
     job_ids = [record.quote_job_id for record in history_records if record.quote_job_id]
     job_ids.extend([draft.quote_job_id for draft, _job in draft_records if draft.quote_job_id])
     job_ids.extend([feedback.quote_job_id for feedback in rejected_feedback_rows if feedback.quote_job_id])
-    feedback_job_ids = [feedback.quote_job_id for feedback in rejected_feedback_rows if feedback.quote_job_id]
+    unique_job_ids = list({job_id for job_id in job_ids if job_id})
     jobs_by_id = {
         job.job_id: job
-        for job in db.query(QuoteJob).filter(QuoteJob.job_id.in_(feedback_job_ids)).all()
-    } if feedback_job_ids else {}
+        for job in db.query(QuoteJob).filter(QuoteJob.job_id.in_(unique_job_ids)).all()
+    } if unique_job_ids else {}
     inquiries_by_job_id = _client_inquiry_map_for_job_ids(db, job_ids)
 
     rows = [
-        _history_row(record, client_inquiry=inquiries_by_job_id.get(record.quote_job_id))
+        _history_row(
+            record,
+            client_inquiry=inquiries_by_job_id.get(record.quote_job_id),
+            job=jobs_by_id.get(record.quote_job_id),
+        )
         for record in history_records
     ]
     rows.extend(
@@ -465,7 +545,8 @@ async def get_history_detail(
         .all()
     )
     inquiries_by_job_id = _client_inquiry_map(db, [record])
-    data = _history_row(record, client_inquiry=inquiries_by_job_id.get(record.quote_job_id))
+    job = db.query(QuoteJob).filter(QuoteJob.job_id == record.quote_job_id).first() if record.quote_job_id else None
+    data = _history_row(record, client_inquiry=inquiries_by_job_id.get(record.quote_job_id), job=job)
     data["payload"] = json_loads(record.payload_json)
     data["items"] = [serialize_history_item(item) for item in items]
     return api_ok(data)
@@ -511,6 +592,7 @@ async def resend_history_quote(
         raise HTTPException(status_code=500, detail="Excel生成失败，无法再次发送")
     payload["excel_base64"] = excel_b64
 
+    resend_trace_id = get_trace_id() or record.trace_id
     response = await post_json_via_gateway(
         provider="n8n",
         model="dingtalk-export",
@@ -520,7 +602,7 @@ async def resend_history_quote(
         headers=sign_payload(payload),
         timeout=60,
         username=current_user.username,
-        trace_id=get_trace_id() or record.trace_id,
+        trace_id=resend_trace_id,
     )
     if response.status_code != 200:
         logger.error(
@@ -529,11 +611,26 @@ async def resend_history_quote(
         )
         raise HTTPException(status_code=502, detail=f"钉钉再次发送失败：HTTP {response.status_code}")
 
+    new_job, new_history = _record_resend_quote(
+        db,
+        source_history=record,
+        payload=payload,
+        details=details,
+        username=current_user.username,
+        trace_id=resend_trace_id,
+    )
+    db.commit()
+    db.refresh(new_job)
+    db.refresh(new_history)
+
     return api_ok(
         {
-            "history_id": record.id,
-            "quote_id": record.quote_id,
-            "quote_job_id": record.quote_job_id,
+            "history_id": new_history.id,
+            "source_history_id": record.id,
+            "resend_from_history_id": record.id,
+            "quote_id": new_history.quote_id,
+            "quote_job_id": new_job.job_id,
+            "quote_job_number": quote_job_number(new_job),
             "item_count": len(details),
             "total_amount": total_amount({"project_details": details}),
         },

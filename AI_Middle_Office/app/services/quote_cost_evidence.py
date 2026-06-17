@@ -385,6 +385,9 @@ def _apply_final_row(
 ) -> None:
     if final_row:
         _apply_final_reference_override(evidence, final_row)
+        final_quantity = _round_money(_row_value(final_row, "quantity", "qty", "count"))
+        if final_quantity is not None:
+            evidence.quantity = final_quantity
         evidence.final_unit_price = _round_money(_row_value(final_row, "unit_price", "price"))
         evidence.final_total_price = _round_money(_row_value(final_row, "total_price", "amount", "subtotal"))
         fallback_ai_row = {

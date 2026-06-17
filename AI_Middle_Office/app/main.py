@@ -18,11 +18,13 @@ from app.core.rate_limit import limiter
 settings.apply_proxy_env()
 
 from app.api.v1 import (
+    agents,
     auth,
     business_ledger,
     client_inquiries,
     cost_items,
     dashboard,
+    dwg_quantity_trial,
     execution_tasks,
     files,
     history,
@@ -57,9 +59,11 @@ from app.models import meeting as meeting_model  # noqa: F401 — 触发会议�
 from app.models import quote_requirement_row as quote_requirement_row_model  # noqa: F401
 from app.models import quote_preview_draft as quote_preview_draft_model  # noqa: F401
 from app.models import project_progress as project_progress_model  # noqa: F401
+from app.models import agent as agent_model  # noqa: F401
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
+from app.services.agent_daily_scheduler import quote_review_daily_scheduler_loop
 
 
 configure_logging()
@@ -150,15 +154,19 @@ async def _alert_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(_run_startup_database_tasks)
-    task = asyncio.create_task(_alert_loop())
+    tasks = [asyncio.create_task(_alert_loop())]
+    if settings.feature_agent_assistants and settings.feature_agent_daily_review:
+        tasks.append(asyncio.create_task(quote_review_daily_scheduler_loop()))
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
@@ -181,6 +189,7 @@ app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
 app.include_router(users.router, prefix="/api/v1", tags=["Users"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
+app.include_router(dwg_quantity_trial.router, prefix="/api/v1", tags=["DWG Quantity Trial"])
 app.include_router(execution_tasks.router, prefix="/api/v1", tags=["Execution Tasks"])
 app.include_router(meetings.router, prefix="/api/v1", tags=["Meetings"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
@@ -194,6 +203,7 @@ app.include_router(ops.router, prefix="/api/v1", tags=["Operations"])
 app.include_router(rag_eval.router, prefix="/api/v1", tags=["RAG Eval"])
 app.include_router(requirement_standardization.router, prefix="/api/v1", tags=["Requirement Standardization"])
 app.include_router(project_progress.router, prefix="/api/v1", tags=["Project Progress"])
+app.include_router(agents.router, prefix="/api/v1", tags=["Agents"])
 
 
 @app.middleware("http")
@@ -232,6 +242,19 @@ def health_live():
     return {"status": "ok", "service": settings.app_name, "version": settings.app_version}
 
 
+def _ready_service_view(service: dict) -> dict:
+    item = {
+        "key": service.get("key"),
+        "name": service.get("name"),
+        "ok": bool(service.get("ok")),
+        "status": service.get("status"),
+        "latency_ms": service.get("latency_ms"),
+    }
+    if service.get("detail"):
+        item["detail"] = str(service.get("detail"))[:240]
+    return item
+
+
 @app.get("/health/ready", include_in_schema=False)
 def health_ready():
     result = {
@@ -239,6 +262,11 @@ def health_ready():
         "database": "unknown",
         "rag_service_url": settings.rag_service_url,
         "task_queue_mode": settings.task_queue_mode,
+        "external_dependencies": {
+            "enabled": settings.ready_check_external_services,
+            "overall_status": "not_probed",
+            "services": [],
+        },
     }
     try:
         with engine.connect() as conn:
@@ -252,6 +280,18 @@ def health_ready():
     result["task_queue"] = queue_status
     if not queue_status.get("ok"):
         result["status"] = "degraded"
+    if settings.ready_check_external_services:
+        from app.services.ops_monitor import collect_external_dependency_statuses
+
+        external_services = [_ready_service_view(service) for service in collect_external_dependency_statuses()]
+        external_ok = all(service["ok"] for service in external_services)
+        result["external_dependencies"] = {
+            "enabled": True,
+            "overall_status": "ok" if external_ok else "degraded",
+            "services": external_services,
+        }
+        if not external_ok:
+            result["status"] = "degraded"
     return result
 
 # 前端 HTML 文件所在目录（Clear_test/）
@@ -345,6 +385,20 @@ def serve_vite_cost_db():
 
 @app.get("/admin/requirement-standardization", include_in_schema=False)
 def serve_vite_requirement_standardization():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/dwg-trial", include_in_schema=False)
+def serve_vite_dwg_trial():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/agent-center", include_in_schema=False)
+def serve_vite_agent_center():
     if not settings.feature_vite_frontend:
         raise HTTPException(status_code=404, detail="Not Found")
     return _serve_vite_index()

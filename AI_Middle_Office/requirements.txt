@@ -15,3 +15,7 @@ minio
 aiofiles
 slowapi
 openpyxl
+pypdf
+pdfplumber
+Pillow
+pypdfium2

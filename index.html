@@ -2964,6 +2964,7 @@
         };
 
         const COST_PRICE_SOURCE_LABELS = {
+          enterprise_quota_unit_price: '企业定额综合单价',
           price: '主参考价',
           subcontract_composite_price: '劳务发包综合单价',
           crew_benchmark_price: '班组标底税前价',
@@ -2981,6 +2982,8 @@
         };
 
         const costItemPriceSource = (item = {}) => {
+          if (item.reference_price_source) return item.reference_price_source;
+          if (item.reference_source === 'enterprise_quota.active') return 'enterprise_quota_unit_price';
           const reference = roundMoneyValue(item.price);
           const fields = ['subcontract_composite_price', 'crew_benchmark_price', 'client_tax_excluded_price'];
           if (reference !== null) {
@@ -3037,6 +3040,16 @@
             match_type: 'manual_selected',
             match_type_label: '人工选择',
             cost_item_id: item.id,
+            reference_source: item.reference_source || 'cost_items.active',
+            source_type: item.source_type || 'cost_item',
+            enterprise_quota_version_id: item.enterprise_quota_version_id || null,
+            enterprise_quota_version_code: item.enterprise_quota_version_code || null,
+            enterprise_quota_version_name: item.enterprise_quota_version_name || null,
+            enterprise_quota_item_id: item.enterprise_quota_item_id || null,
+            quota_code: item.quota_code || null,
+            section_code: item.section_code || null,
+            section_name: item.section_name || null,
+            work_content: item.work_content || null,
             item_name: item.item_name,
             spec: item.spec,
             unit: item.unit,
@@ -3060,9 +3073,9 @@
             subcontract_main_material_price: roundMoneyValue(item.subcontract_main_material_price),
             subcontract_auxiliary_material_price: roundMoneyValue(item.subcontract_auxiliary_material_price),
             crew_benchmark_price: roundMoneyValue(item.crew_benchmark_price),
-            cost_item_url: `/admin/cost-db?cost_item_id=${item.id}`,
-            evidence_url: `/admin/cost-db?cost_item_id=${item.id}`,
-            evidence_api_url: `/api/v1/admin/cost-items/${item.id}`,
+            cost_item_url: item.cost_item_url || item.evidence_url || `/admin/cost-db?cost_item_id=${item.id}`,
+            evidence_url: item.evidence_url || item.cost_item_url || `/admin/cost-db?cost_item_id=${item.id}`,
+            evidence_api_url: item.reference_source === 'enterprise_quota.active' ? null : `/api/v1/admin/cost-items/${item.id}`,
             source_cost_item: {
               id: item.id,
               item_name: item.item_name,
@@ -3073,6 +3086,14 @@
               status: item.status,
               price_type: item.price_type,
               notes: item.notes,
+              reference_source: item.reference_source || 'cost_items.active',
+              source_type: item.source_type || 'cost_item',
+              enterprise_quota_version_id: item.enterprise_quota_version_id || null,
+              enterprise_quota_version_code: item.enterprise_quota_version_code || null,
+              enterprise_quota_item_id: item.enterprise_quota_item_id || null,
+              quota_code: item.quota_code || null,
+              section_code: item.section_code || null,
+              section_name: item.section_name || null,
             },
             price_breakdown: priceBreakdown,
             match_reason: '业务员在预审阶段手动选择该 active 成本条目。',

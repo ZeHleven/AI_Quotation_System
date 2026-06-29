@@ -34,6 +34,10 @@ from app.services.cost_duplicate_guard import (
     active_duplicate_conflicts,
     active_duplicate_conflicts_for_item,
 )
+from app.services.enterprise_quota_cost_reference import (
+    active_enterprise_quota_version,
+    search_active_enterprise_quota_cost_references,
+)
 from app.services.quote_job_numbers import quote_job_number
 from app.services.rbac import has_any_role
 
@@ -406,10 +410,40 @@ def serialize_cost_item(item: CostItem, *, include_history: bool = False) -> dic
     return data
 
 
+def _quote_cost_reference_meta(item: Any) -> dict[str, Any]:
+    reference_source = getattr(item, "reference_source", "cost_items.active")
+    evidence_url = getattr(item, "evidence_url", None)
+    if not evidence_url:
+        if reference_source == "enterprise_quota.active":
+            evidence_url = (
+                f"/admin/enterprise-quota?version_id={getattr(item, 'enterprise_quota_version_id', '')}"
+                f"&quota_item_id={getattr(item, 'enterprise_quota_item_id', getattr(item, 'id', ''))}"
+            )
+        else:
+            evidence_url = f"/admin/cost-db?cost_item_id={getattr(item, 'id', '')}"
+    return {
+        "reference_source": reference_source,
+        "source_type": getattr(item, "source_type", "cost_item"),
+        "reference_price_source": getattr(item, "reference_price_source", None),
+        "enterprise_quota_version_id": getattr(item, "enterprise_quota_version_id", None),
+        "enterprise_quota_version_code": getattr(item, "enterprise_quota_version_code", None),
+        "enterprise_quota_version_name": getattr(item, "enterprise_quota_version_name", None),
+        "enterprise_quota_item_id": getattr(item, "enterprise_quota_item_id", None),
+        "quota_code": getattr(item, "quota_code", None),
+        "section_code": getattr(item, "section_code", None),
+        "section_name": getattr(item, "section_name", None),
+        "work_content": getattr(item, "work_content", None),
+        "evidence_url": evidence_url,
+        "cost_item_url": evidence_url,
+    }
+
+
 def serialize_quote_cost_candidate(item: CostItem, *, include_full_cost: bool = False) -> dict[str, Any]:
     if include_full_cost:
-        return serialize_cost_item(item)
-    return {
+        data = serialize_cost_item(item)
+        data.update(_quote_cost_reference_meta(item))
+        return data
+    data = {
         "id": item.id,
         "category": item.category,
         "subcategory": item.subcategory,
@@ -422,6 +456,8 @@ def serialize_quote_cost_candidate(item: CostItem, *, include_full_cost: bool = 
         "updated_at": _format_dt(item.updated_at),
         "restricted": True,
     }
+    data.update(_quote_cost_reference_meta(item))
+    return data
 
 
 def _duplicate_conflict_detail(item: CostItem, conflicts: list[dict[str, Any]]) -> dict[str, Any]:
@@ -954,6 +990,13 @@ def list_quote_cost_candidates(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="KEYWORD_REQUIRED")
     if len(keyword_text) < 2:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="KEYWORD_TOO_SHORT")
+    if active_enterprise_quota_version(db) is not None:
+        return search_active_enterprise_quota_cost_references(
+            db,
+            keyword_text,
+            page=page,
+            page_size=page_size,
+        )
     query = db.query(CostItem).filter(CostItem.status == COST_STATUS_ACTIVE)
     pattern = f"%{keyword_text}%"
     query = query.filter(

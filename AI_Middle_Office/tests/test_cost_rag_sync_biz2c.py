@@ -448,3 +448,44 @@ def test_cost_rag_sync_runs_endpoint_lists_recent_runs(client):
     viewer_data = viewer_response.json()["data"]
     assert any(item["id"] == run_id and item["message"] == f"synced {suffix}" for item in viewer_data)
     assert any(item["id"] == run_id and item["message"] == f"synced {suffix}" for item in data)
+
+
+def test_sync_active_cost_items_to_rag_endpoint_supports_dry_run(client, monkeypatch):
+    _, admin_headers = _headers(client, "admin")
+    calls = []
+
+    def fake_preview(db, sample_limit=5):
+        calls.append(sample_limit)
+        return {
+            "success": True,
+            "dry_run": True,
+            "message": "dry-run completed",
+            "requested_count": 2,
+            "synced_count": 0,
+            "source": "enterprise_quota.active",
+            "source_detail": {"payload_count": 2},
+            "sample_materials": [{"id": "enterprise_quota_item_1"}],
+            "error": None,
+            "run": None,
+        }
+
+    async def fake_sync(db, username, user_id=None):
+        raise AssertionError("sync should not be called for dry-run")
+
+    monkeypatch.setattr(cost_items_api, "preview_active_cost_items_rag_sync", fake_preview)
+    monkeypatch.setattr(cost_items_api, "sync_active_cost_items_to_rag", fake_sync)
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        response = client.post(
+            "/api/v1/admin/cost-items/sync-rag?dry_run=true&sample_limit=2",
+            headers=admin_headers,
+        )
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["dry_run"] is True
+    assert data["source"] == "enterprise_quota.active"
+    assert data["requested_count"] == 2
+    assert calls == [2]

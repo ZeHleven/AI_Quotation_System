@@ -10,6 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.cost_item import COST_STATUS_ACTIVE, CostItem
+from app.services.enterprise_quota_cost_reference import (
+    ENTERPRISE_QUOTA_PRICE_SOURCE,
+    ENTERPRISE_QUOTA_REFERENCE_SOURCE,
+    load_active_enterprise_quota_cost_references,
+)
 from app.services.quote_history import extract_project_payload, parse_amount
 from app.services.quote_omission_detection import detect_quote_omissions
 
@@ -48,6 +53,7 @@ ACTION_TERMS = (
 MIN_TOKEN_MATCH_SCORE = 360
 
 PRICE_SOURCE_LABELS = {
+    ENTERPRISE_QUOTA_PRICE_SOURCE: "企业定额综合单价",
     "client_tax_excluded_price": "对甲税前综合单价",
     "subcontract_composite_price": "劳务发包综合单价",
     "crew_benchmark_price": "班组标底税前价",
@@ -73,9 +79,16 @@ AI_NOTE_MISSING_COST_TERMS = (
     "找不到",
     "无对应",
     "无相关",
+    "无此项目",
+    "无该项目",
+    "无此条目",
+    "无该条目",
     "没有对应",
     "没有相关",
+    "没有此项目",
+    "没有该项目",
     "未检索到",
+    "未收录",
     "缺少相关",
     "数据集中未包含",
     "知识库未包含",
@@ -513,6 +526,9 @@ def _enrich_row_with_cost_reference(
 
 
 def _price_source(item: CostItem) -> str:
+    explicit_source = getattr(item, "reference_price_source", None)
+    if explicit_source:
+        return explicit_source
     reference = round(float(item.price or 0.0), 6)
     for field_name in (
         "subcontract_composite_price",
@@ -580,6 +596,8 @@ def _cost_item_reference(
     candidate_items: list[CostItem] | None = None,
 ) -> dict[str, Any]:
     reference_price = _round_money(item.price)
+    reference_source = getattr(item, "reference_source", "cost_items.active")
+    source_type = getattr(item, "source_type", "cost_item")
     delta = None
     delta_rate = None
     if ai_unit_price is not None and reference_price not in (None, 0):
@@ -590,6 +608,16 @@ def _cost_item_reference(
         "matched": True,
         "match_type": match_type,
         "cost_item_id": item.id,
+        "reference_source": reference_source,
+        "source_type": source_type,
+        "enterprise_quota_version_id": getattr(item, "enterprise_quota_version_id", None),
+        "enterprise_quota_version_code": getattr(item, "enterprise_quota_version_code", None),
+        "enterprise_quota_version_name": getattr(item, "enterprise_quota_version_name", None),
+        "enterprise_quota_item_id": getattr(item, "enterprise_quota_item_id", None),
+        "quota_code": getattr(item, "quota_code", None),
+        "section_code": getattr(item, "section_code", None),
+        "section_name": getattr(item, "section_name", None),
+        "work_content": getattr(item, "work_content", None),
         "item_name": item.item_name,
         "spec": item.spec,
         "unit": item.unit,
@@ -685,7 +713,17 @@ def _match_type_label(match_type: Any) -> str:
 
 
 def _cost_item_url(item: CostItem) -> str:
+    if getattr(item, "reference_source", None) == ENTERPRISE_QUOTA_REFERENCE_SOURCE:
+        quota_item_id = getattr(item, "enterprise_quota_item_id", item.id)
+        return f"/admin/cost-db?enterprise_quota_item_id={quota_item_id}"
     return f"/admin/cost-db?cost_item_id={item.id}"
+
+
+def _cost_item_api_url(item: CostItem) -> str:
+    if getattr(item, "reference_source", None) == ENTERPRISE_QUOTA_REFERENCE_SOURCE:
+        quota_item_id = getattr(item, "enterprise_quota_item_id", item.id)
+        return f"/api/v1/admin/cost-master/quota-items/{quota_item_id}"
+    return f"/api/v1/admin/cost-items/{item.id}"
 
 
 def _cost_candidate_snapshot(item: CostItem) -> dict[str, Any]:
@@ -701,6 +739,12 @@ def _cost_candidate_snapshot(item: CostItem) -> dict[str, Any]:
         "reference_price_source": _price_source(item),
         "reference_price_source_label": _price_source_label(_price_source(item)),
         "evidence_url": _cost_item_url(item),
+        "reference_source": getattr(item, "reference_source", "cost_items.active"),
+        "source_type": getattr(item, "source_type", "cost_item"),
+        "enterprise_quota_version_id": getattr(item, "enterprise_quota_version_id", None),
+        "enterprise_quota_version_code": getattr(item, "enterprise_quota_version_code", None),
+        "enterprise_quota_item_id": getattr(item, "enterprise_quota_item_id", None),
+        "quota_code": getattr(item, "quota_code", None),
     }
 
 
@@ -793,7 +837,7 @@ def _attach_quote_explanation(row: dict[str, Any], item: CostItem, reference: di
     reference["ai_price_source_reason"] = ai_price_source_reason
     reference["cost_item_url"] = _cost_item_url(item)
     reference["evidence_url"] = _cost_item_url(item)
-    reference["evidence_api_url"] = f"/api/v1/admin/cost-items/{item.id}"
+    reference["evidence_api_url"] = _cost_item_api_url(item)
     reference["match_type_label"] = _match_type_label(reference.get("match_type"))
     reference["match_reason"] = (
         f"报价行“{row_name or '-'}”与成本库 active 条目“{item.item_name}”{reference['match_type_label']}，"
@@ -814,6 +858,14 @@ def _attach_quote_explanation(row: dict[str, Any], item: CostItem, reference: di
         "price_type": item.price_type,
         "status": item.status,
         "notes": item.notes,
+        "reference_source": getattr(item, "reference_source", "cost_items.active"),
+        "source_type": getattr(item, "source_type", "cost_item"),
+        "enterprise_quota_version_id": getattr(item, "enterprise_quota_version_id", None),
+        "enterprise_quota_version_code": getattr(item, "enterprise_quota_version_code", None),
+        "enterprise_quota_item_id": getattr(item, "enterprise_quota_item_id", None),
+        "quota_code": getattr(item, "quota_code", None),
+        "section_code": getattr(item, "section_code", None),
+        "section_name": getattr(item, "section_name", None),
     }
     reference["price_breakdown"] = _price_breakdown(item)
 
@@ -1022,9 +1074,21 @@ def _reference_summary(rows: list[dict[str, Any]], active_count: int) -> dict[st
         for row in rows
         if (row.get("cost_reference") or {}).get("requires_manual_ai_note_confirmation")
     )
+    reference_sources = sorted(
+        {
+            reference.get("reference_source")
+            for row in rows
+            if isinstance((reference := row.get("cost_reference") or {}), dict)
+            and reference.get("matched")
+            and reference.get("reference_source")
+        }
+    )
     return {
         "enabled": True,
         "active_cost_item_count": active_count,
+        "active_reference_count": active_count,
+        "reference_sources": reference_sources,
+        "primary_reference_source": reference_sources[0] if reference_sources else None,
         "matched_count": matched,
         "unmatched_count": max(0, len(rows) - matched),
         "fallback_applied_count": fallback_applied,
@@ -1035,6 +1099,9 @@ def _reference_summary(rows: list[dict[str, Any]], active_count: int) -> dict[st
 
 
 def _active_cost_items(db: Session) -> list[CostItem]:
+    enterprise_references = load_active_enterprise_quota_cost_references(db)
+    if enterprise_references:
+        return enterprise_references
     return (
         db.query(CostItem)
         .filter(CostItem.status == COST_STATUS_ACTIVE)

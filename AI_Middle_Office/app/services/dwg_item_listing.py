@@ -12,7 +12,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from app.core.config import BASE_DIR
+from app.core.config import BASE_DIR, settings
+from app.services.quantity_list_export import QUANTITY_LIST_HEADERS, write_quantity_list_outputs
 from app.services.drawing_standard_matcher import (
     DEFAULT_ACTIVE_STANDARD_LIBRARY_PATH,
     match_drawing_fields_to_standard,
@@ -46,10 +47,21 @@ from app.services.drawing_floor_region_reconstructor import (
     build_floor_region_reconstruction_report,
     write_floor_region_reconstruction_outputs,
 )
+from app.services.drawing_low_risk_mvp_finalizer import (
+    build_low_risk_mvp_binding_pack,
+    write_low_risk_mvp_binding_outputs,
+)
+from app.services.drawing_pdf_dxf_item_fusion import (
+    build_pdf_dxf_item_fusion_report,
+    build_specific_standard_display_name,
+    enrich_summary_with_pdf_dxf_fusion,
+    write_pdf_dxf_item_fusion_outputs,
+)
 from app.services.drawing_dynamic_itemization import (
     build_dynamic_itemization_report_runtime,
     write_dynamic_itemization_outputs,
 )
+from app.services.drawing_pdf_evidence_pipeline import collect_pdf_files, run_pdf_evidence_pipeline
 from app.services.drawing_special_quantity_calculator import (
     build_special_quantity_calculation_report,
     write_special_quantity_calculation_outputs,
@@ -60,6 +72,7 @@ from app.services.dwg_oda_converter import convert_dwg_directory_to_dxf_with_oda
 from app.services.dwg_preview_probe import probe_converter_tools
 from app.services.dxf_geometry_probe import build_geometry_probe_report, parse_dxf_geometry_file, write_geometry_probe_outputs
 from app.services.dxf_layer_block_mapper import build_layer_block_mapping_report, write_layer_block_mapping_outputs
+from app.services.dxf_low_risk_quantity_mvp import build_low_risk_quantity_mvp_report, write_low_risk_quantity_mvp_outputs
 from app.services.dxf_quantity_suggester import build_low_risk_quantity_suggestion_report, write_quantity_suggestion_outputs
 from app.services.dxf_region_label_binder import build_region_label_binding_report, write_region_label_binding_outputs
 from app.services.dxf_room_boundary_analyzer import build_room_boundary_analysis_report, write_room_boundary_analysis_outputs
@@ -112,7 +125,6 @@ ITEM_LIST_HEADERS = [
     "算量证据",
     "来源证据",
 ]
-QUANTITY_LIST_HEADERS = ["项目名称", "项目特征", "单位", "工程量"]
 PENDING_QUANTITY_LABEL = "待算量"
 
 
@@ -124,6 +136,7 @@ def run_dwg_item_listing(
     *,
     upload_dir: str | Path,
     output_dir: str | Path,
+    pdf_upload_dir: str | Path | None = None,
     oda_executable: str | Path | None = None,
     standard_file: str | Path = DEFAULT_ACTIVE_STANDARD_LIBRARY_PATH,
     timestamp: str | None = None,
@@ -135,6 +148,10 @@ def run_dwg_item_listing(
     source_dir = Path(upload_dir)
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
+    debug_dir = target_dir / "debug" / run_timestamp
+    business_dir = target_dir / "business" / run_timestamp
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    business_dir.mkdir(parents=True, exist_ok=True)
     dwg_files = _collect_dwg_files(source_dir)
     if not dwg_files:
         raise DwgItemListingError("没有找到可识别的 .dwg 文件")
@@ -143,7 +160,7 @@ def run_dwg_item_listing(
     if not executable:
         raise DwgItemListingError("未找到 ODAFileConverter.exe，无法把 DWG 转为 DXF")
 
-    dxf_dir = target_dir / f"dxf_{run_timestamp}"
+    dxf_dir = debug_dir / "dxf"
     conversion = convert_dwg_directory_to_dxf_with_oda(
         source_dir,
         dxf_dir,
@@ -153,7 +170,7 @@ def run_dwg_item_listing(
     )
     conversion_outputs = write_oda_conversion_outputs(
         conversion,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG转DXF_{run_timestamp}",
     )
     if conversion.status not in {"converted", "partial_converted"} or not conversion.output_files:
@@ -163,25 +180,37 @@ def run_dwg_item_listing(
     text_report = build_dxf_extraction_report(parsed_files)
     text_outputs = write_dxf_extraction_outputs(
         parsed_files,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DXF文字提取_{run_timestamp}",
     )
     table_report = reconstruct_dxf_tables(parsed_files)
     table_outputs = write_table_reconstruction_outputs(
         table_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DXF表格重建_{run_timestamp}",
     )
     field_report = append_drawing_annotation_rows(converge_table_fields(table_report), parsed_files)
     field_outputs = write_field_convergence_outputs(
         field_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DXF字段收敛_{run_timestamp}",
     )
-    dynamic_itemization_report = build_dynamic_itemization_report_runtime(field_report)
+    pdf_evidence_report = build_optional_pdf_evidence_report(
+        pdf_upload_dir=pdf_upload_dir,
+        output_dir=debug_dir,
+        timestamp=run_timestamp,
+        dxf_context={
+            "field_report": field_report,
+            "text_report": text_report,
+            "parsed_files": parsed_files,
+            "conversion": conversion.as_dict(),
+        },
+    )
+    dynamic_evidence_source = (pdf_evidence_report or {}).get("r0_r9_evidence_source") or field_report
+    dynamic_itemization_report = build_dynamic_itemization_report_runtime(dynamic_evidence_source)
     dynamic_itemization_outputs = write_dynamic_itemization_outputs(
         dynamic_itemization_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG_R0_R9_dynamic_itemization_{run_timestamp}",
     )
     library = load_quantity_standard_library(standard_file)
@@ -198,13 +227,13 @@ def run_dwg_item_listing(
     }
     match_outputs = write_standard_match_outputs(
         match_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG列项标准匹配_{run_timestamp}",
     )
     project_report = build_drawing_project_recognition_report(match_report)
     project_outputs = write_drawing_project_recognition_outputs(
         project_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG图纸项目识别_{run_timestamp}",
     )
 
@@ -214,7 +243,7 @@ def run_dwg_item_listing(
         text_report=text_report,
         match_report=match_report,
         library=library,
-        output_dir=target_dir,
+        output_dir=debug_dir,
         timestamp=run_timestamp,
     )
     project_geometry_binding_report = build_project_geometry_binding_report(
@@ -225,7 +254,7 @@ def run_dwg_item_listing(
     )
     project_geometry_binding_outputs = write_project_geometry_binding_outputs(
         project_geometry_binding_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG项目几何绑定_{run_timestamp}",
     )
     project_region_binding_report = build_project_region_binding_report(
@@ -234,7 +263,7 @@ def run_dwg_item_listing(
     )
     project_region_binding_outputs = write_project_region_binding_outputs(
         project_region_binding_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG项目区域绑定_{run_timestamp}",
     )
     project_material_binding_report = build_project_material_binding_report(
@@ -246,7 +275,7 @@ def run_dwg_item_listing(
     )
     project_material_binding_outputs = write_project_material_binding_outputs(
         project_material_binding_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG材料编号CAD证据绑定_{run_timestamp}",
     )
     floor_paving_locator_report = build_floor_paving_locator_report(
@@ -258,7 +287,7 @@ def run_dwg_item_listing(
     )
     floor_paving_locator_outputs = write_floor_paving_locator_outputs(
         floor_paving_locator_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG地面铺装有效区域定位_{run_timestamp}",
     )
     floor_layer_rescan_report = build_floor_layer_rescan_report(
@@ -268,7 +297,7 @@ def run_dwg_item_listing(
     )
     floor_layer_rescan_outputs = write_floor_layer_rescan_outputs(
         floor_layer_rescan_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG地面图层定向重扫_{run_timestamp}",
     )
     floor_region_reconstruction_report = build_floor_region_reconstruction_report(
@@ -278,7 +307,7 @@ def run_dwg_item_listing(
     )
     floor_region_reconstruction_outputs = write_floor_region_reconstruction_outputs(
         floor_region_reconstruction_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG地面线段闭合区域重构_{run_timestamp}",
     )
     special_quantity_report = build_special_quantity_calculation_report(
@@ -289,51 +318,92 @@ def run_dwg_item_listing(
     )
     special_quantity_outputs = write_special_quantity_calculation_outputs(
         special_quantity_report,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG专项算量trace_{run_timestamp}",
     )
     special_trace_confirmation_pack = build_special_trace_confirmation_pack(special_quantity_report)
     special_trace_confirmation_outputs = quantity_confirmation.write_confirmation_outputs(
         special_trace_confirmation_pack,
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG专项trace确认工作簿_{run_timestamp}",
     )
     item_rows = build_item_listing_rows(match_report, geometry_quantity.get("standard_rule_binding_report"))
     quantity_trace_rows = build_quantity_trace_rows(geometry_quantity.get("standard_rule_binding_report"))
     line_quantity_candidate_rows = build_line_quantity_candidate_rows(item_rows)
-    quantity_list_rows = build_quantity_list_rows(
+    dwg_quantity_list_rows = build_quantity_list_rows(
         project_report.get("project_rows", []),
         special_quantity_report,
     )
+    pdf_direct_itemization_report = build_optional_pdf_direct_itemization_report(
+        pdf_upload_dir=pdf_upload_dir,
+        output_dir=target_dir,
+        timestamp=run_timestamp,
+    )
+    pdf_dxf_fusion_report = build_pdf_dxf_item_fusion_report(
+        dwg_quantity_list_rows=dwg_quantity_list_rows,
+        dwg_project_rows=project_report.get("project_rows", []),
+        pdf_direct_report=pdf_direct_itemization_report,
+    )
+    pdf_dxf_fusion_outputs = write_pdf_dxf_item_fusion_outputs(
+        pdf_dxf_fusion_report,
+        debug_dir,
+        stem=f"BIZ2x_DWG_PDF列项融合_{run_timestamp}",
+    )
+    quantity_list_rows = list(pdf_dxf_fusion_report.get("quantity_list_rows") or dwg_quantity_list_rows)
     quantity_list_outputs = write_quantity_list_outputs(
         quantity_list_rows,
-        target_dir,
+        business_dir,
         stem=f"BIZ2x_DWG识图四字段清单_{run_timestamp}",
+    )
+    low_risk_mvp_binding_pack = build_low_risk_mvp_binding_pack(
+        {
+            "item_rows": item_rows,
+            "quantity_list_rows": quantity_list_rows,
+            "low_risk_quantity_mvp_rows": (geometry_quantity.get("low_risk_quantity_mvp_report") or {}).get("mvp_rows", []),
+        }
+    )
+    low_risk_mvp_binding_outputs = write_low_risk_mvp_binding_outputs(
+        low_risk_mvp_binding_pack,
+        debug_dir,
+        stem=f"BIZ2x_DWG低风险MVP绑定确认_{run_timestamp}",
+    )
+    listing_summary = enrich_summary_with_pdf_dxf_fusion(
+        build_item_listing_summary(
+            dwg_file_count=len(dwg_files),
+            dxf_file_count=len(conversion.output_files),
+            text_report=text_report,
+            field_report=field_report,
+            match_report=match_report,
+            item_rows=item_rows,
+            geometry_quantity=geometry_quantity,
+            project_report=project_report,
+            project_geometry_binding_report=project_geometry_binding_report,
+            project_region_binding_report=project_region_binding_report,
+            project_material_binding_report=project_material_binding_report,
+            floor_paving_locator_report=floor_paving_locator_report,
+            floor_layer_rescan_report=floor_layer_rescan_report,
+            floor_region_reconstruction_report=floor_region_reconstruction_report,
+            special_quantity_report=special_quantity_report,
+            pdf_evidence_report=pdf_evidence_report,
+        ),
+        pdf_dxf_fusion_report,
     )
     item_outputs = write_item_listing_outputs(
         {
             "ok": True,
             "phase": PHASE,
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "summary": build_item_listing_summary(
-                dwg_file_count=len(dwg_files),
-                dxf_file_count=len(conversion.output_files),
-                text_report=text_report,
-                field_report=field_report,
-                match_report=match_report,
-                item_rows=item_rows,
-                geometry_quantity=geometry_quantity,
-                project_report=project_report,
-                project_geometry_binding_report=project_geometry_binding_report,
-                project_region_binding_report=project_region_binding_report,
-                project_material_binding_report=project_material_binding_report,
-                floor_paving_locator_report=floor_paving_locator_report,
-                floor_layer_rescan_report=floor_layer_rescan_report,
-                floor_region_reconstruction_report=floor_region_reconstruction_report,
-                special_quantity_report=special_quantity_report,
-            ),
+            "summary": listing_summary,
             "item_rows": item_rows,
+            "dwg_quantity_list_rows": dwg_quantity_list_rows,
             "quantity_list_rows": quantity_list_rows,
+            "pdf_direct_itemization_summary": (pdf_direct_itemization_report or {}).get("summary", {}),
+            "pdf_direct_item_rows": (pdf_direct_itemization_report or {}).get("pdf_direct_item_rows", []),
+            "pdf_direct_standard_mapping_rows": (pdf_direct_itemization_report or {}).get("standard_mapping_rows", []),
+            "pdf_ai_quantity_summary": (pdf_direct_itemization_report or {}).get("pdf_ai_quantity_summary", {}),
+            "pdf_ai_quantity_rows": (pdf_direct_itemization_report or {}).get("pdf_ai_quantity_rows", []),
+            "pdf_dxf_item_fusion_summary": pdf_dxf_fusion_report.get("summary", {}),
+            "pdf_dxf_item_fusion_rows": pdf_dxf_fusion_report.get("fusion_rows", []),
             "project_rows": project_report.get("project_rows", []),
             "project_recognition_summary": project_report.get("summary", {}),
             "project_geometry_binding_rows": project_geometry_binding_report.get("binding_rows", []),
@@ -366,9 +436,20 @@ def run_dwg_item_listing(
             "dynamic_itemization_summary": dynamic_itemization_report.get("summary", {}),
             "dynamic_itemization_stage_results": dynamic_itemization_report.get("stage_results", []),
             "dynamic_itemization_decision_rows": dynamic_itemization_report.get("itemization_decisions", []),
+            "pdf_evidence_summary": (pdf_evidence_report or {}).get("summary", {}),
+            "pdf_page_rows": ((pdf_evidence_report or {}).get("parse_report") or {}).get("page_rows", []),
+            "pdf_render_rows": ((pdf_evidence_report or {}).get("render_report") or {}).get("render_rows", []),
+            "pdf_tile_rows": ((pdf_evidence_report or {}).get("tile_report") or {}).get("tile_rows", []),
+            "pdf_visual_evidence_rows": ((pdf_evidence_report or {}).get("visual_evidence_report") or {}).get("evidence_rows", []),
+            "dwg_pdf_match_rows": ((pdf_evidence_report or {}).get("dwg_pdf_match_report") or {}).get("match_rows", []),
+            "dxf_pdf_fusion_rows": ((pdf_evidence_report or {}).get("fusion_report") or {}).get("fusion_rows", []),
             "geometry_quantity_summary": geometry_quantity.get("summary", {}),
+            "low_risk_quantity_mvp_summary": (geometry_quantity.get("low_risk_quantity_mvp_report") or {}).get("summary", {}),
+            "low_risk_quantity_mvp_rows": (geometry_quantity.get("low_risk_quantity_mvp_report") or {}).get("mvp_rows", []),
+            "low_risk_mvp_binding_summary": low_risk_mvp_binding_pack.get("summary", {}),
+            "low_risk_mvp_binding_rows": low_risk_mvp_binding_pack.get("binding_rows", []),
         },
-        target_dir,
+        debug_dir,
         stem=f"BIZ2x_DWG上传列项_{run_timestamp}",
     )
     combined_outputs = {
@@ -436,34 +517,41 @@ def run_dwg_item_listing(
         "dynamic_itemization_csv": dynamic_itemization_outputs["itemization_decision_csv"],
         "dynamic_itemization_confirmation_xlsx": dynamic_itemization_outputs.get("confirmation_confirmation_xlsx", ""),
         "dynamic_itemization_confirmation_json": dynamic_itemization_outputs.get("confirmation_json", ""),
+        "low_risk_mvp_binding_json": low_risk_mvp_binding_outputs["json"],
+        "low_risk_mvp_binding_markdown": low_risk_mvp_binding_outputs["markdown"],
+        "low_risk_mvp_binding_csv": low_risk_mvp_binding_outputs["binding_csv"],
+        "low_risk_mvp_confirmation_xlsx": low_risk_mvp_binding_outputs["confirmation_confirmation_xlsx"],
+        "low_risk_mvp_confirmation_csv": low_risk_mvp_binding_outputs["confirmation_confirmation_csv"],
+        "low_risk_mvp_confirmation_markdown": low_risk_mvp_binding_outputs["confirmation_markdown"],
+        "pdf_dxf_item_fusion_json": pdf_dxf_fusion_outputs["json"],
+        "pdf_dxf_item_fusion_markdown": pdf_dxf_fusion_outputs["markdown"],
+        "pdf_dxf_item_fusion_csv": pdf_dxf_fusion_outputs["fusion_csv"],
+        **((pdf_direct_itemization_report or {}).get("outputs") or {}),
+        **((pdf_evidence_report or {}).get("outputs") or {}),
         **geometry_quantity.get("outputs", {}),
     }
     issues = build_item_listing_issues(conversion.as_dict(), match_report, item_rows, geometry_quantity)
+    if pdf_evidence_report:
+        issues.extend(list(pdf_evidence_report.get("issues") or []))
+    if pdf_direct_itemization_report:
+        issues.extend(list(pdf_direct_itemization_report.get("issues") or []))
     Path(item_outputs["json"]).write_text(
         json.dumps(
             {
                 "ok": True,
                 "phase": PHASE,
                 "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "summary": build_item_listing_summary(
-                    dwg_file_count=len(dwg_files),
-                    dxf_file_count=len(conversion.output_files),
-                    text_report=text_report,
-                    field_report=field_report,
-                    match_report=match_report,
-                    item_rows=item_rows,
-                    geometry_quantity=geometry_quantity,
-                    project_report=project_report,
-                    project_geometry_binding_report=project_geometry_binding_report,
-                    project_region_binding_report=project_region_binding_report,
-                    project_material_binding_report=project_material_binding_report,
-                    floor_paving_locator_report=floor_paving_locator_report,
-                    floor_layer_rescan_report=floor_layer_rescan_report,
-                    floor_region_reconstruction_report=floor_region_reconstruction_report,
-                    special_quantity_report=special_quantity_report,
-                ),
+                "summary": listing_summary,
                 "item_rows": item_rows,
+                "dwg_quantity_list_rows": dwg_quantity_list_rows,
                 "quantity_list_rows": quantity_list_rows,
+                "pdf_direct_itemization_summary": (pdf_direct_itemization_report or {}).get("summary", {}),
+                "pdf_direct_item_rows": (pdf_direct_itemization_report or {}).get("pdf_direct_item_rows", []),
+                "pdf_direct_standard_mapping_rows": (pdf_direct_itemization_report or {}).get("standard_mapping_rows", []),
+                "pdf_ai_quantity_summary": (pdf_direct_itemization_report or {}).get("pdf_ai_quantity_summary", {}),
+                "pdf_ai_quantity_rows": (pdf_direct_itemization_report or {}).get("pdf_ai_quantity_rows", []),
+                "pdf_dxf_item_fusion_summary": pdf_dxf_fusion_report.get("summary", {}),
+                "pdf_dxf_item_fusion_rows": pdf_dxf_fusion_report.get("fusion_rows", []),
                 "project_rows": project_report.get("project_rows", []),
                 "project_recognition_summary": project_report.get("summary", {}),
                 "project_geometry_binding_rows": project_geometry_binding_report.get("binding_rows", []),
@@ -496,7 +584,18 @@ def run_dwg_item_listing(
                 "dynamic_itemization_summary": dynamic_itemization_report.get("summary", {}),
                 "dynamic_itemization_stage_results": dynamic_itemization_report.get("stage_results", []),
                 "dynamic_itemization_decision_rows": dynamic_itemization_report.get("itemization_decisions", []),
+                "pdf_evidence_summary": (pdf_evidence_report or {}).get("summary", {}),
+                "pdf_page_rows": ((pdf_evidence_report or {}).get("parse_report") or {}).get("page_rows", []),
+                "pdf_render_rows": ((pdf_evidence_report or {}).get("render_report") or {}).get("render_rows", []),
+                "pdf_tile_rows": ((pdf_evidence_report or {}).get("tile_report") or {}).get("tile_rows", []),
+                "pdf_visual_evidence_rows": ((pdf_evidence_report or {}).get("visual_evidence_report") or {}).get("evidence_rows", []),
+                "dwg_pdf_match_rows": ((pdf_evidence_report or {}).get("dwg_pdf_match_report") or {}).get("match_rows", []),
+                "dxf_pdf_fusion_rows": ((pdf_evidence_report or {}).get("fusion_report") or {}).get("fusion_rows", []),
                 "geometry_quantity_summary": geometry_quantity.get("summary", {}),
+                "low_risk_quantity_mvp_summary": (geometry_quantity.get("low_risk_quantity_mvp_report") or {}).get("summary", {}),
+                "low_risk_quantity_mvp_rows": (geometry_quantity.get("low_risk_quantity_mvp_report") or {}).get("mvp_rows", []),
+                "low_risk_mvp_binding_summary": low_risk_mvp_binding_pack.get("summary", {}),
+                "low_risk_mvp_binding_rows": low_risk_mvp_binding_pack.get("binding_rows", []),
                 "outputs": combined_outputs,
                 "issues": issues,
             },
@@ -510,23 +609,7 @@ def run_dwg_item_listing(
         "ok": True,
         "phase": PHASE,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "summary": build_item_listing_summary(
-            dwg_file_count=len(dwg_files),
-            dxf_file_count=len(conversion.output_files),
-            text_report=text_report,
-            field_report=field_report,
-            match_report=match_report,
-            item_rows=item_rows,
-            geometry_quantity=geometry_quantity,
-            project_report=project_report,
-            project_geometry_binding_report=project_geometry_binding_report,
-            project_region_binding_report=project_region_binding_report,
-            project_material_binding_report=project_material_binding_report,
-            floor_paving_locator_report=floor_paving_locator_report,
-            floor_layer_rescan_report=floor_layer_rescan_report,
-            floor_region_reconstruction_report=floor_region_reconstruction_report,
-            special_quantity_report=special_quantity_report,
-        ),
+        "summary": listing_summary,
         "inputs": {
             "upload_dir": str(source_dir.resolve()),
             "oda_executable": str(executable.resolve()),
@@ -548,9 +631,20 @@ def run_dwg_item_listing(
             "special_quantity_summary": special_quantity_report.get("summary", {}),
             "dynamic_itemization_summary": dynamic_itemization_report.get("summary", {}),
             "geometry_quantity_summary": geometry_quantity.get("summary", {}),
+            "low_risk_quantity_mvp_summary": (geometry_quantity.get("low_risk_quantity_mvp_report") or {}).get("summary", {}),
+            "low_risk_mvp_binding_summary": low_risk_mvp_binding_pack.get("summary", {}),
+            "pdf_evidence_summary": (pdf_evidence_report or {}).get("summary", {}),
         },
         "project_rows": project_report.get("project_rows", []),
+        "dwg_quantity_list_rows": dwg_quantity_list_rows,
         "quantity_list_rows": quantity_list_rows,
+        "pdf_direct_itemization_summary": (pdf_direct_itemization_report or {}).get("summary", {}),
+        "pdf_direct_item_rows": (pdf_direct_itemization_report or {}).get("pdf_direct_item_rows", []),
+        "pdf_direct_standard_mapping_rows": (pdf_direct_itemization_report or {}).get("standard_mapping_rows", []),
+        "pdf_ai_quantity_summary": (pdf_direct_itemization_report or {}).get("pdf_ai_quantity_summary", {}),
+        "pdf_ai_quantity_rows": (pdf_direct_itemization_report or {}).get("pdf_ai_quantity_rows", []),
+        "pdf_dxf_item_fusion_summary": pdf_dxf_fusion_report.get("summary", {}),
+        "pdf_dxf_item_fusion_rows": pdf_dxf_fusion_report.get("fusion_rows", []),
         "project_recognition_summary": project_report.get("summary", {}),
         "project_geometry_binding_rows": project_geometry_binding_report.get("binding_rows", []),
         "project_geometry_candidate_rows": project_geometry_binding_report.get("candidate_rows", []),
@@ -583,7 +677,18 @@ def run_dwg_item_listing(
         "dynamic_itemization_summary": dynamic_itemization_report.get("summary", {}),
         "dynamic_itemization_stage_results": dynamic_itemization_report.get("stage_results", []),
         "dynamic_itemization_decision_rows": dynamic_itemization_report.get("itemization_decisions", []),
+        "pdf_evidence_summary": (pdf_evidence_report or {}).get("summary", {}),
+        "pdf_page_rows": ((pdf_evidence_report or {}).get("parse_report") or {}).get("page_rows", []),
+        "pdf_render_rows": ((pdf_evidence_report or {}).get("render_report") or {}).get("render_rows", []),
+        "pdf_tile_rows": ((pdf_evidence_report or {}).get("tile_report") or {}).get("tile_rows", []),
+        "pdf_visual_evidence_rows": ((pdf_evidence_report or {}).get("visual_evidence_report") or {}).get("evidence_rows", []),
+        "dwg_pdf_match_rows": ((pdf_evidence_report or {}).get("dwg_pdf_match_report") or {}).get("match_rows", []),
+        "dxf_pdf_fusion_rows": ((pdf_evidence_report or {}).get("fusion_report") or {}).get("fusion_rows", []),
         "geometry_quantity_summary": geometry_quantity.get("summary", {}),
+        "low_risk_quantity_mvp_summary": (geometry_quantity.get("low_risk_quantity_mvp_report") or {}).get("summary", {}),
+        "low_risk_quantity_mvp_rows": (geometry_quantity.get("low_risk_quantity_mvp_report") or {}).get("mvp_rows", []),
+        "low_risk_mvp_binding_summary": low_risk_mvp_binding_pack.get("summary", {}),
+        "low_risk_mvp_binding_rows": low_risk_mvp_binding_pack.get("binding_rows", []),
         "outputs": combined_outputs,
         "issues": issues,
     }
@@ -597,6 +702,80 @@ def find_oda_executable() -> Path | None:
         if tool.tool_id == "oda_file_converter" and tool.available and tool.executable:
             return Path(tool.executable)
     return None
+
+
+def build_optional_pdf_evidence_report(
+    *,
+    pdf_upload_dir: str | Path | None,
+    output_dir: str | Path,
+    timestamp: str,
+    dxf_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not pdf_upload_dir:
+        return None
+    pdf_dir = Path(pdf_upload_dir)
+    if not pdf_dir.exists() or not collect_pdf_files(pdf_dir):
+        return None
+    try:
+        return run_pdf_evidence_pipeline(
+            pdf_dir=pdf_dir,
+            output_dir=output_dir,
+            timestamp=timestamp,
+            dxf_context=dxf_context,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "phase": "BIZ-2x-PDF-visual-evidence-fusion",
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "summary": {
+                "pdf_pipeline_status": "failed",
+                "pdf_file_count": len(collect_pdf_files(pdf_dir)),
+            },
+            "outputs": {},
+            "issues": [{"级别": "warning", "说明": f"PDF 视觉证据链生成失败，已保留 DWG/DXF 识图结果：{exc}"}],
+        }
+
+
+def build_optional_pdf_direct_itemization_report(
+    *,
+    pdf_upload_dir: str | Path | None,
+    output_dir: str | Path,
+    timestamp: str,
+) -> dict[str, Any] | None:
+    if not pdf_upload_dir or not settings.feature_pdf_direct_itemization:
+        return None
+    pdf_dir = Path(pdf_upload_dir)
+    if not pdf_dir.exists() or not collect_pdf_files(pdf_dir):
+        return None
+    try:
+        from app.services.drawing_pdf_direct_itemizer import run_pdf_direct_itemization
+
+        return run_pdf_direct_itemization(
+            pdf_dir=pdf_dir,
+            output_dir=output_dir,
+            timestamp=timestamp,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "phase": "BIZ-2x-pdf-direct-itemization",
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "summary": {
+                "pdf_direct_itemization_status": "failed",
+                "pdf_direct_item_count": 0,
+            },
+            "quantity_list_rows": [],
+            "pdf_direct_item_rows": [],
+            "standard_mapping_rows": [],
+            "outputs": {},
+            "issues": [
+                {
+                    "级别": "warning",
+                    "说明": f"PDF 直接列项失败，已保留 DWG/DXF 列项结果：{exc}",
+                }
+            ],
+        }
 
 
 def _collect_dwg_files(source_dir: Path) -> list[Path]:
@@ -668,6 +847,12 @@ def build_geometry_quantity_context(
             output_dir,
             stem=f"BIZ2x_DWG上传_低风险几何建议量_{timestamp}",
         )
+        low_risk_mvp_report = build_low_risk_quantity_mvp_report(quantity_suggestion_report)
+        low_risk_mvp_outputs = write_low_risk_quantity_mvp_outputs(
+            low_risk_mvp_report,
+            output_dir,
+            stem=f"BIZ2x_DWG上传_首批低风险算量MVP_{timestamp}",
+        )
         binding_report = build_standard_rule_binding_report(
             quantity_suggestion_report=quantity_suggestion_report,
             standard_match_report=match_report,
@@ -723,6 +908,11 @@ def build_geometry_quantity_context(
                 "allowed_geometry_group_count": mapping_report.get("summary", {}).get("allowed_group_count", 0),
                 "geometry_suggestion_count": quantity_suggestion_report.get("summary", {}).get("suggestion_count", 0),
                 "ready_geometry_suggestion_count": quantity_suggestion_report.get("summary", {}).get("ready_for_manual_review_count", 0),
+                "low_risk_mvp_candidate_count": low_risk_mvp_report.get("summary", {}).get("mvp_candidate_count", 0),
+                "low_risk_mvp_ready_count": low_risk_mvp_report.get("summary", {}).get("mvp_ready_for_manual_review_count", 0),
+                "low_risk_mvp_floor_area_count": low_risk_mvp_report.get("summary", {}).get("floor_area_candidate_count", 0),
+                "low_risk_mvp_ceiling_area_count": low_risk_mvp_report.get("summary", {}).get("ceiling_area_candidate_count", 0),
+                "low_risk_mvp_fixture_count": low_risk_mvp_report.get("summary", {}).get("fixture_count_candidate_count", 0),
                 "standard_rule_trace_count": binding_report.get("summary", {}).get("standard_rule_trace_count", 0),
                 "compatible_standard_rule_trace_count": binding_report.get("summary", {}).get("compatible_standard_rule_trace_count", 0),
                 "trace_review_row_count": trace_review_pack.get("summary", {}).get("trace_review_row_count", 0),
@@ -741,6 +931,7 @@ def build_geometry_quantity_context(
             "region_label_report": region_label_report,
             "room_boundary_report": room_boundary_report,
             "standard_rule_binding_report": binding_report,
+            "low_risk_quantity_mvp_report": low_risk_mvp_report,
             "trace_review_pack": trace_review_pack,
             "outputs": {
                 "geometry_json": geometry_outputs["json"],
@@ -765,6 +956,9 @@ def build_geometry_quantity_context(
                 "quantity_suggestion_json": quantity_suggestion_outputs["json"],
                 "quantity_suggestion_markdown": quantity_suggestion_outputs["markdown"],
                 "quantity_suggestion_csv": quantity_suggestion_outputs["suggestion_csv"],
+                "low_risk_quantity_mvp_json": low_risk_mvp_outputs["json"],
+                "low_risk_quantity_mvp_markdown": low_risk_mvp_outputs["markdown"],
+                "low_risk_quantity_mvp_csv": low_risk_mvp_outputs["csv"],
                 "standard_rule_binding_json": binding_outputs["json"],
                 "standard_rule_binding_markdown": binding_outputs["markdown"],
                 "standard_rule_binding_csv": binding_outputs["binding_csv"],
@@ -854,7 +1048,7 @@ def build_quantity_list_rows(
         unit = trace.get("建议单位") if _has_ready_quantity(trace) else project.get("单位", "")
         rows.append(
             {
-                "项目名称": project.get("项目名称", ""),
+                "项目名称": _project_display_name(project),
                 "项目特征": project.get("项目特征", ""),
                 "单位": unit or project.get("单位", ""),
                 "工程量": quantity,
@@ -863,14 +1057,11 @@ def build_quantity_list_rows(
     return rows
 
 
-def write_quantity_list_outputs(rows: list[dict[str, Any]], output_dir: str | Path, *, stem: str) -> dict[str, str]:
-    directory = Path(output_dir)
-    directory.mkdir(parents=True, exist_ok=True)
-    csv_path = directory / f"{stem}.csv"
-    xlsx_path = directory / f"{stem}.xlsx"
-    _write_four_field_csv(csv_path, rows)
-    _write_four_field_workbook(xlsx_path, rows)
-    return {"csv": str(csv_path), "xlsx": str(xlsx_path)}
+def _project_display_name(project: dict[str, Any]) -> str:
+    return build_specific_standard_display_name(
+        concrete_name=project.get("图纸项目名称", ""),
+        standard_name=project.get("项目名称", ""),
+    )
 
 
 def _has_ready_quantity(trace: dict[str, Any]) -> bool:
@@ -906,6 +1097,7 @@ def build_item_listing_summary(
     floor_layer_rescan_report: dict[str, Any] | None = None,
     floor_region_reconstruction_report: dict[str, Any] | None = None,
     special_quantity_report: dict[str, Any] | None = None,
+    pdf_evidence_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     unique_codes = sorted({str(row.get("标准项目编码") or "") for row in item_rows if row.get("标准项目编码")})
     by_name: dict[str, int] = defaultdict(int)
@@ -923,6 +1115,7 @@ def build_item_listing_summary(
     floor_layer_summary = (floor_layer_rescan_report or {}).get("summary", {})
     floor_region_summary = (floor_region_reconstruction_report or {}).get("summary", {})
     special_quantity_summary = (special_quantity_report or {}).get("summary", {})
+    pdf_summary = (pdf_evidence_report or {}).get("summary", {})
     suggested_item_count = sum(1 for row in item_rows if row.get("系统建议工程量"))
     bound_item_count = sum(1 for row in item_rows if row.get("逐条绑定状态") == "已逐条绑定CAD建议量，需复核")
     ambiguous_item_count = sum(1 for row in item_rows if row.get("逐条绑定状态") in {"多个CAD候选需选择", "有同类CAD候选，需人工选择"})
@@ -975,6 +1168,22 @@ def build_item_listing_summary(
         "special_quantity_trace_count": special_quantity_summary.get("special_quantity_trace_count", 0),
         "special_quantity_ready_for_review_count": special_quantity_summary.get("ready_for_manual_review_count", 0),
         "special_quantity_blocked_trace_count": special_quantity_summary.get("blocked_trace_count", 0),
+        "pdf_file_count": pdf_summary.get("pdf_file_count", 0),
+        "pdf_page_count": pdf_summary.get("pdf_page_count", 0),
+        "pdf_text_row_count": pdf_summary.get("pdf_text_row_count", 0),
+        "pdf_render_status": pdf_summary.get("pdf_render_status", ""),
+        "pdf_rendered_page_count": pdf_summary.get("pdf_rendered_page_count", 0),
+        "pdf_tile_count": pdf_summary.get("pdf_tile_count", 0),
+        "pdf_visual_evidence_count": pdf_summary.get("pdf_visual_evidence_count", 0),
+        "pdf_llm_visual_status": pdf_summary.get("pdf_llm_visual_status", ""),
+        "pdf_llm_visual_tile_success_count": pdf_summary.get("pdf_llm_visual_tile_success_count", 0),
+        "pdf_llm_visual_tile_error_count": pdf_summary.get("pdf_llm_visual_tile_error_count", 0),
+        "pdf_llm_visual_tile_skipped_count": pdf_summary.get("pdf_llm_visual_tile_skipped_count", 0),
+        "dwg_pdf_match_score": pdf_summary.get("dwg_pdf_match_score", 0),
+        "dwg_pdf_match_status": pdf_summary.get("dwg_pdf_match_status", ""),
+        "dxf_pdf_fusion_status": pdf_summary.get("dxf_pdf_fusion_status", ""),
+        "dxf_pdf_fusion_link_count": pdf_summary.get("dxf_pdf_fusion_link_count", 0),
+        "r0_r9_pdf_signal_count": pdf_summary.get("r0_r9_pdf_signal_count", 0),
         "item_row_count": len(item_rows),
         "unique_standard_item_count": len(unique_codes),
         "unique_standard_item_codes": unique_codes,
@@ -1054,25 +1263,6 @@ def write_item_listing_workbook(rows: list[dict[str, Any]], path: str | Path) ->
     workbook.save(path)
 
 
-def _write_four_field_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=QUANTITY_LIST_HEADERS)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({header: row.get(header, "") for header in QUANTITY_LIST_HEADERS})
-
-
-def _write_four_field_workbook(path: Path, rows: list[dict[str, Any]]) -> None:
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "识图四字段清单"
-    sheet.append(QUANTITY_LIST_HEADERS)
-    for row in rows:
-        sheet.append([row.get(header, "") for header in QUANTITY_LIST_HEADERS])
-    _style_sheet(sheet)
-    workbook.save(path)
-
-
 def build_item_listing_markdown(report: dict[str, Any]) -> str:
     summary = report.get("summary", {})
     lines = [
@@ -1089,6 +1279,9 @@ def build_item_listing_markdown(report: dict[str, Any]) -> str:
         f"- 已逐条绑定建议量的列项：{summary.get('line_bound_quantity_item_row_count', 0)}",
         f"- 需人工选择 CAD 候选的列项：{summary.get('ambiguous_quantity_item_row_count', 0)}",
         f"- 可复核标准规则 trace：{summary.get('compatible_standard_rule_trace_count', 0)}",
+        f"- PDF 页数：{summary.get('pdf_page_count', 0)}",
+        f"- PDF 视觉证据：{summary.get('pdf_visual_evidence_count', 0)}",
+        f"- DWG/PDF 匹配状态：{summary.get('dwg_pdf_match_status', '-') or '-'}",
         "",
         "## 列项候选",
         "",

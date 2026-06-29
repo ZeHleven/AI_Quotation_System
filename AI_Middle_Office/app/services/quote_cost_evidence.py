@@ -172,6 +172,14 @@ def _source_cost_item(reference: dict[str, Any]) -> dict[str, Any]:
         "spec": source_item.get("spec") or reference.get("spec"),
         "notes": source_item.get("notes"),
         "price_breakdown": reference.get("price_breakdown"),
+        "reference_source": source_item.get("reference_source") or reference.get("reference_source"),
+        "source_type": source_item.get("source_type") or reference.get("source_type"),
+        "enterprise_quota_version_id": source_item.get("enterprise_quota_version_id") or reference.get("enterprise_quota_version_id"),
+        "enterprise_quota_version_code": source_item.get("enterprise_quota_version_code") or reference.get("enterprise_quota_version_code"),
+        "enterprise_quota_item_id": source_item.get("enterprise_quota_item_id") or reference.get("enterprise_quota_item_id"),
+        "quota_code": source_item.get("quota_code") or reference.get("quota_code"),
+        "section_code": source_item.get("section_code") or reference.get("section_code"),
+        "section_name": source_item.get("section_name") or reference.get("section_name"),
     }
 
 
@@ -602,6 +610,12 @@ def serialize_cost_evidence(item: QuoteCostEvidence) -> dict[str, Any]:
         "cost_context_basis": item.cost_context_basis,
         "comparison": item.comparison,
         "cost_item_url": item.cost_item_url,
+        "reference_source": cost_reference.get("reference_source"),
+        "source_type": cost_reference.get("source_type"),
+        "enterprise_quota_version_id": cost_reference.get("enterprise_quota_version_id"),
+        "enterprise_quota_version_code": cost_reference.get("enterprise_quota_version_code"),
+        "enterprise_quota_item_id": cost_reference.get("enterprise_quota_item_id"),
+        "quota_code": cost_reference.get("quota_code"),
         "cost_reference": cost_reference,
         "quote_explanation": quote_explanation,
         "cost_item_snapshot": _load_json(item.cost_item_snapshot_json),

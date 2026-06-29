@@ -1473,10 +1473,10 @@ def test_quote_job_runner_parses_excel_quote_sheet_before_gateway(monkeypatch):
         )
 
     async def fail_vision_call(*args, **kwargs):
-        raise AssertionError("Excel quote sheets should not be sent to GLM-4V")
+        raise AssertionError("Excel quote sheets should not be sent to vision model")
 
     monkeypatch.setattr(quote_job_runner, "post_json_via_gateway", fake_post_json_via_gateway)
-    monkeypatch.setattr(quote_job_runner, "call_glm_vision_extract", fail_vision_call)
+    monkeypatch.setattr(quote_job_runner, "call_quote_vision_extract", fail_vision_call)
 
     async def collect_events():
         return [

@@ -25,6 +25,7 @@ from app.schemas.cost_item import (
 from app.services.cost_rag_sync import (
     cost_rag_sync_status_summary,
     list_cost_rag_sync_runs,
+    preview_active_cost_items_rag_sync,
     serialize_cost_rag_sync_run,
     sync_active_cost_items_to_rag,
 )
@@ -55,6 +56,13 @@ from app.services.cost_items import (
     serialize_quote_cost_candidate,
     update_cost_item,
     withdraw_cost_item_activation,
+)
+from app.services.enterprise_quota_master import (
+    enterprise_quota_master_summary,
+    get_enterprise_quota_master_item_detail,
+    list_enterprise_quota_master_components,
+    list_enterprise_quota_master_items,
+    list_enterprise_quota_master_resources,
 )
 
 
@@ -258,6 +266,151 @@ async def list_quote_cost_item_candidates(
     )
 
 
+@router.get("/admin/cost-master/summary", summary="查询企业定额成本主库汇总")
+async def get_admin_cost_master_summary(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_cost_db_enabled()
+    require_cost_db_access(current_user)
+    data = enterprise_quota_master_summary(db)
+    record_cost_audit(
+        db,
+        user=current_user,
+        action="cost_master.summary",
+        resource_type="enterprise_quota",
+        result_count=data.get("quota_item_count"),
+        status_value="success",
+        message=data.get("source"),
+        request=request,
+    )
+    return api_ok(data)
+
+
+@router.get("/admin/cost-master/quota-items", summary="查询企业定额主项")
+async def list_admin_cost_master_quota_items(
+    request: Request,
+    keyword: Optional[str] = None,
+    section_id: Optional[int] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_cost_db_enabled()
+    require_cost_db_access(current_user)
+    rows, total = list_enterprise_quota_master_items(
+        db,
+        keyword=keyword,
+        section_id=section_id,
+        page=page,
+        page_size=page_size,
+    )
+    record_cost_audit(
+        db,
+        user=current_user,
+        action="cost_master.quota_items",
+        resource_type="enterprise_quota_item",
+        filters={"keyword": keyword, "section_id": section_id},
+        result_count=total,
+        status_value="success",
+        request=request,
+    )
+    return api_page(rows, total=total, page=page, page_size=page_size)
+
+
+@router.get("/admin/cost-master/quota-items/{item_id}", summary="查询企业定额主项详情")
+async def get_admin_cost_master_quota_item(
+    item_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_cost_db_enabled()
+    require_cost_db_access(current_user)
+    data = get_enterprise_quota_master_item_detail(db, item_id)
+    if data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="RESOURCE_NOT_FOUND")
+    record_cost_audit(
+        db,
+        user=current_user,
+        action="cost_master.quota_item_detail",
+        resource_type="enterprise_quota_item",
+        resource_id=item_id,
+        result_count=1,
+        status_value="success",
+        request=request,
+    )
+    return api_ok(data)
+
+
+@router.get("/admin/cost-master/components", summary="查询企业定额组成明细")
+async def list_admin_cost_master_components(
+    request: Request,
+    keyword: Optional[str] = None,
+    quota_item_id: Optional[int] = None,
+    fee_bucket: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_cost_db_enabled()
+    require_cost_db_access(current_user)
+    rows, total = list_enterprise_quota_master_components(
+        db,
+        keyword=keyword,
+        quota_item_id=quota_item_id,
+        fee_bucket=fee_bucket,
+        page=page,
+        page_size=page_size,
+    )
+    record_cost_audit(
+        db,
+        user=current_user,
+        action="cost_master.components",
+        resource_type="enterprise_quota_component",
+        filters={"keyword": keyword, "quota_item_id": quota_item_id, "fee_bucket": fee_bucket},
+        result_count=total,
+        status_value="success",
+        request=request,
+    )
+    return api_page(rows, total=total, page=page, page_size=page_size)
+
+
+@router.get("/admin/cost-master/resources", summary="查询企业定额资源价格")
+async def list_admin_cost_master_resources(
+    request: Request,
+    keyword: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_cost_db_enabled()
+    require_cost_db_access(current_user)
+    rows, total = list_enterprise_quota_master_resources(
+        db,
+        keyword=keyword,
+        resource_type=resource_type,
+        page=page,
+        page_size=page_size,
+    )
+    record_cost_audit(
+        db,
+        user=current_user,
+        action="cost_master.resources",
+        resource_type="enterprise_cost_resource",
+        filters={"keyword": keyword, "resource_type": resource_type},
+        result_count=total,
+        status_value="success",
+        request=request,
+    )
+    return api_page(rows, total=total, page=page, page_size=page_size)
+
+
 @router.get("/admin/cost-items/export", summary="导出成本条目")
 async def export_admin_cost_items(
     request: Request,
@@ -403,11 +556,27 @@ async def list_cost_item_lineage_admin(
 @router.post("/admin/cost-items/sync-rag", summary="同步 active 成本条目至 RAG")
 async def sync_active_cost_items_to_rag_admin(
     request: Request,
+    dry_run: bool = Query(False),
+    sample_limit: int = Query(5, ge=0, le=50),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _ensure_cost_db_enabled()
     require_cost_db_approver(current_user)
+    if dry_run:
+        result = preview_active_cost_items_rag_sync(db, sample_limit=sample_limit)
+        record_cost_audit(
+            db,
+            user=current_user,
+            action="cost_rag.dry_run",
+            resource_type="cost_rag",
+            result_count=result.get("requested_count"),
+            status_value="success",
+            message=result.get("source"),
+            request=request,
+        )
+        return api_ok(result, message=result["message"])
+
     result = await sync_active_cost_items_to_rag(db, current_user.username, user_id=current_user.id)
     record_cost_audit(
         db,
@@ -424,6 +593,7 @@ async def sync_active_cost_items_to_rag_admin(
             {
                 "synced_count": result["synced_count"],
                 "source": result["source"],
+                "source_detail": result.get("source_detail"),
                 "run": result.get("run"),
             },
             message=result["message"],

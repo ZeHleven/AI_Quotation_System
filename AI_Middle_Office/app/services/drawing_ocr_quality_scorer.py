@@ -38,6 +38,7 @@ OCR_FEEDBACK_CATEGORICAL_FEATURES = (
     "split_source",
     "planner_source",
     "region_subtype",
+    "quality_flags",
 )
 
 CHINESE_RE = re.compile(r"[\u4e00-\u9fff]")
@@ -383,6 +384,9 @@ def _ocr_feedback_sample(row: Mapping[str, Any]) -> dict[str, Any] | None:
     region_subtype = _clean_text(row.get("region_subtype"))
     if region_subtype:
         features["region_subtype"] = region_subtype
+    quality_flags = [str(flag).strip() for flag in row.get("source_region_quality_flags") or [] if str(flag).strip()]
+    if quality_flags:
+        features["quality_flags"] = quality_flags
     if not any(feature in features for feature in OCR_FEEDBACK_NUMERIC_FEATURES):
         return None
     return features
@@ -421,8 +425,12 @@ def _feedback_categorical_values(samples: Sequence[Mapping[str, Any]]) -> dict[s
     for feature in OCR_FEEDBACK_CATEGORICAL_FEATURES:
         counts: dict[str, int] = {}
         for sample in samples:
-            value = _clean_text(sample.get(feature))
-            if value:
+            raw_value = sample.get(feature)
+            values = raw_value if isinstance(raw_value, list) else [raw_value]
+            for item in values:
+                value = _clean_text(item)
+                if not value:
+                    continue
                 counts[value] = counts.get(value, 0) + 1
         if counts:
             total = sum(counts.values())

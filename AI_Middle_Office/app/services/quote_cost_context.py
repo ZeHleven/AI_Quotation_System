@@ -145,6 +145,12 @@ def _reference_payload(row: dict[str, Any], reference: dict[str, Any], index: in
         "reference_unit_price": reference.get("reference_price"),
         "reference_price_source": reference.get("reference_price_source"),
         "reference_total": reference_total,
+        "reference_source": reference.get("reference_source"),
+        "source_type": reference.get("source_type"),
+        "enterprise_quota_version_id": reference.get("enterprise_quota_version_id"),
+        "enterprise_quota_version_code": reference.get("enterprise_quota_version_code"),
+        "enterprise_quota_item_id": reference.get("enterprise_quota_item_id"),
+        "quota_code": reference.get("quota_code"),
     }
 
 
@@ -154,7 +160,7 @@ def _format_context_text(references: list[dict[str, Any]], active_count: int, un
 
     lines = [
         "[成本库底价强参考]",
-        "以下条目来自 cost_items.active。若需求项与成本库条目匹配，请优先采用 reference_unit_price 作为 AI 原始报价单价；如确需偏离，请在备注说明原因。",
+        "以下条目来自 active cost reference。若需求项与成本库条目匹配，请优先采用 reference_unit_price 作为 AI 原始报价单价；如确需偏离，请在备注说明原因。",
         f"active 成本条目数: {active_count}; 命中参考数: {len(references)}; 未命中需求数: {unmatched_count}。",
     ]
     for ref in references:
@@ -173,6 +179,10 @@ def _format_context_text(references: list[dict[str, Any]], active_count: int, un
         if ref.get("reference_total") is not None:
             parts.append(f"reference_total: {_money(ref['reference_total'])} 元")
         parts.append(f"cost_item_id: {ref['cost_item_id']}")
+        if ref.get("reference_source"):
+            parts.append(f"reference_source: {ref['reference_source']}")
+        if ref.get("quota_code"):
+            parts.append(f"quota_code: {ref['quota_code']}")
         lines.append("; ".join(parts))
     return "\n".join(lines)
 
@@ -259,6 +269,11 @@ def cost_context_references_as_source_rows(context: QuoteCostContext) -> list[di
                         "locked_cost_item_spec": ref.get("cost_item_spec"),
                         "locked_cost_reference_price": ref.get("reference_unit_price"),
                         "locked_cost_match_type": ref.get("match_type"),
+                        "locked_cost_reference_source": ref.get("reference_source"),
+                        "locked_enterprise_quota_item_id": ref.get("enterprise_quota_item_id"),
+                        "locked_enterprise_quota_version_id": ref.get("enterprise_quota_version_id"),
+                        "locked_enterprise_quota_version_code": ref.get("enterprise_quota_version_code"),
+                        "locked_quota_code": ref.get("quota_code"),
                     }
                 )
             rows.append(row)
@@ -278,6 +293,11 @@ def cost_context_references_as_source_rows(context: QuoteCostContext) -> list[di
                 "locked_cost_item_spec": ref.get("cost_item_spec"),
                 "locked_cost_reference_price": ref.get("reference_unit_price"),
                 "locked_cost_match_type": ref.get("match_type"),
+                "locked_cost_reference_source": ref.get("reference_source"),
+                "locked_enterprise_quota_item_id": ref.get("enterprise_quota_item_id"),
+                "locked_enterprise_quota_version_id": ref.get("enterprise_quota_version_id"),
+                "locked_enterprise_quota_version_code": ref.get("enterprise_quota_version_code"),
+                "locked_quota_code": ref.get("quota_code"),
                 "locked_cost_source": "pre_quote_context",
             }
         )
@@ -327,6 +347,10 @@ def build_cost_context_fallback_quote(context: QuoteCostContext, *, reason: str)
                     "demand_item": ref.get("demand_item"),
                     "match_type": ref.get("match_type"),
                     "cost_item_id": ref.get("cost_item_id"),
+                    "reference_source": ref.get("reference_source"),
+                    "enterprise_quota_item_id": ref.get("enterprise_quota_item_id"),
+                    "enterprise_quota_version_code": ref.get("enterprise_quota_version_code"),
+                    "quota_code": ref.get("quota_code"),
                     "reference_price_source": ref.get("reference_price_source"),
                 },
             }

@@ -18,7 +18,7 @@ from app.models.file_object import FileObject
 from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.file_storage import get_object_bytes
-from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
+from app.services.model_gateway import call_quote_vision_extract, post_json_via_gateway, quote_vision_model_label
 from app.services.quote_cost_context import (
     build_cost_context_fallback_quote,
     cost_context_references_as_source_rows,
@@ -435,15 +435,16 @@ async def _iter_quote_events(
             )
             return
         else:
+            vision_model = quote_vision_model_label()
             yield (
                 "processing",
-                f"[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...",
+                f"[Vision Module] 📸 正在驱动 {vision_model} 多模态大模型扫描附件: {filename}...",
                 {"stage": "vision"},
             )
 
             base64_data = base64.b64encode(file_content).decode("utf-8")
             try:
-                extracted_text = await call_glm_vision_extract(
+                extracted_text = await call_quote_vision_extract(
                     base64_data,
                     mime_type or "",
                     username=username,
@@ -455,7 +456,7 @@ async def _iter_quote_events(
                 )
                 yield (
                     "error",
-                    f"❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}",
+                    f"❌ [Vision Module] {vision_model} 调用失败: {str(glm_err)}",
                     {"stage": "vision"},
                 )
                 return
@@ -463,7 +464,7 @@ async def _iter_quote_events(
             if not extracted_text:
                 yield (
                     "error",
-                    "❌ [Vision Module] GLM-4V 返回空内容，请重试",
+                    f"❌ [Vision Module] {vision_model} 返回空内容，请重试",
                     {"stage": "vision"},
                 )
                 return

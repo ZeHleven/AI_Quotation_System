@@ -57,6 +57,7 @@ def build_text_region_discovery_report(
     page_rows = _selected_render_rows(render_report, max_pages=max_pages)
     regions: list[dict[str, Any]] = []
     rejected_regions: list[dict[str, Any]] = []
+    overflow_regions: list[dict[str, Any]] = []
 
     try:
         import cv2  # type: ignore
@@ -68,6 +69,7 @@ def build_text_region_discovery_report(
             page_rows=page_rows,
             regions=[],
             rejected_regions=[],
+            overflow_regions=[],
             warnings=warnings,
             errors=errors,
             settings=settings,
@@ -85,7 +87,7 @@ def build_text_region_discovery_report(
             )
             continue
         try:
-            page_regions, page_rejected = _detect_page_text_regions(
+            page_regions, page_rejected, page_overflow = _detect_page_text_regions(
                 cv2=cv2,
                 render=render,
                 page_index=page_index,
@@ -105,11 +107,26 @@ def build_text_region_discovery_report(
                 }
             )
             continue
-        regions.extend(page_regions[: max(0, int(max_regions_per_page or 0))])
+        page_limit = max(0, int(max_regions_per_page or 0))
+        page_selected, page_budget_overflow = _select_regions_with_budget_diversity(
+            page_regions,
+            limit=page_limit,
+            scope="page",
+        )
+        regions.extend(page_selected)
+        overflow_regions.extend(
+            _overflow_rows(
+                page_budget_overflow,
+                overflow_reason="page_region_cap",
+                overflow_reason_cn="超过单页候选上限，未进入本轮 OCR 计划",
+                overflow_source_bucket="selected_candidate",
+            )
+        )
         rejected_regions.extend(page_rejected)
+        overflow_regions.extend(page_overflow)
 
     regions = _dedupe_regions(regions)
-    regions = sorted(
+    sorted_regions = sorted(
         regions,
         key=lambda item: (
             -_float(item.get("priority"), 0.0),
@@ -118,9 +135,28 @@ def build_text_region_discovery_report(
             _bbox_top(item.get("bbox_ratio")),
             _bbox_left(item.get("bbox_ratio")),
         ),
-    )[: max(0, int(max_regions or 0))]
+    )
+    global_limit = max(0, int(max_regions or 0))
+    regions, global_budget_overflow = _select_regions_with_budget_diversity(
+        sorted_regions,
+        limit=global_limit,
+        scope="global",
+    )
+    overflow_regions.extend(
+        _overflow_rows(
+            global_budget_overflow,
+            overflow_reason="global_region_cap",
+            overflow_reason_cn="超过全局候选上限，未进入本轮 OCR 计划",
+            overflow_source_bucket="selected_candidate",
+        )
+    )
+    rejected_regions = [_with_rejected_layer(row, min_score=min_score) for row in rejected_regions]
+    overflow_regions = [_with_rejected_layer(row, min_score=min_score) for row in overflow_regions]
     for index, region in enumerate(regions, start=1):
         region["region_id"] = f"tr_{_int(region.get('page')):03d}_{index:04d}"
+    regions = [_with_candidate_explanation(row) for row in regions]
+    rejected_regions = [_with_candidate_explanation(row) for row in rejected_regions]
+    overflow_regions = [_with_candidate_explanation(row) for row in overflow_regions]
 
     annotation_outputs = _write_annotations(
         output_dir=directory / "annotations",
@@ -145,6 +181,7 @@ def build_text_region_discovery_report(
         page_rows=page_rows,
         regions=regions,
         rejected_regions=rejected_regions,
+        overflow_regions=overflow_regions,
         warnings=warnings,
         errors=errors,
         settings=settings,
@@ -164,7 +201,7 @@ def _detect_page_text_regions(
     min_height_px: int,
     max_area_ratio: float,
     ocr_quality_feedback_profile: Mapping[str, Any],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     if image is None:
         raise ValueError(f"Cannot read image: {image_path}")
@@ -180,8 +217,10 @@ def _detect_page_text_regions(
         *_contour_boxes(cv2, grouped_block, source="block_group"),
     ]
     merged_boxes = _merge_candidate_boxes(raw_boxes, width=width, height=height)
+    merged_boxes.extend(_colored_annotation_candidate_boxes(cv2=cv2, image=image, page_width=width, page_height=height))
     selected: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
+    overflow: list[dict[str, Any]] = []
     for index, box in enumerate(merged_boxes, start=1):
         features = _candidate_features(
             cv2=cv2,
@@ -217,7 +256,7 @@ def _detect_page_text_regions(
         else:
             rejected.append(row)
             if "too_large_for_text_region" in decision.get("flags", []):
-                split_selected, split_rejected = _split_rejected_large_region(
+                split_selected, split_rejected, split_overflow = _split_rejected_large_region(
                     cv2=cv2,
                     render=render,
                     page_index=page_index,
@@ -239,9 +278,11 @@ def _detect_page_text_regions(
                 )
                 selected.extend(split_selected)
                 rejected.extend(split_rejected)
+                overflow.extend(split_overflow)
     selected.sort(key=lambda item: (-_float(item.get("priority")), _bbox_top(item.get("bbox_ratio")), _bbox_left(item.get("bbox_ratio"))))
     rejected.sort(key=lambda item: (-_float(item.get("priority")), _bbox_top(item.get("bbox_ratio")), _bbox_left(item.get("bbox_ratio"))))
-    return selected, rejected
+    overflow.sort(key=lambda item: (-_float(item.get("priority")), _bbox_top(item.get("bbox_ratio")), _bbox_left(item.get("bbox_ratio"))))
+    return selected, rejected, overflow
 
 
 def _split_rejected_large_region(
@@ -264,7 +305,7 @@ def _split_rejected_large_region(
     max_area_ratio: float,
     ocr_quality_feedback_profile: Mapping[str, Any],
     index_seed: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     child_boxes = _large_region_child_boxes(
         cv2=cv2,
         no_lines=no_lines,
@@ -326,7 +367,25 @@ def _split_rejected_large_region(
             rejected.append(row)
     selected.sort(key=lambda item: (-_float(item.get("priority")), _bbox_top(item.get("bbox_ratio")), _bbox_left(item.get("bbox_ratio"))))
     rejected.sort(key=lambda item: (-_float(item.get("priority")), _bbox_top(item.get("bbox_ratio")), _bbox_left(item.get("bbox_ratio"))))
-    return selected[:40], rejected[:80]
+    selected_limit = 40
+    rejected_limit = 80
+    overflow = [
+        *_overflow_rows(
+            selected[selected_limit:],
+            overflow_reason="large_region_split_selected_cap",
+            overflow_reason_cn="超过单个大块拆分 selected 上限，未进入本轮 OCR 计划",
+            overflow_source_bucket="selected_candidate",
+            parent_bbox_pixel=parent_bbox_pixel,
+        ),
+        *_overflow_rows(
+            rejected[rejected_limit:],
+            overflow_reason="large_region_split_rejected_cap",
+            overflow_reason_cn="超过单个大块拆分 rejected 记录上限，仅进入 overflow 审阅清单",
+            overflow_source_bucket="rejected_candidate",
+            parent_bbox_pixel=parent_bbox_pixel,
+        ),
+    ]
+    return selected[:selected_limit], rejected[:rejected_limit], overflow
 
 
 def _large_region_child_boxes(
@@ -418,6 +477,168 @@ def _dedupe_candidate_boxes(boxes: Sequence[Mapping[str, Any]], *, iou_threshold
         if not duplicate:
             kept.append(box)
     return kept
+
+
+def _select_regions_with_budget_diversity(
+    regions: Sequence[Mapping[str, Any]],
+    *,
+    limit: int,
+    scope: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    candidates = [_with_budget_bucket(row, scope=scope) for row in regions]
+    candidates = sorted(candidates, key=_region_priority_sort_key)
+    if limit <= 0:
+        return [], [_with_budget_selection(row, selected=False, rank=0, scope=scope) for row in candidates]
+    if len(candidates) <= limit:
+        return [_with_budget_selection(row, selected=True, rank=index, scope=scope) for index, row in enumerate(candidates, start=1)], []
+
+    bucket_order = [
+        "ocr_positive_feedback",
+        "colored_annotation",
+        "right_notes",
+        "large_region_split",
+        "main_drawing",
+        "fallback_high_priority",
+    ]
+    bucket_ratios = {
+        "ocr_positive_feedback": 0.22,
+        "colored_annotation": 0.24,
+        "right_notes": 0.14,
+        "large_region_split": 0.14,
+        "main_drawing": 0.18,
+        "fallback_high_priority": 0.08,
+    }
+    by_bucket: dict[str, list[dict[str, Any]]] = {bucket: [] for bucket in bucket_order}
+    for row in candidates:
+        by_bucket.setdefault(_clean_text(row.get("budget_bucket")) or "fallback_high_priority", []).append(row)
+
+    selected: list[dict[str, Any]] = []
+    selected_keys: set[str] = set()
+    for bucket in bucket_order:
+        rows = by_bucket.get(bucket) or []
+        if not rows or len(selected) >= limit:
+            continue
+        target = min(len(rows), max(1, int(math.ceil(limit * bucket_ratios.get(bucket, 0.0)))))
+        target = min(target, limit - len(selected))
+        for row in rows[:target]:
+            key = _region_identity_key(row)
+            if key in selected_keys:
+                continue
+            selected.append(row)
+            selected_keys.add(key)
+            if len(selected) >= limit:
+                break
+
+    for row in candidates:
+        if len(selected) >= limit:
+            break
+        key = _region_identity_key(row)
+        if key in selected_keys:
+            continue
+        selected.append(row)
+        selected_keys.add(key)
+
+    selected = selected[:limit]
+    selected_keys = {_region_identity_key(row) for row in selected}
+    selected_rows = [
+        _with_budget_selection(row, selected=True, rank=index, scope=scope)
+        for index, row in enumerate(sorted(selected, key=_region_priority_sort_key), start=1)
+    ]
+    overflow_rows = [
+        _with_budget_selection(row, selected=False, rank=0, scope=scope)
+        for row in candidates
+        if _region_identity_key(row) not in selected_keys
+    ]
+    return selected_rows, overflow_rows
+
+
+def _with_budget_bucket(row: Mapping[str, Any], *, scope: str) -> dict[str, Any]:
+    result = dict(row)
+    bucket = _budget_bucket(result)
+    result["budget_bucket"] = bucket
+    result["budget_bucket_cn"] = _budget_bucket_cn(bucket)
+    result["budget_scope"] = scope
+    result["budget_reason_cn"] = _budget_reason_cn(result, bucket=bucket)
+    return result
+
+
+def _with_budget_selection(row: Mapping[str, Any], *, selected: bool, rank: int, scope: str) -> dict[str, Any]:
+    result = _with_budget_bucket(row, scope=scope)
+    result["budget_selected"] = bool(selected)
+    result["budget_rank"] = rank if selected else ""
+    if selected:
+        result["budget_decision_cn"] = f"{_budget_bucket_cn(_clean_text(result.get('budget_bucket')))}：预算内保留"
+    else:
+        result["budget_decision_cn"] = f"{_budget_bucket_cn(_clean_text(result.get('budget_bucket')))}：预算不足，进入 overflow"
+    return result
+
+
+def _budget_bucket(row: Mapping[str, Any]) -> str:
+    features = row.get("features") if isinstance(row.get("features"), Mapping) else {}
+    flags = {str(flag) for flag in row.get("quality_flags") or []}
+    subtype = _clean_text(row.get("region_subtype"))
+    page_zone = _clean_text(features.get("page_zone"))
+    candidate_source = _clean_text(features.get("candidate_source"))
+    planner_source = _clean_text(row.get("planner_source"))
+    if bool(row.get("ocr_feedback_positive_shape_match")):
+        return "ocr_positive_feedback"
+    if candidate_source == "colored_annotation_cluster" or subtype == "colored_text_or_callout":
+        return "colored_annotation"
+    if planner_source == "medium_cv_text_region_detector.large_region_splitter" or "split_from_too_large_region" in flags:
+        return "large_region_split"
+    if page_zone == "right_notes" or subtype == "right_side_notes_text":
+        return "right_notes"
+    if page_zone == "main_drawing":
+        return "main_drawing"
+    return "fallback_high_priority"
+
+
+def _budget_bucket_cn(bucket: str) -> str:
+    return {
+        "ocr_positive_feedback": "OCR 正反馈相似区域",
+        "colored_annotation": "彩色图签/材料表候选",
+        "right_notes": "右侧说明/做法文字候选",
+        "large_region_split": "大块 CAD 二次拆分小字",
+        "main_drawing": "主图文字/引线标注",
+        "fallback_high_priority": "综合高优先级兜底",
+    }.get(_clean_text(bucket), "未分类候选")
+
+
+def _budget_reason_cn(row: Mapping[str, Any], *, bucket: str) -> str:
+    if bucket == "ocr_positive_feedback":
+        return "OCR 反馈证明类似形态曾产生高质量有效文字，本轮优先保留。"
+    if bucket == "colored_annotation":
+        return "彩色图签、材料表或说明块候选，拼版 CAD 页中可能包含材料名称、图例和做法说明。"
+    if bucket == "right_notes":
+        return "位于右侧说明区或说明文字块，可能包含材料做法、节点说明或图例信息。"
+    if bucket == "large_region_split":
+        return "来自大块 CAD 区域二次拆分，保留少量小字召回，避免大块误拒绝。"
+    if bucket == "main_drawing":
+        return "来自主图区域，保留房间、节点、引线和局部材料代号证据。"
+    return "综合优先级较高，作为预算剩余时的兜底 OCR 候选。"
+
+
+def _region_identity_key(row: Mapping[str, Any]) -> str:
+    bbox = row.get("bbox_ratio") or row.get("bbox_pixel") or []
+    return "|".join(
+        [
+            _clean_text(row.get("region_id")),
+            _clean_text(row.get("source_file")),
+            str(_int(row.get("page"))),
+            json.dumps(bbox, ensure_ascii=False),
+            _clean_text(row.get("planner_source")),
+        ]
+    )
+
+
+def _region_priority_sort_key(item: Mapping[str, Any]) -> tuple[Any, ...]:
+    return (
+        -_float(item.get("priority"), 0.0),
+        -_float(item.get("confidence"), 0.0),
+        _int(item.get("page")),
+        _bbox_top(item.get("bbox_ratio")),
+        _bbox_left(item.get("bbox_ratio")),
+    )
 
 
 def _box_to_ratio_like(box: Mapping[str, Any]) -> list[float]:
@@ -528,6 +749,63 @@ def _contour_boxes(cv2: Any, mask: np.ndarray, *, source: str) -> list[dict[str,
     return boxes
 
 
+def _colored_annotation_candidate_boxes(
+    *,
+    cv2: Any,
+    image: np.ndarray,
+    page_width: int,
+    page_height: int,
+) -> list[dict[str, Any]]:
+    """Find dense colored annotation/title-block clusters on CAD mosaic pages."""
+    if image.size == 0:
+        return []
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hue = hsv[:, :, 0]
+    saturation = hsv[:, :, 1]
+    value = hsv[:, :, 2]
+    saturated = (saturation > 35) & (value > 80)
+    # Keep common CAD annotation/title-block colors and skip cyan frame lines.
+    target_hue = (
+        ((hue >= 18) & (hue <= 38))
+        | ((hue >= 45) & (hue <= 82))
+        | (hue <= 8)
+        | ((hue >= 140) & (hue <= 172))
+    )
+    mask = (saturated & target_hue).astype(np.uint8) * 255
+    if cv2.countNonZero(mask) <= 0:
+        return []
+
+    grouped = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (14, 8)), iterations=1)
+    contours, _ = cv2.findContours(grouped, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    boxes: list[dict[str, Any]] = []
+    page_area = max(1.0, float(page_width * page_height))
+    for contour in contours:
+        x, y, width, height = cv2.boundingRect(contour)
+        area = max(0, int(width) * int(height))
+        if area < 80 or area > page_area * 0.018:
+            continue
+        if width < 8 or height < 6:
+            continue
+        color_density = float(cv2.countNonZero(mask[y : y + height, x : x + width])) / max(1.0, float(area))
+        if color_density < 0.035:
+            continue
+        aspect = float(width) / max(1.0, float(height))
+        if aspect < 0.12 or aspect > 18.0:
+            continue
+        boxes.append(
+            _expand_box(
+                {"x": x, "y": y, "w": width, "h": height, "source": "colored_annotation_cluster"},
+                pad_x=3,
+                pad_y=3,
+                page_width=page_width,
+                page_height=page_height,
+            )
+        )
+    boxes = _dedupe_candidate_boxes(boxes, iou_threshold=0.62)
+    boxes.sort(key=lambda item: (int(item["y"]), int(item["x"]), -(int(item["w"]) * int(item["h"]))))
+    return boxes[:120]
+
+
 def _merge_candidate_boxes(boxes: Sequence[Mapping[str, Any]], *, width: int, height: int) -> list[dict[str, Any]]:
     cleaned = [
         dict(box)
@@ -602,6 +880,7 @@ def _candidate_features(
     area_ratio = float(area) / max(1.0, float(page_width * page_height))
     center_x = (x + w / 2.0) / max(1.0, float(page_width))
     center_y = (y + h / 2.0) / max(1.0, float(page_height))
+    candidate_source = _clean_text(box.get("source"))
     return {
         "width_px": w,
         "height_px": h,
@@ -614,6 +893,7 @@ def _candidate_features(
         "component_count": component_count,
         "color_ratio": round(color_ratio, 6),
         "page_zone": _page_zone(center_x=center_x, center_y=center_y),
+        "candidate_source": candidate_source,
         "center_x_ratio": round(center_x, 6),
         "center_y_ratio": round(center_y, 6),
     }
@@ -660,6 +940,7 @@ def _score_candidate(
     line_ratio = _float(features.get("line_ratio"))
     component_count = _int(features.get("component_count"))
     color_ratio = _float(features.get("color_ratio"))
+    candidate_source = _clean_text(features.get("candidate_source"))
     if w < min_width_px:
         flags.append("too_narrow")
     if h < min_height_px:
@@ -702,8 +983,15 @@ def _score_candidate(
         score += 0.04
     elif zone == "bottom_title":
         score -= 0.04
+    if candidate_source == "colored_annotation_cluster":
+        score += 0.09
+        if 0.00018 <= area_ratio <= 0.006 and color_ratio >= 0.025:
+            score += 0.05
     base_score = max(0.0, min(1.0, score))
-    feedback = _ocr_feedback_adjustment(features, ocr_quality_feedback_profile)
+    feedback_features = dict(features)
+    feedback_features["quality_flags"] = list(flags)
+    feedback_features["region_subtype"] = _region_subtype(features, flags=flags)
+    feedback = _ocr_feedback_adjustment(feedback_features, ocr_quality_feedback_profile)
     if feedback["positive_shape_match"]:
         flags.append("ocr_feedback_positive_shape_match")
     if feedback["negative_shape_match"]:
@@ -779,6 +1067,9 @@ def _ocr_feedback_adjustment(features: Mapping[str, Any], profile: Mapping[str, 
     max_negative_delta = _float(settings.get("max_negative_delta"), -0.18)
     positive_similarity = _feature_profile_similarity(features, profile.get("positive_feature_profile"))
     negative_similarity = _feature_profile_similarity(features, profile.get("negative_feature_profile"))
+    negative_profile_flags = _profile_categorical_values(profile.get("negative_feature_profile"), "quality_flags")
+    if negative_profile_flags and not (negative_profile_flags & _feature_string_values(features.get("quality_flags"))):
+        negative_similarity = min(negative_similarity, max(0.0, threshold - 0.01))
     positive_match = positive_similarity >= threshold and _int(profile.get("positive_sample_count")) > 0
     negative_match = negative_similarity >= threshold and _int(profile.get("negative_sample_count")) > 0
 
@@ -816,14 +1107,14 @@ def _feature_profile_similarity(features: Mapping[str, Any], profile: Any) -> fl
     categorical_values = profile.get("categorical_values") if isinstance(profile.get("categorical_values"), Mapping) else {}
     categorical_scores: list[float] = []
     for feature, options in categorical_values.items():
-        candidate = _clean_text(features.get(feature))
-        if not candidate or not isinstance(options, Sequence):
+        candidates = _feature_string_values(features.get(feature))
+        if not candidates or not isinstance(options, Sequence):
             continue
         matched = 0.0
         for option in options:
             if not isinstance(option, Mapping):
                 continue
-            if candidate == _clean_text(option.get("value")):
+            if _clean_text(option.get("value")) in candidates:
                 matched = max(matched, 0.65 + min(0.35, _float(option.get("ratio"), 0.0) * 0.35))
         categorical_scores.append(matched)
 
@@ -836,6 +1127,32 @@ def _feature_profile_similarity(features: Mapping[str, Any], profile: Any) -> fl
     if categorical_scores:
         return max(0.0, min(1.0, categorical_score))
     return 0.0
+
+
+def _profile_categorical_values(profile: Any, feature: str) -> set[str]:
+    if not isinstance(profile, Mapping):
+        return set()
+    categorical_values = profile.get("categorical_values") if isinstance(profile.get("categorical_values"), Mapping) else {}
+    options = categorical_values.get(feature) if isinstance(categorical_values, Mapping) else []
+    result: set[str] = set()
+    if not isinstance(options, Sequence):
+        return result
+    for option in options:
+        if isinstance(option, Mapping):
+            value = _clean_text(option.get("value"))
+            if value:
+                result.add(value)
+    return result
+
+
+def _feature_string_values(value: Any) -> set[str]:
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, Sequence):
+        values = [str(item) for item in value]
+    else:
+        values = [str(value or "")]
+    return {item.strip() for item in values if item.strip()}
 
 
 def _range_similarity(value: float, feature_range: Mapping[str, Any]) -> float:
@@ -955,6 +1272,257 @@ def _split_decision_reason(decision: Mapping[str, Any]) -> str:
     return "Rejected by secondary split gate inside large CAD region: " + ", ".join(flags[:6])
 
 
+def _overflow_rows(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    overflow_reason: str,
+    overflow_reason_cn: str,
+    overflow_source_bucket: str,
+    parent_bbox_pixel: Sequence[Any] | None = None,
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = _with_budget_selection(row, selected=False, rank=0, scope=_clean_text(row.get("budget_scope")) or "overflow")
+        item["overflow"] = True
+        item["overflow_reason"] = overflow_reason
+        item["overflow_reason_cn"] = overflow_reason_cn
+        item["overflow_source_bucket"] = overflow_source_bucket
+        item["overflow_original_selected"] = bool(item.get("selected"))
+        item["selected"] = False
+        if parent_bbox_pixel is not None and not item.get("parent_bbox_pixel"):
+            item["parent_bbox_pixel"] = list(parent_bbox_pixel)
+        result.append(item)
+    return result
+
+
+def _with_rejected_layer(row: Mapping[str, Any], *, min_score: float) -> dict[str, Any]:
+    result = dict(row)
+    if result.get("selected") and not result.get("overflow"):
+        return result
+    layer, reason_cn = _rejected_layer(result, min_score=min_score)
+    result["rejected_layer"] = layer
+    result["rejected_layer_cn"] = _rejected_layer_cn(layer)
+    result["rejected_layer_reason_cn"] = reason_cn
+    return result
+
+
+def _with_candidate_explanation(row: Mapping[str, Any]) -> dict[str, Any]:
+    result = dict(row)
+    layer = _clean_text(result.get("rejected_layer"))
+    if result.get("selected") and not result.get("overflow"):
+        result["candidate_decision_cn"] = "入选：预算内主路径 OCR"
+        result["candidate_reason_cn"] = _selected_candidate_reason_cn(result)
+        result["candidate_risk_cn"] = _selected_candidate_risk_cn(result)
+        result["next_action_cn"] = "直接 OCR"
+    elif result.get("overflow"):
+        result["candidate_decision_cn"] = "未入选主路径：预算截断，进入 overflow"
+        result["candidate_reason_cn"] = _overflow_candidate_reason_cn(result)
+        result["candidate_risk_cn"] = _overflow_candidate_risk_cn(result)
+        result["next_action_cn"] = "保留为 overflow 审阅候选，并按兜底预算抽样 OCR"
+    elif layer == "recoverable_text_like":
+        result["candidate_decision_cn"] = "未入选：规则拒绝，但可能误拒绝"
+        result["candidate_reason_cn"] = _clean_text(result.get("rejected_layer_reason_cn")) or "具备一定文字特征，但未达到本轮主路径入选要求。"
+        result["candidate_risk_cn"] = "存在漏掉有效文字的风险，但也可能只是轴号、尺寸或碎片字符，适合少量兜底 OCR 复核。"
+        result["next_action_cn"] = "少量兜底 OCR 复核；若多次低质量则继续压低优先级"
+    elif layer == "too_large_needs_split":
+        result["candidate_decision_cn"] = "未入选：区域过大，不能直接 OCR"
+        result["candidate_reason_cn"] = _clean_text(result.get("rejected_layer_reason_cn")) or "区域过大，直接 OCR 容易混入大量线条和噪声。"
+        result["candidate_risk_cn"] = "整块直接 OCR 成本高且噪声大，但内部可能有小字簇，需要继续拆分。"
+        result["next_action_cn"] = "继续二次拆分或抽样复核"
+    elif layer == "low_priority_text_like":
+        result["candidate_decision_cn"] = "未入选：低优先级文字候选"
+        result["candidate_reason_cn"] = _clean_text(result.get("rejected_layer_reason_cn")) or "像文字但优先级不足，本轮不进入 OCR。"
+        result["candidate_risk_cn"] = "可能包含低价值轴号、尺寸或图签碎片，也可能漏掉少量说明文字。"
+        result["next_action_cn"] = "保留记录，等待后续反馈或预算充足时复核"
+    else:
+        result["candidate_decision_cn"] = "未入选：规则拒绝，暂定噪声"
+        result["candidate_reason_cn"] = _clean_text(result.get("rejected_layer_reason_cn")) or "不满足当前文字候选条件。"
+        result["candidate_risk_cn"] = "误杀风险相对低，可作为噪声/负样本参考。"
+        result["next_action_cn"] = "暂不 OCR"
+    result["candidate_signal_cn"] = _candidate_signal_cn(result)
+    return result
+
+
+def _selected_candidate_reason_cn(row: Mapping[str, Any]) -> str:
+    reason = _clean_text(row.get("budget_reason_cn"))
+    bucket_cn = _clean_text(row.get("budget_bucket_cn"))
+    if reason:
+        return reason
+    if bucket_cn:
+        return f"属于{bucket_cn}，并在当前预算内排序靠前。"
+    return "综合优先级达到本轮 OCR 预算要求。"
+
+
+def _overflow_candidate_reason_cn(row: Mapping[str, Any]) -> str:
+    reason_parts = []
+    budget_reason = _clean_text(row.get("budget_reason_cn"))
+    overflow_reason = _clean_text(row.get("overflow_reason_cn"))
+    if budget_reason:
+        reason_parts.append(budget_reason)
+    if overflow_reason:
+        reason_parts.append(overflow_reason)
+    if not reason_parts:
+        reason_parts.append("该区域已被发现，但本轮 OCR 预算不足。")
+    return "；".join(reason_parts)
+
+
+def _selected_candidate_risk_cn(row: Mapping[str, Any]) -> str:
+    bucket = _clean_text(row.get("budget_bucket"))
+    if bucket == "ocr_positive_feedback":
+        return "历史 OCR 正反馈提升了可信度，但仍需 OCR 质量评分和后续语义分类确认是否为材料信息。"
+    if bucket == "colored_annotation":
+        return "可能是材料表/图例，也可能是图签、设计单位或标题信息，需 OCR 后再筛材料。"
+    if bucket == "large_region_split":
+        return "来自大块拆分，可能召回小字，也可能混入线条和轴号噪声。"
+    return "可能包含有效文字，也可能只是轴号、尺寸或普通图纸说明。"
+
+
+def _overflow_candidate_risk_cn(row: Mapping[str, Any]) -> str:
+    bucket = _clean_text(row.get("budget_bucket"))
+    if bucket in {"colored_annotation", "ocr_positive_feedback"}:
+        return "虽然未进主路径，但存在材料表、图例或说明文字漏召回风险，适合兜底 OCR 抽样。"
+    if bucket == "large_region_split":
+        return "来自大块二次拆分，可能有小字簇，但噪声风险较高，适合少量抽样。"
+    return "本轮预算未覆盖，价值不确定，适合保留审阅或低比例抽样。"
+
+
+def _candidate_signal_cn(row: Mapping[str, Any]) -> str:
+    features = row.get("features") if isinstance(row.get("features"), Mapping) else {}
+    flags = {str(flag) for flag in row.get("quality_flags") or []}
+    signals: list[str] = []
+    bucket_cn = _clean_text(row.get("budget_bucket_cn"))
+    if bucket_cn:
+        signals.append(f"预算分类：{bucket_cn}")
+    layer_cn = _clean_text(row.get("rejected_layer_cn"))
+    if layer_cn:
+        signals.append(f"拒绝层级：{layer_cn}")
+    overflow_reason = _clean_text(row.get("overflow_reason_cn"))
+    if overflow_reason:
+        signals.append(f"预算截断：{overflow_reason}")
+    subtype_cn = _region_subtype_cn(_clean_text(row.get("region_subtype")))
+    if subtype_cn:
+        signals.append(f"区域类型：{subtype_cn}")
+    page_zone_cn = _page_zone_cn(_clean_text(features.get("page_zone")))
+    if page_zone_cn:
+        signals.append(f"页面位置：{page_zone_cn}")
+    if _clean_text(features.get("candidate_source")) == "colored_annotation_cluster":
+        signals.append("候选来源：彩色图签/说明块聚类")
+    if row.get("ocr_feedback_positive_shape_match") or "ocr_feedback_positive_shape_match" in flags:
+        signals.append("OCR 反馈：匹配有效文字正样本形态")
+    if row.get("ocr_feedback_negative_shape_match") or "ocr_feedback_negative_shape_match" in flags:
+        signals.append("OCR 反馈：匹配低价值负样本形态")
+    width = _int(features.get("width_px"))
+    height = _int(features.get("height_px"))
+    if width > 0 and height > 0:
+        signals.append(f"尺寸：{width}x{height}px")
+    density = _float(features.get("text_density"), -1.0)
+    if density >= 0:
+        signals.append(f"文字密度：{density:.4f}")
+    component_count = _int(features.get("component_count"))
+    if component_count > 0:
+        signals.append(f"小组件数：{component_count}")
+    important_flags = [
+        _quality_flag_cn(flag)
+        for flag in [
+            "too_large_for_text_region",
+            "split_from_too_large_region",
+            "line_dominant",
+            "single_component_stroke",
+            "colored_region_without_text_fragments",
+            "score_below_threshold",
+        ]
+        if flag in flags
+    ]
+    if important_flags:
+        signals.append("关键标记：" + "、".join(important_flags))
+    return "；".join(_unique_texts(signals)) or "暂无明显信号"
+
+
+def _region_subtype_cn(subtype: str) -> str:
+    return {
+        "colored_text_or_callout": "彩色文字/引线标注",
+        "right_side_notes_text": "右侧说明文字",
+        "text_line": "文字行",
+        "text_block": "文字块",
+        "line_or_marker_noise": "线条/标记噪声",
+        "noise_or_fill": "填充/图框噪声",
+        "split_noise": "大块拆分后的疑似噪声",
+    }.get(_clean_text(subtype), _clean_text(subtype))
+
+
+def _page_zone_cn(zone: str) -> str:
+    return {
+        "right_notes": "右侧说明区",
+        "bottom_title": "底部标题栏",
+        "top_header": "顶部页眉区",
+        "main_drawing": "主图区域",
+    }.get(_clean_text(zone), _clean_text(zone))
+
+
+def _quality_flag_cn(flag: str) -> str:
+    return {
+        "too_large_for_text_region": "区域过大",
+        "split_from_too_large_region": "来自大块二次拆分",
+        "line_dominant": "线条占比高",
+        "single_component_stroke": "单组件笔画/线段",
+        "colored_region_without_text_fragments": "彩色区域但缺少文字碎片",
+        "score_below_threshold": "分数低于入选阈值",
+    }.get(_clean_text(flag), _clean_text(flag))
+
+
+def _unique_texts(values: Sequence[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = _clean_text(value)
+        if not cleaned or cleaned in seen:
+            continue
+        result.append(cleaned)
+        seen.add(cleaned)
+    return result
+
+
+def _rejected_layer(row: Mapping[str, Any], *, min_score: float) -> tuple[str, str]:
+    flags = {str(flag) for flag in row.get("quality_flags") or []}
+    features = row.get("features") if isinstance(row.get("features"), Mapping) else {}
+    priority = _float(row.get("priority"), 0.0)
+    component_count = _int(features.get("component_count"))
+    density = _float(features.get("text_density"))
+    line_ratio = _float(features.get("line_ratio"))
+    subtype = _clean_text(row.get("region_subtype"))
+    if "too_large_for_text_region" in flags:
+        return "too_large_needs_split", "区域过大，不能直接 OCR，需要继续拆分或抽样复核"
+    if row.get("overflow"):
+        return "low_priority_text_like", _clean_text(row.get("overflow_reason_cn")) or "候选被预算截断，建议进入 overflow 审阅清单"
+    if row.get("ocr_feedback_positive_shape_match") and priority >= max(0.0, min_score - 0.16):
+        return "recoverable_text_like", "匹配 OCR 正样本形态，且分数接近阈值，可能是被误拒绝的文字"
+    hard_noise_flags = {
+        "no_text_like_components",
+        "single_component_stroke",
+        "colored_region_without_text_fragments",
+        "line_dominant",
+        "aspect_ratio_unlikely_text",
+    }
+    if flags & hard_noise_flags and component_count <= 1:
+        return "hard_noise", "单组件、线条或彩色标记特征明显，倾向真实噪声"
+    if subtype in {"line_or_marker_noise", "noise_or_fill"} and priority < max(0.0, min_score - 0.08):
+        return "hard_noise", "区域类型倾向线条/填充噪声，且优先级明显低于阈值"
+    if priority >= max(0.0, min_score - 0.08) or (component_count >= 3 and density >= 0.01 and line_ratio < 0.82):
+        return "recoverable_text_like", "具备一定文字碎片或接近入选阈值，建议低成本 OCR 复核"
+    if "score_below_threshold" in flags:
+        return "low_priority_text_like", "像文字但分数低于本轮入选阈值，可作为低优先级候选保留"
+    return "hard_noise", "不满足文字候选条件，当前倾向噪声"
+
+
+def _rejected_layer_cn(layer: str) -> str:
+    return {
+        "hard_noise": "明确噪声",
+        "recoverable_text_like": "可能被误拒绝的文字",
+        "too_large_needs_split": "需要继续拆分的大块区域",
+        "low_priority_text_like": "低优先级文字候选",
+    }.get(layer, layer)
+
+
 def _dedupe_regions(regions: Sequence[Mapping[str, Any]], *, iou_threshold: float = 0.72) -> list[dict[str, Any]]:
     kept: list[dict[str, Any]] = []
     for region in sorted(regions, key=lambda item: -_float(item.get("priority"))):
@@ -982,6 +1550,22 @@ def _selected_render_rows(render_report: Mapping[str, Any], *, max_pages: int) -
     return rows
 
 
+def _layer_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        layer = _clean_text(row.get("rejected_layer")) or "unclassified"
+        counts[layer] = counts.get(layer, 0) + 1
+    return counts
+
+
+def _budget_bucket_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        bucket = _clean_text(row.get("budget_bucket")) or _budget_bucket(row)
+        counts[bucket] = counts.get(bucket, 0) + 1
+    return counts
+
+
 def _write_report(
     *,
     directory: Path,
@@ -989,15 +1573,28 @@ def _write_report(
     page_rows: Sequence[Mapping[str, Any]],
     regions: Sequence[Mapping[str, Any]],
     rejected_regions: Sequence[Mapping[str, Any]],
+    overflow_regions: Sequence[Mapping[str, Any]],
     warnings: Sequence[Mapping[str, Any]],
     errors: Sequence[Mapping[str, Any]],
     settings: Mapping[str, Any],
 ) -> dict[str, Any]:
+    rejected_layer_counts = _layer_counts(rejected_regions)
+    overflow_layer_counts = _layer_counts(overflow_regions)
     summary = {
         "text_region_discovery_status": status,
         "page_count": len(page_rows),
         "selected_region_count": len(regions),
         "rejected_region_count": len(rejected_regions),
+        "overflow_region_count": len(overflow_regions),
+        "large_region_split_hit_cap": any(row.get("overflow_reason") == "large_region_split_selected_cap" for row in overflow_regions),
+        "large_region_split_rejected_hit_cap": any(row.get("overflow_reason") == "large_region_split_rejected_cap" for row in overflow_regions),
+        "page_region_hit_cap": any(row.get("overflow_reason") == "page_region_cap" for row in overflow_regions),
+        "global_region_hit_cap": any(row.get("overflow_reason") == "global_region_cap" for row in overflow_regions),
+        "rejected_layer_counts": rejected_layer_counts,
+        "overflow_layer_counts": overflow_layer_counts,
+        "budget_diversity_enabled": True,
+        "selected_budget_bucket_counts": _budget_bucket_counts(regions),
+        "overflow_budget_bucket_counts": _budget_bucket_counts(overflow_regions),
         "colored_region_count": sum(1 for row in regions if row.get("region_subtype") == "colored_text_or_callout"),
         "right_notes_region_count": sum(1 for row in regions if row.get("region_subtype") == "right_side_notes_text"),
         "large_region_split_selected_count": sum(
@@ -1021,6 +1618,7 @@ def _write_report(
         summary=summary,
         regions=regions,
         rejected_regions=rejected_regions,
+        overflow_regions=overflow_regions,
         warnings=warnings,
         errors=errors,
     )
@@ -1033,6 +1631,7 @@ def _write_report(
         "summary": summary,
         "regions": list(regions),
         "rejected_regions": list(rejected_regions),
+        "overflow_regions": list(overflow_regions),
         "warnings": list(warnings),
         "errors": list(errors),
         "outputs": outputs,
@@ -1045,6 +1644,7 @@ def _write_outputs(
     summary: Mapping[str, Any],
     regions: Sequence[Mapping[str, Any]],
     rejected_regions: Sequence[Mapping[str, Any]],
+    overflow_regions: Sequence[Mapping[str, Any]],
     warnings: Sequence[Mapping[str, Any]],
     errors: Sequence[Mapping[str, Any]],
 ) -> dict[str, str]:
@@ -1052,6 +1652,7 @@ def _write_outputs(
         ("text_region_summary_json", "text_region_summary.json", dict(summary)),
         ("text_region_plan_json", "text_region_plan.json", {"schema_version": SCHEMA_VERSION, "regions": list(regions)}),
         ("text_region_rejected_json", "text_region_rejected.json", list(rejected_regions)),
+        ("text_region_overflow_json", "text_region_overflow.json", list(overflow_regions)),
         ("text_region_diagnostics_json", "text_region_diagnostics.json", {"warnings": list(warnings), "errors": list(errors)}),
     ]
     outputs: dict[str, str] = {}
@@ -1065,6 +1666,9 @@ def _write_outputs(
     rejected_csv = directory / "text_region_rejected.csv"
     _write_region_csv(rejected_csv, rejected_regions)
     outputs["text_region_rejected_csv"] = str(rejected_csv.resolve())
+    overflow_csv = directory / "text_region_overflow.csv"
+    _write_region_csv(overflow_csv, overflow_regions)
+    outputs["text_region_overflow_csv"] = str(overflow_csv.resolve())
     return outputs
 
 
@@ -1094,8 +1698,27 @@ def _write_region_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         "component_count",
         "color_ratio",
         "page_zone",
+        "candidate_source",
         "planner_source",
+        "candidate_decision_cn",
+        "candidate_reason_cn",
+        "candidate_signal_cn",
+        "candidate_risk_cn",
+        "next_action_cn",
+        "budget_bucket",
+        "budget_bucket_cn",
+        "budget_reason_cn",
+        "budget_selected",
+        "budget_rank",
+        "budget_decision_cn",
         "parent_bbox_pixel",
+        "overflow",
+        "overflow_reason",
+        "overflow_reason_cn",
+        "overflow_source_bucket",
+        "rejected_layer",
+        "rejected_layer_cn",
+        "rejected_layer_reason_cn",
         "quality_flags",
         "reason",
     ]
@@ -1131,8 +1754,27 @@ def _write_region_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
                     "component_count": features.get("component_count", ""),
                     "color_ratio": features.get("color_ratio", ""),
                     "page_zone": features.get("page_zone", ""),
+                    "candidate_source": features.get("candidate_source", ""),
                     "planner_source": row.get("planner_source", ""),
+                    "candidate_decision_cn": row.get("candidate_decision_cn", ""),
+                    "candidate_reason_cn": row.get("candidate_reason_cn", ""),
+                    "candidate_signal_cn": row.get("candidate_signal_cn", ""),
+                    "candidate_risk_cn": row.get("candidate_risk_cn", ""),
+                    "next_action_cn": row.get("next_action_cn", ""),
+                    "budget_bucket": row.get("budget_bucket", ""),
+                    "budget_bucket_cn": row.get("budget_bucket_cn", ""),
+                    "budget_reason_cn": row.get("budget_reason_cn", ""),
+                    "budget_selected": row.get("budget_selected", ""),
+                    "budget_rank": row.get("budget_rank", ""),
+                    "budget_decision_cn": row.get("budget_decision_cn", ""),
                     "parent_bbox_pixel": json.dumps(row.get("parent_bbox_pixel") or [], ensure_ascii=False),
+                    "overflow": row.get("overflow", ""),
+                    "overflow_reason": row.get("overflow_reason", ""),
+                    "overflow_reason_cn": row.get("overflow_reason_cn", ""),
+                    "overflow_source_bucket": row.get("overflow_source_bucket", ""),
+                    "rejected_layer": row.get("rejected_layer", ""),
+                    "rejected_layer_cn": row.get("rejected_layer_cn", ""),
+                    "rejected_layer_reason_cn": row.get("rejected_layer_reason_cn", ""),
                     "quality_flags": "|".join(str(item) for item in row.get("quality_flags") or []),
                     "reason": row.get("reason", ""),
                 }

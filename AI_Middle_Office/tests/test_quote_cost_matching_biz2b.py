@@ -412,6 +412,52 @@ def test_biz2w4_ai_note_conflict_is_sanitized_when_cost_reference_matched(client
     assert enriched["cost_reference_summary"]["ai_note_conflict_count"] == 1
 
 
+def test_biz2w4_ai_note_conflict_handles_missing_this_project_phrase(client):
+    suffix = uuid.uuid4().hex[:8]
+    item_name = f"水泥砂浆止水坎 {suffix}"
+    original_note = "底层数据集中无此项目，无法报价，建议补充数据后重新计算。"
+    db = SessionLocal()
+    old_flag = _set_flag("feature_cost_db", True)
+    try:
+        cost_item = _seed_cost_item(
+            db,
+            item_name=item_name,
+            spec="综合",
+            unit="m",
+            price=20.2,
+        )
+        payload = {
+            "project_details": [
+                {
+                    "project_name": item_name,
+                    "quantity": 16,
+                    "unit": "m",
+                    "unit_price": 20.2,
+                    "total_price": 323.2,
+                    "notes": original_note,
+                }
+            ]
+        }
+
+        enriched = enrich_quote_payload_with_cost_refs(db, payload)
+    finally:
+        _set_flag("feature_cost_db", old_flag)
+        db.close()
+
+    row = enriched["project_details"][0]
+    reference = row["cost_reference"]
+    assert reference["matched"] is True
+    assert reference["cost_item_id"] == cost_item.id
+    assert reference["ai_note_cost_basis_conflict"] is True
+    assert reference["requires_manual_ai_note_confirmation"] is True
+    assert reference["ai_original_notes"] == original_note
+    assert row["ai_original_notes"] == original_note
+    assert "已命中成本库参考" in row["notes"]
+    assert "无此项目" not in row["notes"]
+    assert "无法报价" not in row["notes"]
+    assert enriched["cost_reference_summary"]["ai_note_conflict_count"] == 1
+
+
 def test_biz2w4_normal_cost_note_does_not_require_manual_note_confirmation(client):
     suffix = uuid.uuid4().hex[:8]
     item_name = f"BIZ2w4 regular note {suffix}"

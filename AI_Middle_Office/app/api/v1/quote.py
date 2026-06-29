@@ -19,7 +19,7 @@ from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.schemas.quote import ConfirmPushRequest
 from app.services.excel_service import build_excel_base64
-from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
+from app.services.model_gateway import call_quote_vision_extract, post_json_via_gateway, quote_vision_model_label
 from app.services.no_cost_draft_capture import create_no_cost_draft_items
 from app.services.quote_preview_drafts import mark_preview_draft_pushed
 from app.services.quote_cost_context import (
@@ -133,8 +133,8 @@ def _sse_event(status_name: str, message: str, trace_id: Optional[str] = None, *
 
 
 async def analyze_image_with_domestic_ai(base64_image: str, mime_type: str):
-    """利用国内智谱大模型 (GLM-4V) 提取业务信息"""
-    return await call_glm_vision_extract(base64_image, mime_type, trace_id=get_trace_id())
+    """利用国内智谱视觉大模型提取业务信息"""
+    return await call_quote_vision_extract(base64_image, mime_type, trace_id=get_trace_id())
 
 
 @router.post("/chat", summary="AI 业务对话 (支持文本/图片/文档)")
@@ -186,11 +186,12 @@ async def process_chat(
                     yield _sse_event("error", "❌ [格式校验] 拦截：国内引擎暂只支持图片输入，请截图重试", trace_id=request_trace_id)
                     return
                 else:
-                    yield _sse_event("processing", f"[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...", trace_id=request_trace_id)
+                    vision_model = quote_vision_model_label()
+                    yield _sse_event("processing", f"[Vision Module] 📸 正在驱动 {vision_model} 多模态大模型扫描附件: {filename}...", trace_id=request_trace_id)
 
                     base64_data = base64.b64encode(file_content).decode("utf-8")
                     try:
-                        extracted_text = await call_glm_vision_extract(
+                        extracted_text = await call_quote_vision_extract(
                             base64_data,
                             mime_type,
                             username=current_user.username,
@@ -198,7 +199,7 @@ async def process_chat(
                         )
                     except Exception as glm_err:
                         logger.exception("vision_model_failed", extra={"username": current_user.username, "event": "vision_model_failed"})
-                        yield _sse_event("error", f"❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}", trace_id=request_trace_id)
+                        yield _sse_event("error", f"❌ [Vision Module] {vision_model} 调用失败: {str(glm_err)}", trace_id=request_trace_id)
                         return
 
                     if extracted_text:
@@ -207,7 +208,7 @@ async def process_chat(
                         yield _sse_event("processing", "[Vision Module] ✅ 提取完毕，已成功结构化二维图纸特征！", trace_id=request_trace_id)
                         await asyncio.sleep(0.5)
                     else:
-                        yield _sse_event("error", "❌ [Vision Module] GLM-4V 返回空内容，请重试", trace_id=request_trace_id)
+                        yield _sse_event("error", f"❌ [Vision Module] {vision_model} 返回空内容，请重试", trace_id=request_trace_id)
                         return
             else:
                 if final_query.strip():

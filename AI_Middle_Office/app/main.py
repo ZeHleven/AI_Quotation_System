@@ -22,6 +22,7 @@ from app.api.v1 import (
     auth,
     business_ledger,
     client_inquiries,
+    codex_worker,
     cost_items,
     dashboard,
     dwg_quantity_trial,
@@ -60,6 +61,7 @@ from app.models import quote_requirement_row as quote_requirement_row_model  # n
 from app.models import quote_preview_draft as quote_preview_draft_model  # noqa: F401
 from app.models import project_progress as project_progress_model  # noqa: F401
 from app.models import agent as agent_model  # noqa: F401
+from app.models import enterprise_quota as enterprise_quota_model  # noqa: F401
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -184,6 +186,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
 app.include_router(client_inquiries.router, prefix="/api/v1", tags=["Client Inquiries"])
 app.include_router(business_ledger.router, prefix="/api/v1", tags=["Business Ledger"])
+app.include_router(codex_worker.router, prefix="/api/v1", tags=["Codex Worker POC"])
 app.include_router(cost_items.router, prefix="/api/v1", tags=["Cost Items"])
 app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])

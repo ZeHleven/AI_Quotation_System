@@ -28,6 +28,15 @@ rag_eval_reports/
 AI_Middle_Office/biz2k_reports/
 AI_Middle_Office/biz2l_reports/
 outputs/
+tmp/
+
+# BIZ-2x local PDF takeoff artifacts and non-source resources
+AI_Middle_Office/data/exports/
+AI_Middle_Office/runtime/
+eval/
+reports/trial_readiness/
+tools/
+AI识图练习图纸/
 
 # Local backup artifacts
 backups/

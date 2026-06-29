@@ -21,7 +21,7 @@
         <p>清爽、可信、可追溯的企业工作台。</p>
         <div class="login-hero-meta">
           <span>AI 报价</span>
-          <span>成本数据库</span>
+          <span>企业定额主库</span>
           <span>项目进度</span>
         </div>
       </section>
@@ -130,7 +130,7 @@
           @click="navigate('/admin/cost-db')"
         >
           <el-icon><Document /></el-icon>
-          <span>成本数据库</span>
+          <span>企业定额主库</span>
         </button>
         <button
           v-if="canViewRequirementStandardization"
@@ -2798,19 +2798,10 @@
         <template v-else-if="routeName === 'costDb'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">BIZ-2a</p>
-              <h2>成本数据库</h2>
+              <p class="eyebrow">BIZ-2a / BIZ-2x</p>
+              <h2>企业定额主库 / 成本主库</h2>
             </div>
             <div class="heading-actions">
-              <el-button
-                v-if="canEditCostDb"
-                :icon="Document"
-                plain
-                :disabled="costDbFeatureDisabled"
-                @click="openCostImportDialog"
-              >
-                导入 Excel
-              </el-button>
               <el-button
                 v-if="canApproveCostDb"
                 :icon="DataAnalysis"
@@ -2831,15 +2822,6 @@
                 同步记录
               </el-button>
               <el-button
-                v-if="canExportCostDb"
-                :icon="Download"
-                plain
-                :disabled="costDbFeatureDisabled || costDbLoading"
-                @click="exportCostItems"
-              >
-                导出
-              </el-button>
-              <el-button
                 v-if="canViewCostAudit"
                 :icon="Search"
                 plain
@@ -2856,16 +2838,7 @@
               >
                 状态与流向
               </el-button>
-              <el-button
-                v-if="canEditCostDb"
-                :icon="Plus"
-                type="primary"
-                :disabled="costDbFeatureDisabled"
-                @click="openCostItemCreate"
-              >
-                新建条目
-              </el-button>
-              <el-button :icon="Refresh" plain @click="loadCostItems">刷新</el-button>
+              <el-button :icon="Refresh" plain :loading="costMasterLoading" @click="refreshCostMaster">刷新</el-button>
             </div>
           </div>
 
@@ -2875,7 +2848,7 @@
             type="info"
             show-icon
             :closable="false"
-            title="成本数据库功能尚未开启"
+            title="企业定额主库功能尚未开启"
           ></el-alert>
           <template v-else>
             <el-alert
@@ -2896,10 +2869,241 @@
             </el-alert>
             <section class="cost-workbench-panel">
               <div class="cost-workbench-title">
-                <el-tag effect="plain">成本主库</el-tag>
+                <el-tag type="success" effect="plain">当前主源</el-tag>
                 <div>
-                  <strong>成本库维护工作台</strong>
-                  <span>先筛选待审核 draft，再核定 active；归档和 RAG 同步均保留审计记录。</span>
+                  <strong>企业定额主库 / 成本主库</strong>
+                  <span>报价成本参考与 RAG 同步优先读取当前 active 企业定额版本；旧 cost_items 仅保留历史维护和审计追溯。</span>
+                </div>
+              </div>
+              <div class="cost-workbench-cards">
+                <article
+                  v-for="card in costMasterOverviewCards"
+                  :key="card.key"
+                  :class="['cost-workbench-card', card.tone]"
+                >
+                  <span>{{ card.title }}</span>
+                  <strong>{{ card.value }}</strong>
+                  <small>{{ card.detail }}</small>
+                </article>
+              </div>
+            </section>
+
+            <el-tabs
+              v-model="costMasterActiveTab"
+              class="cost-master-tabs"
+              @tab-click="handleCostMasterTabClick"
+            >
+              <el-tab-pane label="定额主项" name="quotaItems">
+                <div class="cost-db-filters cost-item-filters">
+                  <el-input
+                    v-model="costMasterFilters.keyword"
+                    size="small"
+                    clearable
+                    placeholder="搜索编号/名称/工作内容/分部"
+                    @keyup.enter="applyCostMasterFilters"
+                    @clear="applyCostMasterFilters"
+                  ></el-input>
+                  <el-button size="small" type="primary" plain @click="applyCostMasterFilters">查询</el-button>
+                </div>
+                <el-table
+                  v-loading="costMasterLoading && costMasterActiveTab === 'quotaItems'"
+                  :data="enterpriseQuotaItems"
+                  row-key="id"
+                  class="users-table cost-db-table"
+                  empty-text="暂无 active 企业定额主项"
+                >
+                  <el-table-column label="定额主项" min-width="280" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.quota_code || '-' }} {{ row.item_name || '-' }}</strong>
+                        <small>{{ row.work_content || '-' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="分部" min-width="160" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.section_code || '-' }}</strong>
+                        <small>{{ row.section_name || '-' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="unit" label="单位" width="80" />
+                  <el-table-column label="工程量" width="100">
+                    <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
+                  </el-table-column>
+                  <el-table-column label="综合单价" width="120">
+                    <template #default="{ row }">{{ formatPrice(row.unit_price) }}</template>
+                  </el-table-column>
+                  <el-table-column label="费用拆分" min-width="220">
+                    <template #default="{ row }">
+                      <div class="price-stack">
+                        <span>人工：{{ formatPrice(row.labor_fee) }}</span>
+                        <small>主材：{{ formatPrice(row.main_material_fee) }}</small>
+                        <small>辅材：{{ formatPrice(row.auxiliary_material_fee) }}</small>
+                        <small>机械：{{ formatPrice(row.machinery_fee) }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="组成" width="96">
+                    <template #default="{ row }">{{ row.component_count || 0 }} 条</template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="96" fixed="right">
+                    <template #default="{ row }">
+                      <el-button size="small" :icon="Document" plain @click="openEnterpriseQuotaItemDetail(row)">
+                        详情
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-pagination
+                  v-if="enterpriseQuotaItemTotal > costMasterPageSize"
+                  v-model:current-page="costMasterPage"
+                  :page-size="costMasterPageSize"
+                  :total="enterpriseQuotaItemTotal"
+                  layout="total, prev, pager, next"
+                  small
+                  @current-change="loadEnterpriseQuotaItems"
+                ></el-pagination>
+              </el-tab-pane>
+
+              <el-tab-pane label="组成明细" name="components">
+                <div class="cost-db-filters cost-item-filters">
+                  <el-input
+                    v-model="costMasterFilters.keyword"
+                    size="small"
+                    clearable
+                    placeholder="搜索父级编号/资源名称/组成类型"
+                    @keyup.enter="applyCostMasterFilters"
+                    @clear="applyCostMasterFilters"
+                  ></el-input>
+                  <el-input
+                    v-model="costMasterFilters.fee_bucket"
+                    size="small"
+                    clearable
+                    placeholder="费用桶"
+                    @keyup.enter="applyCostMasterFilters"
+                    @clear="applyCostMasterFilters"
+                  ></el-input>
+                  <el-button size="small" type="primary" plain @click="applyCostMasterFilters">查询</el-button>
+                </div>
+                <el-table
+                  v-loading="costMasterLoading && costMasterActiveTab === 'components'"
+                  :data="enterpriseQuotaComponents"
+                  row-key="id"
+                  class="users-table cost-db-table"
+                  empty-text="暂无 active 企业定额组成明细"
+                >
+                  <el-table-column label="所属主项" min-width="220" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.quota_code || row.parent_quota_code || '-' }}</strong>
+                        <small>{{ row.quota_item_name || '-' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="资源" min-width="240" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.resource_name || '-' }}</strong>
+                        <small>{{ row.resource_code || row.component_type || '-' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="unit" label="单位" width="80" />
+                  <el-table-column label="消耗量" width="100">
+                    <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
+                  </el-table-column>
+                  <el-table-column label="单价" width="120">
+                    <template #default="{ row }">{{ formatPrice(row.unit_price) }}</template>
+                  </el-table-column>
+                  <el-table-column label="金额" width="120">
+                    <template #default="{ row }">{{ formatPrice(row.amount) }}</template>
+                  </el-table-column>
+                  <el-table-column label="费用桶" width="120">
+                    <template #default="{ row }">{{ row.fee_bucket || '-' }}</template>
+                  </el-table-column>
+                </el-table>
+                <el-pagination
+                  v-if="enterpriseQuotaComponentTotal > costMasterPageSize"
+                  v-model:current-page="costMasterComponentPage"
+                  :page-size="costMasterPageSize"
+                  :total="enterpriseQuotaComponentTotal"
+                  layout="total, prev, pager, next"
+                  small
+                  @current-change="loadEnterpriseQuotaComponents"
+                ></el-pagination>
+              </el-tab-pane>
+
+              <el-tab-pane label="资源价格" name="resources">
+                <div class="cost-db-filters cost-item-filters">
+                  <el-input
+                    v-model="costMasterFilters.keyword"
+                    size="small"
+                    clearable
+                    placeholder="搜索资源编码/资源名称/价格块"
+                    @keyup.enter="applyCostMasterFilters"
+                    @clear="applyCostMasterFilters"
+                  ></el-input>
+                  <el-input
+                    v-model="costMasterFilters.resource_type"
+                    size="small"
+                    clearable
+                    placeholder="资源类型"
+                    @keyup.enter="applyCostMasterFilters"
+                    @clear="applyCostMasterFilters"
+                  ></el-input>
+                  <el-button size="small" type="primary" plain @click="applyCostMasterFilters">查询</el-button>
+                </div>
+                <el-table
+                  v-loading="costMasterLoading && costMasterActiveTab === 'resources'"
+                  :data="enterpriseQuotaResources"
+                  row-key="id"
+                  class="users-table cost-db-table"
+                  empty-text="暂无 active 企业定额资源价格"
+                >
+                  <el-table-column label="资源" min-width="260" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.resource_name || '-' }}</strong>
+                        <small>{{ row.resource_code || '-' }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="resource_type" label="类型" width="120" />
+                  <el-table-column prop="unit" label="单位" width="80" />
+                  <el-table-column label="原价" width="120">
+                    <template #default="{ row }">{{ formatPrice(row.price) }}</template>
+                  </el-table-column>
+                  <el-table-column label="含税/计算价" width="140">
+                    <template #default="{ row }">{{ formatPrice(row.computed_price) }}</template>
+                  </el-table-column>
+                  <el-table-column label="税率" width="96">
+                    <template #default="{ row }">{{ row.tax_rate ?? '-' }}</template>
+                  </el-table-column>
+                  <el-table-column label="价格块" min-width="180" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.price_block_label || '-' }}</template>
+                  </el-table-column>
+                </el-table>
+                <el-pagination
+                  v-if="enterpriseQuotaResourceTotal > costMasterPageSize"
+                  v-model:current-page="costMasterResourcePage"
+                  :page-size="costMasterPageSize"
+                  :total="enterpriseQuotaResourceTotal"
+                  layout="total, prev, pager, next"
+                  small
+                  @current-change="loadEnterpriseQuotaResources"
+                ></el-pagination>
+              </el-tab-pane>
+            </el-tabs>
+
+            <el-divider content-position="left">历史 cost_items 维护区</el-divider>
+            <section class="cost-workbench-panel">
+              <div class="cost-workbench-title">
+                <el-tag type="info" effect="plain">历史维护</el-tag>
+                <div>
+                  <strong>旧 cost_items 维护工作台</strong>
+                  <span>旧成本条目当前不再作为报价主源，仅保留导入、审计、状态流向等历史追溯能力。</span>
                 </div>
               </div>
               <div class="cost-workbench-cards">
@@ -3161,14 +3365,29 @@
               >
                 <el-button :icon="Document" plain>选择 DWG 图纸</el-button>
               </el-upload>
+              <el-upload
+                :auto-upload="false"
+                :show-file-list="true"
+                :limit="10"
+                multiple
+                accept=".pdf"
+                :on-change="handleDwgTrialPdfFileChange"
+                :on-remove="clearDwgTrialPdfFile"
+              >
+                <el-button :icon="DocumentChecked" plain>选择正式 PDF</el-button>
+              </el-upload>
               <el-button
                 type="primary"
                 :icon="DataAnalysis"
                 :loading="dwgTrialLoading"
-                :disabled="!dwgTrialUploadFiles.length"
+                :disabled="!dwgTrialUploadFiles.length && !dwgTrialPdfUploadFiles.length"
                 @click="convertDwgTrial"
               >
-                上传 DWG 识别项目
+                {{
+                  dwgTrialUploadFiles.length && dwgTrialPdfUploadFiles.length
+                    ? '上传 DWG+PDF 联合识别'
+                    : (dwgTrialPdfUploadFiles.length ? '上传 PDF 识图列项' : '上传 DWG 识别项目')
+                }}
               </el-button>
               <el-button :icon="Refresh" plain :loading="dwgTrialLoading" @click="loadDwgTrialLatest">最近结果</el-button>
               <el-button
@@ -3218,7 +3437,7 @@
             type="info"
             show-icon
             :closable="false"
-            title="上传 DWG 图纸后，系统会展示识别到的四字段清单：项目名称、项目特征、单位、工程量"
+            title="可只上传正式 PDF 生成四字段列项候选；上传 DWG 时仍走原 DWG 识图试运行"
           ></el-alert>
 
           <section v-if="dwgTrialResult" class="dashboard-section">
@@ -3237,6 +3456,64 @@
               <el-table-column prop="项目特征" label="项目特征" min-width="420" show-overflow-tooltip />
               <el-table-column prop="单位" label="单位" width="100" />
               <el-table-column prop="工程量" label="工程量" width="160" show-overflow-tooltip />
+            </el-table>
+          </section>
+
+          <section v-if="dwgTrialHasPdfEvidence" class="dashboard-section">
+            <div class="section-title">
+              <el-icon><DataAnalysis /></el-icon>
+              <span>PDF证据链</span>
+              <small>{{ dwgTrialPdfEvidenceSummary.dwg_pdf_match_status || '待匹配' }}</small>
+            </div>
+            <el-descriptions class="compact-descriptions" :column="4" border>
+              <el-descriptions-item label="PDF页数">{{ dwgTrialPdfEvidenceSummary.pdf_page_count || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="高清PNG">{{ dwgTrialPdfEvidenceSummary.pdf_render_status || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="视觉证据">{{ dwgTrialPdfEvidenceSummary.pdf_visual_evidence_count || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="匹配分数">{{ dwgTrialPdfEvidenceSummary.dwg_pdf_match_score ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="证据合并">{{ dwgTrialPdfEvidenceSummary.dxf_pdf_fusion_status || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="融合关系">{{ dwgTrialPdfEvidenceSummary.dxf_pdf_fusion_link_count || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="R0-R9信号">{{ dwgTrialPdfEvidenceSummary.r0_r9_pdf_signal_count || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="分块tile">{{ dwgTrialPdfEvidenceSummary.pdf_tile_count || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="视觉模型">{{ dwgTrialPdfEvidenceSummary.pdf_llm_visual_status || '-' }}</el-descriptions-item>
+            </el-descriptions>
+            <div v-if="dwgTrialPdfPreviewRow?.preview_url" class="pdf-preview-panel">
+              <el-image
+                :src="dwgTrialPdfPreviewRow.preview_url"
+                fit="contain"
+                :preview-src-list="[dwgTrialPdfPreviewRow.preview_url]"
+                preview-teleported
+              />
+              <small>{{ dwgTrialPdfPreviewRow.source_file }} 第 {{ dwgTrialPdfPreviewRow.page }} 页</small>
+            </div>
+            <el-table
+              v-if="dwgTrialPdfVisualEvidenceRows.length"
+              :data="dwgTrialPdfVisualEvidenceRows"
+              row-key="evidence_id"
+              class="users-table"
+              empty-text="暂无PDF证据"
+            >
+              <el-table-column prop="evidence_role" label="角色" width="150" show-overflow-tooltip />
+              <el-table-column prop="text" label="证据文本" min-width="360" show-overflow-tooltip />
+              <el-table-column prop="source_file" label="PDF文件" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="page" label="页码" width="90" />
+              <el-table-column prop="confidence" label="置信度" width="100" />
+            </el-table>
+            <el-table
+              v-if="dwgTrialPdfFiles.length"
+              :data="dwgTrialPdfFiles"
+              row-key="filename"
+              class="users-table"
+              empty-text="暂无PDF输出文件"
+            >
+              <el-table-column prop="label" label="文件" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="filename" label="名称" min-width="280" show-overflow-tooltip />
+              <el-table-column label="操作" width="120" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" type="primary" plain :icon="Download" @click="downloadDwgTrialFile(row)">
+                    下载
+                  </el-button>
+                </template>
+              </el-table-column>
             </el-table>
           </section>
 
@@ -4481,6 +4758,113 @@
       </template>
     </el-drawer>
 
+    <el-drawer v-model="enterpriseQuotaItemDrawer.visible" size="760px" title="企业定额主项详情">
+      <div v-if="enterpriseQuotaItemDrawer.loading" class="center-state">
+        <el-icon class="spin"><Refresh /></el-icon>
+        <span>加载中</span>
+      </div>
+      <template v-else-if="enterpriseQuotaItemDrawer.item">
+        <div class="detail-grid">
+          <div>
+            <small>定额编号</small>
+            <strong>{{ enterpriseQuotaItemDrawer.item.quota_code || '-' }}</strong>
+          </div>
+          <div>
+            <small>项目名称</small>
+            <strong>{{ enterpriseQuotaItemDrawer.item.item_name || '-' }}</strong>
+          </div>
+          <div>
+            <small>分部</small>
+            <strong>{{ enterpriseQuotaItemDrawer.item.section_name || '-' }}</strong>
+          </div>
+          <div>
+            <small>单位</small>
+            <strong>{{ enterpriseQuotaItemDrawer.item.unit || '-' }}</strong>
+          </div>
+          <div>
+            <small>工程量</small>
+            <strong>{{ enterpriseQuotaItemDrawer.item.quantity ?? '-' }}</strong>
+          </div>
+          <div>
+            <small>综合单价</small>
+            <strong>{{ formatPrice(enterpriseQuotaItemDrawer.item.unit_price) }}</strong>
+          </div>
+          <div>
+            <small>版本</small>
+            <strong>{{ enterpriseQuotaItemDrawer.item.active_version?.version_code || '-' }}</strong>
+          </div>
+          <div>
+            <small>组成明细</small>
+            <strong>{{ enterpriseQuotaItemDrawer.item.component_count || 0 }} 条</strong>
+          </div>
+        </div>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Document /></el-icon>
+            <span>工作内容</span>
+          </div>
+          <p class="detail-text">{{ enterpriseQuotaItemDrawer.item.work_content || '-' }}</p>
+        </section>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Histogram /></el-icon>
+            <span>费用拆分</span>
+          </div>
+          <div class="detail-grid">
+            <div>
+              <small>人工费</small>
+              <strong>{{ formatPrice(enterpriseQuotaItemDrawer.item.labor_fee) }}</strong>
+            </div>
+            <div>
+              <small>主材费</small>
+              <strong>{{ formatPrice(enterpriseQuotaItemDrawer.item.main_material_fee) }}</strong>
+            </div>
+            <div>
+              <small>辅材费</small>
+              <strong>{{ formatPrice(enterpriseQuotaItemDrawer.item.auxiliary_material_fee) }}</strong>
+            </div>
+            <div>
+              <small>机械费</small>
+              <strong>{{ formatPrice(enterpriseQuotaItemDrawer.item.machinery_fee) }}</strong>
+            </div>
+          </div>
+        </section>
+        <section class="drawer-section">
+          <div class="section-title">
+            <el-icon><Tickets /></el-icon>
+            <span>组成明细</span>
+          </div>
+          <el-table
+            :data="enterpriseQuotaItemDrawer.item.components || []"
+            class="users-table"
+            size="small"
+            empty-text="暂无组成明细"
+          >
+            <el-table-column prop="component_type" label="组成类型" width="110" show-overflow-tooltip />
+            <el-table-column label="资源" min-width="210" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div class="operation-client">
+                  <strong>{{ row.resource_name || '-' }}</strong>
+                  <small>{{ row.resource_code || '-' }}</small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="unit" label="单位" width="72" />
+            <el-table-column label="含量" width="96">
+              <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
+            </el-table-column>
+            <el-table-column label="单价" width="110">
+              <template #default="{ row }">{{ formatPrice(row.unit_price) }}</template>
+            </el-table-column>
+            <el-table-column label="金额" width="110">
+              <template #default="{ row }">{{ formatPrice(row.amount) }}</template>
+            </el-table-column>
+          </el-table>
+        </section>
+      </template>
+      <el-empty v-else description="暂无企业定额主项详情" />
+    </el-drawer>
+
     <el-drawer v-model="costLineageDrawer.visible" size="1100px" title="成本库状态与流向">
       <el-tabs v-model="costLineageDrawer.activeTab" class="dashboard-tabs" @tab-click="handleCostLineageTabClick">
         <el-tab-pane label="总览" name="summary">
@@ -4950,7 +5334,7 @@
       </template>
     </el-drawer>
 
-    <el-drawer v-model="quoteJobDrawer.visible" size="640px" title="报价任务详情">
+    <el-drawer v-model="quoteJobDrawer.visible" size="min(1360px, 96vw)" title="报价任务详情">
       <div v-if="quoteJobDrawer.loading" class="center-state">
         <el-icon class="spin"><Refresh /></el-icon>
         <span>加载中</span>
@@ -5160,10 +5544,10 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="AI 单价" width="96">
+            <el-table-column label="AI 单价" width="88">
               <template #default="{ row }">{{ formatPrice(row.ai_unit_price) }}</template>
             </el-table-column>
-            <el-table-column label="行合计" width="130">
+            <el-table-column label="行合计" width="112">
               <template #default="{ row }">
                 <div class="operation-client">
                   <strong>{{ formatPrice(row.line_total_price ?? row.ai_total_price) }}</strong>
@@ -5171,7 +5555,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="成本参考" min-width="150" show-overflow-tooltip>
+            <el-table-column label="成本参考" min-width="130" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="operation-client">
                   <strong>{{ formatPrice(row.reference_price) }}</strong>
@@ -5179,7 +5563,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="整单合计" width="150">
+            <el-table-column label="整单合计" width="132">
               <template #default="{ row }">
                 <div class="operation-client">
                   <strong>{{ formatPrice(row.quote_total_price) }}</strong>
@@ -5188,13 +5572,13 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="偏差" width="110">
+            <el-table-column label="偏差" width="92">
               <template #default="{ row }">
                 <span>{{ formatPrice(row.price_delta) }}</span>
                 <small class="muted-inline">{{ formatRate(row.price_delta_rate) }}</small>
               </template>
             </el-table-column>
-            <el-table-column label="AI来源" min-width="150" show-overflow-tooltip>
+            <el-table-column label="AI来源" min-width="130" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="operation-client">
                   <strong>{{ row.ai_price_source_label || '-' }}</strong>
@@ -5202,19 +5586,19 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="依据" min-width="220" show-overflow-tooltip>
+            <el-table-column label="依据" min-width="180" show-overflow-tooltip>
               <template #default="{ row }">{{ row.comparison || row.match_reason || '-' }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="110" fixed="right">
+            <el-table-column label="操作" width="96">
               <template #default="{ row }">
                 <el-button
                   size="small"
                   :icon="Document"
                   plain
-                  :disabled="!row.cost_item_id"
+                  :disabled="!costEvidenceOpenId(row)"
                   @click="openCostEvidenceItem(row)"
                 >
-                  成本条目
+                  {{ costEvidenceButtonLabel(row) }}
                 </el-button>
               </template>
             </el-table-column>
@@ -6133,6 +6517,20 @@ const costRagSyncPage = ref(1)
 const costRagSyncPageSize = 10
 const costRagSyncStatus = ref(null)
 const costRagSyncStatusLoading = ref(false)
+const costMasterSummary = ref(null)
+const costMasterLoading = ref(false)
+const costMasterActiveTab = ref('quotaItems')
+const enterpriseQuotaItems = ref([])
+const enterpriseQuotaItemTotal = ref(0)
+const enterpriseQuotaComponents = ref([])
+const enterpriseQuotaComponentTotal = ref(0)
+const enterpriseQuotaResources = ref([])
+const enterpriseQuotaResourceTotal = ref(0)
+const costMasterPage = ref(1)
+const costMasterComponentPage = ref(1)
+const costMasterResourcePage = ref(1)
+const costMasterPageSize = 20
+const ENTERPRISE_QUOTA_REFERENCE_SOURCE = 'enterprise_quota.active'
 const costAuditLogs = ref([])
 const costAuditTotal = ref(0)
 const costAuditPage = ref(1)
@@ -6155,6 +6553,7 @@ const requirementConfirming = ref(false)
 const requirementQuoting = ref(false)
 const requirementFeatureDisabled = ref(false)
 const dwgTrialUploadFiles = ref([])
+const dwgTrialPdfUploadFiles = ref([])
 const dwgTrialResult = ref(null)
 const dwgTrialLoading = ref(false)
 const dwgTrialFinalizing = ref(false)
@@ -6220,6 +6619,11 @@ const costItemFilters = reactive({
   price_type: '',
   source: '',
   keyword: '',
+})
+const costMasterFilters = reactive({
+  keyword: '',
+  fee_bucket: '',
+  resource_type: '',
 })
 const costLineageFilters = reactive({
   source: '',
@@ -6535,6 +6939,12 @@ const costItemDrawer = reactive({
   item: null,
 })
 
+const enterpriseQuotaItemDrawer = reactive({
+  visible: false,
+  loading: false,
+  item: null,
+})
+
 const costLineageDrawer = reactive({
   visible: false,
   loading: false,
@@ -6611,6 +7021,42 @@ const costDbSelectionSummary = computed(() => {
     return `未选择条目；当前筛选共 ${costItemTotal.value || 0} 条，可先按状态/来源筛出待审核项。`
   }
   return `已选 ${selectedCostItemIds.value.length} 条：draft ${selectedDraftCostItemCount.value}，active ${selectedActiveCostItemCount.value}，可归档 ${selectedArchivableCostItemCount.value}。`
+})
+const costMasterOverviewCards = computed(() => {
+  const summary = costMasterSummary.value || {}
+  const version = summary.active_version || {}
+  const ragRun = summary.latest_successful_rag_sync || costRagSyncStatus.value?.latest_successful_run
+  const versionLabel = version.version_code || '暂无 active 版本'
+  return [
+    {
+      key: 'version',
+      title: '当前 active 版本',
+      value: versionLabel,
+      detail: version.version_name || '请先激活企业定额版本',
+      tone: version.id ? 'is-success' : 'is-warning',
+    },
+    {
+      key: 'items',
+      title: '定额主项',
+      value: `${summary.quota_item_count || 0} 条`,
+      detail: `分部 ${summary.section_count || 0} 个 · 组成 ${summary.component_count || 0} 条`,
+      tone: 'is-info',
+    },
+    {
+      key: 'resources',
+      title: '资源价格',
+      value: `${summary.resource_count || 0} 条`,
+      detail: summary.source || 'enterprise_quota.active',
+      tone: 'is-info',
+    },
+    {
+      key: 'rag',
+      title: '最近 RAG 同步',
+      value: ragRun?.synced_count != null ? `${ragRun.synced_count} 条` : '暂无',
+      detail: ragRun?.finished_at ? formatShanghaiDate(ragRun.finished_at) : '尚未发现成功同步记录',
+      tone: ragRun ? 'is-success' : 'is-warning',
+    },
+  ]
 })
 const costDbOverviewCards = computed(() => {
   const counts = costCurrentPageStatusCounts.value
@@ -6850,6 +7296,7 @@ const requirementSheetMappings = computed(() => requirementPreview.value?.sheet_
 const requirementSummary = computed(() => requirementPreview.value?.summary || {})
 const dwgTrialSummary = computed(() => dwgTrialResult.value?.summary || {})
 const dwgTrialFiles = computed(() => dwgTrialResult.value?.files || [])
+const dwgTrialDebugFiles = computed(() => dwgTrialResult.value?.debug_files || [])
 const dwgTrialIssues = computed(() => dwgTrialResult.value?.issues || [])
 const dwgTrialProjectRows = computed(() => dwgTrialResult.value?.project_rows || [])
 const dwgTrialProjectGeometryBindingRows = computed(() => dwgTrialResult.value?.project_geometry_binding_rows || [])
@@ -6857,6 +7304,18 @@ const dwgTrialProjectGeometryCandidateRows = computed(() => dwgTrialResult.value
 const dwgTrialItemRows = computed(() => dwgTrialResult.value?.item_rows || [])
 const dwgTrialQuantityTraceRows = computed(() => dwgTrialResult.value?.quantity_trace_rows || [])
 const dwgTrialLineQuantityCandidateRows = computed(() => dwgTrialResult.value?.line_quantity_candidate_rows || [])
+const dwgTrialPdfEvidenceSummary = computed(() => dwgTrialResult.value?.pdf_evidence_summary || {})
+const dwgTrialPdfRenderRows = computed(() => dwgTrialResult.value?.pdf_render_rows || [])
+const dwgTrialPdfPreviewRow = computed(() => dwgTrialPdfRenderRows.value.find((row) => row.preview_url))
+const dwgTrialPdfVisualEvidenceRows = computed(() => (dwgTrialResult.value?.pdf_visual_evidence_rows || []).slice(0, 80))
+const dwgTrialPdfFiles = computed(() => dwgTrialFiles.value.filter((item) => (
+  String(item?.key || '').startsWith('pdf_')
+  || ['dwg_pdf_match_csv', 'dxf_pdf_fusion_csv'].includes(item?.key)
+)))
+const dwgTrialHasPdfEvidence = computed(() => Boolean(
+  dwgTrialResult.value?.pdf_evidence_effective
+  || dwgTrialResult.value?.has_pdf_evidence
+))
 const dwgTrialQuantityListRows = computed(() => {
   const directRows = dwgTrialResult.value?.quantity_list_rows
   const sourceRows = Array.isArray(directRows) && directRows.length
@@ -6876,7 +7335,10 @@ const dwgTrialQuantityListRows = computed(() => {
 const dwgTrialSelectedCount = computed(() => Object.keys(dwgTrialCandidateSelections).length)
 const dwgTrialAdoptedSelections = computed(() => Object.values(dwgTrialCandidateSelections).filter((item) => item.action === '采纳'))
 const dwgTrialAdoptedCount = computed(() => dwgTrialAdoptedSelections.value.length)
-const dwgTrialResultJsonFile = computed(() => dwgTrialFiles.value.find((item) => item.key === 'item_list_json' || item.key === 'json'))
+const dwgTrialResultJsonFile = computed(() => (
+  dwgTrialDebugFiles.value.find((item) => item.key === 'item_list_json' || item.key === 'json')
+  || dwgTrialFiles.value.find((item) => item.key === 'item_list_json' || item.key === 'json')
+))
 const dwgTrialQuantityListFile = computed(() => (
   dwgTrialFiles.value.find((item) => item.key === 'quantity_list_xlsx')
   || dwgTrialFiles.value.find((item) => item.key === 'project_draft_four_field_xlsx')
@@ -8273,8 +8735,22 @@ function clearDwgTrialFile(_file, fileList = []) {
   clearDwgTrialCandidateSelections()
 }
 
+function handleDwgTrialPdfFileChange(_file, fileList = []) {
+  dwgTrialPdfUploadFiles.value = fileList.map((item) => item.raw || item).filter(Boolean)
+  dwgTrialResult.value = null
+  dwgTrialFinalizationResult.value = null
+  clearDwgTrialCandidateSelections()
+}
+
+function clearDwgTrialPdfFile(_file, fileList = []) {
+  dwgTrialPdfUploadFiles.value = fileList.map((item) => item.raw || item).filter(Boolean)
+  dwgTrialFinalizationResult.value = null
+  clearDwgTrialCandidateSelections()
+}
+
 function resetDwgTrial() {
   dwgTrialUploadFiles.value = []
+  dwgTrialPdfUploadFiles.value = []
   dwgTrialResult.value = null
   dwgTrialFinalizationResult.value = null
   clearDwgTrialCandidateSelections()
@@ -8300,27 +8776,46 @@ async function loadDwgTrialLatest(options = {}) {
 }
 
 async function convertDwgTrial() {
-  if (!dwgTrialUploadFiles.value.length) {
-    ElMessage.warning('请先选择 DWG 图纸')
+  const hasPdf = Boolean(dwgTrialPdfUploadFiles.value.length)
+  const hasDwg = Boolean(dwgTrialUploadFiles.value.length)
+  const isJointUpload = hasPdf && hasDwg
+  if (!hasPdf && !hasDwg) {
+    ElMessage.warning('请先选择 PDF 或 DWG 图纸')
     return
   }
   dwgTrialLoading.value = true
   try {
     const form = new FormData()
-    for (const file of dwgTrialUploadFiles.value) {
-      form.append('files', file)
+    if (isJointUpload) {
+      for (const file of dwgTrialUploadFiles.value) {
+        form.append('dwg_files', file)
+      }
+      for (const file of dwgTrialPdfUploadFiles.value) {
+        form.append('pdf_files', file)
+      }
+    } else if (hasPdf) {
+      for (const file of dwgTrialPdfUploadFiles.value) {
+        form.append('pdf_files', file)
+      }
+    } else {
+      for (const file of dwgTrialUploadFiles.value) {
+        form.append('files', file)
+      }
     }
-    const response = await api.post('/admin/dwg-quantity-trial/list-items', form)
+    const endpoint = isJointUpload
+      ? '/admin/dwg-quantity-trial/list-items-with-pdf'
+      : (hasPdf ? '/admin/dwg-quantity-trial/list-items-from-pdf' : '/admin/dwg-quantity-trial/list-items')
+    const response = await api.post(endpoint, form)
     dwgTrialResult.value = responseData(response)
     dwgTrialFinalizationResult.value = null
     clearDwgTrialCandidateSelections()
     if (dwgTrialResult.value?.has_quantity_list_excel || dwgTrialQuantityListRows.value.length) {
-      ElMessage.success('DWG 识图四字段清单已生成')
+      ElMessage.success(isJointUpload ? 'DWG+PDF 联合识图四字段清单已生成' : (hasPdf ? 'PDF 识图四字段清单已生成' : 'DWG 识图四字段清单已生成'))
     } else {
       ElMessage.warning('已完成识别，暂未形成四字段清单')
     }
   } catch (error) {
-    ElMessage.error(apiErrorMessage(error, 'DWG 识图失败'))
+    ElMessage.error(apiErrorMessage(error, isJointUpload ? 'DWG+PDF 联合识图失败' : (hasPdf ? 'PDF 识图失败' : 'DWG 识图失败')))
   } finally {
     dwgTrialLoading.value = false
   }
@@ -8417,7 +8912,7 @@ async function finalizeDwgTrialSelection() {
   dwgTrialFinalizing.value = true
   try {
     const response = await api.post('/admin/dwg-quantity-trial/finalize-selection', {
-      result_filename: dwgTrialResultJsonFile.value.filename,
+      result_filename: dwgTrialResultJsonFile.value.path || dwgTrialResultJsonFile.value.filename,
       selections: Object.values(dwgTrialCandidateSelections),
     })
     dwgTrialFinalizationResult.value = responseData(response)
@@ -9941,9 +10436,83 @@ async function openQuoteJobDetail(row) {
   }
 }
 
+function positiveId(value) {
+  const number = Number(value)
+  return Number.isFinite(number) && number > 0 ? number : null
+}
+
+function firstPositiveId(...values) {
+  for (const value of values) {
+    const id = positiveId(value)
+    if (id) return id
+  }
+  return null
+}
+
+function costEvidenceReference(row) {
+  return row?.cost_reference && typeof row.cost_reference === 'object' ? row.cost_reference : {}
+}
+
+function costEvidenceSnapshot(row) {
+  return row?.cost_item_snapshot && typeof row.cost_item_snapshot === 'object' ? row.cost_item_snapshot : {}
+}
+
+function costEvidenceSourceItem(row) {
+  const reference = costEvidenceReference(row)
+  return reference.source_cost_item && typeof reference.source_cost_item === 'object' ? reference.source_cost_item : {}
+}
+
+function enterpriseQuotaItemIdFromApiUrl(row) {
+  const reference = costEvidenceReference(row)
+  const match = String(reference.evidence_api_url || '').match(/\/cost-master\/quota-items\/(\d+)/)
+  return match ? positiveId(match[1]) : null
+}
+
+function enterpriseQuotaItemIdFromCostEvidence(row) {
+  const reference = costEvidenceReference(row)
+  const sourceItem = costEvidenceSourceItem(row)
+  const snapshot = costEvidenceSnapshot(row)
+  return firstPositiveId(
+    row?.enterprise_quota_item_id,
+    reference.enterprise_quota_item_id,
+    sourceItem.enterprise_quota_item_id,
+    snapshot.enterprise_quota_item_id,
+    enterpriseQuotaItemIdFromApiUrl(row),
+  )
+}
+
+function costEvidenceIsEnterpriseQuota(row) {
+  const reference = costEvidenceReference(row)
+  const sourceItem = costEvidenceSourceItem(row)
+  const snapshot = costEvidenceSnapshot(row)
+  return row?.reference_source === ENTERPRISE_QUOTA_REFERENCE_SOURCE
+    || reference.reference_source === ENTERPRISE_QUOTA_REFERENCE_SOURCE
+    || sourceItem.reference_source === ENTERPRISE_QUOTA_REFERENCE_SOURCE
+    || snapshot.reference_source === ENTERPRISE_QUOTA_REFERENCE_SOURCE
+    || row?.source_type === 'enterprise_quota_item'
+    || reference.source_type === 'enterprise_quota_item'
+    || Boolean(enterpriseQuotaItemIdFromCostEvidence(row))
+}
+
+function costEvidenceOpenId(row) {
+  if (costEvidenceIsEnterpriseQuota(row)) return enterpriseQuotaItemIdFromCostEvidence(row)
+  const reference = costEvidenceReference(row)
+  const snapshot = costEvidenceSnapshot(row)
+  return firstPositiveId(row?.cost_item_id, reference.cost_item_id, snapshot.id)
+}
+
+function costEvidenceButtonLabel(row) {
+  return costEvidenceIsEnterpriseQuota(row) ? '定额主项' : '成本条目'
+}
+
 function openCostEvidenceItem(row) {
-  if (!row?.cost_item_id) return
-  openCostItemDetail({ id: row.cost_item_id })
+  const id = costEvidenceOpenId(row)
+  if (!id) return
+  if (costEvidenceIsEnterpriseQuota(row)) {
+    openEnterpriseQuotaItemDetail({ id })
+    return
+  }
+  openCostItemDetail({ id })
 }
 
 async function retryQuoteJob(row) {
@@ -10074,6 +10643,149 @@ function applyBusinessLedgerFilters() {
   loadBusinessLedgers()
 }
 
+function clearCostMasterData() {
+  costMasterSummary.value = null
+  enterpriseQuotaItems.value = []
+  enterpriseQuotaItemTotal.value = 0
+  enterpriseQuotaComponents.value = []
+  enterpriseQuotaComponentTotal.value = 0
+  enterpriseQuotaResources.value = []
+  enterpriseQuotaResourceTotal.value = 0
+}
+
+async function loadCostMasterSummary(options = {}) {
+  if (!canViewCostDb.value) return
+  try {
+    const response = await api.get('/admin/cost-master/summary')
+    costMasterSummary.value = responseData(response)
+  } catch (error) {
+    costMasterSummary.value = null
+    if (isFeatureDisabled(error)) {
+      costDbFeatureDisabled.value = true
+      clearCostMasterData()
+      return
+    }
+    if (!options.silent) ElMessage.error(apiErrorMessage(error, '企业定额主库汇总加载失败'))
+  }
+}
+
+function costMasterKeywordParam() {
+  const keyword = costMasterFilters.keyword.trim()
+  return keyword ? { keyword } : {}
+}
+
+function costMasterListParams(page) {
+  return {
+    page,
+    page_size: costMasterPageSize,
+    ...costMasterKeywordParam(),
+  }
+}
+
+async function loadEnterpriseQuotaItems(options = {}) {
+  if (!canViewCostDb.value || costDbFeatureDisabled.value) return
+  if (!options.silent) costMasterLoading.value = true
+  try {
+    const response = await api.get('/admin/cost-master/quota-items', {
+      params: costMasterListParams(costMasterPage.value),
+    })
+    enterpriseQuotaItems.value = responseData(response) || []
+    enterpriseQuotaItemTotal.value = response.data?.total ?? enterpriseQuotaItems.value.length
+  } catch (error) {
+    enterpriseQuotaItems.value = []
+    enterpriseQuotaItemTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      costDbFeatureDisabled.value = true
+      return
+    }
+    if (!options.silent) ElMessage.error(apiErrorMessage(error, '企业定额主项加载失败'))
+  } finally {
+    if (!options.silent) costMasterLoading.value = false
+  }
+}
+
+async function loadEnterpriseQuotaComponents(options = {}) {
+  if (!canViewCostDb.value || costDbFeatureDisabled.value) return
+  if (!options.silent) costMasterLoading.value = true
+  const params = costMasterListParams(costMasterComponentPage.value)
+  const feeBucket = costMasterFilters.fee_bucket.trim()
+  if (feeBucket) params.fee_bucket = feeBucket
+  try {
+    const response = await api.get('/admin/cost-master/components', { params })
+    enterpriseQuotaComponents.value = responseData(response) || []
+    enterpriseQuotaComponentTotal.value = response.data?.total ?? enterpriseQuotaComponents.value.length
+  } catch (error) {
+    enterpriseQuotaComponents.value = []
+    enterpriseQuotaComponentTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      costDbFeatureDisabled.value = true
+      return
+    }
+    if (!options.silent) ElMessage.error(apiErrorMessage(error, '企业定额组成明细加载失败'))
+  } finally {
+    if (!options.silent) costMasterLoading.value = false
+  }
+}
+
+async function loadEnterpriseQuotaResources(options = {}) {
+  if (!canViewCostDb.value || costDbFeatureDisabled.value) return
+  if (!options.silent) costMasterLoading.value = true
+  const params = costMasterListParams(costMasterResourcePage.value)
+  const resourceType = costMasterFilters.resource_type.trim()
+  if (resourceType) params.resource_type = resourceType
+  try {
+    const response = await api.get('/admin/cost-master/resources', { params })
+    enterpriseQuotaResources.value = responseData(response) || []
+    enterpriseQuotaResourceTotal.value = response.data?.total ?? enterpriseQuotaResources.value.length
+  } catch (error) {
+    enterpriseQuotaResources.value = []
+    enterpriseQuotaResourceTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      costDbFeatureDisabled.value = true
+      return
+    }
+    if (!options.silent) ElMessage.error(apiErrorMessage(error, '企业定额资源价格加载失败'))
+  } finally {
+    if (!options.silent) costMasterLoading.value = false
+  }
+}
+
+async function loadCostMasterActiveList(options = {}) {
+  if (costMasterActiveTab.value === 'components') {
+    await loadEnterpriseQuotaComponents(options)
+    return
+  }
+  if (costMasterActiveTab.value === 'resources') {
+    await loadEnterpriseQuotaResources(options)
+    return
+  }
+  await loadEnterpriseQuotaItems(options)
+}
+
+async function refreshCostMaster() {
+  if (!canViewCostDb.value) return
+  costDbFeatureDisabled.value = false
+  costMasterLoading.value = true
+  try {
+    await loadCostMasterSummary({ silent: true })
+    await loadCostMasterActiveList({ silent: true })
+    await loadCostRagSyncStatus({ silent: true })
+  } finally {
+    costMasterLoading.value = false
+  }
+}
+
+function applyCostMasterFilters() {
+  costMasterPage.value = 1
+  costMasterComponentPage.value = 1
+  costMasterResourcePage.value = 1
+  loadCostMasterActiveList()
+}
+
+function handleCostMasterTabClick() {
+  loadCostMasterActiveList()
+}
+
 async function loadCostItems() {
   if (!canViewCostDb.value) return
   costDbFeatureDisabled.value = false
@@ -10097,7 +10809,7 @@ async function loadCostItems() {
     }
     if (error.response?.status === 401) state.error = 'unauthorized'
     else if (error.response?.status === 403) state.error = 'forbidden'
-    else ElMessage.error(apiErrorMessage(error, '成本数据库加载失败'))
+    else ElMessage.error(apiErrorMessage(error, '历史成本条目加载失败'))
   } finally {
     costDbLoading.value = false
   }
@@ -10435,7 +11147,7 @@ async function openCostLineageDetail(row) {
 async function syncActiveCostItemsToRag() {
   if (!canApproveCostDb.value || costDbFeatureDisabled.value) return
   try {
-    await ElMessageBox.confirm('确认将 active 成本条目同步到 RAG？这会让成本数据库成为报价检索主源。', '同步成本库到 RAG', {
+    await ElMessageBox.confirm('确认将 active 企业定额主库同步到 RAG？这会让企业定额成为报价检索主源。', '同步成本主库到 RAG', {
       type: 'warning',
       confirmButtonText: '确认同步',
       cancelButtonText: '返回',
@@ -10712,6 +11424,22 @@ async function openCostItemDetail(row) {
     ElMessage.error(apiErrorMessage(error, '成本条目详情加载失败'))
   } finally {
     costItemDrawer.loading = false
+  }
+}
+
+async function openEnterpriseQuotaItemDetail(row) {
+  const itemId = firstPositiveId(row?.enterprise_quota_item_id, row?.id)
+  if (!itemId) return
+  enterpriseQuotaItemDrawer.visible = true
+  enterpriseQuotaItemDrawer.loading = true
+  enterpriseQuotaItemDrawer.item = null
+  try {
+    const response = await api.get(`/admin/cost-master/quota-items/${itemId}`)
+    enterpriseQuotaItemDrawer.item = responseData(response)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '企业定额主项详情加载失败'))
+  } finally {
+    enterpriseQuotaItemDrawer.loading = false
   }
 }
 
@@ -12193,9 +12921,15 @@ async function bootstrap() {
         state.error = 'forbidden'
         return
       }
+      await refreshCostMaster()
       await loadCostItems()
-      const costItemId = Number(new URLSearchParams(window.location.search).get('cost_item_id'))
-      if (Number.isFinite(costItemId) && costItemId > 0) {
+      const urlParams = new URLSearchParams(window.location.search)
+      const enterpriseQuotaItemId = positiveId(urlParams.get('enterprise_quota_item_id'))
+      if (enterpriseQuotaItemId) {
+        await openEnterpriseQuotaItemDetail({ id: enterpriseQuotaItemId })
+      }
+      const costItemId = positiveId(urlParams.get('cost_item_id'))
+      if (costItemId) {
         await openCostItemDetail({ id: costItemId })
       }
       return

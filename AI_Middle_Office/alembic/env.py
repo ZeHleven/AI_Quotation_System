@@ -18,6 +18,7 @@ from app.models import (  # noqa: F401,E402
     material,
     model_call_log,
     cost_audit,
+    enterprise_quota,
     prompt_regression,
     project_progress,
     quote_cost_evidence,

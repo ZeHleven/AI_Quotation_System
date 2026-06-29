@@ -171,7 +171,7 @@ def get_available_modules(user: User) -> list[dict]:
         modules.append(
             {
                 "key": "cost_db",
-                "name": "成本数据库",
+                "name": "企业定额主库 / 成本主库",
                 "path": "/admin/cost-db",
                 "status": "available" if settings.feature_cost_db else "pending",
             }

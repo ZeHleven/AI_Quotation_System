@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageDraw
 
+from app.services import drawing_text_region_detector as detector
 from app.services.drawing_text_region_detector import build_text_region_discovery_report
 
 
@@ -46,6 +47,28 @@ def test_text_region_detector_keeps_colored_callout_and_rejects_line_noise(tmp_p
     assert any(row["features"]["page_zone"] == "right_notes" for row in report["regions"])
     rejected_flags = {flag for row in report["rejected_regions"] for flag in row.get("quality_flags", [])}
     assert rejected_flags & {"line_dominant", "too_sparse_after_line_removal", "aspect_ratio_unlikely_text", "score_below_threshold"}
+
+
+def test_text_region_detector_adds_colored_annotation_cluster_candidates(tmp_path: Path) -> None:
+    page_path = _make_colored_annotation_page(tmp_path / "page.png")
+    report = build_text_region_discovery_report(
+        render_report=_render_report(page_path),
+        output_dir=tmp_path / "text_regions",
+        max_pages=1,
+        max_regions=20,
+        min_score=0.34,
+    )
+
+    colored_cluster_rows = [
+        row
+        for row in report["regions"]
+        if (row.get("features") or {}).get("candidate_source") == "colored_annotation_cluster"
+    ]
+    assert colored_cluster_rows
+    assert all(row["region_subtype"] == "colored_text_or_callout" for row in colored_cluster_rows)
+    candidates_csv = Path(report["outputs"]["text_region_candidates_csv"]).read_text(encoding="utf-8-sig")
+    assert "candidate_source" in candidates_csv
+    assert "colored_annotation_cluster" in candidates_csv
 
 
 def test_text_region_detector_rejects_single_component_colored_marker(tmp_path: Path) -> None:
@@ -140,6 +163,90 @@ def test_text_region_detector_applies_ocr_quality_feedback_to_candidate_priority
     assert "ocr_feedback_score_delta" in Path(report["outputs"]["text_region_candidates_csv"]).read_text(encoding="utf-8-sig")
 
 
+def test_text_region_detector_writes_overflow_and_rejected_layers(tmp_path: Path) -> None:
+    page_path = _make_medium_page(tmp_path / "page.png")
+    report = build_text_region_discovery_report(
+        render_report=_render_report(page_path),
+        output_dir=tmp_path / "text_regions",
+        max_pages=1,
+        max_regions_per_page=1,
+        max_regions=1,
+        min_score=0.34,
+    )
+
+    assert Path(report["outputs"]["text_region_overflow_json"]).exists()
+    assert Path(report["outputs"]["text_region_overflow_csv"]).exists()
+    assert report["summary"]["overflow_region_count"] >= 1
+    assert report["summary"]["page_region_hit_cap"] is True
+    assert report["overflow_regions"]
+    assert all(row.get("overflow") is True for row in report["overflow_regions"])
+    assert any(row.get("rejected_layer") for row in report["rejected_regions"])
+    assert any(row.get("rejected_layer_cn") for row in report["rejected_regions"])
+    for bucket in (report["regions"], report["overflow_regions"], report["rejected_regions"]):
+        assert all(row.get("candidate_decision_cn") for row in bucket)
+        assert all(row.get("candidate_reason_cn") for row in bucket)
+        assert all(row.get("candidate_signal_cn") for row in bucket)
+        assert all(row.get("candidate_risk_cn") for row in bucket)
+        assert all(row.get("next_action_cn") for row in bucket)
+    overflow_csv = Path(report["outputs"]["text_region_overflow_csv"]).read_text(encoding="utf-8-sig")
+    candidates_csv = Path(report["outputs"]["text_region_candidates_csv"]).read_text(encoding="utf-8-sig")
+    rejected_csv = Path(report["outputs"]["text_region_rejected_csv"]).read_text(encoding="utf-8-sig")
+    assert "candidate_decision_cn" in candidates_csv
+    assert "candidate_reason_cn" in rejected_csv
+    assert "candidate_signal_cn" in overflow_csv
+    assert "overflow_reason_cn" in overflow_csv
+    assert "rejected_layer_cn" in overflow_csv
+
+
+def test_budget_diversity_keeps_lower_score_material_legend_bucket() -> None:
+    high_priority_fallback = [
+        _budget_candidate(f"fallback_{index}", priority=0.95 - index * 0.01, page_zone="bottom_title")
+        for index in range(6)
+    ]
+    colored_material_candidate = _budget_candidate(
+        "material_legend",
+        priority=0.42,
+        page_zone="main_drawing",
+        candidate_source="colored_annotation_cluster",
+        region_subtype="colored_text_or_callout",
+    )
+    main_drawing_candidate = _budget_candidate("main_text", priority=0.5, page_zone="main_drawing")
+
+    selected, overflow = detector._select_regions_with_budget_diversity(
+        [*high_priority_fallback, colored_material_candidate, main_drawing_candidate],
+        limit=3,
+        scope="global",
+    )
+
+    selected_buckets = {row["budget_bucket"] for row in selected}
+    assert "colored_annotation" in selected_buckets
+    assert "main_drawing" in selected_buckets
+    assert len(selected) == 3
+    assert overflow
+    assert all(row.get("budget_decision_cn") for row in selected)
+    assert any(row.get("budget_bucket_cn") == "综合高优先级兜底" for row in overflow)
+
+
+def test_overflow_rows_keep_budget_bucket_for_split_candidates() -> None:
+    split_candidate = _budget_candidate("split_001", priority=0.39, page_zone="main_drawing")
+    split_candidate["planner_source"] = "medium_cv_text_region_detector.large_region_splitter"
+    split_candidate["quality_flags"] = ["split_from_too_large_region"]
+
+    rows = detector._overflow_rows(
+        [split_candidate],
+        overflow_reason="large_region_split_rejected_cap",
+        overflow_reason_cn="大块区域二次拆分命中过多，超出复核预算。",
+        overflow_source_bucket="large_region_split",
+    )
+
+    assert rows[0]["overflow"] is True
+    assert rows[0]["selected"] is False
+    assert rows[0]["budget_bucket"] == "large_region_split"
+    assert rows[0]["budget_bucket_cn"] == "大块 CAD 二次拆分小字"
+    assert rows[0]["budget_selected"] is False
+    assert "预算不足" in rows[0]["budget_decision_cn"]
+
+
 def _make_medium_page(path: Path) -> Path:
     image = Image.new("RGB", (1200, 900), "white")
     draw = ImageDraw.Draw(image)
@@ -166,6 +273,57 @@ def _make_medium_page(path: Path) -> Path:
     # Dense hatch-like fill should be rejected or score low.
     for offset in range(0, 180, 8):
         draw.line((820 + offset, 560, 900 + offset, 720), fill=(0, 0, 0), width=1)
+
+    image.save(path)
+    return path
+
+
+def _budget_candidate(
+    region_id: str,
+    *,
+    priority: float,
+    page_zone: str,
+    candidate_source: str = "",
+    region_subtype: str = "text_block",
+) -> dict[str, object]:
+    return {
+        "region_id": region_id,
+        "source_file": "drawing.pdf",
+        "page": 1,
+        "priority": priority,
+        "confidence": priority,
+        "selected": True,
+        "region_subtype": region_subtype,
+        "planner_source": "medium_cv_text_region_detector",
+        "bbox_ratio": [0.1, 0.1, 0.2, 0.12],
+        "features": {
+            "page_zone": page_zone,
+            "candidate_source": candidate_source,
+        },
+        "quality_flags": [],
+    }
+
+
+def _make_colored_annotation_page(path: Path) -> Path:
+    image = Image.new("RGB", (1200, 900), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((80, 80, 700, 760), outline=(0, 0, 0), width=2)
+    draw.text((140, 160), "MAIN PLAN", fill=(0, 0, 0))
+    draw.text((140, 210), "ROOM 101", fill=(0, 0, 0))
+
+    # Dense CAD title/legend block that should trigger colored annotation discovery.
+    draw.rectangle((835, 115, 980, 215), outline=(0, 210, 0), width=2)
+    for index, text in enumerate(
+        [
+            "CT-01 WHITE TILE",
+            "PT-01 WHITE PAINT",
+            "SCALE 1:75",
+        ]
+    ):
+        y = 135 + index * 24
+        draw.text((855, y), text, fill=(0, 180, 0))
+        draw.line((850, y + 16, 965, y + 16), fill=(230, 180, 0), width=2)
+    draw.line((835, 205, 980, 205), fill=(255, 0, 0), width=2)
 
     image.save(path)
     return path

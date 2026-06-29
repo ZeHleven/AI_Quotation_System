@@ -66,9 +66,16 @@ if (-not [int]::TryParse($WorkerConcurrencyText, [ref]$WorkerConcurrency) -or $W
 }
 $env:CELERY_WORKER_POOL = $WorkerPool
 $env:CELERY_WORKER_CONCURRENCY = [string]$WorkerConcurrency
+$WorkerHostname = "quote-worker-$PID@%h"
 
 $logFile = Join-Path $LogDir ("celery_worker_{0}.log" -f (Get-Date -Format "yyyyMMdd"))
 $pidFile = Join-Path $LogDir "celery_worker.pid"
+
+if ($Restart) {
+    Write-Host "[RESTART] Asking existing Celery workers to shutdown via broker"
+    & $PythonPath -m celery -A app.tasks.celery_app.celery_app control shutdown | Out-Null
+    Start-Sleep -Seconds 4
+}
 
 if (Test-Path $pidFile) {
     $oldPidText = (Get-Content $pidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
@@ -130,6 +137,7 @@ Write-Host "[INFO] Python: $PythonPath"
 Write-Host "[INFO] Log: $logFile"
 Write-Host "[INFO] Worker pool: $WorkerPool"
 Write-Host "[INFO] Worker concurrency: $WorkerConcurrency"
+Write-Host "[INFO] Worker hostname: $WorkerHostname"
 
-& $PythonPath -m celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --pool=$WorkerPool --concurrency=$WorkerConcurrency --hostname=quote-worker@%h --logfile="$logFile" --pidfile="$pidFile"
+& $PythonPath -m celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --pool=$WorkerPool --concurrency=$WorkerConcurrency --hostname=$WorkerHostname --logfile="$logFile" --pidfile="$pidFile"
 exit $LASTEXITCODE

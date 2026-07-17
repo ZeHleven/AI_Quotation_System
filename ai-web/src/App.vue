@@ -2,7 +2,7 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-lockup">
-        <span class="brand-mark">QS</span>
+        <span class="brand-mark" aria-hidden="true">QS</span>
         <div>
           <p class="eyebrow">旗胜智能装饰</p>
           <h1>旗胜智价</h1>
@@ -70,106 +70,177 @@
           <span>按业务流程分组</span>
         </div>
         <nav class="sidebar-nav" aria-label="后台导航">
-          <div class="nav-group" v-if="canAccessPermissions || canViewDashboard">
-            <p class="nav-group-label">权限与总览</p>
-        <button
-          v-if="canAccessPermissions"
-          :class="['nav-item', { active: routeName === 'permissions' }]"
-          type="button"
-          @click="navigate('/admin/permissions')"
-        >
-          <el-icon><Tickets /></el-icon>
-          <span>权限管理</span>
-        </button>
-        <button
-          v-if="canViewDashboard"
-          :class="['nav-item', { active: routeName === 'dashboard' }]"
-          type="button"
-          @click="navigate('/admin/dashboard')"
-        >
-          <el-icon><DataAnalysis /></el-icon>
-          <span>效率驾驶舱</span>
-        </button>
+          <div
+            class="nav-group"
+            v-if="canOpenLegacyQuote || canViewBudgetProjects || canViewDashboard || canViewProjectProgress || canViewMyProjectTasks"
+          >
+            <p class="nav-group-label">核心工作台</p>
+            <button
+              v-if="canOpenLegacyQuote"
+              :class="['nav-item', { active: routeName === 'quoteNew' }]"
+              type="button"
+              @click="navigate('/quote/new')"
+            >
+              <el-icon><Document /></el-icon>
+              <span>新建报价</span>
+            </button>
+            <button
+              v-if="canViewBudgetProjects"
+              :class="['nav-item', { active: ['budgetProjects', 'budgetProjectDetail'].includes(routeName) }]"
+              type="button"
+              @click="navigate('/admin/budget-projects')"
+            >
+              <el-icon><Tickets /></el-icon>
+              <span>预算项目</span>
+            </button>
+            <button
+              v-if="canViewDashboard"
+              :class="['nav-item', { active: routeName === 'dashboard' }]"
+              type="button"
+              @click="navigate('/admin/dashboard')"
+            >
+              <el-icon><DataAnalysis /></el-icon>
+              <span>经营总览</span>
+            </button>
+            <button
+              v-if="canViewProjectProgress"
+              :class="['nav-item', { active: ['projects', 'projectDetail'].includes(routeName) }]"
+              type="button"
+              @click="navigate('/admin/projects')"
+            >
+              <el-icon><TrendCharts /></el-icon>
+              <span>项目进度</span>
+            </button>
+            <button
+              v-if="canViewMyProjectTasks"
+              :class="['nav-item', { active: routeName === 'projectMyTasks' }]"
+              type="button"
+              @click="navigate('/admin/project-tasks/my')"
+            >
+              <el-icon><DocumentChecked /></el-icon>
+              <span>我的项目任务</span>
+            </button>
           </div>
           <div
             class="nav-group"
-            v-if="canViewExecution || canViewProjectProgress || canViewBusinessLedger || canViewCostDb || canViewRequirementStandardization || canViewDwgTrial || canViewAgentCenter"
+            v-if="canViewBusinessLedger || canViewExecution || canViewBidding"
           >
-            <p class="nav-group-label">业务运营</p>
-        <button
-          v-if="canViewExecution"
-          :class="['nav-item', { active: routeName === 'execution' }]"
-          type="button"
-          @click="navigate('/admin/execution')"
-        >
-          <el-icon><Clock /></el-icon>
-          <span>执行任务</span>
-        </button>
-        <button
-          v-if="canViewProjectProgress"
-          :class="['nav-item', { active: ['projects', 'projectDetail', 'projectMyTasks'].includes(routeName) }]"
-          type="button"
-          @click="navigate('/admin/projects')"
-        >
-          <el-icon><TrendCharts /></el-icon>
-          <span>项目进度</span>
-        </button>
-        <button
-          v-if="canViewBusinessLedger"
-          :class="['nav-item', { active: routeName === 'businessLedger' }]"
-          type="button"
-          @click="navigate('/admin/business-ledger')"
-        >
-          <el-icon><Tickets /></el-icon>
-          <span>商务台账</span>
-        </button>
-        <button
-          v-if="canViewCostDb"
-          :class="['nav-item', { active: routeName === 'costDb' }]"
-          type="button"
-          @click="navigate('/admin/cost-db')"
-        >
-          <el-icon><Document /></el-icon>
-          <span>企业定额主库</span>
-        </button>
-        <button
-          v-if="canViewRequirementStandardization"
-          :class="['nav-item', { active: routeName === 'requirementStandardization' }]"
-          type="button"
-          @click="navigate('/admin/requirement-standardization')"
-        >
-          <el-icon><Tickets /></el-icon>
-          <span>需求单标准化</span>
-        </button>
-        <button
-          v-if="canViewDwgTrial"
-          :class="['nav-item', { active: routeName === 'dwgTrial' }]"
-          type="button"
-          @click="navigate('/admin/dwg-trial')"
-        >
-          <el-icon><Upload /></el-icon>
-          <span>图纸试运行</span>
-        </button>
-        <button
-          v-if="canViewAgentCenter"
-          :class="['nav-item', { active: routeName === 'agentCenter' }]"
-          type="button"
-          @click="navigate('/admin/agent-center')"
-        >
-          <el-icon><DataAnalysis /></el-icon>
-          <span>AI助手中心</span>
-        </button>
+            <p class="nav-group-label">业务协同</p>
+            <button
+              v-if="canViewBusinessLedger"
+              :class="['nav-item', { active: routeName === 'businessLedger' }]"
+              type="button"
+              @click="navigate('/admin/business-ledger')"
+            >
+              <el-icon><Tickets /></el-icon>
+              <span>商务台账</span>
+            </button>
+            <button
+              v-if="canViewExecution"
+              :class="['nav-item', { active: routeName === 'execution' }]"
+              type="button"
+              @click="navigate('/admin/execution')"
+            >
+              <el-icon><Clock /></el-icon>
+              <span>执行任务</span>
+            </button>
+            <button
+              v-if="canViewBidding"
+              :class="['nav-item', { active: routeName === 'bidding' }]"
+              type="button"
+              @click="navigate('/admin/bidding')"
+            >
+              <el-icon><DocumentChecked /></el-icon>
+              <span>智能投标</span>
+            </button>
           </div>
-          <div class="nav-group" v-if="canOpenLegacyQuote || canOpenLegacyAdmin">
-            <p class="nav-group-label">旧版入口</p>
-        <button v-if="canOpenLegacyQuote" class="nav-item" type="button" @click="openLegacy('/index.html')">
-          <el-icon><Document /></el-icon>
-          <span>旧报价工作台</span>
-        </button>
-        <button v-if="canOpenLegacyAdmin" class="nav-item" type="button" @click="openLegacy('/admin.html')">
-          <el-icon><Setting /></el-icon>
-          <span>旧知识库管理</span>
-        </button>
+          <div
+            class="nav-group"
+            v-if="canViewRequirementStandardization || canViewCostMeasurement || canViewCostDb || canViewAccountQuotas || canViewEnterpriseProfile"
+          >
+            <p class="nav-group-label">数据资产</p>
+            <button
+              v-if="canViewRequirementStandardization"
+              :class="['nav-item', { active: routeName === 'requirementStandardization' }]"
+              type="button"
+              @click="navigate('/admin/requirement-standardization')"
+            >
+              <el-icon><Tickets /></el-icon>
+              <span>需求单标准化</span>
+            </button>
+            <button
+              v-if="canViewCostMeasurement"
+              :class="['nav-item', { active: routeName === 'costMeasurement' }]"
+              type="button"
+              @click="navigate('/admin/cost-measurement')"
+            >
+              <el-icon><DataAnalysis /></el-icon>
+              <span>&#25104;&#26412;&#27979;&#31639;</span>
+            </button>
+            <button
+              v-if="canViewCostDb"
+              :class="['nav-item', { active: routeName === 'costDb' }]"
+              type="button"
+              @click="navigate('/admin/cost-db')"
+            >
+              <el-icon><Document /></el-icon>
+              <span>企业定额主库</span>
+            </button>
+            <button
+              v-if="canViewAccountQuotas"
+              :class="['nav-item', { active: routeName === 'accountQuotas' }]"
+              type="button"
+              @click="navigate('/admin/account-quotas')"
+            >
+              <el-icon><Document /></el-icon>
+              <span>账户定额库</span>
+            </button>
+            <button
+              v-if="canViewEnterpriseProfile"
+              :class="['nav-item', { active: routeName === 'enterpriseProfile' }]"
+              type="button"
+              @click="navigate('/admin/enterprise-profile')"
+            >
+              <el-icon><Document /></el-icon>
+              <span>企业资料库</span>
+            </button>
+          </div>
+          <div class="nav-group" v-if="canViewDwgTrial || canViewAgentCenter">
+            <p class="nav-group-label">智能工具</p>
+            <button
+              v-if="canViewDwgTrial"
+              :class="['nav-item', { active: routeName === 'dwgTrial' }]"
+              type="button"
+              @click="navigate('/admin/dwg-trial')"
+            >
+              <el-icon><Upload /></el-icon>
+              <span>图纸识图</span>
+            </button>
+            <button
+              v-if="canViewAgentCenter"
+              :class="['nav-item', { active: routeName === 'agentCenter' }]"
+              type="button"
+              @click="navigate('/admin/agent-center')"
+            >
+              <el-icon><DataAnalysis /></el-icon>
+              <span>智能助手</span>
+            </button>
+          </div>
+          <div class="nav-group" v-if="canAccessPermissions || canOpenLegacyAdmin">
+            <p class="nav-group-label">系统管理</p>
+            <button
+              v-if="canAccessPermissions"
+              :class="['nav-item', { active: routeName === 'permissions' }]"
+              type="button"
+              @click="navigate('/admin/permissions')"
+            >
+              <el-icon><Tickets /></el-icon>
+              <span>账号与权限</span>
+            </button>
+            <button v-if="canOpenLegacyAdmin" class="nav-item" type="button" @click="openLegacy('/admin.html')">
+              <el-icon><Setting /></el-icon>
+              <span>管理设置</span>
+            </button>
           </div>
         </nav>
       </aside>
@@ -190,17 +261,24 @@
           <p>无权限访问</p>
         </div>
 
+        <div v-else-if="routeName === 'noAccess'" class="center-state">
+          <el-icon><Lock /></el-icon>
+          <h2>暂无可用功能</h2>
+          <p>账号已登录，但尚未分配可用模块，请联系系统管理员。</p>
+          <el-button type="primary" plain @click="logout">退出登录</el-button>
+        </div>
+
         <div v-else-if="state.error === 'feature_disabled'" class="center-state">
           <el-icon><DataAnalysis /></el-icon>
           <h2>功能未开启</h2>
-          <p>驾驶舱看板开关尚未打开。</p>
+          <p>经营总览暂不可用，请联系管理员确认服务状态。</p>
         </div>
 
         <template v-else-if="routeName === 'agentCenter'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">Agentic Middle Office · Audit</p>
-              <h2>AI助手中心</h2>
+              <p class="eyebrow">智能审查</p>
+              <h2>智能助手</h2>
             </div>
             <div class="heading-actions">
               <el-button :icon="Refresh" plain @click="refreshAgentCenter">刷新</el-button>
@@ -213,8 +291,8 @@
             type="info"
             show-icon
             :closable="false"
-            title="Agent 助手开关尚未打开"
-            description="请在内网试运行环境开启 FEATURE_AGENT_ASSISTANTS=true 后使用。"
+            title="智能助手暂不可用"
+            description="请联系管理员确认功能状态后再使用。"
           />
           <template v-else>
             <section v-if="canManageAgentDailyReview" class="dashboard-section agent-daily-panel">
@@ -244,7 +322,7 @@
                 type="info"
                 show-icon
                 :closable="false"
-                title="每日自动后审计开关尚未打开"
+                title="每日自动后审计暂不可用"
                 description="打开 FEATURE_AGENT_DAILY_REVIEW=true 后，系统会按定时任务扫描当天确认下发的报价单。"
               />
               <template v-else>
@@ -451,7 +529,7 @@
                   <div class="agent-scheduler-history-header">
                     <div>
                       <strong>最近调度记录</strong>
-                      <small>自动复核执行留痕，可用于试运行验收和失败补扫。</small>
+                      <small>自动复核执行留痕，可用于问题复查和失败补扫。</small>
                     </div>
                     <div class="agent-scheduler-history-actions">
                       <el-radio-group
@@ -1112,10 +1190,61 @@
           </template>
         </template>
 
+        <template v-else-if="routeName === 'quoteNew'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">AI Quote</p>
+              <h2>新建报价</h2>
+              <p class="page-intro">选择合适的输入方式，系统会进入现有报价链路，不会在此页创建报价任务。</p>
+            </div>
+          </div>
+
+          <section class="quote-entry-hero">
+            <div>
+              <el-tag type="primary" effect="plain">统一入口</el-tag>
+              <h3>从需求到人工预审，一条报价链路</h3>
+              <p>文本、图纸和简单 Excel 可直接报价；多 Sheet 或需要人工列映射的需求单，请先标准化确认。</p>
+            </div>
+          </section>
+
+          <section class="quote-entry-grid" aria-label="选择报价创建方式">
+            <article class="quote-entry-card quote-entry-card-primary">
+              <div class="quote-entry-card-icon"><el-icon><DataAnalysis /></el-icon></div>
+              <div>
+                <h3>快速报价</h3>
+                <p>直接描述施工需求，或上传图片、图纸截图和简单 Excel 需求单。</p>
+              </div>
+              <ul>
+                <li>适合口述需求、图片和单 Sheet 清单</li>
+                <li>进入报价工作台后再提交，支持人工预审</li>
+              </ul>
+              <el-button type="primary" @click="openQuickQuote('quick')">开始新建报价</el-button>
+            </article>
+
+            <article v-if="canViewRequirementStandardization" class="quote-entry-card">
+              <div class="quote-entry-card-icon"><el-icon><Tickets /></el-icon></div>
+              <div>
+                <h3>标准需求单报价</h3>
+                <p>上传 .xlsx / .xlsm，人工确认字段和报价行后，再发起报价。</p>
+              </div>
+              <ul>
+                <li>适合多 Sheet、列不固定或需要逐行复核的清单</li>
+                <li>未通过校验的行不会进入报价任务</li>
+              </ul>
+              <el-button plain type="primary" @click="openRequirementQuoteEntry">导入并标准化需求单</el-button>
+            </article>
+          </section>
+
+          <section class="quote-entry-note">
+            <el-icon><Clock /></el-icon>
+            <span>已有报价草稿或正在运行的任务，请从报价工作台的历史记录、恢复提示或运营详情继续处理。</span>
+          </section>
+        </template>
+
         <template v-else-if="routeName === 'dashboard'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">Phase 1-2</p>
+              <p class="eyebrow">经营分析</p>
               <h2>效率驾驶舱</h2>
             </div>
             <div class="heading-actions">
@@ -1132,6 +1261,46 @@
             </div>
           </div>
 
+          <section class="management-focus-panel" aria-label="管理重点">
+            <div class="management-focus-header">
+              <div class="management-focus-intro">
+                <p class="eyebrow">本轮优先处理</p>
+                <h3>管理重点</h3>
+                <small>{{ managementFocusSummary }}</small>
+              </div>
+              <div class="management-focus-links">
+                <el-button
+                  v-for="link in managementFocusLinks"
+                  :key="link.path"
+                  size="small"
+                  plain
+                  @click="openBusinessTarget(link.path)"
+                >
+                  {{ link.label }}
+                </el-button>
+              </div>
+            </div>
+
+            <div v-if="managementFocusCards.length" class="management-focus-grid">
+              <button
+                v-for="card in managementFocusCards"
+                :key="card.key"
+                type="button"
+                :class="['management-focus-card', `is-${card.tone}`]"
+                @click="openBusinessTarget(card.targetPath)"
+              >
+                <span>{{ card.title }}</span>
+                <strong>{{ card.value }}</strong>
+                <small>{{ card.detail }}</small>
+                <em>{{ card.action }}</em>
+              </button>
+            </div>
+            <div v-else class="management-focus-empty">
+              <strong>当前没有需要立即处理的项目或执行事项</strong>
+              <small>可继续从下方模块查看整体进度、执行效率和经营数据。</small>
+            </div>
+          </section>
+
           <el-tabs v-model="dashboardTab" class="dashboard-tabs">
             <el-tab-pane label="经营总览" name="business" :disabled="dashboardFeature.businessDisabled">
               <el-alert
@@ -1140,7 +1309,7 @@
                 type="info"
                 show-icon
                 :closable="false"
-                title="经营总览开关尚未打开"
+                title="经营总览暂不可用"
               />
               <template v-else>
                 <el-alert
@@ -1149,7 +1318,7 @@
                   type="info"
                   show-icon
                   :closable="false"
-                  title="暂无经营总览数据，指标会在试运行数据产生后显示"
+                  title="暂无经营总览数据，业务数据产生后将自动显示"
                 />
                 <el-alert
                   v-if="businessSectionErrorCount > 0"
@@ -1166,14 +1335,13 @@
                       {{ businessOverallLabel(businessDashboard?.environment?.overall_status) }}
                     </el-tag>
                     <div>
-                      <strong>经营总览轻量 MVP</strong>
+                      <strong>经营总览</strong>
                       <small>只读汇总 · 不展示成本敏感明细</small>
                     </div>
                   </div>
                   <div class="business-overview-meta">
                     <span>更新时间：{{ formatDate(businessDashboard?.generated_at) }}</span>
-                    <span>环境：{{ businessModeLabel(businessDashboard?.environment?.mode) }}</span>
-                    <span>DB head：{{ businessDashboard?.environment?.database_head || '-' }}</span>
+                    <span>运行状态：{{ businessModeLabel(businessDashboard?.environment?.mode) }}</span>
                   </div>
                   <div class="business-overview-actions">
                     <el-button
@@ -1357,7 +1525,7 @@
                 type="info"
                 show-icon
                 :closable="false"
-                title="报价速度看板开关尚未打开"
+                title="报价速度看板暂不可用"
               />
               <template v-else>
                 <el-alert
@@ -1461,7 +1629,7 @@
                 type="info"
                 show-icon
                 :closable="false"
-                title="响应速度看板开关尚未打开"
+                title="响应速度看板暂不可用"
               />
               <template v-else>
                 <el-alert
@@ -1778,7 +1946,7 @@
                 type="info"
                 show-icon
                 :closable="false"
-                title="执行速度看板开关尚未打开"
+                title="执行速度看板暂不可用"
               />
               <template v-else>
                 <el-alert
@@ -1877,7 +2045,7 @@
                 type="info"
                 show-icon
                 :closable="false"
-                title="项目进度看板开关尚未打开"
+                title="项目进度看板暂不可用"
               />
               <template v-else>
                 <el-alert
@@ -1957,17 +2125,31 @@
           </el-tabs>
         </template>
 
+        <template v-else-if="['budgetProjects', 'budgetProjectDetail'].includes(routeName)">
+          <BudgetProjects
+            :detail-mode="routeName === 'budgetProjectDetail'"
+            :can-edit="canEditBudgetProjects"
+            :feature-available="budgetProjectsFeatureAvailable"
+            :pricing-feature-available="budgetPricingFeatureAvailable"
+            @navigate="navigate"
+          />
+        </template>
+
+        <template v-else-if="routeName === 'accountQuotas'">
+          <AccountQuotaLibrary :feature-available="accountQuotasFeatureAvailable" />
+        </template>
+
         <template v-else-if="['projects', 'projectDetail', 'projectMyTasks'].includes(routeName)">
           <div v-if="routeName === 'projects'">
             <div class="content-heading">
               <div>
-                <p class="eyebrow">BIZ-3a</p>
+                <p class="eyebrow">项目协同</p>
                 <h2>项目进度</h2>
               </div>
               <div class="heading-actions">
                 <el-button :icon="Tickets" plain @click="navigate('/admin/project-tasks/my')">我的任务</el-button>
                 <el-button v-if="canManageProjectProgress" :icon="Plus" type="primary" @click="openProjectCreate">新建项目</el-button>
-                <el-button v-if="canManageProjectProgress" :icon="Tickets" type="success" plain @click="openProjectTrialCreate">单人试运行</el-button>
+                <el-button v-if="canManageProjectProgress" :icon="Tickets" type="success" plain @click="openProjectTrialCreate">快速创建项目</el-button>
                 <el-button v-if="canManageProjectProgress" :icon="TrendCharts" type="primary" plain @click="openProjectEpcCreate">EPC流程模板</el-button>
                 <el-button :icon="Refresh" plain @click="loadProjects">刷新</el-button>
               </div>
@@ -2002,7 +2184,7 @@
                 <el-input v-model="projectFilters.keyword" size="small" clearable placeholder="项目/客户/地址" @keyup.enter="applyProjectFilters" @clear="applyProjectFilters" />
                 <el-button size="small" type="primary" plain @click="applyProjectFilters">查询</el-button>
               </div>
-              <el-table :data="projects" row-key="id" class="users-table" empty-text="暂无项目">
+              <el-table :data="projects" row-key="id" class="users-table" :row-class-name="projectListRowClassName" empty-text="暂无项目">
                 <el-table-column label="项目" min-width="240" show-overflow-tooltip>
                   <template #default="{ row }">
                     <div class="operation-client">
@@ -2028,6 +2210,14 @@
                 <el-table-column label="风险" width="110">
                   <template #default="{ row }">
                     <el-tag :type="projectRiskTag(row.risk_level)" effect="plain">{{ projectRiskLabel(row.risk_level) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="推进重点" min-width="180" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <div :class="['project-focus-hint', projectFocusTone(row)]">
+                      <strong>{{ projectFocusLabel(row) }}</strong>
+                      <small>{{ projectFocusDetail(row) }}</small>
+                    </div>
                   </template>
                 </el-table-column>
                 <el-table-column label="任务" width="130">
@@ -2056,7 +2246,7 @@
           <div v-else-if="routeName === 'projectMyTasks'">
             <div class="content-heading">
               <div>
-                <p class="eyebrow">BIZ-3a</p>
+                <p class="eyebrow">项目管理</p>
                 <h2>我的项目任务</h2>
               </div>
               <div class="heading-actions">
@@ -2082,7 +2272,7 @@
               <el-input v-model="myProjectTaskFilters.keyword" size="small" clearable placeholder="任务/说明/下一步" @keyup.enter="applyMyProjectTaskFilters" @clear="applyMyProjectTaskFilters" />
               <el-button size="small" type="primary" plain @click="applyMyProjectTaskFilters">查询</el-button>
             </div>
-            <el-table :data="myProjectTasks" row-key="id" class="users-table" empty-text="暂无我的项目任务">
+            <el-table :data="myProjectTasks" row-key="id" class="users-table" :row-class-name="projectTaskRowClassName" empty-text="暂无我的项目任务">
               <el-table-column label="任务" min-width="250" show-overflow-tooltip>
                 <template #default="{ row }">
                   <div class="operation-client">
@@ -2130,10 +2320,10 @@
               </el-table-column>
               <el-table-column label="操作" width="420" fixed="right">
                 <template #default="{ row }">
-                  <div class="row-actions">
-                    <el-button size="small" plain :disabled="row.status !== 'todo'" @click="advanceProjectTask(row, 'start')">开始</el-button>
-                    <el-button size="small" plain :disabled="!['todo', 'started'].includes(row.status)" @click="advanceProjectTask(row, 'progress')">推进</el-button>
-                    <el-button size="small" plain :disabled="!['todo', 'started', 'progressing'].includes(row.status)" @click="advanceProjectTask(row, 'submit')">提交</el-button>
+                    <div class="row-actions project-task-actions">
+                      <el-button size="small" type="primary" plain :disabled="row.status !== 'todo'" @click="advanceProjectTask(row, 'start')">开始</el-button>
+                      <el-button size="small" type="primary" plain :disabled="!['todo', 'started'].includes(row.status)" @click="advanceProjectTask(row, 'progress')">推进</el-button>
+                      <el-button size="small" type="warning" plain :disabled="!['todo', 'started', 'progressing'].includes(row.status)" @click="advanceProjectTask(row, 'submit')">提交</el-button>
                     <el-button size="small" plain :disabled="!canRollbackProjectTask(row)" @click="rollbackProjectTask(row)">回退</el-button>
                     <el-button size="small" type="success" plain :disabled="row.status !== 'blocked'" @click="unblockProjectTask(row)">解除</el-button>
                     <el-button size="small" type="warning" plain :disabled="['blocked', 'done', 'cancelled'].includes(row.status)" @click="blockProjectTask(row)">阻塞</el-button>
@@ -2155,7 +2345,7 @@
           <div v-else>
             <div class="content-heading">
               <div>
-                <p class="eyebrow">BIZ-3a</p>
+                <p class="eyebrow">任务协同</p>
                 <h2>{{ projectDetail?.name || '项目详情' }}</h2>
               </div>
               <div class="heading-actions">
@@ -2305,7 +2495,7 @@
                   <el-tag v-if="projectTaskEvidenceFilter !== 'all'" type="warning" effect="plain">{{ projectTaskEvidenceFilterLabel(projectTaskEvidenceFilter) }}</el-tag>
                   <el-button v-if="projectTaskEvidenceFilter !== 'all'" size="small" plain @click="setProjectTaskEvidenceFilter('all')">清除筛选</el-button>
                 </div>
-                <el-table :data="visibleProjectDetailTasks" row-key="id" class="users-table" empty-text="暂无任务">
+                <el-table :data="visibleProjectDetailTasks" row-key="id" class="users-table" :row-class-name="projectTaskRowClassName" empty-text="暂无任务">
                   <el-table-column label="任务" min-width="240" show-overflow-tooltip>
                     <template #default="{ row }">
                       <div class="operation-client">
@@ -2353,10 +2543,10 @@
                   </el-table-column>
                   <el-table-column label="操作" width="480" fixed="right">
                     <template #default="{ row }">
-                      <div class="row-actions">
-                        <el-button size="small" plain :disabled="row.status !== 'todo'" @click="advanceProjectTask(row, 'start')">开始</el-button>
-                        <el-button size="small" plain :disabled="!['todo', 'started'].includes(row.status)" @click="advanceProjectTask(row, 'progress')">推进</el-button>
-                        <el-button size="small" plain :disabled="!['todo', 'started', 'progressing'].includes(row.status)" @click="advanceProjectTask(row, 'submit')">提交</el-button>
+                      <div class="row-actions project-task-actions">
+                        <el-button size="small" type="primary" plain :disabled="row.status !== 'todo'" @click="advanceProjectTask(row, 'start')">开始</el-button>
+                        <el-button size="small" type="primary" plain :disabled="!['todo', 'started'].includes(row.status)" @click="advanceProjectTask(row, 'progress')">推进</el-button>
+                        <el-button size="small" type="warning" plain :disabled="!['todo', 'started', 'progressing'].includes(row.status)" @click="advanceProjectTask(row, 'submit')">提交</el-button>
                         <el-button v-if="canManageProjectProgress" size="small" type="success" plain :disabled="row.status !== 'submitted'" @click="advanceProjectTask(row, 'complete')">完成</el-button>
                         <el-button size="small" plain :disabled="!canRollbackProjectTask(row)" @click="rollbackProjectTask(row)">回退</el-button>
                         <el-button size="small" type="success" plain :disabled="row.status !== 'blocked'" @click="unblockProjectTask(row)">解除</el-button>
@@ -2388,7 +2578,7 @@
         <template v-else-if="routeName === 'execution'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">Phase 3 / 4a</p>
+              <p class="eyebrow">执行协同</p>
               <h2>执行系统</h2>
             </div>
             <div class="heading-actions">
@@ -2412,6 +2602,17 @@
                 title="执行任务功能尚未开启"
               />
               <template v-else>
+                <section class="execution-overview-strip">
+                  <article
+                    v-for="card in executionTaskOverviewCards"
+                    :key="card.key"
+                    :class="['project-overview-card', card.tone]"
+                  >
+                    <span>{{ card.title }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <small>{{ card.detail }}</small>
+                  </article>
+                </section>
                 <div class="operation-filters">
                   <el-select
                     v-model="executionTaskFilters.status"
@@ -2455,6 +2656,7 @@
                   :data="executionTasks"
                   row-key="id"
                   class="users-table"
+                  :row-class-name="executionTaskRowClassName"
                   empty-text="暂无执行任务"
                 >
                   <el-table-column label="任务" min-width="220" show-overflow-tooltip>
@@ -2481,13 +2683,22 @@
                       </el-tag>
                     </template>
                   </el-table-column>
+                  <el-table-column label="下一步" min-width="190" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div :class="['execution-next-step', executionTaskNextStepTone(row)]">
+                        <strong>{{ executionTaskNextStepLabel(row) }}</strong>
+                        <small>{{ executionTaskNextStepDetail(row) }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="notes" label="备注" min-width="180" show-overflow-tooltip />
                   <el-table-column label="操作" width="270" fixed="right">
                     <template #default="{ row }">
-                      <div class="row-actions">
+                      <div class="row-actions execution-task-actions">
                         <el-button size="small" :icon="Document" plain @click="openExecutionDetail(row)">详情</el-button>
                         <el-button
                           size="small"
+                          type="primary"
                           plain
                           :disabled="row.status !== 'pending'"
                           @click="updateExecutionTaskStatus(row, 'in_progress')"
@@ -2496,6 +2707,7 @@
                         </el-button>
                         <el-button
                           size="small"
+                          type="success"
                           plain
                           :disabled="!['pending', 'in_progress'].includes(row.status)"
                           @click="updateExecutionTaskStatus(row, 'done')"
@@ -2538,6 +2750,17 @@
                 title="会议纪要功能尚未开启"
               />
               <template v-else>
+                <section class="execution-overview-strip">
+                  <article
+                    v-for="card in meetingOverviewCards"
+                    :key="card.key"
+                    :class="['project-overview-card', card.tone]"
+                  >
+                    <span>{{ card.title }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <small>{{ card.detail }}</small>
+                  </article>
+                </section>
                 <div class="meeting-filters">
                   <el-select
                     v-model="meetingFilters.status"
@@ -2568,6 +2791,7 @@
                   :data="meetings"
                   row-key="id"
                   class="users-table"
+                  :row-class-name="meetingRowClassName"
                   empty-text="暂无会议纪要"
                 >
                   <el-table-column label="纪要" min-width="260" show-overflow-tooltip>
@@ -2588,15 +2812,18 @@
                       <el-tag effect="plain">{{ meetingAiStatusLabel(row.ai_status) }}</el-tag>
                     </template>
                   </el-table-column>
-                  <el-table-column label="草稿" width="120">
+                  <el-table-column label="任务草稿" min-width="150">
                     <template #default="{ row }">
-                      {{ row.accepted_draft_count || 0 }} / {{ row.draft_count || 0 }}
+                      <div :class="['meeting-draft-progress', meetingDraftProgressTone(row)]">
+                        <strong>{{ row.accepted_draft_count || 0 }} / {{ row.draft_count || 0 }}</strong>
+                        <small>{{ meetingDraftProgressLabel(row) }}</small>
+                      </div>
                     </template>
                   </el-table-column>
                   <el-table-column label="操作" width="190" fixed="right">
                     <template #default="{ row }">
-                      <div class="row-actions">
-                        <el-button size="small" :icon="Document" plain @click="openMeetingDetail(row)">详情</el-button>
+                      <div class="row-actions execution-task-actions">
+                        <el-button size="small" :icon="Document" type="primary" plain @click="openMeetingDetail(row)">详情</el-button>
                         <el-button
                           size="small"
                           type="danger"
@@ -2627,7 +2854,7 @@
         <template v-else-if="routeName === 'businessLedger'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">BIZ-1a</p>
+              <p class="eyebrow">客户经营</p>
               <h2>商务台账</h2>
             </div>
             <div class="heading-actions">
@@ -2647,6 +2874,17 @@
             title="商务台账功能尚未开启"
           ></el-alert>
           <template v-else>
+            <section class="business-ledger-overview">
+              <article
+                v-for="card in businessLedgerOverviewCards"
+                :key="card.key"
+                :class="['project-overview-card', card.tone]"
+              >
+                <span>{{ card.title }}</span>
+                <strong>{{ card.value }}</strong>
+                <small>{{ card.detail }}</small>
+              </article>
+            </section>
             <div class="business-ledger-filters">
               <el-select
                 v-model="businessLedgerFilters.stage"
@@ -2755,14 +2993,23 @@
                   </div>
                 </template>
               </el-table-column>
+              <el-table-column label="建议下一步" min-width="210" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div :class="['ledger-next-step', businessLedgerNextStepTone(row)]">
+                    <strong>{{ businessLedgerNextStepLabel(row) }}</strong>
+                    <small>{{ businessLedgerNextStepDetail(row) }}</small>
+                  </div>
+                </template>
+              </el-table-column>
               <el-table-column prop="responder_username" label="负责人" width="120" />
               <el-table-column prop="notes" label="备注" min-width="180" show-overflow-tooltip />
               <el-table-column label="操作" width="260" fixed="right">
                 <template #default="{ row }">
-                  <div class="row-actions">
-                    <el-button size="small" :icon="Document" plain @click="openBusinessLedgerDetail(row)">详情</el-button>
+                  <div class="row-actions business-ledger-actions">
+                    <el-button size="small" :icon="Document" type="primary" plain @click="openBusinessLedgerDetail(row)">详情</el-button>
                     <el-button
                       size="small"
+                      type="primary"
                       plain
                       :disabled="!canEditBusinessLedger(row)"
                       @click="openBusinessLedgerEdit(row)"
@@ -2795,11 +3042,4094 @@
           </template>
         </template>
 
+        <template v-else-if="routeName === 'bidding'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">投标工作台</p>
+              <h2>智能投标解析</h2>
+            </div>
+            <div class="heading-actions">
+              <el-button :icon="Upload" type="primary" :disabled="biddingFeatureDisabled" @click="openBiddingTenderUpload">
+                上传招标文件
+              </el-button>
+              <el-button :icon="Refresh" plain @click="loadBiddingProjects">刷新</el-button>
+            </div>
+          </div>
+
+          <el-alert
+            v-if="biddingFeatureDisabled"
+            class="dashboard-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="智能投标暂不可用"
+            description="请联系管理员确认功能状态后再使用。"
+          ></el-alert>
+
+          <template v-else>
+            <div class="metric-grid">
+              <div
+                v-for="card in biddingOverviewCards"
+                :key="card.key"
+                class="metric-card"
+              >
+                <span>{{ card.title }}</span>
+                <strong>{{ card.value }}</strong>
+                <small>{{ card.detail }}</small>
+              </div>
+            </div>
+
+            <section class="dashboard-section">
+              <div class="section-title">
+                <el-icon><DocumentChecked /></el-icon>
+                <span>投标项目</span>
+                <small>通过上传甲方 Word/PDF 招标文件创建项目，并生成要求清单、合同风险和废标风险</small>
+              </div>
+              <div class="cost-db-filters">
+                <el-select
+                  v-model="biddingFilters.status"
+                  size="small"
+                  clearable
+                  placeholder="状态"
+                  @change="applyBiddingFilters"
+                >
+                  <el-option
+                    v-for="option in biddingStatusOptions"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  ></el-option>
+                </el-select>
+                <el-input
+                  v-model="biddingFilters.keyword"
+                  size="small"
+                  clearable
+                  :prefix-icon="Search"
+                  placeholder="项目、业主、代理、地点"
+                  @keyup.enter="applyBiddingFilters"
+                  @clear="applyBiddingFilters"
+                ></el-input>
+                <el-button size="small" type="primary" plain @click="applyBiddingFilters">查询</el-button>
+              </div>
+
+              <el-table
+                v-loading="biddingLoading"
+                :data="biddingProjects"
+                row-key="project_uuid"
+                class="users-table"
+                empty-text="暂无投标项目"
+              >
+                <el-table-column label="项目" min-width="230" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <div class="operation-client">
+                      <strong>{{ row.project_name }}</strong>
+                      <small>{{ row.tenderer_name || '未填写招标单位' }}</small>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="project_type" label="类型" width="120" />
+                <el-table-column prop="project_location" label="地点" min-width="130" show-overflow-tooltip />
+                <el-table-column label="状态" width="110">
+                  <template #default="{ row }">
+                    <el-tag :type="biddingStatusTag(row.status)" effect="plain">{{ biddingStatusLabel(row.status) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="解析结果" min-width="210">
+                  <template #default="{ row }">
+                    <div class="operation-client">
+                      <strong>要求 {{ row.counts?.requirement_count || 0 }} · 风险 {{ row.counts?.risk_count || 0 }}</strong>
+                      <small>高风险 {{ row.counts?.high_risk_count || 0 }} · 待复核 {{ row.counts?.pending_risk_count || 0 }}</small>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="截止时间" min-width="150">
+                  <template #default="{ row }">{{ formatDate(row.tender_deadline_at) }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="170" fixed="right">
+                  <template #default="{ row }">
+                    <div class="row-actions">
+                      <el-button size="small" :icon="Document" plain @click="openBiddingProjectDetail(row)">详情</el-button>
+                      <el-button size="small" type="primary" plain @click="openBiddingProjectDetail(row, 'risks')">风险</el-button>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-pagination
+                v-if="biddingProjectTotal > biddingProjectPageSize"
+                v-model:current-page="biddingProjectPage"
+                :page-size="biddingProjectPageSize"
+                :total="biddingProjectTotal"
+                layout="total, prev, pager, next"
+                small
+                @current-change="loadBiddingProjects"
+              ></el-pagination>
+            </section>
+
+            <el-drawer
+              v-model="biddingDrawer.visible"
+              size="82%"
+              :title="biddingDrawer.project?.project_name || '投标项目详情'"
+              destroy-on-close
+            >
+              <div v-if="biddingDrawer.project" class="drawer-body">
+                <div class="metric-grid">
+                  <div class="metric-card">
+                    <span>资料</span>
+                    <strong>{{ biddingFiles.length }}</strong>
+                    <small>支持 PDF、Word、Excel、文本</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>分析成果</span>
+                    <strong>{{ biddingTenderAnalysisResultCount }}</strong>
+                    <small>
+                      摘要 {{ biddingTenderSummaryRows.length }} ·
+                      评分 {{ biddingTenderScoringItemCount }} ·
+                      风险 {{ biddingTenderRiskClauseRows.length }}
+                    </small>
+                  </div>
+                  <div class="metric-card">
+                    <span>风险</span>
+                    <strong>{{ biddingRisksTotal }}</strong>
+                    <small>待复核 {{ biddingPendingRiskCount }}</small>
+                  </div>
+                  <div class="metric-card">
+                    <span>最近解析</span>
+                    <strong>{{ biddingParseRuns[0]?.status ? biddingParseStatusLabel(biddingParseRuns[0].status) : '暂无' }}</strong>
+                    <small>{{ formatDate(biddingParseRuns[0]?.finished_at || biddingParseRuns[0]?.created_at) }}</small>
+                  </div>
+                </div>
+
+                <el-tabs v-model="biddingDrawer.activeTab" class="dashboard-tabs">
+                  <el-tab-pane label="资料与解析" name="files">
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Upload /></el-icon>
+                        <span>追加招标文件</span>
+                        <small>支持 PDF、Word(.docx)，上传后先抽取文本，再点击解析生成要求和风险清单</small>
+                      </div>
+                      <div class="cost-db-filters">
+                        <el-select v-model="biddingUpload.fileType" size="small">
+                          <el-option
+                            v-for="option in biddingFileTypeOptions"
+                            :key="option.value"
+                            :label="option.label"
+                            :value="option.value"
+                          ></el-option>
+                        </el-select>
+                        <el-upload
+                          ref="biddingUploadRef"
+                          :auto-upload="false"
+                          :show-file-list="true"
+                          :limit="1"
+                          accept=".pdf,.docx"
+                          :on-change="handleBiddingFileChange"
+                          :on-remove="clearBiddingFile"
+                        >
+                          <el-button :icon="Document" plain>选择资料</el-button>
+                        </el-upload>
+                        <el-button
+                          type="primary"
+                          :icon="Upload"
+                          :loading="biddingUpload.loading"
+                          :disabled="!biddingUpload.file"
+                          @click="uploadBiddingFile"
+                        >
+                          上传并抽取
+                        </el-button>
+                        <el-button
+                          :icon="DataAnalysis"
+                          type="success"
+                          plain
+                          :loading="biddingParsing"
+                          :disabled="!biddingFiles.length"
+                          @click="parseBiddingProject"
+                        >
+                          解析招标文件
+                        </el-button>
+                      </div>
+
+                      <el-table
+                        :data="biddingFiles"
+                        row-key="file_uuid"
+                        class="users-table"
+                        empty-text="暂无资料"
+                      >
+                        <el-table-column prop="original_filename" label="文件名" min-width="240" show-overflow-tooltip />
+                        <el-table-column label="类型" width="130">
+                          <template #default="{ row }">{{ biddingFileTypeLabel(row.file_type) }}</template>
+                        </el-table-column>
+                        <el-table-column prop="section_count" label="段落" width="90" />
+                        <el-table-column prop="page_count" label="页/表" width="90" />
+                        <el-table-column label="状态" width="110">
+                          <template #default="{ row }">
+                            <el-tag :type="row.parser_status === 'parsed' ? 'success' : 'warning'" effect="plain">{{ row.parser_status }}</el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="上传时间" min-width="150">
+                          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Clock /></el-icon>
+                        <span>解析版本</span>
+                        <small>每次解析会保留版本；风险条款由独立“风险分析”生成</small>
+                      </div>
+                      <div v-if="biddingDocumentStructureRows.length" class="bidding-structure-panel">
+                        <div class="bidding-structure-summary">
+                          <span>文档结构识别</span>
+                          <strong>
+                            已分析 {{ latestBiddingParseSummary.analyzed_segment_count || 0 }} / {{ latestBiddingParseSummary.segment_count || 0 }} 段
+                          </strong>
+                          <small>
+                            继承章节 {{ latestBiddingParseSummary.inherited_segment_count || 0 }} 段 · 已过滤 {{ latestBiddingParseSummary.ignored_segment_count || 0 }} 段
+                          </small>
+                        </div>
+                        <div class="bidding-structure-list">
+                          <span
+                            v-for="item in biddingDocumentStructureRows"
+                            :key="item.section"
+                            class="bidding-structure-item"
+                          >
+                            <em>{{ item.label }}</em>
+                            <strong>{{ item.count }}</strong>
+                          </span>
+                        </div>
+                      </div>
+                      <el-table
+                        :data="biddingParseRuns"
+                        row-key="run_uuid"
+                        class="users-table"
+                        empty-text="暂无解析版本"
+                      >
+                        <el-table-column prop="run_uuid" label="版本" min-width="220" show-overflow-tooltip />
+                        <el-table-column label="状态" width="110">
+                          <template #default="{ row }">
+                            <el-tag :type="row.status === 'completed' ? 'success' : row.status === 'failed' ? 'danger' : 'warning'" effect="plain">
+                              {{ biddingParseStatusLabel(row.status) }}
+                            </el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="摘要" min-width="260">
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>原文片段 {{ row.summary?.segment_count || 0 }} · 已分析 {{ row.summary?.analyzed_segment_count || 0 }} · 已过滤 {{ row.summary?.ignored_segment_count || 0 }}</strong>
+                              <small v-if="row.summary?.risk_card_summary">
+                                解析版本仅生成结构化摘要；风险条款请点击“风险分析”
+                              </small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="完成时间" min-width="150">
+                          <template #default="{ row }">{{ formatDate(row.finished_at || row.created_at) }}</template>
+                        </el-table-column>
+                      </el-table>
+
+                    </section>
+                  </el-tab-pane>
+
+                  <el-tab-pane label="招标分析" name="analysis">
+                    <section v-loading="biddingTenderAnalysisLoading" class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><DataAnalysis /></el-icon>
+                        <span>招标文件分析成果表</span>
+                        <small>解析生成结构化信息摘要表；风险条款清单需单独点击“风险分析”生成</small>
+                        <el-button
+                          class="section-title-action"
+                          size="small"
+                          type="primary"
+                          plain
+                          :icon="Download"
+                          :loading="biddingTenderAnalysisExporting"
+                          :disabled="!biddingTenderAnalysis"
+                          @click="exportBiddingTenderAnalysis"
+                        >
+                          导出Word
+                        </el-button>
+                        <el-button
+                          size="small"
+                          type="warning"
+                          plain
+                          :icon="DataAnalysis"
+                          :loading="biddingRiskClauseAnalyzing"
+                          :disabled="!biddingTenderAnalysis"
+                          @click="analyzeBiddingRiskClause"
+                        >
+                          风险分析
+                        </el-button>
+                        <el-button
+                          size="small"
+                          type="warning"
+                          plain
+                          :icon="Download"
+                          :loading="biddingRiskClauseExporting"
+                          :disabled="!biddingTenderRiskClauseRows.length"
+                          @click="exportBiddingRiskClause"
+                        >
+                          导出风险Word
+                        </el-button>
+                      </div>
+
+                      <el-empty
+                        v-if="!biddingTenderAnalysis"
+                        description="暂无成果表，请先上传并解析甲方招标文件"
+                      />
+
+                      <template v-else>
+                        <div v-if="biddingImportantInfoProgress.visible" class="bidding-llm-progress-panel">
+                          <div class="bidding-risk-detail-heading">
+                            <div>
+                              <strong>LLM结构化提取进度</strong>
+                              <small>{{ biddingImportantInfoProgress.stage || '准备中' }} · {{ biddingImportantInfoProgress.detail || '等待系统返回结果' }}</small>
+                            </div>
+                            <el-tag :type="biddingImportantInfoProgress.status === 'success' ? 'success' : biddingImportantInfoProgress.status === 'error' ? 'danger' : 'warning'" effect="plain">
+                              {{ biddingImportantInfoProgress.status === 'success' ? '已完成' : biddingImportantInfoProgress.status === 'error' ? '异常' : '进行中' }}
+                            </el-tag>
+                          </div>
+                          <el-progress
+                            :percentage="biddingImportantInfoProgress.percentage"
+                            :status="biddingImportantInfoProgressBarStatus"
+                          />
+                        </div>
+                        <div v-if="biddingRiskClauseProgress.visible" class="bidding-llm-progress-panel">
+                          <div class="bidding-risk-detail-heading">
+                            <div>
+                              <strong>LLM风险分析进度</strong>
+                              <small>{{ biddingRiskClauseProgress.stage || '准备中' }} · {{ biddingRiskClauseProgress.detail || '等待系统返回结果' }}</small>
+                            </div>
+                            <el-tag :type="biddingRiskClauseProgress.status === 'success' ? 'success' : biddingRiskClauseProgress.status === 'error' ? 'danger' : 'warning'" effect="plain">
+                              {{ biddingRiskClauseProgress.status === 'success' ? '已完成' : biddingRiskClauseProgress.status === 'error' ? '异常' : '进行中' }}
+                            </el-tag>
+                          </div>
+                          <el-progress
+                            :percentage="biddingRiskClauseProgress.percentage"
+                            :status="biddingRiskClauseProgressBarStatus"
+                          />
+                        </div>
+
+                        <div class="bidding-risk-card-summary">
+                          <div>
+                            <span>结构化摘要</span>
+                            <strong>{{ biddingImportantInfoFoundCount || 0 }}/{{ biddingImportantInfoFieldCount || 0 }}</strong>
+                            <small>待澄清/未识别 {{ biddingImportantInfoIssueCount || 0 }} 项</small>
+                          </div>
+                          <div>
+                            <span>评分细则</span>
+                            <strong>{{ biddingTenderAnalysisQuality.scoring_item_count || biddingTenderScoringRows.length }}</strong>
+                            <small>
+                              商务 {{ biddingTenderAnalysisQuality.scoring_by_package?.business || 0 }} ·
+                              技术 {{ biddingTenderAnalysisQuality.scoring_by_package?.technical || 0 }} ·
+                              报价 {{ biddingTenderAnalysisQuality.scoring_by_package?.pricing || 0 }}
+                            </small>
+                          </div>
+                          <div>
+                            <span>风险条款</span>
+                            <strong>{{ biddingRiskClauseRiskCount }}</strong>
+                            <small>
+                              高 {{ biddingRiskClauseHighCount }} ·
+                              中 {{ biddingRiskClauseMediumCount }} ·
+                              低 {{ biddingRiskClauseLowCount }}
+                            </small>
+                          </div>
+                          <div>
+                            <span>待复核</span>
+                            <strong>{{ biddingTenderAnalysisReviewQueue.length }}</strong>
+                            <small>{{ biddingTenderAnalysis.business_object_policy?.frontstage_note || '业务对象默认隐藏' }}</small>
+                          </div>
+                        </div>
+
+                        <div class="bidding-review-workbench">
+                          <div class="bidding-risk-detail-heading">
+                            <div>
+                              <strong>待复核项</strong>
+                              <small>优先处理结构化摘要缺失、低置信度和评分细则复核项；风险条款请使用独立风险分析</small>
+                            </div>
+                            <div class="bidding-section-actions">
+                              <el-tag :type="biddingTenderAnalysisReviewQueue.length ? 'warning' : 'success'" effect="plain">
+                                {{ biddingTenderAnalysisReviewQueue.length ? `${biddingTenderAnalysisReviewQueue.length} 项待复核` : '暂无待复核' }}
+                              </el-tag>
+                              <el-button
+                                size="small"
+                                plain
+                                :icon="biddingTenderReviewWorkbenchExpanded ? ArrowDown : ArrowRight"
+                                @click="biddingTenderReviewWorkbenchExpanded = !biddingTenderReviewWorkbenchExpanded"
+                              >
+                                {{ biddingTenderReviewWorkbenchExpanded ? '收起' : '展开' }}
+                              </el-button>
+                            </div>
+                          </div>
+                          <el-table
+                            v-show="biddingTenderReviewWorkbenchExpanded"
+                            :data="biddingTenderReviewPreviewRows"
+                            row-key="row_key"
+                            :tree-props="{ children: 'children' }"
+                            class="users-table"
+                            empty-text="暂无待复核项"
+                          >
+                            <el-table-column prop="table_label" label="成果表" width="150" />
+                            <el-table-column label="复核项" min-width="220" show-overflow-tooltip>
+                              <template #default="{ row }">
+                                <div class="operation-client">
+                                  <strong>{{ row.title }}</strong>
+                                  <small>
+                                    {{ row.review_category_label || '待复核' }}
+                                    <template v-if="row.item_count && row.item_count > 1"> · 合并 {{ row.item_count }} 项</template>
+                                  </small>
+                                </div>
+                              </template>
+                            </el-table-column>
+                            <el-table-column label="原因" min-width="260">
+                              <template #default="{ row }">
+                                <div class="business-object-badges">
+                                  <el-tag
+                                    v-for="reason in row.reasons || []"
+                                    :key="reason"
+                                    size="small"
+                                    type="warning"
+                                    effect="plain"
+                                  >
+                                    {{ reason }}
+                                  </el-tag>
+                                </div>
+                              </template>
+                            </el-table-column>
+                            <el-table-column label="来源" min-width="180" show-overflow-tooltip>
+                              <template #default="{ row }">{{ row.source_file || '-' }} · {{ row.source_location || '-' }}</template>
+                            </el-table-column>
+                            <el-table-column label="操作" width="120">
+                              <template #default="{ row }">
+                                <el-button size="small" type="primary" plain @click.stop="openBiddingAnalysisTable(row.table_key)">查看对应表</el-button>
+                              </template>
+                            </el-table-column>
+                          </el-table>
+                        </div>
+
+                        <el-tabs ref="biddingAnalysisTabsRef" v-model="biddingTenderAnalysisTab" class="bidding-analysis-tabs">
+                          <el-tab-pane label="结构化信息摘要表" name="summary">
+                            <div v-if="biddingImportantInfoSections.length" class="bidding-important-info-board">
+                              <div class="bidding-important-info-toolbar">
+                                <span>共 {{ biddingImportantInfoSections.length }} 个大项 · {{ biddingImportantInfoFoundCount }}/{{ biddingImportantInfoFieldCount }} 项已识别</span>
+                                <div class="bidding-section-actions">
+                                  <el-button
+                                    size="small"
+                                    plain
+                                    :icon="ArrowDown"
+                                    :disabled="biddingImportantInfoAllExpanded"
+                                    @click="expandAllBiddingImportantInfoSections"
+                                  >
+                                    全部展开
+                                  </el-button>
+                                  <el-button
+                                    size="small"
+                                    plain
+                                    :icon="ArrowRight"
+                                    :disabled="!biddingImportantInfoExpandedKeys.length"
+                                    @click="collapseAllBiddingImportantInfoSections"
+                                  >
+                                    全部收起
+                                  </el-button>
+                                </div>
+                              </div>
+                              <section
+                                v-for="section in biddingImportantInfoSections"
+                                :key="section.section_key"
+                                class="bidding-important-info-section"
+                              >
+                                <div class="bidding-risk-detail-heading">
+                                  <div>
+                                    <strong>{{ section.title }}</strong>
+                                    <small>
+                                      已识别 {{ biddingImportantInfoSectionFoundCount(section) }} / {{ section.items.length }} 项
+                                    </small>
+                                  </div>
+                                  <div class="bidding-section-actions">
+                                    <el-tag effect="plain">{{ section.section_key }}</el-tag>
+                                    <el-button
+                                      size="small"
+                                      plain
+                                      :icon="isBiddingImportantInfoSectionExpanded(section) ? ArrowDown : ArrowRight"
+                                      @click="toggleBiddingImportantInfoSection(section)"
+                                    >
+                                      {{ isBiddingImportantInfoSectionExpanded(section) ? '收起' : '展开' }}
+                                    </el-button>
+                                  </div>
+                                </div>
+                                <el-table
+                                  v-show="isBiddingImportantInfoSectionExpanded(section)"
+                                  :data="section.items"
+                                  row-key="row_key"
+                                  class="users-table bidding-important-info-table"
+                                  empty-text="暂无字段"
+                                >
+                                  <el-table-column prop="field_name" label="字段" width="170" />
+                                  <el-table-column label="识别结果" min-width="380">
+                                    <template #default="{ row }">
+                                      <div class="operation-client bidding-important-info-value">
+                                        <strong>{{ row.value || '未识别到明确结果' }}</strong>
+                                        <small v-if="row.note">{{ row.note }}</small>
+                                      </div>
+                                    </template>
+                                  </el-table-column>
+                                  <el-table-column label="状态" width="105">
+                                    <template #default="{ row }">
+                                      <el-tag :type="biddingImportantInfoStatusTag(row.status)" effect="plain">
+                                        {{ biddingImportantInfoStatusLabel(row.status) }}
+                                      </el-tag>
+                                    </template>
+                                  </el-table-column>
+                                  <el-table-column label="来源" min-width="210" show-overflow-tooltip>
+                                    <template #default="{ row }">{{ biddingImportantInfoSourceLabel(row) }}</template>
+                                  </el-table-column>
+                                </el-table>
+                              </section>
+                            </div>
+                            <el-empty
+                              v-else
+                              :description="biddingImportantInfoEmptyText"
+                            />
+                          </el-tab-pane>
+
+                          <el-tab-pane label="评分细则表" name="scoring">
+                            <el-table
+                              :data="biddingTenderScoringDisplayRows"
+                              row-key="row_key"
+                              class="users-table"
+                              empty-text="暂无评分细则"
+                            >
+                              <el-table-column label="评分项" min-width="220" show-overflow-tooltip>
+                                <template #default="{ row }">
+                                  <div
+                                    class="operation-client bidding-scoring-item"
+                                    :class="{ 'is-child': row.__scoringChild }"
+                                  >
+                                    <div class="bidding-scoring-title-line">
+                                      <el-button
+                                        v-if="row.__scoringCanExpand"
+                                        link
+                                        type="primary"
+                                        size="small"
+                                        class="bidding-scoring-toggle"
+                                        @click.stop="toggleBiddingScoringGroup(row)"
+                                      >
+                                        {{ row.__scoringExpanded ? '收起' : '展开' }} {{ row.__scoringChildrenCount }} 项
+                                      </el-button>
+                                      <span v-else-if="row.__scoringChild" class="bidding-scoring-child-marker">子项</span>
+                                      <strong>{{ row.scoring_item }}</strong>
+                                    </div>
+                                    <small>
+                                      {{ biddingAnalysisPackageLabel(row.package_type) }}
+                                      <template v-if="row.full_score"> · {{ row.full_score }}</template>
+                                      <template v-if="row.scoring_weight"> · 权重 {{ row.scoring_weight }}</template>
+                                    </small>
+                                    <div v-if="row.is_scoring_group || row.split_from_parent" class="business-object-badges">
+                                      <el-tag v-if="row.is_scoring_group" size="small" type="success" effect="plain">
+                                        汇总项 {{ row.child_count || (row.children || []).length }} 项
+                                      </el-tag>
+                                      <el-tag v-if="row.split_from_parent" size="small" type="primary" effect="plain">
+                                        拆分项
+                                      </el-tag>
+                                    </div>
+                                  </div>
+                                </template>
+                              </el-table-column>
+                              <el-table-column prop="scoring_standard" label="评分标准说明" min-width="340" show-overflow-tooltip />
+                              <el-table-column prop="gap_analysis" label="差距分析" min-width="240" show-overflow-tooltip />
+                              <el-table-column prop="suggested_action" label="建议动作" min-width="240" show-overflow-tooltip />
+                              <el-table-column prop="owner_role" label="责任" width="90" />
+                              <el-table-column label="来源" min-width="180" show-overflow-tooltip>
+                                <template #default="{ row }">{{ row.source_file || '-' }} · {{ row.source_location || '-' }}</template>
+                              </el-table-column>
+                            </el-table>
+                          </el-tab-pane>
+
+                          <el-tab-pane label="风险条款清单" name="risk_clause">
+                            <div v-loading="biddingRiskClauseLoading || biddingRiskClauseAnalyzing" class="bidding-risk-clause-board">
+                              <el-empty v-if="!biddingTenderRiskClauseRows.length" :description="biddingRiskClauseEmptyText">
+                                <el-button
+                                  type="warning"
+                                  plain
+                                  :icon="DataAnalysis"
+                                  :loading="biddingRiskClauseAnalyzing"
+                                  @click="analyzeBiddingRiskClause"
+                                >
+                                  风险分析
+                                </el-button>
+                              </el-empty>
+                              <template v-else>
+                                <section class="bidding-important-info-section">
+                                  <div class="bidding-risk-detail-heading">
+                                    <div>
+                                      <strong>风险分析基本信息</strong>
+                                      <small>{{ biddingRiskClauseRiskCount }} 条风险 · 高 {{ biddingRiskClauseHighCount }} · 中 {{ biddingRiskClauseMediumCount }} · 低 {{ biddingRiskClauseLowCount }}</small>
+                                    </div>
+                                    <el-tag effect="plain">{{ biddingRiskClause?.status || 'completed' }}</el-tag>
+                                  </div>
+                                  <el-table :data="biddingRiskClauseBasicRows" class="users-table" row-key="label">
+                                    <el-table-column prop="label" label="项目" width="130" />
+                                    <el-table-column prop="value" label="内容" min-width="460" show-overflow-tooltip />
+                                  </el-table>
+                                </section>
+
+                                <section class="bidding-important-info-section">
+                                  <div class="bidding-risk-detail-heading">
+                                    <div>
+                                      <strong>一、优先关注事项</strong>
+                                      <small>优先谈判、优先管控、关键证据</small>
+                                    </div>
+                                  </div>
+                                  <el-table :data="biddingRiskClausePriorityAttention" class="users-table" row-key="category">
+                                    <el-table-column prop="category" label="类别" width="130" />
+                                    <el-table-column prop="suggestion" label="建议" min-width="520" />
+                                  </el-table>
+                                </section>
+
+                                <section class="bidding-important-info-section">
+                                  <div class="bidding-risk-detail-heading">
+                                    <div>
+                                      <strong>二、风险清单概览</strong>
+                                      <small>序号、等级、所在章节、风险说明</small>
+                                    </div>
+                                  </div>
+                                  <el-table :data="biddingTenderRiskClauseRows" class="users-table" row-key="row_key">
+                                    <el-table-column prop="risk_id" label="序号" width="85" />
+                                    <el-table-column label="等级" width="90">
+                                      <template #default="{ row }">
+                                        <el-tag :type="biddingRiskLevelTag(row.risk_level)" effect="plain">{{ biddingRiskLevelLabel(row.risk_level) }}</el-tag>
+                                      </template>
+                                    </el-table-column>
+                                    <el-table-column prop="source_location" label="所在章节" min-width="220" show-overflow-tooltip />
+                                    <el-table-column prop="risk_explanation" label="风险说明" min-width="420" show-overflow-tooltip />
+                                  </el-table>
+                                </section>
+
+                                <section class="bidding-important-info-section">
+                                  <div class="bidding-risk-detail-heading">
+                                    <div>
+                                      <strong>三、风险条款明细</strong>
+                                      <small>所在章节、风险等级、条款原文、风险说明、建议应对方式</small>
+                                    </div>
+                                  </div>
+                                  <el-table :data="biddingTenderRiskClauseRows" class="users-table" row-key="row_key">
+                                    <el-table-column prop="source_location" label="所在章节" width="210" show-overflow-tooltip />
+                                    <el-table-column label="风险等级" width="100">
+                                      <template #default="{ row }">
+                                        <el-tag :type="biddingRiskLevelTag(row.risk_level)" effect="plain">{{ biddingRiskLevelLabel(row.risk_level) }}</el-tag>
+                                      </template>
+                                    </el-table-column>
+                                    <el-table-column label="条款原文" min-width="330">
+                                      <template #default="{ row }">
+                                        <div class="operation-client bidding-important-info-value">
+                                          <strong>{{ row.clause_original || '-' }}</strong>
+                                          <small>{{ row.source_file || '-' }}</small>
+                                        </div>
+                                      </template>
+                                    </el-table-column>
+                                    <el-table-column prop="risk_explanation" label="风险说明" min-width="280" />
+                                    <el-table-column prop="suggested_response" label="建议应对方式" min-width="300" />
+                                  </el-table>
+                                </section>
+                              </template>
+                            </div>
+                          </el-tab-pane>
+
+                          <el-tab-pane label="待复核队列" name="review_queue">
+                            <el-table
+                              :data="biddingTenderAnalysisReviewQueue"
+                              row-key="row_key"
+                              :tree-props="{ children: 'children' }"
+                              class="users-table"
+                              empty-text="暂无待复核项"
+                            >
+                              <el-table-column prop="table_label" label="成果表" width="150" />
+                              <el-table-column label="复核项" min-width="240" show-overflow-tooltip>
+                                <template #default="{ row }">
+                                  <div class="operation-client">
+                                    <strong>{{ row.title }}</strong>
+                                    <small>
+                                      {{ row.review_category_label || '待复核' }}
+                                      <template v-if="row.item_count && row.item_count > 1"> · 合并 {{ row.item_count }} 项</template>
+                                    </small>
+                                  </div>
+                                </template>
+                              </el-table-column>
+                              <el-table-column label="原因" min-width="260">
+                                <template #default="{ row }">
+                                  <div class="business-object-badges">
+                                    <el-tag
+                                      v-for="reason in row.reasons || []"
+                                      :key="reason"
+                                      size="small"
+                                      type="warning"
+                                      effect="plain"
+                                    >
+                                      {{ reason }}
+                                    </el-tag>
+                                  </div>
+                                </template>
+                              </el-table-column>
+                              <el-table-column label="来源" min-width="180" show-overflow-tooltip>
+                                <template #default="{ row }">{{ row.source_file || '-' }} · {{ row.source_location || '-' }}</template>
+                              </el-table-column>
+                            </el-table>
+                          </el-tab-pane>
+                        </el-tabs>
+                      </template>
+                    </section>
+
+                    <el-collapse v-model="biddingBusinessObjectCollapse" class="bidding-debug-collapse">
+                      <el-collapse-item name="businessObjects">
+                        <template #title>
+                          <div class="bidding-debug-collapse-title">
+                            <strong>内部业务对象</strong>
+                            <small>默认隐藏，用于查看系统识别出的待复核事项</small>
+                          </div>
+                        </template>
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Tickets /></el-icon>
+                        <span>结构化投标业务对象</span>
+                        <small>把招标文件要求归并为投标规则、资格审查、合同条款、报价约束和文件清单</small>
+                        <el-button
+                          class="section-title-action"
+                          size="small"
+                          type="primary"
+                          plain
+                          :loading="biddingBusinessObjectLlmReviewing"
+                          @click="reviewBiddingBusinessObjectsWithLlm"
+                        >
+                          DeepSeek复核
+                        </el-button>
+                      </div>
+                      <div class="bidding-risk-card-summary">
+                        <div>
+                          <span>业务对象</span>
+                          <strong>{{ biddingBusinessObjectsSummary.object_count || biddingBusinessObjectsTotal }}</strong>
+                          <small>需响应 {{ biddingBusinessObjectsSummary.response_required_count || 0 }} · 报价预留 {{ biddingBusinessObjectsSummary.quote_allowance_count || 0 }} · 转答疑 {{ biddingBusinessObjectsSummary.clarification_count || 0 }} · 待复核 {{ biddingBusinessObjectsSummary.pending_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>对象分布</span>
+                          <strong>{{ biddingBusinessObjectTypeRows.length }}</strong>
+                          <small>{{ biddingBusinessObjectTypeRows.map((item) => `${item.label} ${item.count}`).join(' · ') || '暂无' }}</small>
+                        </div>
+                        <div>
+                          <span>证据质量</span>
+                          <strong>{{ biddingBusinessObjectsSummary.secondary_split_count || 0 }}</strong>
+                          <small>已拆分 · 弱拆分 {{ biddingBusinessObjectsSummary.weak_split_count || 0 }} · 仍需二拆 {{ biddingBusinessObjectsSummary.needs_secondary_split_count || 0 }} · 需复核 {{ biddingBusinessObjectsSummary.needs_llm_review_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>DeepSeek建议</span>
+                          <strong>{{ biddingBusinessObjectsSummary.llm_reviewed_count || 0 }}</strong>
+                          <small>待确认 {{ biddingBusinessObjectsSummary.llm_pending_manual_count || 0 }} · 已采纳 {{ biddingBusinessObjectsSummary.llm_accepted_count || 0 }} · 已修改 {{ biddingBusinessObjectsSummary.llm_modified_count || 0 }} · 已驳回 {{ biddingBusinessObjectsSummary.llm_rejected_count || 0 }} · 异常 {{ biddingBusinessObjectsSummary.llm_error_count || 0 }}</small>
+                        </div>
+                      </div>
+
+                      <div v-if="biddingBusinessObjectLlmProgress.visible" class="bidding-llm-progress-panel">
+                        <div class="bidding-risk-detail-heading">
+                          <div>
+                            <strong>DeepSeek复核进度</strong>
+                            <small>
+                              第 {{ biddingBusinessObjectLlmProgress.current || 0 }} / {{ biddingBusinessObjectLlmProgress.total || 0 }} 条
+                              · 当前 {{ biddingBusinessObjectLlmProgress.currentTitle || '准备中' }}
+                            </small>
+                          </div>
+                          <el-tag :type="biddingBusinessObjectLlmReviewing ? 'warning' : 'success'" effect="plain">
+                            {{ biddingBusinessObjectLlmReviewing ? '处理中' : '已结束' }}
+                          </el-tag>
+                        </div>
+                        <el-progress
+                          :percentage="biddingLlmProgressPercentage"
+                          :status="biddingBusinessObjectLlmProgress.error ? 'warning' : undefined"
+                        />
+                        <small>
+                          完成 {{ biddingBusinessObjectLlmProgress.completed }}
+                          · 异常 {{ biddingBusinessObjectLlmProgress.error }}
+                          · 跳过 {{ biddingBusinessObjectLlmProgress.skipped }}
+                          · {{ biddingBusinessObjectLlmProgress.lastMessage || '等待开始' }}
+                        </small>
+                      </div>
+
+                      <div v-if="biddingLlmReviewRows.length" class="bidding-llm-review-panel">
+                        <div class="bidding-risk-detail-heading">
+                          <div>
+                            <strong>DeepSeek复核结果</strong>
+                            <small>模型建议只作为人工确认依据，不会自动修改对象分类或复核状态</small>
+                          </div>
+                          <el-tag type="success" effect="plain">已返回 {{ biddingLlmReviewRows.length }} 条</el-tag>
+                        </div>
+                        <el-table
+                          :data="biddingLlmReviewRows"
+                          row-key="object_uuid"
+                          class="users-table"
+                          max-height="320"
+                          empty-text="暂无 DeepSeek 复核结果"
+                        >
+                          <el-table-column label="对象" min-width="210" show-overflow-tooltip>
+                            <template #default="{ row }">
+                              <div class="operation-client">
+                                <strong>{{ row.title }}</strong>
+                                <small>{{ biddingBusinessObjectTypeLabel(row.object_type) }} · {{ row.object_subtype }}</small>
+                              </div>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="建议" width="150">
+                            <template #default="{ row }">
+                              <el-tag :type="biddingLlmDecisionTag(row.normalized?.llm_review?.decision)" effect="plain">
+                                {{ biddingLlmDecisionLabel(row.normalized?.llm_review?.decision) }}
+                              </el-tag>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="置信度" width="95">
+                            <template #default="{ row }">{{ biddingConfidenceLabel(row.normalized?.llm_review?.confidence) }}</template>
+                          </el-table-column>
+                          <el-table-column label="说明" min-width="320" show-overflow-tooltip>
+                            <template #default="{ row }">
+                              <div class="operation-client">
+                                <span>{{ row.normalized?.llm_review?.reason || row.normalized?.llm_review_error?.error || '暂无说明' }}</span>
+                                <small v-if="row.normalized?.llm_review?.suggested_reviewer_note">
+                                  人工建议：{{ row.normalized.llm_review.suggested_reviewer_note }}
+                                </small>
+                              </div>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="状态" width="130">
+                            <template #default="{ row }">
+                              <el-tag :type="biddingLlmReviewStatusTag(row.normalized?.llm_review_status)" effect="plain">
+                                {{ biddingLlmReviewStatusLabel(row.normalized?.llm_review_status) }}
+                              </el-tag>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="210" fixed="right">
+                            <template #default="{ row }">
+                              <div class="row-actions bidding-llm-actions">
+                                <el-button
+                                  size="small"
+                                  type="success"
+                                  plain
+                                  :loading="biddingLlmDecisionSubmitting"
+                                  :disabled="row.normalized?.llm_review_status !== 'pending_manual_confirm'"
+                                  @click="acceptBiddingLlmReview(row)"
+                                >
+                                  采纳
+                                </el-button>
+                                <el-button
+                                  size="small"
+                                  type="info"
+                                  plain
+                                  :loading="biddingLlmDecisionSubmitting"
+                                  :disabled="!['pending_manual_confirm', 'error'].includes(row.normalized?.llm_review_status)"
+                                  @click="rejectBiddingLlmReview(row)"
+                                >
+                                  驳回
+                                </el-button>
+                                <el-button
+                                  size="small"
+                                  type="warning"
+                                  plain
+                                  :loading="biddingLlmDecisionSubmitting"
+                                  :disabled="row.normalized?.llm_review_status !== 'pending_manual_confirm'"
+                                  @click="openModifyBiddingLlmReview(row)"
+                                >
+                                  修改
+                                </el-button>
+                              </div>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </div>
+
+                      <el-table
+                        :data="biddingBusinessObjects"
+                        row-key="object_uuid"
+                        class="users-table"
+                        empty-text="暂无业务对象"
+                      >
+                        <el-table-column label="对象" min-width="240" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>{{ row.title }}</strong>
+                              <small>{{ biddingBusinessObjectTypeLabel(row.object_type) }} · {{ row.normalized_value || '未抽取标准值' }}</small>
+                              <div class="business-object-badges">
+                                <el-tag v-if="row.normalized?.split_applied" size="small" type="success" effect="plain">已拆分</el-tag>
+                                <el-tag v-if="row.normalized?.weak_split" size="small" type="warning" effect="plain">弱拆分</el-tag>
+                                <el-tag v-if="row.normalized?.large_object" size="small" type="warning" effect="plain">大对象 {{ row.source_count || 0 }}</el-tag>
+                                <el-tag v-if="row.normalized?.needs_llm_review" size="small" type="primary" effect="plain">需复核</el-tag>
+                                <el-tag v-if="row.normalized?.llm_review_status === 'pending_manual_confirm'" size="small" type="success" effect="plain">DeepSeek已建议</el-tag>
+                                <el-tag v-if="row.normalized?.llm_review_status === 'accepted'" size="small" type="success" effect="plain">建议已采纳</el-tag>
+                                <el-tag v-if="row.normalized?.llm_review_status === 'modified'" size="small" type="warning" effect="plain">建议已修改</el-tag>
+                                <el-tag v-if="row.normalized?.llm_review_status === 'rejected'" size="small" type="info" effect="plain">建议已驳回</el-tag>
+                                <el-tag v-if="row.normalized?.llm_review_status === 'error'" size="small" type="danger" effect="plain">LLM异常</el-tag>
+                                <el-tag v-if="row.normalized?.low_confidence_representative" size="small" type="danger" effect="plain">证据低置信</el-tag>
+                              </div>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="用途" width="150">
+                          <template #default="{ row }">
+                            <div class="business-action-stack">
+                              <el-tag :type="biddingBusinessObjectActionTag(row.normalized?.business_action)" effect="plain">
+                                {{ biddingBusinessObjectActionLabel(row.normalized?.business_action) }}
+                              </el-tag>
+                              <small v-if="row.normalized?.secondary_business_actions?.length || row.normalized?.risk_secondary_actions?.length">
+                                次级 {{ biddingBusinessObjectActionListLabel(row.normalized?.secondary_business_actions || row.normalized?.risk_secondary_actions) }}
+                              </small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="责任" width="110">
+                          <template #default="{ row }">{{ row.owner_role || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column label="响应" width="95">
+                          <template #default="{ row }">
+                            <el-tag :type="row.response_required ? 'warning' : 'info'" effect="plain">
+                              {{ row.response_required ? '需响应' : '可选' }}
+                            </el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="来源" min-width="180" show-overflow-tooltip>
+                          <template #default="{ row }">{{ row.source_file }} · {{ row.source_location }}</template>
+                        </el-table-column>
+                        <el-table-column label="证据" min-width="320" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ row.original_text }}</span>
+                              <small>
+                                {{ biddingBusinessObjectEvidenceQualityLabel(row.normalized?.representative_evidence_quality) }}
+                                · 相关度 {{ row.normalized?.representative_evidence_relevance ?? '-' }}
+                                · 上下文 {{ biddingBusinessObjectEvidenceContextLabel(row.normalized?.representative_evidence_context_quality) }}
+                                · 样本 {{ row.normalized?.evidence_sample_count || row.evidence?.length || 0 }}/{{ row.normalized?.evidence_total_count || row.source_count || 0 }}
+                              </small>
+                              <small v-if="row.normalized?.llm_review">
+                                DeepSeek {{ biddingLlmDecisionLabel(row.normalized.llm_review.decision) }}
+                                · 置信度 {{ biddingConfidenceLabel(row.normalized.llm_review.confidence) }}
+                                · {{ row.normalized.llm_review.reason || '待人工查看建议' }}
+                              </small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="复核" width="110">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingRiskReviewTag(row.review_status)" effect="plain">{{ biddingRiskReviewLabel(row.review_status) }}</el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="280" fixed="right">
+                          <template #default="{ row }">
+                            <div class="row-actions">
+                              <el-button size="small" type="success" plain @click="reviewBiddingBusinessObject(row, 'confirmed')">确认</el-button>
+                              <el-button size="small" type="warning" plain @click="reviewBiddingBusinessObject(row, 'to_clarify')">转答疑</el-button>
+                              <el-button size="small" plain @click="reviewBiddingBusinessObject(row, 'to_quote_allowance')">报价预留</el-button>
+                              <el-button size="small" type="info" plain @click="reviewBiddingBusinessObject(row, 'ignored')">忽略</el-button>
+                            </div>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+                      </el-collapse-item>
+                    </el-collapse>
+                  </el-tab-pane>
+
+                  <el-tab-pane label="响应矩阵" name="responseMatrix">
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><DocumentChecked /></el-icon>
+                        <span>投标响应矩阵</span>
+                        <small>把业务对象、风险和关键要求转成可执行、可追踪的投标响应任务</small>
+                        <el-button
+                          class="section-title-action"
+                          size="small"
+                          type="primary"
+                          plain
+                          :loading="biddingResponseMatrixGenerating"
+                          @click="generateBiddingResponseMatrix"
+                        >
+                          生成响应矩阵
+                        </el-button>
+                      </div>
+
+                      <div class="bidding-risk-card-summary">
+                        <div>
+                          <span>响应项</span>
+                          <strong>{{ biddingResponseVisibleSummary.item_count || 0 }}</strong>
+                          <small>待处理 {{ biddingResponseVisibleSummary.pending_count || 0 }} · 已完成 {{ biddingResponseVisibleSummary.done_count || 0 }} · 已忽略 {{ biddingResponseVisibleSummary.ignored_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>协同动作</span>
+                          <strong>{{ biddingResponseWorkflowCount('clarification') + biddingResponseWorkflowCount('quote_allowance') + biddingResponseWorkflowCount('legal_review') }}</strong>
+                          <small>答疑 {{ biddingResponseWorkflowCount('clarification') }} · 报价预留 {{ biddingResponseWorkflowCount('quote_allowance') }} · 法务 {{ biddingResponseWorkflowCount('legal_review') }}</small>
+                        </div>
+                        <div>
+                          <span>风险响应</span>
+                          <strong>{{ biddingResponseVisibleSummary.high_risk_count || 0 }}</strong>
+                          <small>高风险响应项；覆盖风险 {{ biddingResponseVisibleSummary.covered_risk_count || 0 }} 条</small>
+                        </div>
+                        <div>
+                          <span>覆盖解释</span>
+                          <strong>{{ biddingResponseVisibleSummary.covered_requirement_count || 0 }}</strong>
+                          <small>覆盖要求 · 技术聚类 {{ biddingResponseVisibleSummary.clustered_requirement_count || 0 }} 项 · 拆分 {{ biddingResponseVisibleSummary.split_item_count || 0 }} 项</small>
+                        </div>
+                      </div>
+
+                      <div class="bidding-response-toolbar">
+                        <div class="bidding-response-role-filter">
+                          <span>复核视图</span>
+                          <el-radio-group
+                            v-model="biddingResponseReviewRole"
+                            size="small"
+                          >
+                            <el-radio-button
+                              v-for="option in biddingResponseReviewRoleOptions"
+                              :key="option.value"
+                              :label="option.value"
+                              :value="option.value"
+                            >
+                              {{ option.label }}
+                            </el-radio-button>
+                          </el-radio-group>
+                          <el-button
+                            size="small"
+                            plain
+                            :disabled="!biddingResponseExpandableRows.length"
+                            @click="expandAllBiddingResponseGroups"
+                          >
+                            展开分组
+                          </el-button>
+                          <el-button
+                            size="small"
+                            plain
+                            :disabled="!biddingResponseExpandedKeys.length"
+                            @click="collapseAllBiddingResponseGroups"
+                          >
+                            收起分组
+                          </el-button>
+                        </div>
+                        <small>
+                          质量标记 {{ biddingResponseVisibleSummary.quality_flag_count || 0 }} ·
+                          第1波 {{ biddingResponseVisibleSummary.by_review_wave?.wave_1 || 0 }} ·
+                          第2波 {{ biddingResponseVisibleSummary.by_review_wave?.wave_2 || 0 }} ·
+                          第3波 {{ biddingResponseVisibleSummary.by_review_wave?.wave_3 || 0 }} ·
+                          经营 {{ biddingResponseVisibleSummary.by_primary_review_role?.['经营'] || 0 }} ·
+                          预算 {{ biddingResponseVisibleSummary.by_primary_review_role?.['预算'] || 0 }} ·
+                          技术 {{ biddingResponseVisibleSummary.by_primary_review_role?.['技术'] || 0 }} ·
+                          法务 {{ biddingResponseVisibleSummary.by_primary_review_role?.['法务'] || 0 }}
+                        </small>
+                      </div>
+
+                      <el-table
+                        :data="visibleBiddingResponseItems"
+                        row-key="response_item_uuid"
+                        :tree-props="{ children: 'children' }"
+                        :expand-row-keys="biddingResponseExpandedKeys"
+                        class="users-table"
+                        empty-text="暂无响应矩阵，请先生成初稿"
+                      >
+                        <el-table-column label="响应项" min-width="250" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>{{ row.response_title }}</strong>
+                              <small>
+                                {{ biddingResponseCreatedFromLabel(row.created_from) }}
+                                · {{ biddingResponseCategoryLabel(row.response_category) }}
+                                <template v-if="row.covered_requirement_count || row.covered_risk_count">
+                                  · 覆盖 {{ row.covered_requirement_count || 0 }} 要求 / {{ row.covered_risk_count || 0 }} 风险
+                                </template>
+                                <template v-if="biddingResponsePrimaryRole(row)"> · 主责 {{ biddingResponsePrimaryRole(row) }}</template>
+                                <template v-if="biddingResponseSupportingRoles(row).length"> · 协同 {{ biddingResponseSupportingRoles(row).join('/') }}</template>
+                                <template v-if="row.business_object_title"> · {{ row.business_object_title }}</template>
+                              </small>
+                              <div v-if="biddingResponseQualityTags(row).length || biddingResponseTaskDisplayLabel(row) || row.review_wave_label" class="bidding-response-chips">
+                                <el-tag
+                                  v-if="biddingResponseTaskDisplayLabel(row)"
+                                  size="small"
+                                  :type="biddingResponseTaskDisplayType(row) === 'group_task' ? 'primary' : biddingResponseTaskDisplayType(row) === 'summary_task' ? 'warning' : 'info'"
+                                  effect="plain"
+                                >
+                                  {{ biddingResponseTaskDisplayLabel(row) }}
+                                  <template v-if="biddingResponseTaskDisplayType(row) === 'summary_task' && (row.task_group_child_count || biddingResponseGroupChildren(row).length)">
+                                    · {{ row.task_group_child_count || biddingResponseGroupChildren(row).length }}组
+                                  </template>
+                                </el-tag>
+                                <el-button
+                                  v-if="biddingResponseGroupChildren(row).length"
+                                  size="small"
+                                  text
+                                  type="primary"
+                                  @click.stop="toggleBiddingResponseGroup(row)"
+                                >
+                                  {{ biddingResponseIsGroupExpanded(row) ? '收起分组' : `展开${biddingResponseGroupChildren(row).length}组` }}
+                                </el-button>
+                                <el-tag
+                                  v-if="row.review_wave_label"
+                                  size="small"
+                                  :type="biddingResponsePriorityTag(row.review_priority)"
+                                  effect="plain"
+                                >
+                                  {{ row.review_wave_label }} · {{ row.review_priority || '-' }}
+                                </el-tag>
+                                <el-tag
+                                  v-for="tag in biddingResponseQualityTags(row)"
+                                  :key="tag"
+                                  size="small"
+                                  type="warning"
+                                  effect="plain"
+                                >
+                                  {{ biddingResponseQualityLabel(tag) }}
+                                </el-tag>
+                              </div>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="原文证据" min-width="320" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ row.source_text }}</span>
+                              <small v-if="row.evidence?.length">
+                                {{ row.evidence[0].source_file || '-' }} · {{ row.evidence[0].source_location || '-' }}
+                              </small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="响应动作" width="200">
+                          <template #default="{ row }">
+                            <div v-if="row.is_virtual_group_parent" class="operation-client">
+                              <el-tag type="warning" effect="plain">展开后处理子项</el-tag>
+                            </div>
+                            <div v-else class="operation-client">
+                              <el-select
+                                size="small"
+                                :model-value="row.response_action"
+                                :disabled="biddingResponseItemUpdating"
+                                @change="(value) => updateBiddingResponseItem(row, { response_action: value })"
+                              >
+                                <el-option
+                                  v-for="option in biddingResponseActionOptions"
+                                  :key="option.value"
+                                  :label="option.label"
+                                  :value="option.value"
+                                />
+                              </el-select>
+                              <div v-if="biddingResponseLinkedActions(row).length > 1" class="bidding-response-chips">
+                                <el-tag
+                                  v-for="action in biddingResponseLinkedActions(row).filter((item) => item.action !== row.response_action)"
+                                  :key="action.action"
+                                  size="small"
+                                  :type="biddingResponseActionTag(action.action)"
+                                  effect="plain"
+                                >
+                                  {{ biddingResponseActionLabel(action.action) }}
+                                </el-tag>
+                              </div>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="状态" width="150">
+                          <template #default="{ row }">
+                            <el-tag v-if="row.is_virtual_group_parent" type="info" effect="plain">汇总</el-tag>
+                            <el-select
+                              v-else
+                              size="small"
+                              :model-value="row.status"
+                              :disabled="biddingResponseItemUpdating"
+                              @change="(value) => updateBiddingResponseItem(row, { status: value })"
+                            >
+                              <el-option
+                                v-for="option in biddingResponseStatusOptions"
+                                :key="option.value"
+                                :label="option.label"
+                                :value="option.value"
+                              />
+                            </el-select>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="风险" width="90">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingRiskLevelTag(row.risk_level)" effect="plain">{{ biddingRiskLevelLabel(row.risk_level) }}</el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="责任" width="110">
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <el-button size="small" text @click="editBiddingResponseItemOwner(row)">
+                                {{ biddingResponsePrimaryRole(row) || row.owner_role || '未分配' }}
+                              </el-button>
+                              <small v-if="biddingResponseSupportingRoles(row).length">协同 {{ biddingResponseSupportingRoles(row).join('/') }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="说明/备注" min-width="230" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ row.response_note || '暂无响应说明' }}</span>
+                              <small v-if="biddingResponseReviewActionText(row)">{{ biddingResponseReviewActionText(row) }}</small>
+                              <small v-if="biddingResponseDoneText(row)">{{ biddingResponseDoneText(row) }}</small>
+                              <small v-if="row.priority_reason">{{ row.review_priority_label }}：{{ row.priority_reason }}</small>
+                              <small v-if="biddingResponseCoverageText(row)">{{ biddingResponseCoverageText(row) }}</small>
+                              <small v-if="biddingResponseQualityText(row)">{{ biddingResponseQualityText(row) }}</small>
+                              <small v-if="row.reviewer_note">复核：{{ row.reviewer_note }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="220" fixed="right">
+                          <template #default="{ row }">
+                            <div v-if="row.is_virtual_group_parent" class="row-actions">
+                              <el-button size="small" type="primary" plain @click.stop="toggleBiddingResponseGroup(row)">
+                                {{ biddingResponseIsGroupExpanded(row) ? '收起分组' : `展开${biddingResponseGroupChildren(row).length}组` }}
+                              </el-button>
+                            </div>
+                            <div v-else class="row-actions">
+                              <el-button size="small" type="success" plain @click="updateBiddingResponseItem(row, { status: 'done' })">完成</el-button>
+                              <el-button size="small" type="info" plain @click="updateBiddingResponseItem(row, { status: 'ignored' })">忽略</el-button>
+                              <el-button size="small" plain @click="editBiddingResponseItemNote(row)">备注</el-button>
+                            </div>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+
+                  </el-tab-pane>
+
+                  <el-tab-pane label="商务标草案" name="businessBidDraft">
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Document /></el-icon>
+                        <span>投标文件格式确认</span>
+                        <small>先确认本项目商务/技术分册和目录项归属，再分别进入商务标、技术标草案链路</small>
+                        <div class="section-title-action bidding-outline-actions">
+                          <el-button
+                            size="small"
+                            plain
+                            :loading="biddingFileFormatLoading"
+                            @click="loadBiddingFileFormatPlan()"
+                          >
+                            刷新
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="primary"
+                            plain
+                            :loading="biddingFileFormatGenerating"
+                            @click="generateBiddingFileFormatPlan"
+                          >
+                            生成格式表
+                          </el-button>
+                          <el-button
+                            size="small"
+                            plain
+                            :disabled="!biddingFileFormatPackages.length"
+                            @click="openBiddingFileFormatItemDialog"
+                          >
+                            新增目录项
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="success"
+                            plain
+                            :loading="biddingFileFormatConfirming"
+                            :disabled="!biddingFileFormatPackages.length"
+                            @click="confirmBiddingFileFormatPlan"
+                          >
+                            {{ biddingFileFormatPlan?.review_status === 'confirmed' ? '重新确认' : '确认格式' }}
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <div class="bidding-risk-card-summary">
+                        <div>
+                          <span>识别结论</span>
+                          <strong>{{ biddingFileFormatPlan?.package_mode_label || '-' }}</strong>
+                          <small>{{ biddingFileFormatPlan?.format_source_label || '等待识别' }}</small>
+                        </div>
+                        <div>
+                          <span>文件包</span>
+                          <strong>{{ biddingFileFormatSummary.package_count || 0 }}</strong>
+                          <small>目录项 {{ biddingFileFormatSummary.item_count || 0 }} · 正文 {{ biddingFileFormatSummary.draft_section_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>固定表单</span>
+                          <strong>{{ biddingFileFormatSummary.fixed_form_count || 0 }}</strong>
+                          <small>报价表 {{ biddingFileFormatSummary.pricing_table_count || 0 }} · 附件 {{ biddingFileFormatSummary.attachment_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>确认状态</span>
+                          <strong>{{ biddingFileFormatReviewStatusLabel(biddingFileFormatPlan?.review_status) }}</strong>
+                          <small>{{ biddingFileFormatPlan?.confirmed_at ? `已确认 ${biddingFileFormatPlan.confirmed_at}` : '确认后再进入草稿生成' }}</small>
+                        </div>
+                      </div>
+
+                      <el-alert
+                        v-if="biddingFileFormatWarnings.length"
+                        class="dashboard-alert"
+                        type="warning"
+                        show-icon
+                        :closable="false"
+                        :title="biddingFileFormatWarnings[0].message || '投标文件格式仍需人工确认'"
+                      ></el-alert>
+
+                      <el-table
+                        v-loading="biddingFileFormatLoading || biddingFileFormatGenerating"
+                        :data="biddingFileFormatRows"
+                        row-key="item_key"
+                        class="users-table"
+                        empty-text="暂无投标文件格式识别结果，请先生成格式表"
+                      >
+                        <el-table-column label="文件包/目录项" min-width="300" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>{{ row.item_title }}</strong>
+                              <small>{{ row.package_title }}</small>
+                              <div class="bidding-response-chips">
+                                <el-tag size="small" effect="plain">{{ row.content_type_label || biddingFileFormatContentTypeLabel(row.content_type) }}</el-tag>
+                                <el-tag v-if="row.requires_signature" size="small" type="warning" effect="plain">签章/签字</el-tag>
+                                <el-tag v-if="row.requires_attachment" size="small" type="info" effect="plain">需附件</el-tag>
+                                <el-tag v-if="row.conflict_status === 'cross_package_duplicate'" size="small" type="danger" effect="plain">跨包去重</el-tag>
+                              </div>
+                              <small v-if="row.conflict_note">{{ row.conflict_note }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="负责人" width="90">
+                          <template #default="{ row }">{{ row.owner_role || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column label="生成方式" width="130">
+                          <template #default="{ row }">{{ biddingFileFormatGenerationStrategyLabel(row.generation_strategy) }}</template>
+                        </el-table-column>
+                        <el-table-column label="证据原文" min-width="360" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ row.evidence?.[0]?.original_text || '-' }}</span>
+                              <small v-if="row.evidence?.[0]">{{ row.evidence[0].source_file }} · {{ row.evidence[0].source_location }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="250" fixed="right">
+                          <template #default="{ row }">
+                            <div class="row-actions">
+                              <el-button
+                                v-if="row.package_key !== 'business' && biddingFileFormatHasPackage('business')"
+                                size="small"
+                                plain
+                                @click="moveBiddingFileFormatItem(row, 'business')"
+                              >
+                                移到商务标
+                              </el-button>
+                              <el-button
+                                v-if="row.package_key !== 'technical' && biddingFileFormatHasPackage('technical')"
+                                size="small"
+                                plain
+                                @click="moveBiddingFileFormatItem(row, 'technical')"
+                              >
+                                移到技术标
+                              </el-button>
+                              <el-button size="small" type="danger" plain @click="removeBiddingFileFormatItem(row)">
+                                删除
+                              </el-button>
+                            </div>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+
+                      <el-table
+                        v-if="biddingFileFormatPackagingRequirements.length"
+                        :data="biddingFileFormatPackagingRequirements"
+                        row-key="requirement_key"
+                        class="users-table bidding-subtable"
+                      >
+                        <el-table-column label="装订/密封/电子标要求" min-width="260" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>{{ row.requirement_title }}</strong>
+                              <small>{{ row.evidence?.[0]?.source_file }} · {{ row.evidence?.[0]?.source_location }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="风险" width="90">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingRiskLevelTag(row.risk_level)" effect="plain">{{ biddingRiskLevelLabel(row.risk_level) }}</el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="证据原文" min-width="360" show-overflow-tooltip>
+                          <template #default="{ row }">{{ row.evidence?.[0]?.original_text || '-' }}</template>
+                        </el-table-column>
+                      </el-table>
+
+                      <el-table
+                        v-if="biddingFileFormatAuditEvents.length"
+                        :data="biddingFileFormatAuditEvents"
+                        row-key="event_uuid"
+                        class="users-table bidding-subtable"
+                      >
+                        <el-table-column label="编辑审计" min-width="220" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>{{ biddingFileFormatEventTypeLabel(row.event_type) }}：{{ row.item_title || '-' }}</strong>
+                              <small>
+                                {{ row.pending ? '待确认保存' : `已保存 ${formatDate(row.created_at)}` }}
+                              </small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="文件包变化" min-width="180">
+                          <template #default="{ row }">
+                            {{ biddingFileFormatPackageLabel(row.from_package_key) || '-' }}
+                            <span v-if="row.from_package_key || row.to_package_key"> → </span>
+                            {{ biddingFileFormatPackageLabel(row.to_package_key) || '-' }}
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="说明" min-width="260" show-overflow-tooltip>
+                          <template #default="{ row }">{{ row.detail?.note || '-' }}</template>
+                        </el-table-column>
+                      </el-table>
+
+                      <el-dialog
+                        v-model="biddingFileFormatItemDialog.visible"
+                        title="新增目录项"
+                        width="520px"
+                        append-to-body
+                      >
+                        <el-form label-position="top">
+                          <div class="form-grid-2">
+                            <el-form-item label="文件包">
+                              <el-select v-model="biddingFileFormatItemDialog.package_key" placeholder="选择文件包">
+                                <el-option
+                                  v-for="pkg in biddingFileFormatPackages"
+                                  :key="pkg.package_key"
+                                  :label="pkg.package_title"
+                                  :value="pkg.package_key"
+                                ></el-option>
+                              </el-select>
+                            </el-form-item>
+                            <el-form-item label="负责人">
+                              <el-select v-model="biddingFileFormatItemDialog.owner_role" placeholder="选择负责人">
+                                <el-option
+                                  v-for="option in biddingFileFormatOwnerOptions"
+                                  :key="option.value"
+                                  :label="option.label"
+                                  :value="option.value"
+                                ></el-option>
+                              </el-select>
+                            </el-form-item>
+                          </div>
+                          <el-form-item label="目录项名称">
+                            <el-input v-model="biddingFileFormatItemDialog.item_title" placeholder="例如：投标函、施工组织设计、材料品牌表" />
+                          </el-form-item>
+                          <div class="form-grid-2">
+                            <el-form-item label="内容类型">
+                              <el-select v-model="biddingFileFormatItemDialog.content_type" @change="syncBiddingFileFormatDialogStrategy">
+                                <el-option
+                                  v-for="option in biddingFileFormatContentTypeOptions"
+                                  :key="option.value"
+                                  :label="option.label"
+                                  :value="option.value"
+                                ></el-option>
+                              </el-select>
+                            </el-form-item>
+                            <el-form-item label="生成方式">
+                              <el-select v-model="biddingFileFormatItemDialog.generation_strategy">
+                                <el-option
+                                  v-for="option in biddingFileFormatGenerationOptions"
+                                  :key="option.value"
+                                  :label="option.label"
+                                  :value="option.value"
+                                ></el-option>
+                              </el-select>
+                            </el-form-item>
+                          </div>
+                          <div class="bidding-response-chips">
+                            <el-checkbox v-model="biddingFileFormatItemDialog.requires_signature">需要签字/盖章</el-checkbox>
+                            <el-checkbox v-model="biddingFileFormatItemDialog.requires_attachment">需要附件</el-checkbox>
+                          </div>
+                        </el-form>
+                        <template #footer>
+                          <el-button @click="biddingFileFormatItemDialog.visible = false">取消</el-button>
+                          <el-button type="primary" @click="addBiddingFileFormatItem">新增</el-button>
+                        </template>
+                      </el-dialog>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Document /></el-icon>
+                        <span>商务标资料需求与补齐清单</span>
+                        <small>仅处理已分配到商务标的企业资料、附件、表单字段和报价数据，先补齐再生成商务标草稿</small>
+                        <div class="section-title-action bidding-outline-actions">
+                          <el-button
+                            size="small"
+                            plain
+                            :loading="biddingMaterialRequirementsLoading"
+                            @click="loadBiddingMaterialRequirements(undefined, 'business')"
+                          >
+                            刷新
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="primary"
+                            plain
+                            :loading="biddingMaterialRequirementsGenerating"
+                            @click="generateBiddingMaterialRequirements"
+                          >
+                            生成商务标补齐清单
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <div class="bidding-risk-card-summary">
+                        <div>
+                          <span>商务标资料项</span>
+                          <strong>{{ biddingMaterialRequirementSummary.total || 0 }}</strong>
+                          <small>企业资料 {{ biddingMaterialRequirementSummary.enterprise_profile_requirement_count || 0 }} · 上传 {{ biddingMaterialRequirementSummary.manual_upload_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>待补齐</span>
+                          <strong>{{ biddingMaterialRequirementSummary.open_count || 0 }}</strong>
+                          <small>缺失 {{ biddingMaterialRequirementSummary.missing_count || 0 }} · 候选 {{ biddingMaterialRequirementSummary.candidate_found_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>已提交</span>
+                          <strong>{{ biddingMaterialRequirementSummary.submitted_count || 0 }}</strong>
+                          <small>待确认可用</small>
+                        </div>
+                        <div>
+                          <span>可用率</span>
+                          <strong>{{ Math.round((biddingMaterialRequirementSummary.completion_rate || 0) * 100) }}%</strong>
+                          <small>已确认 {{ biddingMaterialRequirementSummary.resolved_count || 0 }} · 高优先级待处理 {{ biddingMaterialRequirementSummary.high_priority_open_count || 0 }}</small>
+                        </div>
+                      </div>
+
+                      <el-table
+                        v-loading="biddingMaterialRequirementsLoading || biddingMaterialRequirementsGenerating"
+                        :data="biddingMaterialRequirementRows"
+                        row-key="requirement_uuid"
+                        class="users-table"
+                        empty-text="暂无资料需求清单，请先确认投标文件格式后点击生成补齐清单"
+                      >
+                        <el-table-column label="资料需求" min-width="320" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>{{ row.title }}</strong>
+                              <small>{{ row.description || row.item_title }}</small>
+                              <div class="bidding-response-chips">
+                                <el-tag size="small" effect="plain">{{ biddingMaterialRequirementTypeLabel(row.requirement_type) }}</el-tag>
+                                <el-tag size="small" :type="biddingMaterialPriorityTag(row.priority)" effect="plain">{{ row.priority === 'high' ? '高优先级' : '普通' }}</el-tag>
+                                <el-tag v-if="row.profile_category" size="small" type="info" effect="plain">{{ biddingEnterpriseProfileCategoryLabel(row.profile_category) }}</el-tag>
+                              </div>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="来源目录" min-width="220" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ row.item_title }}</span>
+                              <small>{{ row.package_title || row.package_key || '-' }}</small>
+                              <small v-if="row.source_file">{{ row.source_file }} · {{ row.source_location }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="补齐方式" width="130">
+                          <template #default="{ row }">{{ biddingMaterialFulfillmentModeLabel(row.fulfillment_mode) }}</template>
+                        </el-table-column>
+                        <el-table-column label="状态" width="120">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingMaterialRequirementStatusTag(row.status)" effect="plain">
+                              {{ biddingMaterialRequirementStatusLabel(row.status) }}
+                            </el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="候选/提交" min-width="260" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ row.candidate_profile_item?.title || row.normalized?.candidate_profile_item?.title || row.submitted_value || '-' }}</span>
+                              <small v-if="(row.submitted_profile_item_uuids?.length || 0) || (row.submitted_file_ids?.length || 0)">
+                                已提交：企业资料 {{ row.submitted_profile_item_uuids?.length || 0 }} 份 / 补充文件 {{ row.submitted_file_ids?.length || 0 }} 份
+                              </small>
+                              <small v-else-if="row.submitted_profile_item_uuid">已绑定资料：{{ row.submitted_profile_item_uuid }}</small>
+                              <small v-else-if="row.candidates?.length">候选 {{ row.candidates.length }} 条 · {{ row.candidate_profile_item?.summary || row.candidates?.[0]?.summary || '待人工确认' }}</small>
+                              <small v-else>{{ row.notes || '暂无候选，需人工补充' }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="260" fixed="right">
+                          <template #default="{ row }">
+                            <div class="row-actions">
+                              <el-button
+                                v-if="row.candidate_profile_item_uuid && !['approved', 'applied', 'not_applicable'].includes(row.status)"
+                                size="small"
+                                type="success"
+                                plain
+                                :loading="biddingMaterialRequirementUpdatingUuid === row.requirement_uuid"
+                                @click="useBiddingMaterialCandidate(row)"
+                              >
+                                采用候选
+                              </el-button>
+                              <el-button
+                                size="small"
+                                plain
+                                :loading="biddingMaterialRequirementUpdatingUuid === row.requirement_uuid"
+                                @click="submitBiddingMaterialValue(row)"
+                              >
+                                填写
+                              </el-button>
+                              <el-button
+                                v-if="['submitted', 'candidate_found'].includes(row.status) || row.submitted_value || row.submitted_profile_item_uuid || row.submitted_file_id || row.submitted_profile_item_uuids?.length || row.submitted_file_ids?.length"
+                                size="small"
+                                type="primary"
+                                plain
+                                :loading="biddingMaterialRequirementUpdatingUuid === row.requirement_uuid"
+                                @click="approveBiddingMaterialRequirement(row)"
+                              >
+                                确认可用
+                              </el-button>
+                              <el-button
+                                size="small"
+                                type="info"
+                                plain
+                                :loading="biddingMaterialRequirementUpdatingUuid === row.requirement_uuid"
+                                @click="markBiddingMaterialRequirementNotApplicable(row)"
+                              >
+                                不适用
+                              </el-button>
+                            </div>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Document /></el-icon>
+                        <span>商务标目录骨架</span>
+                        <small>仅生成商务标分册下的章节草稿，技术方案和施工组织设计不会进入这里</small>
+                        <div class="section-title-action bidding-outline-actions">
+                          <el-button
+                            size="small"
+                            plain
+                            :loading="biddingDraftOutlineLoading"
+                            @click="loadBiddingDraftOutline()"
+                          >
+                            刷新
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="primary"
+                            plain
+                            :loading="biddingDraftOutlineGenerating"
+                            @click="generateBiddingDraftOutline"
+                          >
+                            生成商务标目录
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <div class="bidding-risk-card-summary">
+                        <div>
+                          <span>章节</span>
+                          <strong>{{ biddingDraftOutlineSummary.section_count || 0 }}</strong>
+                          <small>一级 {{ biddingDraftOutlineSummary.parent_section_count || 0 }} · 任务 {{ biddingDraftOutlineSummary.task_section_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>可起草</span>
+                          <strong>{{ biddingDraftOutlineSummary.placeholder_draft_count || biddingDraftOutlineSummary.can_generate_draft_count || 0 }}</strong>
+                          <small>正式 {{ biddingDraftOutlineSummary.formal_draft_ready_count || 0 }} · 占位 {{ biddingDraftOutlineSummary.placeholder_draft_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>阻断</span>
+                          <strong>{{ biddingDraftOutlineSummary.blocked_section_count || 0 }}</strong>
+                          <small>法务高风险、缺少响应矩阵或需决策项先生成复核说明</small>
+                        </div>
+                        <div>
+                          <span>来源</span>
+                          <strong>{{ biddingDraftOutlineSourceText(biddingDraftOutlineSource) }}</strong>
+                          <small>{{ biddingDraftOutlineSourceDetail(biddingDraftOutlineSource, biddingDraftOutlineSummary) }}</small>
+                        </div>
+                      </div>
+
+                      <el-alert
+                        v-if="biddingDraftOutlineWarnings.length"
+                        class="dashboard-alert"
+                        type="warning"
+                        show-icon
+                        :closable="false"
+                        :title="biddingDraftOutlineWarnings[0].message || '目录骨架仍有待处理事项'"
+                      ></el-alert>
+
+                      <el-table
+                        v-loading="biddingDraftOutlineLoading || biddingDraftOutlineGenerating || biddingDraftSectionsLoading"
+                        :data="biddingDraftOutlineSections"
+                        row-key="section_key"
+                        class="users-table"
+                        empty-text="暂无投标书目录骨架，请先生成响应矩阵后点击生成目录骨架"
+                      >
+                        <el-table-column label="章节" min-width="280" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client" :style="{ paddingLeft: `${Math.max(0, Number(row.level || 1) - 1) * 18}px` }">
+                              <strong>{{ row.section_title }}</strong>
+                              <small>{{ row.description || row.source_summary }}</small>
+                              <small v-if="row.split_reason">{{ row.split_reason }}</small>
+                              <div class="bidding-response-chips">
+                                <el-tag size="small" :type="row.level === 1 ? 'primary' : 'info'" effect="plain">
+                                  {{ row.level === 1 ? '一级章节' : '章节任务' }}
+                                </el-tag>
+                                <el-tag size="small" effect="plain">{{ biddingDraftOutlineSectionTypeLabel(row.section_type) }}</el-tag>
+                                <el-tag v-if="row.package_title" size="small" type="success" effect="plain">
+                                  {{ row.package_title }}
+                                </el-tag>
+                                <el-tag v-if="row.content_type_label || row.content_type" size="small" effect="plain">
+                                  {{ row.content_type_label || biddingFileFormatContentTypeLabel(row.content_type) }}
+                                </el-tag>
+                                <el-tag v-if="row.generation_decision?.label" size="small" effect="plain">
+                                  {{ row.generation_decision.label }}
+                                </el-tag>
+                                <el-tag v-if="row.format_plan_review_status" size="small" :type="row.format_plan_review_status === 'confirmed' ? 'success' : 'warning'" effect="plain">
+                                  {{ biddingFileFormatReviewStatusLabel(row.format_plan_review_status) }}
+                                </el-tag>
+                                <el-tag v-if="row.source_mapping" size="small" :type="biddingDraftOutlineMappingTag(row.source_mapping)" effect="plain">
+                                  {{ biddingDraftOutlineMappingLabel(row.source_mapping) }}
+                                </el-tag>
+                                <el-tag v-if="row.split_from_generic_title" size="small" type="warning" effect="plain">
+                                  {{ biddingDraftGenericSplitLabel(row) }}
+                                </el-tag>
+                                <el-tag v-if="row.needs_secondary_split" size="small" type="danger" effect="plain">
+                                  需二次拆分
+                                </el-tag>
+                                <el-tag v-if="biddingDraftNeedsUpgrade(row)" size="small" type="warning" effect="plain">
+                                  需升级
+                                </el-tag>
+                              </div>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="主责" width="95">
+                          <template #default="{ row }">{{ row.owner_role || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column label="状态" width="120">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingDraftOutlineStatusTag(row.draft_status)" effect="plain">
+                              {{ biddingDraftOutlineStatusLabel(row.draft_status) }}
+                            </el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="关联" width="170">
+                          <template #default="{ row }">
+                            <div v-if="row.outline_source === 'file_format_plan'" class="operation-client">
+                              <span>响应 {{ row.response_item_count || 0 }} · 要求 {{ row.requirement_count || 0 }} · 风险 {{ row.risk_count || 0 }}</span>
+                              <small>{{ row.generation_strategy ? biddingFileFormatGenerationStrategyLabel(row.generation_strategy) : '文件包汇总' }} · {{ biddingDraftOutlineMappingLabel(row.source_mapping) }} · 证据 {{ row.evidence_count || 0 }}</small>
+                            </div>
+                            <div v-else class="operation-client">
+                              <span>响应 {{ row.response_item_count || 0 }} · 子项 {{ row.child_section_count || 0 }}</span>
+                              <small>要求 {{ row.requirement_count || 0 }} · 风险 {{ row.risk_count || 0 }} · 证据 {{ row.evidence_count || 0 }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="缺口" min-width="260" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ biddingDraftOutlineListText(row.missing_inputs, '暂无明显缺口') }}</span>
+                              <small>{{ biddingDraftOutlineDraftModeText(row) }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="风险/完成标准" min-width="300" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ biddingDraftOutlineListText(row.risk_warnings, '暂无高风险提示') }}</span>
+                              <small>{{ biddingDraftOutlineListText(row.review_checklist, row.source_summary || '暂无完成标准') }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="草稿" width="190" fixed="right">
+                          <template #default="{ row }">
+                            <div v-if="row.level === 2" class="row-actions">
+                              <el-button
+                                size="small"
+                                type="primary"
+                                plain
+                                :loading="biddingDraftSectionGeneratingKey === row.section_key"
+                                :disabled="Boolean(biddingDraftSectionGeneratingKey)"
+                                @click="generateBiddingDraftSection(row)"
+                              >
+                                {{ biddingDraftOutlineActionButtonText(row) }}
+                              </el-button>
+                              <el-button
+                                v-if="biddingDraftForOutlineSection(row)"
+                                size="small"
+                                plain
+                                @click="openBiddingDraftPreview(row)"
+                              >
+                                查看
+                              </el-button>
+                            </div>
+                            <div v-else class="operation-client">
+                              <el-tag size="small" type="info" effect="plain">汇总章节</el-tag>
+                            </div>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+                  </el-tab-pane>
+
+                  <el-tab-pane label="技术标草案" name="technicalBidDraft">
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><DocumentChecked /></el-icon>
+                        <span>投标文件组成识别</span>
+                        <small>从招标文件“投标文件组成”出发，分清固定企业资料与项目专属抽取内容</small>
+                        <div class="section-title-action bidding-outline-actions">
+                          <el-button
+                            size="small"
+                            plain
+                            :loading="biddingTechnicalCompositionLoading"
+                            @click="loadBiddingTechnicalComposition()"
+                          >
+                            刷新
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="primary"
+                            plain
+                            :loading="biddingTechnicalCompositionGenerating"
+                            @click="generateBiddingTechnicalComposition"
+                          >
+                            LLM识别技术标组成
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <div class="bidding-risk-card-summary">
+                        <div>
+                          <span>组成项</span>
+                          <strong>{{ biddingTechnicalCompositionSummary.component_count || 0 }}</strong>
+                          <small>原文 {{ biddingTechnicalCompositionSummary.source_item_count || 0 }} 项 · LLM {{ biddingTechnicalCompositionSummary.llm_component_count || 0 }} 项</small>
+                        </div>
+                        <div>
+                          <span>固定资料</span>
+                          <strong>{{ biddingTechnicalCompositionSummary.enterprise_profile_need_count || 0 }}</strong>
+                          <small>自动匹配 {{ biddingTechnicalCompositionSummary.auto_matched_profile_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>招标抽取</span>
+                          <strong>{{ biddingTechnicalCompositionSummary.tender_document_need_count || 0 }}</strong>
+                          <small>由 LLM 抽取并润色</small>
+                        </div>
+                        <div>
+                          <span>待人工</span>
+                          <strong>{{ biddingTechnicalCompositionSummary.manual_requirement_count || 0 }}</strong>
+                          <small>修复漏项 {{ biddingTechnicalCompositionSummary.repaired_missing_count || 0 }} · 已同步到资料需求</small>
+                        </div>
+                      </div>
+
+                      <el-alert
+                        v-if="biddingTechnicalCompositionWarnings.length"
+                        class="dashboard-alert"
+                        type="warning"
+                        show-icon
+                        :closable="false"
+                        :title="biddingTechnicalCompositionWarnings[0].message || '技术标组成识别仍有待处理事项'"
+                      ></el-alert>
+
+                      <el-table
+                        v-loading="biddingTechnicalCompositionLoading || biddingTechnicalCompositionGenerating"
+                        :data="biddingTechnicalCompositionComponents"
+                        row-key="component_key"
+                        class="users-table"
+                        empty-text="暂无技术标组成识别结果，请点击 LLM识别技术标组成"
+                      >
+                        <el-table-column label="组成项" min-width="260" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>{{ row.component_title }}</strong>
+                              <small>{{ row.classification_reason || row.draft_instruction || '-' }}</small>
+                              <div class="bidding-response-chips">
+                                <el-tag v-if="row.source_item_no" size="small" effect="plain">{{ row.source_item_no }}</el-tag>
+                                <el-tag size="small" effect="plain">{{ biddingTechnicalCompositionClassLabel(row.classification) }}</el-tag>
+                                <el-tag v-if="row.coverage_repair" size="small" type="warning" effect="plain">待复核漏项</el-tag>
+                                <el-tag size="small" type="info" effect="plain">技术标</el-tag>
+                              </div>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="资料与信息来源" min-width="360">
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <div
+                                v-for="need in row.information_needs || []"
+                                :key="need.need_key"
+                                class="bidding-source-need"
+                              >
+                                <el-tag size="small" :type="biddingTechnicalCompositionSourceTag(need.source_type)" effect="plain">
+                                  {{ biddingTechnicalCompositionSourceLabel(need.source_type) }}
+                                </el-tag>
+                                <span>{{ need.need_title }}</span>
+                                <small v-if="need.source_type === 'enterprise_profile'">
+                                  {{
+                                    biddingTechnicalCompositionRequirementFor(row, need)?.submitted_profile_item_uuid
+                                      ? `已匹配企业资料，得分 ${biddingTechnicalCompositionRequirementFor(row, need)?.match_score || '-'}`
+                                      : '未找到足够接近的企业资料，需人工填写'
+                                  }}
+                                </small>
+                                <small v-else>{{ need.reason || need.query || '-' }}</small>
+                              </div>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="招标文件抽取/润色" min-width="320" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <template v-for="need in row.information_needs || []" :key="`polished-${need.need_key}`">
+                                <small v-if="need.source_type === 'tender_document'">{{ need.polished_text || need.query || '-' }}</small>
+                              </template>
+                              <span v-if="!(row.information_needs || []).some((need) => need.source_type === 'tender_document')">-</span>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="证据" min-width="240" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ row.source_evidence?.[0]?.source_file || '-' }}</span>
+                              <small>{{ row.source_evidence?.[0]?.source_location || '-' }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Document /></el-icon>
+                        <span>技术标资料需求与补齐清单</span>
+                        <small>仅处理已分配到技术标的格式项、附件和正文素材，不影响商务标草案链路</small>
+                        <div class="section-title-action bidding-outline-actions">
+                          <el-button
+                            size="small"
+                            plain
+                            :loading="biddingMaterialRequirementsLoading"
+                            @click="loadBiddingMaterialRequirements(undefined, 'technical')"
+                          >
+                            刷新
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="primary"
+                            plain
+                            :loading="biddingMaterialRequirementsGenerating || biddingTechnicalCompositionGenerating"
+                            @click="generateBiddingMaterialRequirements"
+                          >
+                            LLM生成技术标补齐清单
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <div class="bidding-risk-card-summary">
+                        <div>
+                          <span>技术标资料项</span>
+                          <strong>{{ biddingMaterialRequirementSummary.total || 0 }}</strong>
+                          <small>企业资料 {{ biddingMaterialRequirementSummary.enterprise_profile_requirement_count || 0 }} · 上传 {{ biddingMaterialRequirementSummary.manual_upload_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>待补齐</span>
+                          <strong>{{ biddingMaterialRequirementSummary.open_count || 0 }}</strong>
+                          <small>缺失 {{ biddingMaterialRequirementSummary.missing_count || 0 }} · 候选 {{ biddingMaterialRequirementSummary.candidate_found_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>已提交</span>
+                          <strong>{{ biddingMaterialRequirementSummary.submitted_count || 0 }}</strong>
+                          <small>待确认可用</small>
+                        </div>
+                        <div>
+                          <span>可用率</span>
+                          <strong>{{ Math.round((biddingMaterialRequirementSummary.completion_rate || 0) * 100) }}%</strong>
+                          <small>已确认 {{ biddingMaterialRequirementSummary.resolved_count || 0 }}</small>
+                        </div>
+                      </div>
+
+                      <el-table
+                        v-loading="biddingMaterialRequirementsLoading || biddingMaterialRequirementsGenerating"
+                        :data="biddingMaterialRequirementRows"
+                        row-key="requirement_uuid"
+                        class="users-table"
+                        empty-text="暂无技术标资料需求，请先确认格式并生成技术标补齐清单"
+                      >
+                        <el-table-column label="资料需求" min-width="300" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>{{ row.title }}</strong>
+                              <small>{{ row.description || row.item_title }}</small>
+                              <div class="bidding-response-chips">
+                                <el-tag size="small" effect="plain">{{ biddingMaterialRequirementTypeLabel(row.requirement_type) }}</el-tag>
+                                <el-tag v-if="row.profile_category" size="small" type="info" effect="plain">{{ biddingEnterpriseProfileCategoryLabel(row.profile_category) }}</el-tag>
+                              </div>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="来源目录" min-width="220" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ row.item_title }}</span>
+                              <small>{{ row.package_title || '技术标' }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="状态" width="110">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingMaterialRequirementStatusTag(row.status)" effect="plain">
+                              {{ biddingMaterialRequirementStatusLabel(row.status) }}
+                            </el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="候选/提交" min-width="240" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ row.candidate_profile_item?.title || row.normalized?.candidate_profile_item?.title || row.submitted_value || '-' }}</span>
+                              <small v-if="(row.submitted_profile_item_uuids?.length || 0) || (row.submitted_file_ids?.length || 0)">
+                                已提交：企业资料 {{ row.submitted_profile_item_uuids?.length || 0 }} 份 / 补充文件 {{ row.submitted_file_ids?.length || 0 }} 份
+                              </small>
+                              <small v-else-if="row.submitted_profile_item_uuid">已绑定资料：{{ row.submitted_profile_item_uuid }}</small>
+                              <small v-else-if="row.candidates?.length">候选 {{ row.candidates.length }} 条</small>
+                              <small v-else>{{ row.notes || '暂无候选，需人工补充' }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="250" fixed="right">
+                          <template #default="{ row }">
+                            <div class="row-actions">
+                              <el-button
+                                v-if="row.candidate_profile_item_uuid && !['approved', 'applied', 'not_applicable'].includes(row.status)"
+                                size="small"
+                                type="success"
+                                plain
+                                :loading="biddingMaterialRequirementUpdatingUuid === row.requirement_uuid"
+                                @click="useBiddingMaterialCandidate(row)"
+                              >
+                                采用候选
+                              </el-button>
+                              <el-button size="small" plain @click="submitBiddingMaterialValue(row)">填写</el-button>
+                              <el-button
+                                v-if="['submitted', 'candidate_found'].includes(row.status) || row.submitted_value || row.submitted_profile_item_uuid || row.submitted_file_id || row.submitted_profile_item_uuids?.length || row.submitted_file_ids?.length"
+                                size="small"
+                                type="primary"
+                                plain
+                                @click="approveBiddingMaterialRequirement(row)"
+                              >
+                                确认可用
+                              </el-button>
+                              <el-button size="small" type="info" plain @click="markBiddingMaterialRequirementNotApplicable(row)">不适用</el-button>
+                            </div>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Document /></el-icon>
+                        <span>技术标目录骨架</span>
+                        <small>仅生成技术标分册下的章节草稿，商务标报价、资格和表单不会进入这里</small>
+                        <div class="section-title-action bidding-outline-actions">
+                          <el-button size="small" plain :loading="biddingDraftOutlineLoading" @click="loadBiddingDraftOutline()">刷新</el-button>
+                          <el-button size="small" type="primary" plain :loading="biddingDraftOutlineGenerating" @click="generateBiddingDraftOutline">
+                            生成技术标目录
+                          </el-button>
+                          <el-button size="small" type="success" plain :loading="biddingTechnicalDraftGenerating" @click="generateBiddingTechnicalDraftMvp">
+                            一键生成技术标草案
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <div class="bidding-risk-card-summary">
+                        <div>
+                          <span>技术标章节</span>
+                          <strong>{{ biddingDraftOutlineSummary.section_count || 0 }}</strong>
+                          <small>任务 {{ biddingDraftOutlineSummary.task_section_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>可起草</span>
+                          <strong>{{ biddingDraftOutlineSummary.placeholder_draft_count || biddingDraftOutlineSummary.can_generate_draft_count || 0 }}</strong>
+                          <small>正式 {{ biddingDraftOutlineSummary.formal_draft_ready_count || 0 }}</small>
+                        </div>
+                        <div>
+                          <span>阻断</span>
+                          <strong>{{ biddingDraftOutlineSummary.blocked_section_count || 0 }}</strong>
+                          <small>缺资料或风险项需先处理</small>
+                        </div>
+                        <div>
+                          <span>来源</span>
+                          <strong>{{ biddingDraftOutlineSourceText(biddingDraftOutlineSource) }}</strong>
+                          <small>{{ biddingDraftOutlineSourceDetail(biddingDraftOutlineSource, biddingDraftOutlineSummary) }}</small>
+                        </div>
+                      </div>
+
+                      <el-alert
+                        v-if="biddingDraftOutlineWarnings.length"
+                        class="dashboard-alert"
+                        type="warning"
+                        show-icon
+                        :closable="false"
+                        :title="biddingDraftOutlineWarnings[0].message || '技术标目录骨架仍有待处理事项'"
+                      ></el-alert>
+
+                      <el-table
+                        v-loading="biddingDraftOutlineLoading || biddingDraftOutlineGenerating || biddingDraftSectionsLoading"
+                        :data="biddingDraftOutlineSections"
+                        row-key="section_key"
+                        class="users-table"
+                        empty-text="暂无技术标目录骨架，请先生成技术标目录"
+                      >
+                        <el-table-column label="章节" min-width="300" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client" :style="{ paddingLeft: `${Math.max(0, Number(row.level || 1) - 1) * 18}px` }">
+                              <strong>{{ row.section_title }}</strong>
+                              <small>{{ row.description || row.source_summary }}</small>
+                              <div class="bidding-response-chips">
+                                <el-tag size="small" :type="row.level === 1 ? 'primary' : 'info'" effect="plain">
+                                  {{ row.level === 1 ? '文件包' : '章节' }}
+                                </el-tag>
+                                <el-tag size="small" effect="plain">{{ biddingDraftOutlineSectionTypeLabel(row.section_type) }}</el-tag>
+                              </div>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="状态" width="120">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingDraftOutlineStatusTag(row.draft_status)" effect="plain">
+                              {{ biddingDraftOutlineStatusLabel(row.draft_status) }}
+                            </el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="缺口/风险" min-width="260" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <span>{{ biddingDraftOutlineListText(row.missing_inputs, '暂无明显缺口') }}</span>
+                              <small>{{ biddingDraftOutlineListText(row.risk_warnings, row.source_summary || '暂无高风险提示') }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="草稿" width="190" fixed="right">
+                          <template #default="{ row }">
+                            <div v-if="row.level === 2" class="row-actions">
+                              <el-button
+                                size="small"
+                                type="primary"
+                                plain
+                                :loading="biddingDraftSectionGeneratingKey === row.section_key"
+                                :disabled="Boolean(biddingDraftSectionGeneratingKey)"
+                                @click="generateBiddingDraftSection(row)"
+                              >
+                                {{ biddingDraftOutlineActionButtonText(row) }}
+                              </el-button>
+                              <el-button v-if="biddingDraftForOutlineSection(row)" size="small" plain @click="openBiddingDraftPreview(row)">查看</el-button>
+                            </div>
+                            <el-tag v-else size="small" type="info" effect="plain">汇总章节</el-tag>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><DocumentChecked /></el-icon>
+                        <span>已生成技术标草案</span>
+                        <small>来自“投标文件组成识别”的一键生成结果，可直接查看、编辑和复核</small>
+                        <div class="section-title-action bidding-outline-actions">
+                          <el-button
+                            size="small"
+                            type="primary"
+                            plain
+                            :loading="biddingTechnicalDraftExporting"
+                            :disabled="!biddingTechnicalCompositionDraftSections.length || biddingTechnicalFinalExporting"
+                            @click="exportBiddingTechnicalDraftWord"
+                          >
+                            导出 Word 草稿
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="success"
+                            plain
+                            :loading="biddingTechnicalFinalExporting"
+                            :disabled="!biddingTechnicalCompositionDraftSections.length || biddingTechnicalDraftExporting || biddingTechnicalFinalQualityLoading"
+                            @click="exportBiddingTechnicalFinalWord"
+                          >
+                            导出正式 Word
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="warning"
+                            plain
+                            :icon="DataAnalysis"
+                            :loading="biddingTechnicalFinalQualityLoading"
+                            :disabled="!biddingTechnicalCompositionDraftSections.length || biddingTechnicalDraftExporting || biddingTechnicalFinalExporting"
+                            @click="openBiddingTechnicalFinalQualityReport"
+                          >
+                            正式导出质检
+                          </el-button>
+                        </div>
+                      </div>
+                      <el-table
+                        v-loading="biddingDraftSectionsLoading || biddingTechnicalDraftGenerating"
+                        :data="biddingTechnicalCompositionDraftSections"
+                        row-key="draft_uuid"
+                        class="users-table"
+                        empty-text="暂无技术标草案，请点击一键生成技术标草案"
+                      >
+                        <el-table-column label="章节" min-width="300" show-overflow-tooltip>
+                          <template #default="{ row }">
+                            <div class="operation-client">
+                              <strong>{{ row.section_title }}</strong>
+                              <small>{{ row.generation_decision?.classification_label || row.generation_decision?.label || '-' }}</small>
+                            </div>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="生成状态" width="130">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingDraftOutlineStatusTag(row.draft_status)" effect="plain">
+                              {{ biddingDraftOutlineStatusLabel(row.draft_status) }}
+                            </el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="复核" width="110">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingDraftSectionReviewTag(row.review_status)" effect="plain">
+                              {{ biddingDraftSectionReviewLabel(row.review_status) }}
+                            </el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="版本" width="90">
+                          <template #default="{ row }">v{{ row.content_version || 1 }}</template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="120" fixed="right">
+                          <template #default="{ row }">
+                            <el-button size="small" type="primary" plain @click="openBiddingDraftPreview(row)">查看</el-button>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+                  </el-tab-pane>
+
+                  <el-tab-pane label="招标要求" name="requirements">
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Tickets /></el-icon>
+                        <span>招标要求清单</span>
+                        <small>确认后可从这里生成响应矩阵</small>
+                      </div>
+                      <el-table
+                        :data="biddingRequirements"
+                        row-key="requirement_uuid"
+                        class="users-table"
+                        empty-text="暂无招标要求"
+                      >
+                        <el-table-column label="类型" width="130">
+                          <template #default="{ row }">{{ biddingRequirementTypeLabel(row.requirement_type) }}</template>
+                        </el-table-column>
+                        <el-table-column label="来源" min-width="170" show-overflow-tooltip>
+                          <template #default="{ row }">{{ row.source_file }} · {{ row.source_location }}</template>
+                        </el-table-column>
+                        <el-table-column prop="parsed_requirement" label="系统提炼" min-width="260" show-overflow-tooltip />
+                        <el-table-column prop="original_text" label="原文" min-width="320" show-overflow-tooltip />
+                        <el-table-column label="风险" width="90">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingRiskLevelTag(row.risk_level)" effect="plain">{{ biddingRiskLevelLabel(row.risk_level) }}</el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="owner_role" label="负责人" width="100" />
+                        <el-table-column prop="output_section" label="输出章节" min-width="140" show-overflow-tooltip />
+                      </el-table>
+                    </section>
+                  </el-tab-pane>
+
+                  <el-tab-pane label="合同/废标风险" name="risks">
+                    <section class="dashboard-section">
+                      <div class="section-title">
+                        <el-icon><Warning /></el-icon>
+                        <span>合同风险与废标风险</span>
+                        <small>优先按风险卡片复核；下方保留原始明细供追溯</small>
+                      </div>
+                      <div class="bidding-risk-card-summary">
+                        <div>
+                          <span>风险卡片</span>
+                          <strong>{{ biddingRiskCardsSummary.card_count || biddingRiskCards.length }}</strong>
+                          <small>由 {{ biddingRiskCardsSummary.risk_count || biddingRisksTotal }} 条风险聚类生成</small>
+                        </div>
+                        <div>
+                          <span>v2 重大/阻断</span>
+                          <strong>{{ (biddingRiskCardsSummary.critical_card_count || 0) + (biddingRiskCardsSummary.blocking_v2_card_count || 0) }}</strong>
+                          <small>阻断 {{ biddingRiskCardsSummary.blocking_v2_card_count || 0 }} · 高 {{ biddingRiskCardsSummary.high_v2_card_count || 0 }} · 待复核 {{ biddingRiskCardsSummary.pending_card_count || 0 }}</small>
+                        </div>
+                      </div>
+                      <div v-if="biddingRiskCards.length" class="bidding-risk-card-grid">
+                        <article
+                          v-for="card in biddingRiskCards"
+                          :key="card.card_id"
+                          :class="['bidding-risk-card', `risk-${card.risk_level || 'medium'}`, `grade-${card.risk_grade_v2 || 'medium'}`]"
+                        >
+                          <div class="bidding-risk-card-head">
+                            <div>
+                              <el-tag size="small" :type="biddingRiskGradeV2Tag(card.risk_grade_v2)" effect="dark">
+                                {{ biddingRiskGradeV2Label(card.risk_grade_v2) }} · {{ card.risk_score || 0 }}
+                              </el-tag>
+                              <el-tag size="small" :type="biddingRiskLevelTag(card.risk_level)" effect="plain">
+                                {{ biddingRiskLevelLabel(card.risk_level) }}
+                              </el-tag>
+                              <el-tag v-if="card.is_blocking" size="small" type="danger" effect="plain">阻断</el-tag>
+                              <el-tag size="small" :type="biddingRiskReviewTag(card.review_status)" effect="plain">
+                                {{ biddingRiskReviewLabel(card.review_status) }}
+                              </el-tag>
+                            </div>
+                            <strong>{{ card.title }}</strong>
+                            <small>{{ biddingRiskTypeLabel(card.risk_type) }} · {{ card.risk_count }} 条明细 · {{ card.source_count }} 个来源</small>
+                          </div>
+                          <p>{{ card.risk_explanation || '-' }}</p>
+                          <div class="bidding-risk-card-action">
+                            <span>建议</span>
+                            <small>{{ card.suggested_action || '-' }}</small>
+                          </div>
+                          <div class="bidding-risk-card-action">
+                            <span>等级依据</span>
+                            <small>{{ card.grade_reason || '-' }}</small>
+                          </div>
+                          <div v-if="card.drivers?.length" class="bidding-risk-source-line">
+                            <span>驱动因素</span>
+                            <small>{{ card.drivers.join('、') }}</small>
+                          </div>
+                          <div v-if="card.review_roles?.length" class="bidding-risk-source-line">
+                            <span>建议复核</span>
+                            <small>{{ card.review_roles.join('、') }} · 主动作 {{ biddingRiskActionLabel(card.primary_action) }}{{ card.secondary_action ? ` · 备选 ${biddingRiskActionLabel(card.secondary_action)}` : '' }}</small>
+                          </div>
+                          <div v-if="card.source_locations?.length" class="bidding-risk-source-line">
+                            <span>来源</span>
+                            <small>{{ card.source_locations.slice(0, 5).join('、') }}</small>
+                          </div>
+                          <div v-if="card.evidence?.length" class="bidding-risk-evidence-list">
+                            <span>证据</span>
+                            <small
+                              v-for="evidence in card.evidence.slice(0, 3)"
+                              :key="evidence.risk_uuid"
+                            >
+                              {{ evidence.source_location }}：{{ evidence.original_text }}
+                            </small>
+                          </div>
+                          <div class="bidding-risk-card-actions">
+                            <el-button size="small" type="success" plain @click="reviewBiddingRiskCard(card, 'confirmed')">确认</el-button>
+                            <el-button size="small" type="warning" plain @click="reviewBiddingRiskCard(card, 'to_clarify')">转答疑</el-button>
+                            <el-button size="small" plain @click="reviewBiddingRiskCard(card, 'to_quote_allowance')">报价预留</el-button>
+                            <el-button size="small" type="info" plain @click="reviewBiddingRiskCard(card, 'ignored')">忽略</el-button>
+                          </div>
+                        </article>
+                      </div>
+                      <el-empty v-else description="暂无风险卡片" />
+                      <div class="bidding-risk-detail-heading">
+                        <strong>风险明细</strong>
+                        <small>{{ biddingRisksTotal }} 条原始规则识别结果，用于证据追溯</small>
+                      </div>
+                      <el-table
+                        :data="biddingRisks"
+                        row-key="risk_uuid"
+                        class="users-table"
+                        empty-text="暂无风险"
+                      >
+                        <el-table-column label="级别" width="90">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingRiskLevelTag(row.risk_level)" effect="plain">{{ biddingRiskLevelLabel(row.risk_level) }}</el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="风险类型" width="150">
+                          <template #default="{ row }">{{ biddingRiskTypeLabel(row.risk_type) }}</template>
+                        </el-table-column>
+                        <el-table-column label="来源" min-width="180" show-overflow-tooltip>
+                          <template #default="{ row }">{{ row.source_file }} · {{ row.source_location }}</template>
+                        </el-table-column>
+                        <el-table-column prop="risk_explanation" label="风险解释" min-width="280" show-overflow-tooltip />
+                        <el-table-column prop="suggested_action" label="建议动作" min-width="260" show-overflow-tooltip />
+                        <el-table-column label="复核" width="110">
+                          <template #default="{ row }">
+                            <el-tag :type="biddingRiskReviewTag(row.review_status)" effect="plain">{{ biddingRiskReviewLabel(row.review_status) }}</el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="310" fixed="right">
+                          <template #default="{ row }">
+                            <div class="row-actions">
+                              <el-button size="small" type="success" plain @click="reviewBiddingRisk(row, 'confirmed')">确认</el-button>
+                              <el-button size="small" type="warning" plain @click="reviewBiddingRisk(row, 'to_clarify')">转答疑</el-button>
+                              <el-button size="small" plain @click="reviewBiddingRisk(row, 'to_quote_allowance')">报价预留</el-button>
+                              <el-button size="small" type="info" plain @click="reviewBiddingRisk(row, 'ignored')">忽略</el-button>
+                            </div>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </section>
+                  </el-tab-pane>
+                </el-tabs>
+              </div>
+            </el-drawer>
+
+            <el-drawer
+              v-model="biddingDraftPreviewDrawer.visible"
+              size="64%"
+              :title="biddingDraftPreviewDrawer.draft?.section_title || '章节草稿预览'"
+              destroy-on-close
+            >
+              <div v-if="biddingDraftPreviewDrawer.draft" class="bidding-draft-preview">
+                <div class="bidding-draft-preview-head">
+                  <div>
+                    <el-tag effect="plain">{{ biddingDraftOutlineSectionTypeLabel(biddingDraftPreviewDrawer.draft.section_type) }}</el-tag>
+                    <el-tag :type="biddingDraftOutlineStatusTag(biddingDraftPreviewDrawer.draft.draft_status)" effect="plain">
+                      {{ biddingDraftOutlineStatusLabel(biddingDraftPreviewDrawer.draft.draft_status) }}
+                    </el-tag>
+                    <el-tag :type="biddingDraftSectionReviewTag(biddingDraftPreviewDrawer.draft.review_status)" effect="plain">
+                      {{ biddingDraftSectionReviewLabel(biddingDraftPreviewDrawer.draft.review_status) }}
+                    </el-tag>
+                    <el-tag v-if="biddingDraftPreviewDrawer.draft.generation_decision?.label" effect="plain">
+                      {{ biddingDraftPreviewDrawer.draft.generation_decision.label }}
+                    </el-tag>
+                    <el-tag
+                      v-if="biddingDraftPreviewDrawer.draft.quality_result?.status_label"
+                      :type="biddingDraftQualityResultTag(biddingDraftPreviewDrawer.draft.quality_result.status)"
+                      effect="plain"
+                    >
+                      质检：{{ biddingDraftPreviewDrawer.draft.quality_result.status_label }}
+                    </el-tag>
+                    <el-tag
+                      v-if="biddingDraftPreviewDrawer.draft.llm_entry?.status_label"
+                      :type="biddingDraftLlmEntryTag(biddingDraftPreviewDrawer.draft.llm_entry)"
+                      effect="plain"
+                    >
+                      {{ biddingDraftPreviewDrawer.draft.llm_entry.status_label }}
+                    </el-tag>
+                  </div>
+                  <small>
+                    主责 {{ biddingDraftPreviewDrawer.draft.owner_role || '-' }} ·
+                    内容版本 第 {{ biddingDraftPreviewDrawer.draft.content_version || 1 }} 版
+                  </small>
+                </div>
+
+                <section v-if="!biddingDraftPreviewDrawer.draft.quality_profile?.quality_status" class="bidding-draft-panel bidding-draft-upgrade-panel">
+                  <strong>章节质量画像尚未生成</strong>
+                  <small>当前预览的是旧草稿或旧接口返回结果，请在目录行点击“重新生成/升级草稿”，或刷新前端后重新打开章节。</small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.quality_profile?.quality_status" class="bidding-draft-panel bidding-draft-quality-panel">
+                  <strong>章节质量画像</strong>
+                  <small>
+                    状态：{{ biddingDraftPreviewDrawer.draft.quality_profile.quality_status_label || '-' }} ·
+                    素材：响应 {{ biddingDraftPreviewDrawer.draft.quality_profile.response_item_count || 0 }} 项 /
+                    要求 {{ biddingDraftPreviewDrawer.draft.quality_profile.requirement_count || 0 }} 条 /
+                    风险 {{ biddingDraftPreviewDrawer.draft.quality_profile.risk_count || 0 }} 条 /
+                    证据 {{ biddingDraftPreviewDrawer.draft.quality_profile.evidence_count || 0 }} 条
+                  </small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.quality_profile.mapping_status">
+                    映射：{{ biddingDraftPreviewDrawer.draft.quality_profile.mapping_status }} /
+                    {{ biddingDraftPreviewDrawer.draft.quality_profile.mapping_confidence || '-' }}
+                  </small>
+                  <small
+                    v-for="item in biddingDraftPreviewDrawer.draft.quality_profile.blockers || []"
+                    :key="`blocker-${item}`"
+                  >
+                    阻断：{{ item }}
+                  </small>
+                  <small
+                    v-for="item in biddingDraftPreviewDrawer.draft.quality_profile.material_gaps || []"
+                    :key="`gap-${item}`"
+                  >
+                    缺口：{{ item }}
+                  </small>
+                  <small
+                    v-for="item in biddingDraftPreviewDrawer.draft.quality_profile.warnings || []"
+                    :key="`quality-warning-${item}`"
+                  >
+                    提醒：{{ item }}
+                  </small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.writing_plan?.target_output" class="bidding-draft-panel bidding-draft-quality-panel">
+                  <strong>写作计划</strong>
+                  <small>目标产出：{{ biddingDraftPreviewDrawer.draft.writing_plan.target_output_label || '-' }}</small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.writing_plan.suggested_headings?.length">
+                    建议小标题：{{ biddingDraftPreviewDrawer.draft.writing_plan.suggested_headings.slice(0, 8).join('、') }}
+                  </small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.writing_plan.must_cover_requirements?.length">
+                    必覆盖：{{ biddingDraftPlanListText(biddingDraftPreviewDrawer.draft.writing_plan.must_cover_requirements) }}
+                  </small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.writing_plan.response_tasks?.length">
+                    响应任务：{{ biddingDraftPlanListText(biddingDraftPreviewDrawer.draft.writing_plan.response_tasks) }}
+                  </small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.writing_plan.review_focus?.length">
+                    复核重点：{{ biddingDraftPreviewDrawer.draft.writing_plan.review_focus.slice(0, 4).join('；') }}
+                  </small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.quality_result?.status" class="bidding-draft-panel bidding-draft-quality-panel">
+                  <strong>质检结果</strong>
+                  <small>
+                    {{ biddingDraftPreviewDrawer.draft.quality_result.status_label || '-' }}：
+                    {{ biddingDraftPreviewDrawer.draft.quality_result.summary || '-' }}
+                  </small>
+                  <small
+                    v-for="check in biddingDraftPreviewDrawer.draft.quality_result.checks || []"
+                    :key="check.code"
+                    class="bidding-draft-quality-check"
+                  >
+                    <el-tag size="small" :type="biddingDraftQualityCheckTag(check.status)" effect="plain">
+                      {{ check.label || check.code }}
+                    </el-tag>
+                    {{ check.message || '-' }}
+                  </small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.llm_entry" class="bidding-draft-panel bidding-draft-llm-panel">
+                  <strong>智能润色</strong>
+                  <small>
+                    {{ biddingDraftPreviewDrawer.draft.llm_entry.status_label || '-' }} ·
+                    {{ biddingDraftPreviewDrawer.draft.llm_entry.action_label || '智能润色正文' }}
+                  </small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.llm_entry.quality_gate_status_label">
+                    质检门槛：{{ biddingDraftPreviewDrawer.draft.llm_entry.quality_gate_status_label }}
+                  </small>
+                  <small>{{ biddingDraftPreviewDrawer.draft.llm_entry.note || '智能润色仅用于优化正文，不补充事实、不替代人工复核。' }}</small>
+                  <small
+                    v-for="reason in biddingDraftPreviewDrawer.draft.llm_entry.blocked_reasons || []"
+                    :key="`llm-blocked-${reason}`"
+                  >
+                    不可用：{{ reason }}
+                  </small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.diff_summary?.base_change_type" class="bidding-draft-panel bidding-draft-quality-panel">
+                  <strong>初稿与润色稿差异</strong>
+                  <small>
+                    基准版本：v{{ biddingDraftPreviewDrawer.draft.diff_summary.base_version_no || '-' }} ·
+                    新增 {{ biddingDraftPreviewDrawer.draft.diff_summary.added_line_count || 0 }} 行 ·
+                    删除 {{ biddingDraftPreviewDrawer.draft.diff_summary.removed_line_count || 0 }} 行 ·
+                    保留标题 {{ biddingDraftPreviewDrawer.draft.diff_summary.preserved_heading_count || 0 }} 个
+                  </small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.diff_summary.added_headings?.length">
+                    新增标题：{{ biddingDraftSummaryListText(biddingDraftPreviewDrawer.draft.diff_summary.added_headings) }}
+                  </small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.diff_summary.removed_headings?.length">
+                    删除标题：{{ biddingDraftSummaryListText(biddingDraftPreviewDrawer.draft.diff_summary.removed_headings) }}
+                  </small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.diff_summary.risk_removed">
+                    风险提示：润色稿疑似删除了 {{ biddingDraftSummaryListText(biddingDraftPreviewDrawer.draft.diff_summary.removed_risk_markers) }}
+                  </small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.semantic_quality?.status" class="bidding-draft-panel bidding-draft-quality-panel">
+                  <strong>证据对齐质检</strong>
+                  <small>
+                    {{ biddingDraftPreviewDrawer.draft.semantic_quality.status_label || '-' }}：
+                    {{ biddingDraftPreviewDrawer.draft.semantic_quality.summary || '-' }}
+                  </small>
+                  <small
+                    v-for="item in biddingDraftPreviewDrawer.draft.semantic_quality.unsupported_claims || []"
+                    :key="`unsupported-${item}`"
+                  >
+                    疑似无证据表达：{{ item }}
+                  </small>
+                  <small
+                    v-for="item in (biddingDraftPreviewDrawer.draft.semantic_quality.missing_coverages || []).slice(0, 6)"
+                    :key="`missing-coverage-${item}`"
+                  >
+                    疑似覆盖不足：{{ item }}
+                  </small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.content_evidence?.status" class="bidding-draft-panel bidding-draft-evidence-panel">
+                  <strong>段落证据追溯</strong>
+                  <small>
+                    {{ biddingDraftPreviewDrawer.draft.content_evidence.status_label || '-' }}：
+                    {{ biddingDraftPreviewDrawer.draft.content_evidence.summary || '-' }}
+                  </small>
+                  <small v-if="biddingDraftPreviewDrawer.draft.content_evidence.coverage_summary">
+                    覆盖：{{ biddingDraftPreviewDrawer.draft.content_evidence.coverage_summary.covered_count || 0 }} /
+                    {{ biddingDraftPreviewDrawer.draft.content_evidence.coverage_summary.required_count || 0 }} ·
+                    缺失 {{ biddingDraftPreviewDrawer.draft.content_evidence.coverage_summary.missing_count || 0 }}
+                  </small>
+                  <div
+                    v-for="block in (biddingDraftPreviewDrawer.draft.content_evidence.blocks || []).slice(0, 8)"
+                    :key="`content-evidence-${block.block_index}`"
+                    class="bidding-draft-evidence-block"
+                  >
+                    <div>
+                      <el-tag size="small" :type="biddingDraftEvidenceStatusTag(block.evidence_status)" effect="plain">
+                        {{ block.evidence_status_label || block.evidence_status || '-' }}
+                      </el-tag>
+                      <span>第 {{ block.block_index }} 段</span>
+                    </div>
+                    <small>{{ block.block_text || '-' }}</small>
+                    <small v-if="block.supporting_evidence">
+                      来源：{{ block.supporting_evidence.source_type_label || '-' }} ·
+                      {{ block.supporting_evidence.title || '-' }}
+                      <template v-if="block.supporting_evidence.source_location">
+                        · {{ block.supporting_evidence.source_location }}
+                      </template>
+                    </small>
+                    <small
+                      v-for="warning in block.warnings || []"
+                      :key="`content-evidence-warning-${block.block_index}-${warning}`"
+                    >
+                      提醒：{{ warning }}
+                    </small>
+                  </div>
+                  <small
+                    v-for="item in (biddingDraftPreviewDrawer.draft.content_evidence.missing_coverages || []).slice(0, 6)"
+                    :key="`content-evidence-missing-${item}`"
+                  >
+                    未覆盖：{{ item }}
+                  </small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.acceptance_check?.status" class="bidding-draft-panel bidding-draft-acceptance-panel">
+                  <strong>接受前检查</strong>
+                  <small>
+                    {{ biddingDraftPreviewDrawer.draft.acceptance_check.status_label || '-' }}：
+                    {{ biddingDraftPreviewDrawer.draft.acceptance_check.summary || '-' }}
+                  </small>
+                  <small
+                    v-for="item in biddingDraftPreviewDrawer.draft.acceptance_check.blockers || []"
+                    :key="`accept-blocker-${item}`"
+                  >
+                    阻断：{{ item }}
+                  </small>
+                  <small
+                    v-for="item in biddingDraftPreviewDrawer.draft.acceptance_check.warnings || []"
+                    :key="`accept-warning-${item}`"
+                  >
+                    提醒：{{ item }}
+                  </small>
+                </section>
+
+                <el-input
+                  v-if="biddingDraftPreviewDrawer.editing"
+                  v-model="biddingDraftPreviewDrawer.editContent"
+                  type="textarea"
+                  :autosize="{ minRows: 16, maxRows: 28 }"
+                  class="bidding-draft-editor"
+                  placeholder="编辑章节正文 Markdown"
+                />
+                <pre v-else class="bidding-draft-markdown">{{ biddingDraftMarkdownPreview(biddingDraftPreviewDrawer.draft.content_markdown) }}</pre>
+
+                <section
+                  v-if="biddingDraftPreviewDrawer.draft.upgrade_hint?.needs_upgrade"
+                  class="bidding-draft-panel bidding-draft-upgrade-panel"
+                >
+                  <strong>旧草稿升级提示</strong>
+                  <small>{{ biddingDraftPreviewDrawer.draft.upgrade_hint.message || '该章节建议重新生成后再复核。' }}</small>
+                  <small
+                    v-for="reason in biddingDraftPreviewDrawer.draft.upgrade_hint.reasons || []"
+                    :key="reason.code"
+                  >
+                    {{ reason.message }}
+                  </small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.generation_decision?.reason" class="bidding-draft-panel">
+                  <strong>生成判定</strong>
+                  <small>{{ biddingDraftPreviewDrawer.draft.generation_decision.reason }}</small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.placeholders?.length" class="bidding-draft-panel">
+                  <strong>占位符</strong>
+                  <small
+                    v-for="placeholder in biddingDraftPreviewDrawer.draft.placeholders"
+                    :key="placeholder.placeholder_key"
+                  >
+                    {{ placeholder.text }} · {{ placeholder.owner_role || '-' }}
+                  </small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.warnings?.length" class="bidding-draft-panel">
+                  <strong>风险/阻断提示</strong>
+                  <small
+                    v-for="warning in biddingDraftPreviewDrawer.draft.warnings"
+                    :key="warning.message"
+                  >
+                    {{ warning.message }}
+                  </small>
+                </section>
+
+                <section class="bidding-draft-panel">
+                  <strong>来源证据</strong>
+                  <small
+                    v-for="evidence in (biddingDraftPreviewDrawer.draft.evidence || []).slice(0, 10)"
+                    :key="`${evidence.source_file || '-'}-${evidence.source_location || '-'}-${evidence.original_text || '-'}`"
+                  >
+                    {{ evidence.source_file || '-' }} · {{ evidence.source_location || '-' }}：{{ evidence.original_text || '-' }}
+                  </small>
+                  <small v-if="!biddingDraftPreviewDrawer.draft.evidence?.length">暂无来源证据</small>
+                </section>
+
+                <section v-if="biddingDraftPreviewDrawer.draft.versions?.length" class="bidding-draft-panel">
+                  <strong>版本记录</strong>
+                  <small
+                    v-for="version in biddingDraftPreviewDrawer.draft.versions"
+                    :key="version.version_uuid"
+                  >
+                    v{{ version.version_no }} · {{ biddingDraftVersionTypeLabel(version.change_type) }} · {{ version.created_at || '-' }}
+                    <template v-if="version.editor_note"> · {{ version.editor_note }}</template>
+                  </small>
+                </section>
+
+                <div class="row-actions">
+                  <el-button
+                    v-if="!biddingDraftPreviewDrawer.editing"
+                    plain
+                    @click="startEditingBiddingDraftSection"
+                  >
+                    编辑正文
+                  </el-button>
+                  <el-button
+                    v-if="biddingDraftPreviewDrawer.editing"
+                    type="primary"
+                    plain
+                    :loading="biddingDraftPreviewDrawer.saving"
+                    @click="saveBiddingDraftSectionContent"
+                  >
+                    保存版本
+                  </el-button>
+                  <el-button
+                    v-if="biddingDraftPreviewDrawer.editing"
+                    plain
+                    @click="cancelEditingBiddingDraftSection"
+                  >
+                    取消编辑
+                  </el-button>
+                  <el-button
+                    v-if="!biddingDraftPreviewDrawer.editing && biddingDraftCanLlmEnhance(biddingDraftPreviewDrawer.draft)"
+                    type="primary"
+                    plain
+                    :loading="biddingDraftPreviewDrawer.llmGenerating"
+                    @click="generateBiddingDraftSectionWithLlm"
+                  >
+                    智能润色正文
+                  </el-button>
+                  <el-button
+                    type="success"
+                    plain
+                    :loading="biddingDraftSectionReviewing"
+                    @click="reviewBiddingDraftSection('accepted')"
+                  >
+                    接受
+                  </el-button>
+                  <el-button
+                    type="primary"
+                    plain
+                    :loading="biddingDraftSectionReviewing"
+                    @click="reviewBiddingDraftSection('reviewed')"
+                  >
+                    已复核
+                  </el-button>
+                  <el-button
+                    type="warning"
+                    plain
+                    :loading="biddingDraftSectionReviewing"
+                    @click="reviewBiddingDraftSection('needs_revision')"
+                  >
+                    需修改
+                  </el-button>
+                </div>
+              </div>
+            </el-drawer>
+
+            <el-drawer
+              v-model="biddingTechnicalFinalQualityDrawer.visible"
+              size="min(1120px, 96vw)"
+              title="正式技术标导出质检"
+              destroy-on-close
+            >
+              <div v-if="biddingTechnicalFinalQualityDrawer.report" class="drawer-body bidding-final-quality">
+                <section class="drawer-section">
+                  <div class="section-title compact">
+                    <el-icon><DataAnalysis /></el-icon>
+                    <span>导出质量概览</span>
+                    <el-tag :type="biddingFinalQualityStatusTag(biddingTechnicalFinalQualityDrawer.report.status)" effect="plain">
+                      {{ biddingFinalQualityStatusLabel(biddingTechnicalFinalQualityDrawer.report.status) }}
+                    </el-tag>
+                  </div>
+                  <div class="bidding-structure-summary">
+                    <span>
+                      <small>阻断/问题</small>
+                      <strong>{{ biddingTechnicalFinalQualityDrawer.report.issue_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>技术章节</small>
+                      <strong>{{ biddingTechnicalFinalQualityDrawer.report.draft_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>组成项</small>
+                      <strong>{{ biddingTechnicalFinalQualityDrawer.report.component_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>缺章节</small>
+                      <strong>{{ biddingTechnicalFinalQualityDrawer.report.missing_draft_section_count || 0 }}</strong>
+                    </span>
+                  </div>
+                </section>
+
+                <section class="drawer-section" v-if="biddingTechnicalFinalQualityDrawer.report.issues?.length">
+                  <div class="section-title compact">
+                    <el-icon><Warning /></el-icon>
+                    <span>解除阻断所需信息</span>
+                    <small>逐项填写并确认可用；涉及章节资料的，确认后重新生成对应章节</small>
+                  </div>
+                  <el-table :data="biddingTechnicalFinalQualityDrawer.report.issues" class="users-table">
+                    <el-table-column type="index" label="#" width="56" />
+                    <el-table-column label="章节" min-width="190" show-overflow-tooltip>
+                      <template #default="{ row }">{{ row.section || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="具体需要补充" min-width="380">
+                      <template #default="{ row }">
+                        <div class="operation-client">
+                          <strong>{{ row.required_information || row.issue || '-' }}</strong>
+                          <small v-if="row.requirement_status">当前状态：{{ biddingMaterialRequirementStatusLabel(row.requirement_status) }}</small>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="处理方法" min-width="420">
+                      <template #default="{ row }">{{ row.suggestion || '-' }}</template>
+                    </el-table-column>
+                  </el-table>
+                </section>
+
+                <section class="drawer-section" v-if="biddingFinalQualityTemplateReinforcement.version">
+                  <div class="section-title compact">
+                    <el-icon><DocumentChecked /></el-icon>
+                    <span>章节模板深化</span>
+                    <el-tag :type="biddingReinforcementStatusTag(biddingFinalQualityTemplateReinforcement.status)" effect="plain">
+                      {{ biddingReinforcementStatusLabel(biddingFinalQualityTemplateReinforcement.status) }}
+                    </el-tag>
+                  </div>
+                  <div class="bidding-structure-summary">
+                    <span>
+                      <small>深化章节</small>
+                      <strong>{{ biddingFinalQualityTemplateReinforcement.reinforced_section_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>补充主题</small>
+                      <strong>{{ biddingFinalQualityTemplateReinforcement.added_topic_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>扫描章节</small>
+                      <strong>{{ biddingFinalQualityTemplateReinforcement.section_count || 0 }}</strong>
+                    </span>
+                  </div>
+                  <el-table
+                    v-if="biddingFinalQualityTemplateReinforcementSections.length"
+                    :data="biddingFinalQualityTemplateReinforcementSections"
+                    class="users-table"
+                    row-key="section_key"
+                  >
+                    <el-table-column label="章节" width="130">
+                      <template #default="{ row }">{{ row.section_no || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="深化类型" min-width="180" show-overflow-tooltip>
+                      <template #default="{ row }">{{ row.intent || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="段落变化" width="150">
+                      <template #default="{ row }">{{ row.paragraph_count_before || 0 }} → {{ row.paragraph_count_after || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="字数变化" width="160">
+                      <template #default="{ row }">{{ row.visible_length_before || 0 }} → {{ row.visible_length_after || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="补充主题" min-width="260" show-overflow-tooltip>
+                      <template #default="{ row }">{{ (row.added_topics || []).slice(0, 6).join('、') || '-' }}</template>
+                    </el-table-column>
+                  </el-table>
+                  <el-empty v-else description="暂无章节模板深化记录" />
+                </section>
+
+                <section class="drawer-section" v-if="biddingFinalQualityPlaybookReinforcement.version">
+                  <div class="section-title compact">
+                    <el-icon><DocumentChecked /></el-icon>
+                    <span>专业工法清单</span>
+                    <el-tag :type="biddingReinforcementStatusTag(biddingFinalQualityPlaybookReinforcement.status)" effect="plain">
+                      {{ biddingReinforcementStatusLabel(biddingFinalQualityPlaybookReinforcement.status) }}
+                    </el-tag>
+                  </div>
+                  <div class="bidding-structure-summary">
+                    <span>
+                      <small>深化章节</small>
+                      <strong>{{ biddingFinalQualityPlaybookReinforcement.reinforced_section_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>新增表格</small>
+                      <strong>{{ biddingFinalQualityPlaybookReinforcement.added_table_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>控制项</small>
+                      <strong>{{ biddingFinalQualityPlaybookReinforcement.control_item_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>流程节点</small>
+                      <strong>{{ biddingFinalQualityPlaybookReinforcement.process_node_count || 0 }}</strong>
+                    </span>
+                  </div>
+                  <el-table
+                    v-if="biddingFinalQualityPlaybookReinforcementSections.length"
+                    :data="biddingFinalQualityPlaybookReinforcementSections"
+                    class="users-table"
+                    row-key="section_key"
+                  >
+                    <el-table-column label="章节" width="130">
+                      <template #default="{ row }">{{ row.section_no || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="类型" min-width="180" show-overflow-tooltip>
+                      <template #default="{ row }">{{ row.intent || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="表格" width="90">
+                      <template #default="{ row }">{{ row.added_table_count || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="控制项" width="90">
+                      <template #default="{ row }">{{ row.control_item_count || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="流程节点" width="100">
+                      <template #default="{ row }">{{ row.process_node_count || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="段落变化" width="150">
+                      <template #default="{ row }">{{ row.paragraph_count_before || 0 }} → {{ row.paragraph_count_after || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="字数变化" width="160">
+                      <template #default="{ row }">{{ row.visible_length_before || 0 }} → {{ row.visible_length_after || 0 }}</template>
+                    </el-table-column>
+                  </el-table>
+                  <el-empty v-else description="暂无专业工法清单记录" />
+                </section>
+
+                <section class="drawer-section" v-if="biddingFinalQualityReviewFocusReinforcement.version">
+                  <div class="section-title compact">
+                    <el-icon><DocumentChecked /></el-icon>
+                    <span>评审关注点响应</span>
+                    <el-tag :type="biddingReinforcementStatusTag(biddingFinalQualityReviewFocusReinforcement.status)" effect="plain">
+                      {{ biddingReinforcementStatusLabel(biddingFinalQualityReviewFocusReinforcement.status) }}
+                    </el-tag>
+                  </div>
+                  <div class="bidding-structure-summary">
+                    <span>
+                      <small>深化章节</small>
+                      <strong>{{ biddingFinalQualityReviewFocusReinforcement.reinforced_section_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>关注点</small>
+                      <strong>{{ biddingFinalQualityReviewFocusReinforcement.added_focus_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>新增关键词</small>
+                      <strong>{{ biddingFinalQualityReviewFocusReinforcement.added_keyword_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>响应表</small>
+                      <strong>{{ biddingFinalQualityReviewFocusReinforcement.added_table_count || 0 }}</strong>
+                    </span>
+                  </div>
+                  <el-table
+                    v-if="biddingFinalQualityReviewFocusReinforcementSections.length"
+                    :data="biddingFinalQualityReviewFocusReinforcementSections"
+                    class="users-table"
+                    row-key="section_key"
+                  >
+                    <el-table-column label="章节" width="130">
+                      <template #default="{ row }">{{ row.section_no || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="类型" min-width="170" show-overflow-tooltip>
+                      <template #default="{ row }">{{ row.intent || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="关键词" width="120">
+                      <template #default="{ row }">{{ row.matched_keyword_count_before || 0 }} → {{ row.matched_keyword_count_after || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="新增" width="80">
+                      <template #default="{ row }">{{ row.added_keyword_count || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="关注点" width="90">
+                      <template #default="{ row }">{{ row.added_focus_count || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="段落变化" width="150">
+                      <template #default="{ row }">{{ row.paragraph_count_before || 0 }} → {{ row.paragraph_count_after || 0 }}</template>
+                    </el-table-column>
+                    <el-table-column label="仍缺关键词" min-width="260" show-overflow-tooltip>
+                      <template #default="{ row }">{{ (row.missing_keywords_after || []).slice(0, 8).join('、') || '-' }}</template>
+                    </el-table-column>
+                  </el-table>
+                  <el-empty v-else description="暂无评审关注点响应记录" />
+                </section>
+
+                <section class="drawer-section" v-if="biddingFinalQualityReinforcement.version">
+                  <div class="section-title compact">
+                    <el-icon><DocumentChecked /></el-icon>
+                    <span>自动补强审计</span>
+                    <el-tag :type="biddingReinforcementStatusTag(biddingFinalQualityReinforcement.status)" effect="plain">
+                      {{ biddingReinforcementStatusLabel(biddingFinalQualityReinforcement.status) }}
+                    </el-tag>
+                  </div>
+                  <div class="bidding-structure-summary">
+                    <span>
+                      <small>自动补强要求</small>
+                      <strong>{{ biddingFinalQualityReinforcement.auto_reinforced_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>补强章节</small>
+                      <strong>{{ biddingFinalQualityReinforcement.reinforced_section_count || 0 }}</strong>
+                    </span>
+                    <span>
+                      <small>人工复核项</small>
+                      <strong>{{ biddingFinalQualityReinforcement.manual_review_count || 0 }}</strong>
+                    </span>
+                  </div>
+                  <el-table
+                    v-if="biddingFinalQualityReinforcementTransitions.length"
+                    :data="biddingFinalQualityReinforcementTransitions"
+                    class="users-table"
+                    row-key="requirement_key"
+                  >
+                    <el-table-column label="章节" width="130">
+                      <template #default="{ row }">{{ row.section_no || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="补强要求" min-width="220" show-overflow-tooltip>
+                      <template #default="{ row }">{{ row.requirement_title || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="补强前" width="110">
+                      <template #default="{ row }">
+                        <el-tag :type="biddingCoverageStatusTag(row.before_status)" effect="plain">
+                          {{ biddingCoverageStatusLabel(row.before_status) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="补强后" width="110">
+                      <template #default="{ row }">
+                        <el-tag :type="biddingCoverageStatusTag(row.after_status)" effect="plain">
+                          {{ biddingCoverageStatusLabel(row.after_status) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="关键词" min-width="220" show-overflow-tooltip>
+                      <template #default="{ row }">{{ (row.terms || row.matched_terms_after || []).slice(0, 6).join('、') || '-' }}</template>
+                    </el-table-column>
+                  </el-table>
+                  <el-empty v-else description="暂无自动补强记录" />
+                </section>
+
+                <section class="drawer-section" v-if="biddingFinalQualityManualItems.length">
+                  <div class="section-title compact">
+                    <el-icon><Warning /></el-icon>
+                    <span>仍需人工复核</span>
+                    <small>证照、人员、业绩、奖项等硬事实不会自动编造</small>
+                  </div>
+                  <el-table :data="biddingFinalQualityManualItems" class="users-table" row-key="requirement_key">
+                    <el-table-column label="章节" width="130">
+                      <template #default="{ row }">{{ row.section_no || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="要求" min-width="240" show-overflow-tooltip>
+                      <template #default="{ row }">{{ row.requirement_title || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="状态" width="130">
+                      <template #default="{ row }">
+                        <el-tag :type="biddingCoverageStatusTag(row.coverage_status)" effect="plain">
+                          {{ biddingCoverageStatusLabel(row.coverage_status) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="原因" width="180">
+                      <template #default="{ row }">{{ biddingReinforcementSkipReasonLabel(row.reason) }}</template>
+                    </el-table-column>
+                    <el-table-column label="缺失关键词" min-width="220" show-overflow-tooltip>
+                      <template #default="{ row }">{{ (row.missing_terms || []).slice(0, 6).join('、') || '-' }}</template>
+                    </el-table-column>
+                  </el-table>
+                </section>
+
+                <section class="drawer-section" v-if="biddingFinalQualityCoverageProblemItems.length">
+                  <div class="section-title compact">
+                    <el-icon><Tickets /></el-icon>
+                    <span>逐条覆盖问题</span>
+                    <small>来自正式导出质量报告</small>
+                  </div>
+                  <el-table :data="biddingFinalQualityCoverageProblemItems" class="users-table" row-key="requirement_key">
+                    <el-table-column label="章节" width="130">
+                      <template #default="{ row }">{{ row.section_no || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="要求" min-width="240" show-overflow-tooltip>
+                      <template #default="{ row }">{{ row.requirement_title || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="覆盖状态" width="130">
+                      <template #default="{ row }">
+                        <el-tag :type="biddingCoverageStatusTag(row.coverage_status)" effect="plain">
+                          {{ biddingCoverageStatusLabel(row.coverage_status) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="缺失关键词" min-width="240" show-overflow-tooltip>
+                      <template #default="{ row }">{{ (row.missing_terms || []).slice(0, 8).join('、') || '-' }}</template>
+                    </el-table-column>
+                  </el-table>
+                </section>
+              </div>
+              <el-empty v-else description="暂无正式导出质检报告" />
+            </el-drawer>
+
+            <el-dialog
+              v-model="biddingMaterialProfileDialog.visible"
+              title="从企业资料库填写"
+              width="860px"
+              destroy-on-close
+            >
+              <el-alert
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="选择后会把该企业资料绑定到当前技术标资料需求，后续生成技术标章节草稿时会读取这条资料。"
+              />
+              <el-form class="filter-bar" :model="biddingMaterialProfileDialog.form" @submit.prevent>
+                <el-form-item label="资料分类">
+                  <el-select v-model="biddingMaterialProfileDialog.form.category" clearable placeholder="全部分类">
+                    <el-option
+                      v-for="option in enterpriseProfileCategoryOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="关键词">
+                  <el-input
+                    v-model="biddingMaterialProfileDialog.form.keyword"
+                    placeholder="按资料名称、摘要、正文搜索"
+                    clearable
+                    @keyup.enter="loadBiddingMaterialProfileCandidates"
+                  />
+                </el-form-item>
+                <el-button :icon="Search" plain :loading="biddingMaterialProfileDialog.loading" @click="loadBiddingMaterialProfileCandidates">
+                  搜索
+                </el-button>
+              </el-form>
+              <el-table
+                v-loading="biddingMaterialProfileDialog.loading"
+                :data="biddingMaterialProfileDialog.candidates"
+                class="users-table"
+                empty-text="暂无可用企业资料，请先在企业资料库新增并启用资料"
+                @selection-change="handleBiddingMaterialProfileSelectionChange"
+              >
+                <el-table-column type="selection" width="48" />
+                <el-table-column label="资料名称" min-width="240" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <div class="operation-client">
+                      <strong>{{ row.title }}</strong>
+                      <small>{{ row.summary || row.applicable_scope || '-' }}</small>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="分类" width="140">
+                  <template #default="{ row }">{{ biddingEnterpriseProfileCategoryLabel(row.category) }}</template>
+                </el-table-column>
+                <el-table-column label="形式/附件" width="130">
+                  <template #default="{ row }">
+                    <div class="operation-client">
+                      <span>{{ row.structured?.material_form === 'attachment' ? '附件形式' : '文本形式' }}</span>
+                      <small>附件 {{ row.attachment_count || 0 }} 个</small>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="有效期" width="130">
+                  <template #default="{ row }">{{ row.valid_until || '长期' }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="120" fixed="right">
+                  <template #default="{ row }">
+                    <el-button
+                      size="small"
+                      type="primary"
+                      plain
+                      :loading="biddingMaterialRequirementUpdatingUuid === biddingMaterialProfileDialog.row?.requirement_uuid"
+                      @click="submitBiddingMaterialProfileCandidates([row])"
+                    >
+                      填入
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <section class="bidding-draft-panel">
+                <div class="section-title">
+                  <el-icon><Upload /></el-icon>
+                  <span>补充上传文件</span>
+                  <small>同一个技术标资料项可提交多份附件</small>
+                </div>
+                <el-upload
+                  action="#"
+                  :auto-upload="false"
+                  :show-file-list="false"
+                  multiple
+                  :on-change="uploadBiddingMaterialRequirementFile"
+                >
+                  <el-button :icon="Upload" plain :loading="biddingMaterialProfileDialog.uploading">
+                    上传补充文件
+                  </el-button>
+                </el-upload>
+                <div class="bidding-response-chips">
+                  <el-tag
+                    v-for="file in biddingMaterialProfileDialog.uploadedFiles"
+                    :key="file.file_id"
+                    closable
+                    effect="plain"
+                    @close="removeBiddingMaterialRequirementUploadedFile(file.file_id)"
+                  >
+                    {{ file.original_filename || file.file_id }}
+                  </el-tag>
+                  <small v-if="!biddingMaterialProfileDialog.uploadedFiles.length">暂无已上传文件</small>
+                </div>
+              </section>
+              <template #footer>
+                <el-button @click="biddingMaterialProfileDialog.visible = false">关闭</el-button>
+                <el-button plain @click="submitBiddingMaterialManualValue(biddingMaterialProfileDialog.row)">
+                  手动填写
+                </el-button>
+                <el-button
+                  type="primary"
+                  :loading="biddingMaterialRequirementUpdatingUuid === biddingMaterialProfileDialog.row?.requirement_uuid"
+                  @click="submitBiddingMaterialProfileCandidates(biddingMaterialProfileDialog.selectedProfiles)"
+                >
+                  提交已选/已上传
+                </el-button>
+              </template>
+            </el-dialog>
+
+            <el-dialog
+              v-model="biddingDialog.visible"
+              title="上传甲方招标文件"
+              width="620px"
+              destroy-on-close
+            >
+              <el-form label-position="top" :model="biddingDialog.form">
+                <el-form-item label="招标文件">
+                  <el-upload
+                    ref="biddingProjectUploadRef"
+                    :auto-upload="false"
+                    :show-file-list="true"
+                    :limit="1"
+                    accept=".pdf,.docx"
+                    :on-change="handleBiddingProjectFileChange"
+                    :on-remove="clearBiddingProjectFile"
+                  >
+                    <el-button :icon="Upload" plain>选择 Word/PDF</el-button>
+                    <template #tip>
+                      <div class="upload-tip">支持甲方招标文件 PDF、Word(.docx)，上传后自动创建投标项目。</div>
+                    </template>
+                  </el-upload>
+                </el-form-item>
+                <el-form-item label="项目名称（可选）">
+                  <el-input v-model="biddingDialog.form.project_name" placeholder="不填则使用招标文件名"></el-input>
+                </el-form-item>
+                <el-form-item label="招标单位（可选）">
+                  <el-input v-model="biddingDialog.form.tenderer_name" placeholder="甲方/建设单位"></el-input>
+                </el-form-item>
+                <el-form-item label="招标代理（可选）">
+                  <el-input v-model="biddingDialog.form.tender_agency" placeholder="可选"></el-input>
+                </el-form-item>
+                <div class="form-grid-2">
+                  <el-form-item label="工程地点（可选）">
+                    <el-input v-model="biddingDialog.form.project_location" placeholder="可选"></el-input>
+                  </el-form-item>
+                  <el-form-item label="工程类型（可选）">
+                    <el-input v-model="biddingDialog.form.project_type" placeholder="办公楼装修/餐饮装修等"></el-input>
+                  </el-form-item>
+                </div>
+                <el-form-item label="投标截止时间（可选）">
+                  <el-date-picker
+                    v-model="biddingDialog.form.tender_deadline_at"
+                    type="datetime"
+                    value-format="YYYY-MM-DDTHH:mm:ss"
+                    format="YYYY-MM-DD HH:mm"
+                    placeholder="可选"
+                  ></el-date-picker>
+                </el-form-item>
+              </el-form>
+              <template #footer>
+                <el-button @click="biddingDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="biddingDialog.loading" :disabled="!biddingDialog.file" @click="saveBiddingProject">
+                  上传并创建
+                </el-button>
+              </template>
+            </el-dialog>
+
+            <el-dialog
+              v-model="biddingLlmEditDialog.visible"
+              title="修改 DeepSeek 建议"
+              width="680px"
+              destroy-on-close
+            >
+              <el-form label-position="top" :model="biddingLlmEditDialog.form">
+                <div class="form-grid-2">
+                  <el-form-item label="建议类型">
+                    <el-select v-model="biddingLlmEditDialog.form.decision" placeholder="选择建议类型">
+                      <el-option
+                        v-for="option in biddingLlmDecisionOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="建议业务动作">
+                    <el-select v-model="biddingLlmEditDialog.form.primary_business_action" clearable placeholder="选择动作">
+                      <el-option
+                        v-for="option in biddingBusinessObjectActionOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </div>
+                <el-form-item label="建议标题">
+                  <el-input v-model="biddingLlmEditDialog.form.suggested_title" maxlength="160" show-word-limit />
+                </el-form-item>
+                <el-form-item label="建议子类">
+                  <el-input v-model="biddingLlmEditDialog.form.suggested_object_subtype" maxlength="120" placeholder="保持原子类或输入候选子类" />
+                </el-form-item>
+                <el-form-item label="判断说明">
+                  <el-input
+                    v-model="biddingLlmEditDialog.form.reason"
+                    type="textarea"
+                    :rows="3"
+                    maxlength="800"
+                    show-word-limit
+                  />
+                </el-form-item>
+                <el-form-item label="人工建议">
+                  <el-input
+                    v-model="biddingLlmEditDialog.form.suggested_reviewer_note"
+                    type="textarea"
+                    :rows="3"
+                    maxlength="800"
+                    show-word-limit
+                  />
+                </el-form-item>
+                <el-form-item label="处理备注">
+                  <el-input
+                    v-model="biddingLlmEditDialog.form.reviewer_note"
+                    type="textarea"
+                    :rows="2"
+                    maxlength="4000"
+                    show-word-limit
+                    placeholder="说明为什么修改该建议，便于后续追溯"
+                  />
+                </el-form-item>
+              </el-form>
+              <template #footer>
+                <el-button @click="biddingLlmEditDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="biddingLlmDecisionSubmitting" @click="submitModifyBiddingLlmReview">
+                  保存修改
+                </el-button>
+              </template>
+            </el-dialog>
+          </template>
+        </template>
+
+        <template v-else-if="routeName === 'enterpriseProfile'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">企业资料</p>
+              <h2>企业资料库</h2>
+            </div>
+            <div class="heading-actions">
+              <el-button :icon="Refresh" plain :loading="enterpriseProfileLoading" @click="refreshEnterpriseProfile">
+                刷新
+              </el-button>
+              <el-button
+                v-if="canEditEnterpriseProfile"
+                :icon="Plus"
+                type="primary"
+                :disabled="enterpriseProfileFeatureDisabled"
+                @click="openEnterpriseProfileDialog('create')"
+              >
+                新建资料
+              </el-button>
+            </div>
+          </div>
+
+          <el-alert
+            v-if="enterpriseProfileFeatureDisabled"
+            class="dashboard-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="企业资料库暂不可用"
+            description="请联系管理员确认功能状态后再使用。"
+          />
+          <template v-else>
+            <section class="dashboard-section">
+              <div class="metric-grid">
+                <article
+                  v-for="card in enterpriseProfileOverviewCards"
+                  :key="card.key"
+                  :class="['metric-card', card.tone]"
+                >
+                  <span>{{ card.title }}</span>
+                  <strong>{{ card.value }}</strong>
+                  <small>{{ card.detail }}</small>
+                </article>
+              </div>
+            </section>
+
+            <section class="dashboard-section">
+              <div class="cost-db-filters">
+                <el-select v-model="enterpriseProfileFilters.category" placeholder="资料分类" clearable>
+                  <el-option
+                    v-for="option in enterpriseProfileCategoryOptions"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+                <el-select v-model="enterpriseProfileFilters.status" placeholder="状态" clearable>
+                  <el-option
+                    v-for="option in enterpriseProfileStatusOptions"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+                <el-input
+                  v-model="enterpriseProfileFilters.keyword"
+                  :prefix-icon="Search"
+                  clearable
+                  placeholder="搜索标题、摘要、标签"
+                  @keyup.enter="loadEnterpriseProfileItems"
+                />
+                <el-button :icon="Search" plain :loading="enterpriseProfileLoading" @click="loadEnterpriseProfileItems">
+                  查询
+                </el-button>
+              </div>
+
+              <el-table
+                v-loading="enterpriseProfileLoading"
+                :data="enterpriseProfileItems"
+                class="users-table"
+                empty-text="暂无企业资料"
+              >
+                <el-table-column label="资料" min-width="260">
+                  <template #default="{ row }">
+                    <div class="operation-client">
+                      <strong>{{ row.title }}</strong>
+                      <small>{{ enterpriseProfileCategoryLabel(row.category) }} · {{ row.subcategory || '未分组' }}</small>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="110">
+                  <template #default="{ row }">
+                    <el-tag :type="enterpriseProfileStatusTag(row.status)" effect="plain">
+                      {{ enterpriseProfileStatusLabel(row.status) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="有效期" width="140">
+                  <template #default="{ row }">{{ row.valid_until || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="附件" width="90">
+                  <template #default="{ row }">{{ row.attachment_count || 0 }}</template>
+                </el-table-column>
+                <el-table-column label="资料体检" min-width="220">
+                  <template #default="{ row }">
+                    <div class="tag-list">
+                      <el-tag
+                        v-for="issue in row.quality_issues || []"
+                        :key="issue.code"
+                        :type="enterpriseProfileIssueTag(issue.code)"
+                        effect="plain"
+                      >
+                        {{ enterpriseProfileIssueLabel(issue.code) }}
+                      </el-tag>
+                      <el-tag v-if="!(row.quality_issues || []).length" type="success" effect="plain">可用</el-tag>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="更新时间" width="170">
+                  <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="250" fixed="right">
+                  <template #default="{ row }">
+                    <div class="row-actions">
+                      <el-button size="small" plain @click="openEnterpriseProfileDialog('view', row)">详情</el-button>
+                      <el-button
+                        v-if="canEditEnterpriseProfile && row.status !== 'archived'"
+                        size="small"
+                        type="primary"
+                        plain
+                        @click="openEnterpriseProfileDialog('edit', row)"
+                      >
+                        编辑
+                      </el-button>
+                      <el-button
+                        v-if="canEditEnterpriseProfile && row.status !== 'archived'"
+                        size="small"
+                        plain
+                        @click="openEnterpriseProfileAttachmentDialog(row)"
+                      >
+                        附件
+                      </el-button>
+                      <el-button
+                        v-if="canApproveEnterpriseProfile && row.status !== 'active' && row.status !== 'archived'"
+                        size="small"
+                        type="success"
+                        plain
+                        @click="activateEnterpriseProfileItem(row)"
+                      >
+                        启用
+                      </el-button>
+                      <el-button
+                        v-if="canApproveEnterpriseProfile && row.status !== 'archived'"
+                        size="small"
+                        type="danger"
+                        plain
+                        @click="archiveEnterpriseProfileItem(row)"
+                      >
+                        归档
+                      </el-button>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-pagination
+                v-if="enterpriseProfileTotal > enterpriseProfilePageSize"
+                v-model:current-page="enterpriseProfilePage"
+                :page-size="enterpriseProfilePageSize"
+                :total="enterpriseProfileTotal"
+                layout="prev, pager, next, total"
+                @current-change="loadEnterpriseProfileItems"
+              />
+            </section>
+          </template>
+
+          <el-dialog
+            v-model="enterpriseProfileDialog.visible"
+            :title="enterpriseProfileDialogTitle"
+            width="820px"
+          >
+            <el-form label-position="top" :model="enterpriseProfileDialog.form">
+              <el-form-item label="资料名称">
+                <el-input
+                  v-model="enterpriseProfileDialog.form.title"
+                  :disabled="enterpriseProfileDialog.mode === 'view'"
+                  maxlength="255"
+                  placeholder="例如：公司简介、营业执照、类似项目业绩、施工组织设计通用措施"
+                />
+              </el-form-item>
+              <el-form-item label="资料形式">
+                <el-radio-group
+                  v-model="enterpriseProfileDialog.form.material_form"
+                  :disabled="enterpriseProfileDialog.mode === 'view'"
+                >
+                  <el-radio-button
+                    v-for="option in enterpriseProfileMaterialFormOptions"
+                    :key="option.value"
+                    :label="option.value"
+                  >
+                    {{ option.label }}
+                  </el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <div class="form-grid">
+                <el-form-item label="分类">
+                  <el-select
+                    v-model="enterpriseProfileDialog.form.category"
+                    class="full-width"
+                    :disabled="enterpriseProfileDialog.mode === 'view'"
+                  >
+                    <el-option
+                      v-for="option in enterpriseProfileCategoryOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="子类">
+                  <el-input v-model="enterpriseProfileDialog.form.subcategory" :disabled="enterpriseProfileDialog.mode === 'view'" maxlength="128" />
+                </el-form-item>
+                <el-form-item label="资料键">
+                  <el-input v-model="enterpriseProfileDialog.form.profile_key" :disabled="enterpriseProfileDialog.mode === 'view'" maxlength="128" />
+                </el-form-item>
+                <el-form-item label="有效期至">
+                  <el-date-picker
+                    v-model="enterpriseProfileDialog.form.valid_until"
+                    class="full-width"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    :disabled="enterpriseProfileDialog.mode === 'view'"
+                  />
+                </el-form-item>
+              </div>
+              <el-form-item label="摘要">
+                <el-input
+                  v-model="enterpriseProfileDialog.form.summary"
+                  :disabled="enterpriseProfileDialog.mode === 'view'"
+                  maxlength="1000"
+                  show-word-limit
+                />
+              </el-form-item>
+              <el-form-item v-if="enterpriseProfileDialog.form.material_form === 'text'" label="文本内容">
+                <el-input
+                  v-model="enterpriseProfileDialog.form.content_text"
+                  type="textarea"
+                  :rows="6"
+                  :disabled="enterpriseProfileDialog.mode === 'view'"
+                  maxlength="12000"
+                  show-word-limit
+                />
+              </el-form-item>
+              <section v-else class="bidding-draft-panel">
+                <el-alert
+                  class="dashboard-alert"
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  title="附件形式会先上传文件，再把附件绑定到这条企业资料。"
+                />
+                <el-upload
+                  action="#"
+                  :auto-upload="false"
+                  :show-file-list="false"
+                  :disabled="enterpriseProfileDialog.mode === 'view'"
+                  :on-change="uploadEnterpriseProfileInlineAttachmentFile"
+                >
+                  <el-button :icon="Upload" plain :loading="enterpriseProfileDialog.uploading">
+                    上传资料附件
+                  </el-button>
+                </el-upload>
+                <div class="form-grid">
+                  <el-form-item label="file_id">
+                    <el-input
+                      v-model="enterpriseProfileDialog.form.attachment_file_id"
+                      :disabled="enterpriseProfileDialog.mode === 'view'"
+                      placeholder="上传成功后自动填入"
+                    />
+                  </el-form-item>
+                  <el-form-item label="附件类型">
+                    <el-input
+                      v-model="enterpriseProfileDialog.form.attachment_type"
+                      :disabled="enterpriseProfileDialog.mode === 'view'"
+                      maxlength="64"
+                    />
+                  </el-form-item>
+                </div>
+                <el-form-item label="附件说明">
+                  <el-input
+                    v-model="enterpriseProfileDialog.form.attachment_description"
+                    type="textarea"
+                    :rows="3"
+                    :disabled="enterpriseProfileDialog.mode === 'view'"
+                    maxlength="1000"
+                    show-word-limit
+                  />
+                </el-form-item>
+              </section>
+              <div class="form-grid">
+                <el-form-item label="标签">
+                  <el-input v-model="enterpriseProfileDialog.form.tagsText" :disabled="enterpriseProfileDialog.mode === 'view'" placeholder="用逗号分隔" />
+                </el-form-item>
+                <el-form-item label="适用范围">
+                  <el-input v-model="enterpriseProfileDialog.form.applicable_scope" :disabled="enterpriseProfileDialog.mode === 'view'" maxlength="1000" />
+                </el-form-item>
+              </div>
+              <el-form-item v-if="enterpriseProfileDialog.mode === 'edit'" label="变更原因">
+                <el-input v-model="enterpriseProfileDialog.form.change_reason" maxlength="500" />
+              </el-form-item>
+
+              <div v-if="enterpriseProfileDialog.mode !== 'create'" class="bidding-risk-card-summary">
+                <article>
+                  <strong>{{ enterpriseProfileDialog.detail?.attachment_count || 0 }}</strong>
+                  <small>附件数量</small>
+                </article>
+                <article>
+                  <strong>{{ enterpriseProfileDialog.detail?.events?.length || 0 }}</strong>
+                  <small>审计事件</small>
+                </article>
+                <article>
+                  <strong>{{ enterpriseProfileDialog.detail?.status || '-' }}</strong>
+                  <small>当前状态</small>
+                </article>
+              </div>
+              <el-table
+                v-if="enterpriseProfileDialog.detail?.attachments?.length"
+                :data="enterpriseProfileDialog.detail.attachments"
+                class="users-table"
+                size="small"
+              >
+                <el-table-column prop="original_filename" label="附件" min-width="220" show-overflow-tooltip />
+                <el-table-column prop="attachment_type" label="类型" width="120" />
+                <el-table-column prop="file_id" label="file_id" min-width="220" show-overflow-tooltip />
+              </el-table>
+            </el-form>
+            <template #footer>
+              <el-button @click="enterpriseProfileDialog.visible = false">关闭</el-button>
+              <el-button
+                v-if="enterpriseProfileDialog.mode !== 'view'"
+                type="primary"
+                :loading="state.submitting"
+                @click="submitEnterpriseProfileItem"
+              >
+                保存
+              </el-button>
+            </template>
+          </el-dialog>
+
+          <el-dialog v-model="enterpriseProfileAttachmentDialog.visible" title="绑定资料附件" width="620px">
+            <el-form label-position="top" :model="enterpriseProfileAttachmentDialog.form">
+              <el-alert
+                class="dashboard-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="可直接上传文件，也可粘贴已有 file_id"
+              />
+              <el-upload
+                action="#"
+                :auto-upload="false"
+                :show-file-list="false"
+                :on-change="uploadEnterpriseProfileAttachmentFile"
+              >
+                <el-button :icon="Upload" plain :loading="enterpriseProfileAttachmentDialog.uploading">
+                  上传附件
+                </el-button>
+              </el-upload>
+              <el-form-item label="file_id">
+                <el-input v-model="enterpriseProfileAttachmentDialog.form.file_id" placeholder="上传成功后自动填入" />
+              </el-form-item>
+              <el-form-item label="附件类型">
+                <el-input v-model="enterpriseProfileAttachmentDialog.form.attachment_type" maxlength="64" />
+              </el-form-item>
+              <el-form-item label="说明">
+                <el-input v-model="enterpriseProfileAttachmentDialog.form.description" type="textarea" :rows="3" maxlength="1000" />
+              </el-form-item>
+              <el-checkbox v-model="enterpriseProfileAttachmentDialog.form.is_primary">设为主附件</el-checkbox>
+            </el-form>
+            <template #footer>
+              <el-button @click="enterpriseProfileAttachmentDialog.visible = false">取消</el-button>
+              <el-button type="primary" :loading="state.submitting" @click="submitEnterpriseProfileAttachment">
+                绑定
+              </el-button>
+            </template>
+          </el-dialog>
+        </template>
+
+        <template v-else-if="routeName === 'costMeasurement'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">COST-MEASURE-1</p>
+              <h2>&#25104;&#26412;&#27979;&#31639;&#38381;&#29615;</h2>
+              <p>&#23548;&#20837;&#21382;&#21490;&#27979;&#31639; Excel&#65292;&#32479;&#19968;&#37325;&#31639;&#12289;&#26174;&#24335;&#22797;&#26680;&#12289;&#38145;&#23450;&#24182;&#23548;&#20986;&#25104;&#26524;&#12290;</p>
+            </div>
+            <div class="heading-actions">
+              <input
+                ref="costMeasurementFileInput"
+                type="file"
+                accept=".xlsx,.xlsm"
+                hidden
+                @change="handleCostMeasurementFile"
+              />
+              <el-button
+                v-if="canEditCostMeasurement"
+                type="primary"
+                :icon="Upload"
+                :disabled="costMeasurementFeatureDisabled"
+                @click="costMeasurementFileInput?.click()"
+              >
+                &#23548;&#20837;&#27979;&#31639; Excel
+              </el-button>
+              <el-button :icon="Refresh" plain :loading="costMeasurementLoading" @click="loadCostMeasurements">
+                &#21047;&#26032;
+              </el-button>
+            </div>
+          </div>
+
+          <el-alert
+            v-if="costMeasurementFeatureDisabled"
+            class="dashboard-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="&#25104;&#26412;&#27979;&#31639;&#21151;&#33021;&#23578;&#26410;&#24320;&#21551;"
+          />
+          <template v-else>
+            <div class="cost-workbench-cards">
+              <article class="cost-workbench-card">
+                <span>&#27979;&#31639;&#39033;&#30446;</span>
+                <strong>{{ costMeasurementTotal }}</strong>
+                <small>&#21382;&#21490;&#25104;&#26524;&#19982;&#26032;&#27979;&#31639;&#32479;&#19968;&#31649;&#29702;</small>
+              </article>
+              <article class="cost-workbench-card warning">
+                <span>&#24453;&#22797;&#26680;&#34892;</span>
+                <strong>{{ costMeasurements.reduce((sum, row) => sum + Number(row.review_line_count || 0), 0) }}</strong>
+                <small>&#21382;&#21490;&#20844;&#24335;&#24046;&#24322;&#25110;&#20165;&#32508;&#21512;&#20215;</small>
+              </article>
+              <article class="cost-workbench-card success">
+                <span>&#24050;&#38145;&#23450;&#29256;&#26412;</span>
+                <strong>{{ costMeasurements.filter((row) => row.status === 'locked').length }}</strong>
+                <small>&#21487;&#20316;&#20026;&#21518;&#32493;&#25237;&#26631;&#19982;&#25104;&#26412;&#21488;&#36134;&#20381;&#25454;</small>
+              </article>
+            </div>
+            <el-table
+              v-loading="costMeasurementLoading"
+              :data="costMeasurements"
+              row-key="id"
+              class="users-table cost-db-table"
+              empty-text="&#26242;&#26080;&#25104;&#26412;&#27979;&#31639;&#39033;&#30446;"
+              @row-dblclick="openCostMeasurement"
+            >
+              <el-table-column label="&#27979;&#31639;&#39033;&#30446;" min-width="300">
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <strong>{{ row.measurement_code }} &#183; {{ row.name }}</strong>
+                    <small>{{ row.project_name || row.source_filename || '-' }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="&#29366;&#24577;" width="110">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 'locked' ? 'success' : 'warning'" effect="plain">
+                    {{ row.status === 'locked' ? '\u5df2\u9501\u5b9a' : '\u8349\u7a3f' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="line_count" label="&#28165;&#21333;&#34892;" width="90" />
+              <el-table-column prop="matched_quota_count" label="&#23450;&#39069;&#21629;&#20013;" width="100" />
+              <el-table-column label="&#24453;&#22797;&#26680;" width="100">
+                <template #default="{ row }">
+                  <el-tag :type="row.review_line_count ? 'danger' : 'success'" effect="plain">{{ row.review_line_count || 0 }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="&#31246;&#21069;&#21512;&#35745;" width="150" align="right">
+                <template #default="{ row }">{{ formatAmount(row.pretax_total) }}</template>
+              </el-table-column>
+              <el-table-column label="&#21547;&#31246;&#21512;&#35745;" width="150" align="right">
+                <template #default="{ row }">{{ formatAmount(row.grand_total) }}</template>
+              </el-table-column>
+              <el-table-column label="&#25805;&#20316;" width="110" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" type="primary" plain @click="openCostMeasurement(row)">&#26597;&#30475;</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </template>
+
+          <el-dialog
+            v-model="costMeasurementImportDialog.visible"
+            title="&#23548;&#20837;&#25104;&#26412;&#27979;&#31639;"
+            width="720px"
+            destroy-on-close
+          >
+            <el-alert
+              v-if="costMeasurementImportDialog.preview"
+              type="info"
+              :closable="false"
+              show-icon
+              :title="`\u5df2\u8bc6\u522b ${costMeasurementImportDialog.preview.line_count || 0} \u884c\uff0c\u5f85\u590d\u6838 ${costMeasurementImportDialog.preview.review_line_count || 0} \u884c`"
+            />
+            <el-form label-position="top">
+              <el-form-item label="&#27979;&#31639;&#21517;&#31216;">
+                <el-input v-model="costMeasurementImportDialog.name" />
+              </el-form-item>
+              <el-form-item label="&#39033;&#30446;&#21517;&#31216;">
+                <el-input v-model="costMeasurementImportDialog.project_name" />
+              </el-form-item>
+              <el-form-item label="&#28304;&#25991;&#20214;">
+                <el-input :model-value="costMeasurementImportDialog.file?.name || '-'" disabled />
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="costMeasurementImportDialog.visible = false">&#21462;&#28040;</el-button>
+              <el-button type="primary" :loading="state.submitting" @click="commitCostMeasurementImport">
+                &#21019;&#24314;&#27979;&#31639;&#33609;&#31295;
+              </el-button>
+            </template>
+          </el-dialog>
+
+          <el-drawer
+            v-model="costMeasurementDrawer.visible"
+            size="94%"
+            :title="costMeasurementDetail?.name || '\u6210\u672c\u6d4b\u7b97\u8be6\u60c5'"
+            destroy-on-close
+          >
+            <template v-if="costMeasurementDetail">
+              <div class="heading-actions">
+                <el-tag :type="costMeasurementDetail.status === 'locked' ? 'success' : 'warning'">
+                  {{ costMeasurementDetail.status === 'locked' ? '\u5df2\u9501\u5b9a' : '\u8349\u7a3f' }}
+                </el-tag>
+                <span>&#31246;&#21069; {{ formatAmount(costMeasurementDetail.pretax_total) }}</span>
+                <span>&#21547;&#31246; {{ formatAmount(costMeasurementDetail.grand_total) }}</span>
+                <span>&#24453;&#22797;&#26680; {{ costMeasurementDetail.review_line_count || 0 }} &#34892;</span>
+                <el-button
+                  v-if="canEditCostMeasurement && costMeasurementDetail.status === 'draft'"
+                  :loading="costMeasurementLoading"
+                  @click="recalculateCostMeasurement"
+                >&#32479;&#19968;&#37325;&#31639;</el-button>
+                <el-button
+                  v-if="canApproveCostMeasurement && costMeasurementDetail.status === 'draft'"
+                  type="success"
+                  plain
+                  @click="lockCostMeasurement"
+                >&#22797;&#26680;&#24182;&#38145;&#23450;</el-button>
+                <el-button
+                  v-if="canEditCostMeasurement && costMeasurementDetail.status === 'locked'"
+                  type="primary"
+                  plain
+                  @click="previewCostMeasurementDrafts"
+                >&#27785;&#28096;&#25104;&#26412;&#24211;</el-button>
+                <el-button v-if="canExportCostMeasurement" :icon="Download" plain @click="exportCostMeasurement">
+                  &#23548;&#20986; Excel
+                </el-button>
+              </div>
+              <el-table :data="costMeasurementDetail.lines || []" row-key="id" max-height="680" class="users-table cost-db-table">
+                <el-table-column label="&#39033;&#30446;" min-width="280" fixed="left">
+                  <template #default="{ row }">
+                    <div class="operation-client">
+                      <strong>{{ row.sequence_no || row.sort_order }}. {{ row.item_name }}</strong>
+                      <small>{{ row.section_name || '-' }} &#183; {{ row.unit || '-' }}</small>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="&#24037;&#31243;&#37327;" width="130">
+                  <template #default="{ row }">
+                    <el-input-number v-model="row.quantity" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="&#20154;&#24037;" width="125">
+                  <template #default="{ row }"><el-input-number v-model="row.labor_unit_price" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" /></template>
+                </el-table-column>
+                <el-table-column label="&#20027;&#26448;" width="125">
+                  <template #default="{ row }"><el-input-number v-model="row.main_material_unit_price" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" /></template>
+                </el-table-column>
+                <el-table-column label="&#36741;&#26448;&#21450;&#26426;&#26800;" width="135">
+                  <template #default="{ row }"><el-input-number v-model="row.auxiliary_machinery_unit_price" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" /></template>
+                </el-table-column>
+                <el-table-column label="&#20998;&#21253;" width="125">
+                  <template #default="{ row }"><el-input-number v-model="row.subcontract_unit_price" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" /></template>
+                </el-table-column>
+                <el-table-column label="&#21382;&#21490;&#21333;&#20215;" width="120" align="right">
+                  <template #default="{ row }">{{ formatAmount(row.source_unit_price) }}</template>
+                </el-table-column>
+                <el-table-column label="&#37325;&#31639;&#21333;&#20215;" width="120" align="right">
+                  <template #default="{ row }">{{ formatAmount(row.calculated_unit_price) }}</template>
+                </el-table-column>
+                <el-table-column label="&#21512;&#35745;" width="130" align="right">
+                  <template #default="{ row }">{{ formatAmount(row.calculated_total_price) }}</template>
+                </el-table-column>
+                <el-table-column label="&#22797;&#26680;" width="145" fixed="right">
+                  <template #default="{ row }">
+                    <div class="row-actions">
+                      <el-tag :type="row.review_status === 'required' ? 'danger' : 'success'" effect="plain">
+                        {{ row.review_status === 'required' ? '\u5f85\u590d\u6838' : '\u5df2\u590d\u6838' }}
+                      </el-tag>
+                      <el-button
+                        v-if="canEditCostMeasurement && costMeasurementDetail.status === 'draft'"
+                        size="small"
+                        type="primary"
+                        plain
+                        @click="saveCostMeasurementLine(row)"
+                      >&#20445;&#23384;</el-button>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </template>
+          </el-drawer>
+
+          <el-dialog
+            v-model="costMeasurementDraftDialog.visible"
+            title="&#27785;&#28096;&#20225;&#19994;&#25104;&#26412;&#24211;"
+            width="1120px"
+            destroy-on-close
+          >
+            <el-alert
+              type="info"
+              show-icon
+              :closable="false"
+              title="&#21482;&#20174;&#24050;&#38145;&#23450;&#29256;&#26412;&#20013;&#25552;&#21462;&#24050;&#22797;&#26680;&#34892;&#65307;&#19981;&#33258;&#21160;&#21551;&#29992;&#65292;&#19981;&#35206;&#30422;&#29616;&#26377;&#24050;&#21551;&#29992;&#25110;&#24453;&#26680;&#23450;&#26465;&#30446;&#12290;"
+            />
+            <div v-if="costMeasurementDraftDialog.summary" class="cost-workbench-cards">
+              <article class="cost-workbench-card">
+                <span>&#26412;&#27425;&#20505;&#36873;</span>
+                <strong>{{ costMeasurementDraftDialog.summary.selected_line_count || 0 }}</strong>
+                <small>&#38145;&#23450;&#27979;&#31639;&#29256;&#26412;&#30340;&#26126;&#32454;&#34892;</small>
+              </article>
+              <article class="cost-workbench-card success">
+                <span>&#21487;&#29983;&#25104;&#24453;&#26680;&#23450;&#26465;&#30446;</span>
+                <strong>{{ costMeasurementDraftDialog.summary.eligible_count || 0 }}</strong>
+                <small>&#37325;&#22797;&#20505;&#36873; {{ costMeasurementDraftDialog.summary.within_measurement_duplicate_count || 0 }} &#26465;&#65292;&#21487;&#20154;&#24037;&#25913;&#36873;</small>
+              </article>
+              <article class="cost-workbench-card warning">
+                <span>&#24050;&#38459;&#26029;</span>
+                <strong>{{ costMeasurementDraftDialog.summary.blocked_count || 0 }}</strong>
+                <small>&#24453;&#22797;&#26680;&#12289;&#37325;&#22797;&#25110;&#20215;&#26684;&#26080;&#25928;</small>
+              </article>
+            </div>
+            <el-form label-position="top">
+              <el-form-item label="&#26412;&#25209;&#27425;&#35828;&#26126;&#65288;&#20889;&#20837;&#25104;&#26412;&#21382;&#21490;&#19982;&#27979;&#31639;&#20107;&#20214;&#65289;">
+                <el-input
+                  v-model="costMeasurementDraftDialog.note"
+                  type="textarea"
+                  :rows="2"
+                  maxlength="2000"
+                  show-word-limit
+                  placeholder="&#20363;&#65306;&#24050;&#26680;&#23545;&#20449;&#36798;&#39033;&#30446;&#21382;&#21490;&#25104;&#26412;&#21475;&#24452;"
+                />
+              </el-form-item>
+            </el-form>
+            <el-table
+              v-loading="costMeasurementDraftDialog.loading"
+              :data="costMeasurementDraftDialog.candidates"
+              row-key="line_id"
+              max-height="520"
+              class="users-table cost-db-table"
+            >
+              <el-table-column label="&#36873;&#25321;" width="70" align="center">
+                <template #default="{ row }">
+                  <el-checkbox v-model="row.selected" :disabled="!row.can_create" />
+                </template>
+              </el-table-column>
+              <el-table-column label="&#27979;&#31639;&#26126;&#32454;" min-width="260">
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <strong>{{ row.sequence_no || row.line_id }}. {{ row.item_name }}</strong>
+                    <small>{{ row.feature || '-' }}</small>
+                    <small>{{ row.source_sheet || '-' }} &#183; &#21407;&#34892; {{ row.source_row_index || '-' }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="unit" label="&#21333;&#20301;" width="80" />
+              <el-table-column label="&#30452;&#25509;&#25104;&#26412;" width="110" align="right">
+                <template #default="{ row }">{{ formatAmount(row.direct_unit_price) }}</template>
+              </el-table-column>
+              <el-table-column label="&#31649;&#29702;&#36153;&#21033;&#28070;" width="120" align="right">
+                <template #default="{ row }">{{ formatAmount(row.management_profit_unit_price) }}</template>
+              </el-table-column>
+              <el-table-column label="&#31246;&#21069;&#32508;&#21512;&#25104;&#26412;" width="135" align="right">
+                <template #default="{ row }">{{ formatAmount(row.calculated_unit_price) }}</template>
+              </el-table-column>
+              <el-table-column label="&#20505;&#36873;&#29366;&#24577;" min-width="220">
+                <template #default="{ row }">
+                  <div class="operation-client">
+                    <el-tag :type="costMeasurementDraftStatusTag(row.candidate_status)" effect="plain">
+                      {{ costMeasurementDraftStatusLabel(row.candidate_status) }}
+                    </el-tag>
+                    <small>{{ row.reason_message || '-' }}</small>
+                    <small v-if="row.existing_cost_item">
+                      &#24050;&#26377; #{{ row.existing_cost_item.id }} &#183; {{ row.existing_cost_item.status }} &#183; {{ formatAmount(row.existing_cost_item.price) }}
+                    </small>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+            <template #footer>
+              <el-button @click="costMeasurementDraftDialog.visible = false">&#21462;&#28040;</el-button>
+              <el-button
+                type="primary"
+                :loading="costMeasurementDraftDialog.submitting"
+                :disabled="costMeasurementDraftSelectedCount === 0"
+                @click="commitCostMeasurementDrafts"
+              >&#25552;&#20132; {{ costMeasurementDraftSelectedCount }} &#26465;&#24453;&#26680;&#23450;&#26465;&#30446;</el-button>
+            </template>
+          </el-dialog>
+        </template>
+
+
         <template v-else-if="routeName === 'costDb'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">BIZ-2a / BIZ-2x</p>
-              <h2>企业定额主库 / 成本主库</h2>
+              <p class="eyebrow">成本参考</p>
+              <h2>企业成本库</h2>
             </div>
             <div class="heading-actions">
               <el-button
@@ -2810,7 +7140,7 @@
                 :disabled="costDbFeatureDisabled || costRagSyncing"
                 @click="syncActiveCostItemsToRag"
               >
-                同步 active 到 RAG
+                更新成本参考
               </el-button>
               <el-button
                 v-if="canViewCostDb"
@@ -2860,8 +7190,8 @@
             >
               <template #title>
                 <span>
-                  RAG 同步状态：{{ costRagSyncStatus.status_label || costRagSyncSummaryLabel(costRagSyncStatus.status) }}
-                  · active {{ costRagSyncStatus.active_count || 0 }} 条
+                  成本参考更新状态：{{ costRagSyncStatus.status_label || costRagSyncSummaryLabel(costRagSyncStatus.status) }}
+                  · 已启用 {{ costRagSyncStatus.active_count || 0 }} 条
                   · 最近成功 {{ formatShanghaiDate(costRagSyncStatus.latest_successful_run?.finished_at) }}
                 </span>
               </template>
@@ -2871,8 +7201,8 @@
               <div class="cost-workbench-title">
                 <el-tag type="success" effect="plain">当前主源</el-tag>
                 <div>
-                  <strong>企业定额主库 / 成本主库</strong>
-                  <span>报价成本参考与 RAG 同步优先读取当前 active 企业定额版本；旧 cost_items 仅保留历史维护和审计追溯。</span>
+                  <strong>企业成本库</strong>
+                  <span>报价成本参考优先读取当前已启用的企业定额；旧成本条目仅保留历史维护和审计追溯。</span>
                 </div>
               </div>
               <div class="cost-workbench-cards">
@@ -2910,7 +7240,7 @@
                   :data="enterpriseQuotaItems"
                   row-key="id"
                   class="users-table cost-db-table"
-                  empty-text="暂无 active 企业定额主项"
+                  empty-text="暂无已启用企业定额主项"
                 >
                   <el-table-column label="定额主项" min-width="280" show-overflow-tooltip>
                     <template #default="{ row }">
@@ -2992,7 +7322,7 @@
                   :data="enterpriseQuotaComponents"
                   row-key="id"
                   class="users-table cost-db-table"
-                  empty-text="暂无 active 企业定额组成明细"
+                  empty-text="暂无已启用企业定额组成明细"
                 >
                   <el-table-column label="所属主项" min-width="220" show-overflow-tooltip>
                     <template #default="{ row }">
@@ -3060,7 +7390,7 @@
                   :data="enterpriseQuotaResources"
                   row-key="id"
                   class="users-table cost-db-table"
-                  empty-text="暂无 active 企业定额资源价格"
+                  empty-text="暂无已启用企业定额资源价格"
                 >
                   <el-table-column label="资源" min-width="260" show-overflow-tooltip>
                     <template #default="{ row }">
@@ -3094,6 +7424,216 @@
                   small
                   @current-change="loadEnterpriseQuotaResources"
                 ></el-pagination>
+              </el-tab-pane>
+
+              <el-tab-pane label="项目采购入库" name="purchaseImports">
+                <el-alert
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  title="采购资料先形成价格观察与待审核候选；只有审核通过后才能生成新的待核定企业定额，当前已启用版本不会被直接修改。"
+                ></el-alert>
+                <section class="cost-workbench-panel">
+                  <div class="cost-workbench-title">
+                    <el-tag type="primary" effect="plain">快速入库</el-tag>
+                    <div>
+                      <strong>上传采购单、订购单或 ZIP</strong>
+                      <span>系统自动识别材料、品牌、规格、单位、采购价、供应商、税率与运费口径，并保留源文件与原始行号。</span>
+                    </div>
+                  </div>
+                  <div class="cost-db-filters cost-item-filters">
+                    <el-input v-model="projectCostImportProjectName" size="small" placeholder="项目名称（必填）"></el-input>
+                    <input
+                      ref="projectCostImportFileInput"
+                      type="file"
+                      multiple
+                      accept=".xlsx,.xlsm,.zip"
+                      style="display: none"
+                      @change="selectProjectCostImportFiles"
+                    />
+                    <input
+                      ref="projectCostImportFolderInput"
+                      type="file"
+                      multiple
+                      webkitdirectory
+                      directory
+                      style="display: none"
+                      @change="selectProjectCostImportFiles"
+                    />
+                    <el-button size="small" plain @click="projectCostImportFileInput?.click()">选择文件/ZIP</el-button>
+                    <el-button size="small" plain @click="projectCostImportFolderInput?.click()">选择项目文件夹</el-button>
+                    <el-button
+                      v-if="canEditCostDb"
+                      size="small"
+                      type="primary"
+                      :loading="projectCostImportUploading"
+                      :disabled="!projectCostImportProjectName.trim() || !projectCostImportFiles.length"
+                      @click="uploadProjectCostImport"
+                    >
+                      开始解析
+                    </el-button>
+                    <span class="filter-count">已选 {{ projectCostImportFiles.length }} 个文件</span>
+                  </div>
+                </section>
+
+                <el-table
+                  v-loading="projectCostImportLoading"
+                  :data="projectCostImportBatches"
+                  row-key="id"
+                  class="users-table cost-db-table"
+                  empty-text="暂无项目采购导入批次"
+                >
+                  <el-table-column label="项目/批次" min-width="240" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="operation-client">
+                        <strong>{{ row.project_name }}</strong>
+                        <small>{{ row.batch_uuid }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="解析结果" min-width="220">
+                    <template #default="{ row }">
+                      <div class="price-stack">
+                        <span>文件 {{ row.parsed_file_count }}/{{ row.file_count }}</span>
+                        <small>观察 {{ row.observation_count }} · 候选 {{ row.candidate_count }}</small>
+                        <small>高置信 {{ row.high_confidence_count }} · 已通过 {{ row.approved_count }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="120">
+                    <template #default="{ row }">
+                      <el-tag :type="row.status === 'draft_created' ? 'success' : 'warning'" effect="plain">
+                        {{ row.status === 'draft_created' ? '已生成草稿' : '待审核' }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="企业定额草稿" min-width="160">
+                    <template #default="{ row }">{{ row.target_quota_version_id ? `#${row.target_quota_version_id}` : '-' }}</template>
+                  </el-table-column>
+                  <el-table-column label="创建时间" width="170">
+                    <template #default="{ row }">{{ formatShanghaiDate(row.created_at) }}</template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="120" fixed="right">
+                    <template #default="{ row }">
+                      <el-button size="small" type="primary" plain @click="openProjectCostImportBatch(row)">审核候选</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-pagination
+                  v-if="projectCostImportTotal > projectCostImportPageSize"
+                  v-model:current-page="projectCostImportPage"
+                  :page-size="projectCostImportPageSize"
+                  :total="projectCostImportTotal"
+                  layout="total, prev, pager, next"
+                  small
+                  @current-change="loadProjectCostImportBatches"
+                ></el-pagination>
+
+                <template v-if="selectedProjectCostImportBatch">
+                  <el-divider content-position="left">
+                    候选审核 · {{ selectedProjectCostImportBatch.project_name }}
+                  </el-divider>
+                  <div class="cost-db-filters cost-item-filters">
+                    <el-select v-model="projectCostCandidateFilters.status" size="small" clearable placeholder="审核状态" @change="applyProjectCostCandidateFilters">
+                      <el-option label="待审核" value="pending"></el-option>
+                      <el-option label="已通过" value="approved"></el-option>
+                      <el-option label="已驳回" value="rejected"></el-option>
+                    </el-select>
+                    <el-select v-model="projectCostCandidateFilters.risk_level" size="small" clearable placeholder="风险等级" @change="applyProjectCostCandidateFilters">
+                      <el-option label="低风险" value="low"></el-option>
+                      <el-option label="中风险" value="medium"></el-option>
+                      <el-option label="高风险" value="high"></el-option>
+                    </el-select>
+                    <el-input v-model="projectCostCandidateFilters.keyword" size="small" clearable placeholder="材料/品牌/规格" @keyup.enter="applyProjectCostCandidateFilters"></el-input>
+                    <el-button size="small" plain @click="applyProjectCostCandidateFilters">查询</el-button>
+                    <el-button
+                      v-if="canApproveCostDb"
+                      size="small"
+                      type="success"
+                      plain
+                      :disabled="!selectedProjectCostCandidates.length"
+                      @click="reviewSelectedProjectCostCandidates('approve')"
+                    >批量通过</el-button>
+                    <el-button
+                      v-if="canApproveCostDb"
+                      size="small"
+                      type="danger"
+                      plain
+                      :disabled="!selectedProjectCostCandidates.length"
+                      @click="reviewSelectedProjectCostCandidates('reject')"
+                    >批量驳回</el-button>
+                    <el-button
+                      v-if="canApproveCostDb"
+                      size="small"
+                      type="primary"
+                      :disabled="!selectedProjectCostImportBatch.approved_count || selectedProjectCostImportBatch.target_quota_version_id"
+                      @click="createProjectCostDraftVersion"
+                    >生成企业定额草稿</el-button>
+                  </div>
+                  <el-table
+                    v-loading="projectCostCandidateLoading"
+                    :data="projectCostCandidates"
+                    row-key="id"
+                    class="users-table cost-db-table"
+                    @selection-change="selectedProjectCostCandidates = $event"
+                  >
+                    <el-table-column v-if="canApproveCostDb" type="selection" width="48"></el-table-column>
+                    <el-table-column label="材料候选" min-width="260" show-overflow-tooltip>
+                      <template #default="{ row }">
+                        <div class="operation-client">
+                          <strong>{{ row.normalized_item_name || '-' }}</strong>
+                          <small>{{ row.brand || '-' }} · {{ row.spec || '-' }}</small>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="unit" label="单位" width="80"></el-table-column>
+                    <el-table-column label="价格区间" min-width="180">
+                      <template #default="{ row }">
+                        <div class="price-stack">
+                          <span>建议 {{ formatPrice(row.recommended_price) }}</span>
+                          <small>{{ formatPrice(row.min_price) }} ～ {{ formatPrice(row.max_price) }}</small>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="样本" width="100">
+                      <template #default="{ row }">{{ row.observation_count }} 次 / {{ row.supplier_count }} 家</template>
+                    </el-table-column>
+                    <el-table-column label="质量" min-width="150">
+                      <template #default="{ row }">
+                        <div class="price-stack">
+                          <el-tag :type="row.risk_level === 'high' ? 'danger' : row.risk_level === 'low' ? 'success' : 'warning'" effect="plain">
+                            {{ row.risk_level }}
+                          </el-tag>
+                          <small>置信度 {{ Math.round((row.confidence_score || 0) * 100) }}%</small>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="主库匹配" min-width="190" show-overflow-tooltip>
+                      <template #default="{ row }">
+                        <div class="operation-client">
+                          <strong>{{ row.matched_resource_name || '新增资源' }}</strong>
+                          <small>{{ row.match_type || '-' }} · {{ Math.round((row.match_confidence || 0) * 100) }}%</small>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="审核状态" width="100">
+                      <template #default="{ row }">
+                        <el-tag :type="row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'" effect="plain">
+                          {{ row.status === 'approved' ? '已通过' : row.status === 'rejected' ? '已驳回' : '待审核' }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                  <el-pagination
+                    v-if="projectCostCandidateTotal > projectCostCandidatePageSize"
+                    v-model:current-page="projectCostCandidatePage"
+                    :page-size="projectCostCandidatePageSize"
+                    :total="projectCostCandidateTotal"
+                    layout="total, prev, pager, next"
+                    small
+                    @current-change="loadProjectCostCandidates"
+                  ></el-pagination>
+                </template>
               </el-tab-pane>
             </el-tabs>
 
@@ -3205,7 +7745,7 @@
                   :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedDraftCostItemCount === 0"
                   @click="bulkActivateCostItems"
                 >
-                  批量核定 active
+                  批量核定为启用
                 </el-button>
                 <el-button
                   :icon="Refresh"
@@ -3215,7 +7755,7 @@
                   :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedActiveCostItemCount === 0"
                   @click="bulkRestoreCostItemsToDraft"
                 >
-                  批量恢复 draft
+                  批量恢复为待核定
                 </el-button>
                 <el-button
                   :icon="Delete"
@@ -3350,8 +7890,8 @@
         <template v-else-if="routeName === 'dwgTrial'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">BIZ-2x · DWG Trial</p>
-              <h2>图纸识图试运行</h2>
+              <p class="eyebrow">图纸识别</p>
+              <h2>图纸识别</h2>
             </div>
             <div class="heading-actions">
               <el-upload
@@ -3437,7 +7977,7 @@
             type="info"
             show-icon
             :closable="false"
-            title="可只上传正式 PDF 生成四字段列项候选；上传 DWG 时仍走原 DWG 识图试运行"
+            title="可只上传正式 PDF 生成四字段列项候选；上传 DWG 可辅助识别图纸项目"
           ></el-alert>
 
           <section v-if="dwgTrialResult" class="dashboard-section">
@@ -3767,7 +8307,7 @@
         <template v-else-if="routeName === 'requirementStandardization'">
           <div class="content-heading">
             <div>
-              <p class="eyebrow">BIZ-2l-2 / BIZ-2l-3</p>
+              <p class="eyebrow">需求单处理</p>
               <h2>需求单标准化确认</h2>
             </div>
             <div class="heading-actions">
@@ -4224,7 +8764,7 @@
         <template v-else>
           <div class="content-heading">
             <div>
-              <p class="eyebrow">Phase 0</p>
+              <p class="eyebrow">账号与权限</p>
               <h2>用户角色</h2>
             </div>
             <div class="row-actions">
@@ -4871,11 +9411,11 @@
           <div v-loading="costLineageDrawer.summaryLoading">
             <div class="detail-grid lineage-summary-grid">
               <div>
-                <small>草稿 draft</small>
+                <small>待核定</small>
                 <strong>{{ costLineageSummary.by_status?.draft || 0 }}</strong>
               </div>
               <div>
-                <small>启用 active</small>
+                <small>已启用</small>
                 <strong>{{ costLineageSummary.by_status?.active || 0 }}</strong>
               </div>
               <div>
@@ -4891,15 +9431,15 @@
                 <strong>{{ costLineageSummary.quote_used_count || 0 }}</strong>
               </div>
               <div>
-                <small>active 且已引用</small>
+                <small>已启用且已引用</small>
                 <strong>{{ costLineageSummary.active_quote_used_count || 0 }}</strong>
               </div>
               <div>
-                <small>active RAG 范围</small>
+                <small>已用于报价参考</small>
                 <strong>{{ costLineageSummary.active_rag_scope_count || 0 }}</strong>
               </div>
               <div>
-                <small>最近 RAG 同步</small>
+                <small>最近成本参考更新</small>
                 <strong>{{ formatDate(costLineageSummary.latest_successful_rag_sync?.finished_at) }}</strong>
               </div>
             </div>
@@ -4916,8 +9456,8 @@
             </section>
           </div>
         </el-tab-pane>
-        <el-tab-pane label="新增 draft" name="draft"></el-tab-pane>
-        <el-tab-pane label="active 记录" name="active"></el-tab-pane>
+        <el-tab-pane label="新增待核定" name="draft"></el-tab-pane>
+        <el-tab-pane label="已启用记录" name="active"></el-tab-pane>
         <el-tab-pane label="归档记录" name="archived"></el-tab-pane>
       </el-tabs>
 
@@ -5092,9 +9632,9 @@
       </template>
     </el-drawer>
 
-    <el-dialog v-model="costRagSyncDialog.visible" title="RAG 同步记录" width="920px">
+    <el-dialog v-model="costRagSyncDialog.visible" title="成本参考更新记录" width="920px">
       <div class="dialog-toolbar">
-        <span>记录每次 active 成本库同步到 RAG 的时间、数量和结果</span>
+        <span>记录每次成本参考更新的时间、数量和结果</span>
         <el-button :icon="Refresh" plain :loading="costRagSyncDialog.loading" @click="loadCostRagSyncRuns">
           刷新
         </el-button>
@@ -5728,7 +10268,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="projectTrialDialog.visible" title="单人试运行项目" width="560px">
+    <el-dialog v-model="projectTrialDialog.visible" title="快速创建项目" width="560px">
       <el-form label-position="top" :model="projectTrialDialog.form">
         <el-form-item label="项目名称">
           <el-input v-model="projectTrialDialog.form.name" maxlength="120" />
@@ -5760,7 +10300,7 @@
       </el-form>
       <template #footer>
         <el-button @click="projectTrialDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="state.submitting" @click="createProjectTrial">创建试运行项目</el-button>
+        <el-button type="primary" :loading="state.submitting" @click="createProjectTrial">创建项目</el-button>
       </template>
     </el-dialog>
 
@@ -6232,10 +10772,14 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import axios from 'axios'
+import BudgetProjects from './BudgetProjects.vue'
+import AccountQuotaLibrary from './AccountQuotaLibrary.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  ArrowDown,
+  ArrowRight,
   Clock,
   DataAnalysis,
   Delete,
@@ -6287,15 +10831,18 @@ api.interceptors.response.use(
 )
 
 const roleOptions = [
-  { value: 'system_admin', label: 'system_admin', hint: '权限与系统配置' },
-  { value: 'admin', label: 'admin', hint: '报价与知识库管理' },
-  { value: 'quote_operator', label: 'quote_operator', hint: '报价运营只读复核' },
-  { value: 'quote_user', label: 'quote_user', hint: '报价工作台与需求单标准化' },
-  { value: 'cost_viewer', label: 'cost_viewer', hint: '完整成本库只读' },
-  { value: 'cost_editor', label: 'cost_editor', hint: '维护成本库 draft' },
-  { value: 'cost_approver', label: 'cost_approver', hint: '启用/归档成本价' },
-  { value: 'cost_exporter', label: 'cost_exporter', hint: '成本数据导出预留' },
-  { value: 'project_viewer', label: 'project_viewer', hint: '查看参与项目' },
+  { value: 'system_admin', label: '系统管理员', hint: '权限与系统配置' },
+  { value: 'admin', label: '管理人员', hint: '报价与知识库管理' },
+  { value: 'quote_operator', label: '报价复核人员', hint: '报价运营只读复核' },
+  { value: 'quote_user', label: '报价专员', hint: '报价工作台与需求单标准化' },
+  { value: 'cost_viewer', label: '成本库查看人员', hint: '完整成本库只读' },
+  { value: 'cost_editor', label: '成本库维护人员', hint: '维护成本库待核定条目' },
+  { value: 'cost_approver', label: '成本库核定人员', hint: '启用或归档成本价' },
+  { value: 'cost_exporter', label: '成本库导出人员', hint: '导出成本数据' },
+  { value: 'enterprise_profile_viewer', label: '企业资料查看人员', hint: '查看企业资料库' },
+  { value: 'enterprise_profile_editor', label: '企业资料维护人员', hint: '维护企业资料草稿' },
+  { value: 'enterprise_profile_approver', label: '企业资料核定人员', hint: '启用或归档企业资料' },
+  { value: 'project_viewer', label: '项目查看人员', hint: '查看参与项目' },
   { value: 'project_member', label: 'project_member', hint: '更新本人项目任务' },
   { value: 'project_manager', label: 'project_manager', hint: '管理项目进度' },
   { value: 'staff', label: 'staff', hint: '旧报价工作台' },
@@ -6337,6 +10884,29 @@ const executionStatusOptions = [
   { value: 'in_progress', label: '进行中' },
   { value: 'done', label: '已完成' },
   { value: 'cancelled', label: '已取消' },
+]
+
+const enterpriseProfileCategoryOptions = [
+  { value: 'basic_info', label: '企业基本信息' },
+  { value: 'certificate', label: '证照证书' },
+  { value: 'qualification', label: '企业资质' },
+  { value: 'personnel', label: '人员资料' },
+  { value: 'project_performance', label: '项目业绩' },
+  { value: 'technical_solution', label: '技术方案片段' },
+  { value: 'attachment_asset', label: '附件素材' },
+  { value: 'commitment_template', label: '承诺函模板' },
+  { value: 'other', label: '其他' },
+]
+
+const enterpriseProfileMaterialFormOptions = [
+  { value: 'text', label: '文本形式' },
+  { value: 'attachment', label: '附件形式' },
+]
+
+const enterpriseProfileStatusOptions = [
+  { value: 'draft', label: '草稿' },
+  { value: 'active', label: '已启用' },
+  { value: 'archived', label: '已归档' },
 ]
 
 const projectStatusOptions = [
@@ -6458,6 +11028,95 @@ const requirementRowFilterOptions = [
   { value: 'quantity_missing', label: '数量来源不明' },
 ]
 
+const biddingStatusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'draft', label: '草稿' },
+  { value: 'files_uploaded', label: '已上传资料' },
+  { value: 'parsed', label: '已解析' },
+  { value: 'reviewing', label: '复核中' },
+  { value: 'archived', label: '已归档' },
+]
+
+const biddingFileTypeOptions = [
+  { value: 'tender_document', label: '招标文件' },
+  { value: 'bill_of_quantities', label: '工程量清单' },
+  { value: 'drawing', label: '图纸/图纸说明' },
+  { value: 'contract', label: '合同范本' },
+  { value: 'addendum', label: '补遗文件' },
+  { value: 'clarification', label: '答疑文件' },
+  { value: 'brand_table', label: '材料品牌表' },
+  { value: 'other', label: '其他资料' },
+]
+
+const biddingFileFormatContentTypeOptions = [
+  { value: 'fixed_form', label: '固定表单' },
+  { value: 'draft_section', label: '正文章节' },
+  { value: 'attachment_proof', label: '附件证明' },
+  { value: 'qualification_attachment', label: '资格附件' },
+  { value: 'pricing_table', label: '报价表' },
+]
+
+const biddingFileFormatGenerationOptions = [
+  { value: 'generate_draft', label: '生成正文' },
+  { value: 'from_cost_quote', label: '报价链路' },
+  { value: 'manual_upload', label: '人工上传' },
+  { value: 'manual_fill', label: '人工填表' },
+]
+
+const biddingFileFormatOwnerOptions = [
+  { value: '经营', label: '经营' },
+  { value: '预算', label: '预算' },
+  { value: '技术', label: '技术' },
+  { value: '法务', label: '法务' },
+]
+
+const biddingLlmDecisionOptions = [
+  { value: 'keep', label: '保留' },
+  { value: 'rename', label: '建议改名/改类' },
+  { value: 'split', label: '建议拆分' },
+  { value: 'ignore', label: '建议忽略' },
+  { value: 'manual_review', label: '转人工判断' },
+]
+
+const biddingBusinessObjectActionOptions = [
+  { value: 'bid_compliance', label: '投标合规' },
+  { value: 'qualification_response', label: '资格响应' },
+  { value: 'document_response', label: '文件响应' },
+  { value: 'quote_allowance', label: '报价预留' },
+  { value: 'clarification', label: '转答疑' },
+  { value: 'legal_review', label: '合同/法务复核' },
+  { value: 'delivery_planning', label: '履约计划' },
+  { value: 'reference', label: '资料参考' },
+]
+
+const biddingResponseActionOptions = [
+  { value: 'direct_response', label: '直接响应' },
+  { value: 'qualification_material', label: '资格材料准备' },
+  { value: 'document_preparation', label: '文件编制' },
+  { value: 'clarification', label: '转答疑' },
+  { value: 'quote_allowance', label: '报价预留' },
+  { value: 'legal_review', label: '法务复核' },
+  { value: 'reference', label: '仅参考' },
+]
+
+const biddingResponseStatusOptions = [
+  { value: 'pending', label: '待处理' },
+  { value: 'confirmed', label: '已确认' },
+  { value: 'to_clarify', label: '需答疑' },
+  { value: 'to_quote_allowance', label: '报价预留' },
+  { value: 'legal_review', label: '法务复核' },
+  { value: 'done', label: '已完成' },
+  { value: 'ignored', label: '已忽略' },
+]
+
+const biddingResponseReviewRoleOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'business', label: '经营' },
+  { value: 'budget', label: '预算' },
+  { value: 'technical', label: '技术' },
+  { value: 'legal', label: '法务' },
+]
+
 const loginForm = reactive({ username: '', password: '' })
 const session = reactive({ user: null })
 const users = ref([])
@@ -6500,11 +11159,247 @@ const businessLedgerTotal = ref(0)
 const businessLedgerPage = ref(1)
 const businessLedgerPageSize = 20
 const businessLedgerLoading = ref(false)
+const biddingProjects = ref([])
+const biddingProjectTotal = ref(0)
+const biddingProjectPage = ref(1)
+const biddingProjectPageSize = 20
+const biddingLoading = ref(false)
+const biddingFeatureDisabled = ref(false)
+const biddingFiles = ref([])
+const biddingParseRuns = ref([])
+const biddingTenderAnalysis = ref(null)
+const biddingTenderAnalysisLoading = ref(false)
+const biddingTenderAnalysisExporting = ref(false)
+const biddingTenderAnalysisTab = ref('summary')
+const biddingAnalysisTabsRef = ref(null)
+const biddingTenderReviewWorkbenchExpanded = ref(true)
+const biddingImportantInfoExpandedKeys = ref([])
+const biddingTenderScoringExpandedKeys = ref([])
+const biddingRiskClause = ref(null)
+const biddingRiskClauseLoading = ref(false)
+const biddingRiskClauseAnalyzing = ref(false)
+const biddingRiskClauseExporting = ref(false)
+const biddingImportantInfoProgress = reactive({
+  visible: false,
+  percentage: 0,
+  status: 'idle',
+  stage: '',
+  detail: '',
+})
+let biddingImportantInfoProgressTimer = null
+const biddingRiskClauseProgress = reactive({
+  visible: false,
+  percentage: 0,
+  status: 'idle',
+  stage: '',
+  detail: '',
+})
+let biddingRiskClauseProgressTimer = null
+const biddingBusinessObjectCollapse = ref([])
+const biddingBusinessObjects = ref([])
+const biddingBusinessObjectsTotal = ref(0)
+const biddingBusinessObjectsSummary = ref({})
+const biddingResponseItems = ref([])
+const biddingResponseItemsTotal = ref(0)
+const biddingResponseMatrixSummary = ref({})
+const biddingResponseReviewRole = ref('all')
+const biddingResponseMatrixGenerating = ref(false)
+const biddingResponseItemUpdating = ref(false)
+const biddingResponseExpandedKeys = ref([])
+const biddingFileFormatPlan = ref(null)
+const biddingFileFormatLoading = ref(false)
+const biddingFileFormatGenerating = ref(false)
+const biddingFileFormatConfirming = ref(false)
+const biddingFileFormatPendingEvents = ref([])
+const biddingFileFormatItemDialog = reactive({
+  visible: false,
+  package_key: '',
+  item_title: '',
+  content_type: 'draft_section',
+  owner_role: '技术',
+  generation_strategy: 'generate_draft',
+  requires_signature: false,
+  requires_attachment: false,
+})
+const biddingFileFormatSummary = computed(() => biddingFileFormatPlan.value?.summary || {})
+const biddingFileFormatStructure = computed(() => biddingFileFormatPlan.value?.structure || {})
+const biddingFileFormatPackages = computed(() => biddingFileFormatStructure.value?.packages || [])
+const biddingFileFormatWarnings = computed(() => biddingFileFormatPlan.value?.warnings || [])
+const biddingFileFormatPackagingRequirements = computed(() => biddingFileFormatStructure.value?.packaging_requirements || [])
+const biddingFileFormatRows = computed(() => {
+  const rows = []
+  for (const pkg of biddingFileFormatPackages.value) {
+    for (const item of pkg.items || []) {
+      rows.push({
+        ...item,
+        package_title: pkg.package_title,
+        package_key: pkg.package_key,
+      })
+    }
+  }
+  return rows
+})
+const biddingFileFormatAuditEvents = computed(() => {
+  const pending = biddingFileFormatPendingEvents.value.map((event) => ({
+    ...event,
+    event_uuid: event.event_uuid || `pending-${event.created_at || Math.random()}`,
+    pending: true,
+  }))
+  const persisted = Array.isArray(biddingFileFormatPlan.value?.edit_events) ? biddingFileFormatPlan.value.edit_events : []
+  return [...pending, ...persisted].slice(-30).reverse()
+})
+const biddingMaterialRequirements = ref([])
+const biddingMaterialRequirementSummary = ref({})
+const biddingMaterialRequirementsLoading = ref(false)
+const biddingMaterialRequirementsGenerating = ref(false)
+const biddingMaterialRequirementUpdatingUuid = ref('')
+const biddingMaterialRequirementRows = computed(() => biddingMaterialRequirements.value || [])
+const biddingTechnicalComposition = ref(null)
+const biddingTechnicalCompositionLoading = ref(false)
+const biddingTechnicalCompositionGenerating = ref(false)
+const biddingTechnicalCompositionComponents = computed(() => biddingTechnicalComposition.value?.components || [])
+const biddingTechnicalCompositionSummary = computed(() => biddingTechnicalComposition.value?.summary || {})
+const biddingTechnicalCompositionWarnings = computed(() => biddingTechnicalComposition.value?.warnings || [])
+const biddingTechnicalCompositionRequirements = computed(() => biddingTechnicalComposition.value?.requirements || [])
+const biddingTechnicalCompositionRequirementMap = computed(() => {
+  const map = new Map()
+  for (const row of biddingTechnicalCompositionRequirements.value) {
+    if (row?.component_key && row?.need_key) map.set(`${row.component_key}:${row.need_key}`, row)
+  }
+  return map
+})
+const biddingDraftOutline = ref(null)
+const biddingDraftOutlineLoading = ref(false)
+const biddingDraftOutlineGenerating = ref(false)
+const biddingDraftOutlineSections = computed(() => biddingDraftOutline.value?.sections || [])
+const biddingDraftOutlineSummary = computed(() => biddingDraftOutline.value?.summary || {})
+const biddingDraftOutlineSource = computed(() => biddingDraftOutline.value?.source || {})
+const biddingDraftOutlineWarnings = computed(() => biddingDraftOutline.value?.warnings || [])
+const biddingDraftSections = ref([])
+const biddingDraftSectionsLoading = ref(false)
+const biddingDraftSectionGeneratingKey = ref('')
+const biddingTechnicalDraftGenerating = ref(false)
+const biddingTechnicalDraftExporting = ref(false)
+const biddingTechnicalFinalExporting = ref(false)
+const biddingTechnicalFinalQualityLoading = ref(false)
+const biddingDraftSectionReviewing = ref(false)
+const biddingDraftSectionsByKey = computed(() => {
+  const map = new Map()
+  for (const draft of biddingDraftSections.value) {
+    if (draft?.section_key) map.set(draft.section_key, draft)
+  }
+  return map
+})
+const biddingTechnicalCompositionDraftSections = computed(() =>
+  (biddingDraftSections.value || []).filter((draft) =>
+    String(draft?.section_key || '').startsWith('technical_composition:')
+    || draft?.generation_decision?.source === 'technical_composition',
+  ),
+)
+const biddingDraftPreviewDrawer = reactive({
+  visible: false,
+  draft: null,
+  editing: false,
+  editContent: '',
+  saving: false,
+  llmGenerating: false,
+})
+const biddingTechnicalFinalQualityDrawer = reactive({
+  visible: false,
+  report: null,
+})
+const biddingFinalQualityReport = computed(() => biddingTechnicalFinalQualityDrawer.report?.quality_report || {})
+const biddingFinalQualityTemplateReinforcement = computed(() => biddingFinalQualityReport.value?.section_template_reinforcement || {})
+const biddingFinalQualityPlaybookReinforcement = computed(() => biddingFinalQualityReport.value?.section_playbook_reinforcement || {})
+const biddingFinalQualityReviewFocusReinforcement = computed(() => biddingFinalQualityReport.value?.section_review_focus_reinforcement || {})
+const biddingFinalQualityReinforcement = computed(() => biddingFinalQualityReport.value?.requirement_reinforcement || {})
+const biddingFinalQualityCoverage = computed(() => biddingFinalQualityReport.value?.requirement_coverage || {})
+const biddingFinalQualityTemplateReinforcementSections = computed(() =>
+  (biddingFinalQualityTemplateReinforcement.value?.section_reports || []).slice(0, 80),
+)
+const biddingFinalQualityPlaybookReinforcementSections = computed(() =>
+  (biddingFinalQualityPlaybookReinforcement.value?.section_reports || []).slice(0, 80),
+)
+const biddingFinalQualityReviewFocusReinforcementSections = computed(() =>
+  (biddingFinalQualityReviewFocusReinforcement.value?.section_reports || []).slice(0, 80),
+)
+const biddingFinalQualityReinforcementTransitions = computed(() =>
+  (biddingFinalQualityReinforcement.value?.transitions || []).slice(0, 80),
+)
+const biddingFinalQualityManualItems = computed(() =>
+  (biddingFinalQualityReinforcement.value?.skipped_items || []).slice(0, 80),
+)
+const biddingFinalQualityCoverageProblemItems = computed(() =>
+  (biddingFinalQualityCoverage.value?.problem_items || []).slice(0, 80),
+)
+const biddingMaterialProfileDialog = reactive({
+  visible: false,
+  loading: false,
+  uploading: false,
+  row: null,
+  form: {
+    category: '',
+    keyword: '',
+  },
+  candidates: [],
+  selectedProfiles: [],
+  uploadedFiles: [],
+})
+const filteredBiddingResponseItems = computed(() => {
+  const role = biddingResponseReviewRole.value
+  if (!role || role === 'all') return biddingResponseItems.value
+  return biddingResponseItems.value.filter((row) => biddingResponseRowMatchesRole(row, role))
+})
+const visibleBiddingResponseItems = computed(() => buildBiddingResponseTaskTree(filteredBiddingResponseItems.value))
+const biddingResponseExpandableRows = computed(() =>
+  visibleBiddingResponseItems.value.filter((row) => Array.isArray(row.children) && row.children.length),
+)
+const biddingResponseVisibleSummary = computed(() => buildBiddingResponseLocalSummary(filteredBiddingResponseItems.value))
+const biddingBusinessObjectLlmReviewing = ref(false)
+const biddingBusinessObjectLlmProgress = reactive({
+  visible: false,
+  total: 0,
+  current: 0,
+  completed: 0,
+  error: 0,
+  skipped: 0,
+  currentTitle: '',
+  lastMessage: '',
+})
+const biddingLlmDecisionSubmitting = ref(false)
+const biddingLlmEditDialog = reactive({
+  visible: false,
+  row: null,
+  form: {
+    decision: 'manual_review',
+    suggested_title: '',
+    suggested_object_subtype: '',
+    primary_business_action: '',
+    reason: '',
+    suggested_reviewer_note: '',
+    reviewer_note: '',
+  },
+})
+const biddingRequirements = ref([])
+const biddingRequirementsTotal = ref(0)
+const biddingRisks = ref([])
+const biddingRisksTotal = ref(0)
+const biddingRiskCards = ref([])
+const biddingRiskCardsSummary = ref({})
+const biddingParsing = ref(false)
+const biddingProjectUploadRef = ref(null)
+const biddingUploadRef = ref(null)
 const costItems = ref([])
 const costItemTotal = ref(0)
 const costItemPage = ref(1)
 const costItemPageSize = 20
 const costDbLoading = ref(false)
+const enterpriseProfileLoading = ref(false)
+const enterpriseProfileItems = ref([])
+const enterpriseProfileSummary = ref({})
+const enterpriseProfileTotal = ref(0)
+const enterpriseProfilePage = ref(1)
+const enterpriseProfilePageSize = 20
 const costRagSyncing = ref(false)
 const costBulkSubmitting = ref(false)
 const costAllSelecting = ref(false)
@@ -6526,6 +11421,24 @@ const enterpriseQuotaComponents = ref([])
 const enterpriseQuotaComponentTotal = ref(0)
 const enterpriseQuotaResources = ref([])
 const enterpriseQuotaResourceTotal = ref(0)
+const projectCostImportBatches = ref([])
+const projectCostImportTotal = ref(0)
+const projectCostImportPage = ref(1)
+const projectCostImportPageSize = 10
+const projectCostImportLoading = ref(false)
+const projectCostImportUploading = ref(false)
+const projectCostImportProjectName = ref('')
+const projectCostImportFiles = ref([])
+const projectCostImportFileInput = ref(null)
+const projectCostImportFolderInput = ref(null)
+const selectedProjectCostImportBatch = ref(null)
+const projectCostCandidates = ref([])
+const projectCostCandidateTotal = ref(0)
+const projectCostCandidatePage = ref(1)
+const projectCostCandidatePageSize = 20
+const projectCostCandidateLoading = ref(false)
+const selectedProjectCostCandidates = ref([])
+const projectCostCandidateFilters = reactive({ status: '', risk_level: '', keyword: '' })
 const costMasterPage = ref(1)
 const costMasterComponentPage = ref(1)
 const costMasterResourcePage = ref(1)
@@ -6613,6 +11526,15 @@ const businessLedgerFilters = reactive({
   keyword: '',
   overdue_only: false,
 })
+const biddingFilters = reactive({
+  status: '',
+  keyword: '',
+})
+const enterpriseProfileFilters = reactive({
+  category: '',
+  status: '',
+  keyword: '',
+})
 const costItemFilters = reactive({
   category: '',
   status: [],
@@ -6638,7 +11560,35 @@ const executionFeatureDisabled = ref(false)
 const projectFeatureDisabled = ref(false)
 const meetingFeatureDisabled = ref(false)
 const businessLedgerFeatureDisabled = ref(false)
+const costMeasurements = ref([])
+const costMeasurementTotal = ref(0)
+const costMeasurementPage = ref(1)
+const costMeasurementPageSize = 20
+const costMeasurementLoading = ref(false)
+const costMeasurementFeatureDisabled = ref(false)
+const costMeasurementDetail = ref(null)
+const costMeasurementFileInput = ref(null)
+const costMeasurementDrawer = reactive({ visible: false })
+const costMeasurementImportDialog = reactive({
+  visible: false,
+  file: null,
+  preview: null,
+  name: '',
+  project_name: '',
+})
+const costMeasurementDraftDialog = reactive({
+  visible: false,
+  loading: false,
+  submitting: false,
+  summary: null,
+  candidates: [],
+  note: '',
+})
+const costMeasurementDraftSelectedCount = computed(() =>
+  costMeasurementDraftDialog.candidates.filter((row) => row.can_create && row.selected).length,
+)
 const costDbFeatureDisabled = ref(false)
+const enterpriseProfileFeatureDisabled = ref(false)
 const agentCenterFeatureDisabled = ref(false)
 const agentCenterLoading = ref(false)
 const agentQuoteJobId = ref('')
@@ -6897,6 +11847,98 @@ const businessLedgerDrawer = reactive({
   ledger: null,
 })
 
+const biddingDialog = reactive({
+  visible: false,
+  loading: false,
+  file: null,
+  form: {
+    project_name: '',
+    tenderer_name: '',
+    tender_agency: '',
+    project_location: '',
+    project_type: '',
+    tender_deadline_at: '',
+  },
+})
+
+const biddingDrawer = reactive({
+  visible: false,
+  loading: false,
+  activeTab: 'files',
+  project: null,
+})
+
+function biddingDraftPackageForTab(tab) {
+  if (tab === 'businessBidDraft') return 'business'
+  if (tab === 'technicalBidDraft') return 'technical'
+  return ''
+}
+
+const biddingDraftPackageKey = computed(() => biddingDraftPackageForTab(biddingDrawer.activeTab))
+const biddingDraftPackageTitle = computed(() => {
+  if (biddingDraftPackageKey.value === 'business') return '商务标'
+  if (biddingDraftPackageKey.value === 'technical') return '技术标'
+  return '投标书'
+})
+
+watch(
+  () => biddingDrawer.activeTab,
+  async (tab) => {
+    const packageKey = biddingDraftPackageForTab(tab)
+    if (biddingDrawer.loading || !biddingDrawer.visible || !currentBiddingProjectUuid() || !packageKey) return
+    const loaders = [
+      loadBiddingFileFormatPlan(),
+      loadBiddingMaterialRequirements(undefined, packageKey),
+      loadBiddingDraftOutline(),
+      loadBiddingDraftSections(),
+    ]
+    if (tab === 'technicalBidDraft') loaders.push(loadBiddingTechnicalComposition())
+    await Promise.all(loaders)
+  },
+)
+
+const biddingUpload = reactive({
+  file: null,
+  fileType: 'tender_document',
+  loading: false,
+})
+
+const enterpriseProfileDialog = reactive({
+  visible: false,
+  mode: 'create',
+  uploading: false,
+  itemUuid: '',
+  detail: null,
+  form: {
+    category: 'basic_info',
+    subcategory: '',
+    profile_key: '',
+    title: '',
+    material_form: 'text',
+    summary: '',
+    content_text: '',
+    attachment_file_id: '',
+    attachment_type: 'source',
+    attachment_description: '',
+    tagsText: '',
+    applicable_scope: '',
+    valid_until: '',
+    change_reason: '',
+  },
+})
+
+const enterpriseProfileAttachmentDialog = reactive({
+  visible: false,
+  uploading: false,
+  item: null,
+  form: {
+    file_id: '',
+    attachment_type: 'source',
+    description: '',
+    is_primary: true,
+  },
+})
+
 const costItemDialog = reactive({
   visible: false,
   mode: 'create',
@@ -6983,16 +12025,47 @@ const canViewExecution = computed(() => canAccessPermissions.value || roles.valu
 const canCreateExecutionTask = computed(() => canAccessPermissions.value)
 const canCreateMeetingNote = computed(() => canViewExecution.value)
 const canViewProjectProgress = computed(() => canAccessPermissions.value || hasRole('staff', 'manager', 'project_viewer', 'project_member', 'project_manager'))
+const canViewMyProjectTasks = computed(() => hasRole('staff', 'manager', 'project_member', 'project_manager'))
 const canManageProjectProgress = computed(() => canAccessPermissions.value || hasRole('manager', 'project_manager'))
 const canViewBusinessLedger = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
 const canManageBusinessLedger = computed(() => canAccessPermissions.value)
+const canViewEnterpriseProfile = computed(() => canAccessPermissions.value || hasRole('enterprise_profile_viewer', 'enterprise_profile_editor', 'enterprise_profile_approver'))
+const canEditEnterpriseProfile = computed(() => canAccessPermissions.value || hasRole('enterprise_profile_editor', 'enterprise_profile_approver'))
+const canApproveEnterpriseProfile = computed(() => canAccessPermissions.value || roles.value.includes('enterprise_profile_approver'))
 const canViewCostDb = computed(() => canAccessPermissions.value || hasRole('cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter'))
+const canViewCostMeasurement = computed(() => canViewCostDb.value)
+const canEditCostMeasurement = computed(() => canEditCostDb.value)
+const canApproveCostMeasurement = computed(() => canApproveCostDb.value)
+const canExportCostMeasurement = computed(() => canExportCostDb.value)
 const canEditCostDb = computed(() => canAccessPermissions.value || hasRole('cost_editor', 'cost_approver'))
 const canApproveCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
 const canExportCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_exporter'))
 const canViewCostAudit = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
 const canViewRequirementStandardization = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
+const budgetProjectsModule = computed(() => (session.user?.available_modules || []).find(
+  (module) => module.key === 'budget_projects' || module.path === '/admin/budget-projects',
+))
+const budgetProjectsFeatureAvailable = computed(() => budgetProjectsModule.value?.status === 'available')
+const budgetPricingModule = computed(() => (session.user?.available_modules || []).find(
+  (module) => module.key === 'budget_pricing',
+))
+const budgetPricingFeatureAvailable = computed(() => budgetPricingModule.value?.status === 'available')
+const accountQuotasModule = computed(() => (session.user?.available_modules || []).find(
+  (module) => module.key === 'account_quotas' || module.path === '/admin/account-quotas',
+))
+const accountQuotasFeatureAvailable = computed(() => accountQuotasModule.value?.status === 'available')
+const canViewAccountQuotas = computed(() => accountQuotasFeatureAvailable.value && canAccessPermissions.value)
+const canViewBudgetProjectsByRole = computed(() => canAccessPermissions.value || hasRole(
+  'viewer', 'staff', 'quote_user', 'quote_operator', 'manager',
+  'project_viewer', 'project_member', 'project_manager',
+))
+const canViewBudgetProjects = computed(() => budgetProjectsFeatureAvailable.value && canViewBudgetProjectsByRole.value)
+const canEditBudgetProjectsByRole = computed(() => canAccessPermissions.value || hasRole(
+  'staff', 'quote_user', 'quote_operator', 'manager', 'project_manager',
+))
+const canEditBudgetProjects = computed(() => budgetProjectsFeatureAvailable.value && canEditBudgetProjectsByRole.value)
 const canViewDwgTrial = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
+const canViewBidding = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user', 'quote_operator', 'manager'))
 const canViewAgentCenter = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user', 'quote_operator'))
 const canManageAgentDailyReview = computed(() => canAccessPermissions.value || hasRole('quote_operator'))
 const canOpenLegacyQuote = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
@@ -7020,17 +12093,285 @@ const costDbSelectionSummary = computed(() => {
   if (!selectedCostItemIds.value.length) {
     return `未选择条目；当前筛选共 ${costItemTotal.value || 0} 条，可先按状态/来源筛出待审核项。`
   }
-  return `已选 ${selectedCostItemIds.value.length} 条：draft ${selectedDraftCostItemCount.value}，active ${selectedActiveCostItemCount.value}，可归档 ${selectedArchivableCostItemCount.value}。`
+  return `已选 ${selectedCostItemIds.value.length} 条：待核定 ${selectedDraftCostItemCount.value}，已启用 ${selectedActiveCostItemCount.value}，可归档 ${selectedArchivableCostItemCount.value}。`
+})
+const biddingTenderAnalysisQuality = computed(() => biddingTenderAnalysis.value?.quality_summary || {})
+const biddingTenderAnalysisReviewQueue = computed(() => (
+  (biddingTenderAnalysis.value?.review_queue || []).filter((item) => item?.table_key !== 'risk_clause')
+))
+const biddingTenderReviewPreviewRows = computed(() => biddingTenderAnalysisReviewQueue.value)
+const biddingTenderAnalysisTables = computed(() => biddingTenderAnalysis.value?.tables || {})
+const biddingLegacyTenderSummaryRows = computed(() => biddingTenderAnalysisTables.value.summary?.items || [])
+const biddingImportantInfo = computed(() => biddingTenderAnalysis.value?.important_info || {})
+const biddingImportantInfoSections = computed(() => {
+  const sections = Array.isArray(biddingImportantInfo.value?.sections) ? biddingImportantInfo.value.sections : []
+  const priorityClarificationText = formatBiddingPriorityClarificationText(biddingImportantInfo.value?.priority_clarifications)
+  return sections
+    .map((section, sectionIndex) => {
+      const sectionKey = String(section?.section_key || `section_${sectionIndex + 1}`)
+      const title = String(section?.title || `结构化信息 ${sectionIndex + 1}`)
+      const items = (Array.isArray(section?.items) ? section.items : []).map((item, itemIndex) => {
+        const fieldKey = String(item?.field_key || '')
+        const shouldUsePriorityList = sectionKey === 'pre_bid_clarifications' && fieldKey === 'priority_clarifications' && priorityClarificationText
+        return {
+          ...item,
+          row_key: `${sectionKey}:${item?.field_key || itemIndex}`,
+          section_key: sectionKey,
+          section_title: title,
+          status: shouldUsePriorityList ? 'found' : item?.status || 'not_found',
+          value: shouldUsePriorityList ? priorityClarificationText : item?.value || '',
+          note: item?.note || '',
+          source_file: item?.source_file || '',
+          source_location: item?.source_location || '',
+          confidence: Number(item?.confidence || 0),
+        }
+      })
+      return {
+        ...section,
+        section_key: sectionKey,
+        title,
+        items,
+      }
+    })
+    .filter((section) => section.items.length)
+})
+const biddingTenderSummaryRows = computed(() => biddingImportantInfoSections.value.flatMap((section) => section.items))
+const biddingImportantInfoSectionKeys = computed(() => biddingImportantInfoSections.value.map((section) => section.section_key).filter(Boolean))
+const biddingImportantInfoAllExpanded = computed(() => (
+  biddingImportantInfoSectionKeys.value.length > 0
+  && biddingImportantInfoSectionKeys.value.every((key) => biddingImportantInfoExpandedKeys.value.includes(key))
+))
+const biddingImportantInfoFieldCount = computed(() => biddingTenderSummaryRows.value.length)
+const biddingImportantInfoFoundCount = computed(() => (
+  biddingTenderSummaryRows.value.filter((item) => item.status === 'found' && String(item.value || '').trim()).length
+))
+const biddingImportantInfoIssueCount = computed(() => (
+  biddingTenderSummaryRows.value.filter((item) => item.status !== 'found' || !String(item.value || '').trim()).length
+))
+watch(biddingImportantInfoSectionKeys, (keys) => {
+  biddingImportantInfoExpandedKeys.value = [...keys]
+})
+const biddingImportantInfoProgressBarStatus = computed(() => {
+  if (biddingImportantInfoProgress.status === 'success') return 'success'
+  if (biddingImportantInfoProgress.status === 'error') return 'exception'
+  return undefined
+})
+const biddingImportantInfoEmptyText = computed(() => {
+  const status = biddingImportantInfo.value?.status || biddingImportantInfo.value?.metadata?.status
+  if (status === 'error') return `LLM结构化提取失败：${biddingImportantInfo.value?.metadata?.error || '未知错误'}`
+  if (status === 'disabled') return 'LLM结构化提取未启用'
+  if (status === 'skipped') return 'LLM结构化提取已跳过'
+  if (status === 'no_source') return '暂无可分析的招标文件原文片段'
+  return '暂无LLM结构化信息，请先解析招标文件'
+})
+const biddingTenderScoringRows = computed(() => biddingTenderAnalysisTables.value.scoring?.items || [])
+const biddingTenderScoringDisplayRows = computed(() => {
+  const expandedKeys = new Set(biddingTenderScoringExpandedKeys.value)
+  const rows = []
+  for (const row of biddingTenderScoringRows.value) {
+    const children = Array.isArray(row?.children) ? row.children : []
+    const { children: _children, ...parentRow } = row || {}
+    const isExpanded = expandedKeys.has(parentRow.row_key)
+    rows.push({
+      ...parentRow,
+      __scoringCanExpand: children.length > 0,
+      __scoringChildrenCount: Number(parentRow.child_count || children.length || 0),
+      __scoringExpanded: isExpanded,
+      __scoringChild: false,
+    })
+    if (!isExpanded) continue
+    for (const child of children) {
+      const { children: _grandchildren, ...childRow } = child || {}
+      rows.push({
+        ...childRow,
+        __scoringCanExpand: false,
+        __scoringChildrenCount: 0,
+        __scoringExpanded: false,
+        __scoringChild: true,
+        __scoringParentKey: parentRow.row_key,
+      })
+    }
+  }
+  return rows
+})
+const biddingTenderRiskClauseRows = computed(() => (
+  (Array.isArray(biddingRiskClause.value?.risks) ? biddingRiskClause.value.risks : []).map((row, index) => ({
+    ...row,
+    row_key: row?.risk_id || `risk-${index + 1}`,
+  }))
+))
+const biddingRiskClauseBasicInfo = computed(() => biddingRiskClause.value?.basic_info || {})
+const biddingRiskClauseBasicRows = computed(() => [
+  { label: '依据文件', value: biddingRiskClauseBasicInfo.value.source_files || '-' },
+  { label: '适用场景', value: biddingRiskClauseBasicInfo.value.applicable_scenario || '-' },
+  { label: '风险分布', value: biddingRiskClauseBasicInfo.value.risk_distribution || '-' },
+  { label: '生成说明', value: biddingRiskClauseBasicInfo.value.generation_note || '-' },
+])
+const biddingRiskClausePriorityAttention = computed(() => (
+  Array.isArray(biddingRiskClause.value?.priority_attention) ? biddingRiskClause.value.priority_attention : []
+))
+const biddingRiskClauseRiskCount = computed(() => biddingTenderRiskClauseRows.value.length)
+const biddingRiskClauseHighCount = computed(() => biddingTenderRiskClauseRows.value.filter((row) => row.risk_level === 'high').length)
+const biddingRiskClauseMediumCount = computed(() => biddingTenderRiskClauseRows.value.filter((row) => row.risk_level === 'medium').length)
+const biddingRiskClauseLowCount = computed(() => biddingTenderRiskClauseRows.value.filter((row) => row.risk_level === 'low').length)
+const biddingRiskClauseProgressBarStatus = computed(() => {
+  if (biddingRiskClauseProgress.status === 'success') return 'success'
+  if (biddingRiskClauseProgress.status === 'error') return 'exception'
+  return undefined
+})
+const biddingRiskClauseEmptyText = computed(() => {
+  const status = biddingRiskClause.value?.status || biddingRiskClause.value?.metadata?.status
+  if (status === 'error') return `LLM风险分析失败：${biddingRiskClause.value?.metadata?.error || '未知错误'}`
+  if (status === 'disabled') return 'LLM风险分析未启用'
+  if (status === 'skipped') return 'LLM风险分析已跳过'
+  if (status === 'no_source') return '暂无可分析的招标文件原文片段'
+  return '暂无风险条款清单，请先点击“风险分析”'
+})
+const biddingTenderScoringItemCount = computed(() => Number(
+  biddingTenderAnalysisQuality.value.scoring_item_count || biddingTenderScoringRows.value.length || 0,
+))
+const biddingTenderAnalysisResultCount = computed(() => (
+  biddingTenderSummaryRows.value.length + biddingTenderScoringItemCount.value + biddingTenderRiskClauseRows.value.length
+))
+const biddingPendingRiskCount = computed(() => (
+  biddingRisks.value.filter((item) => item.review_status === 'pending').length
+))
+const biddingBusinessObjectTypeRows = computed(() => {
+  const counts = biddingBusinessObjectsSummary.value.object_by_type || {}
+  return Object.entries(counts)
+    .map(([type, count]) => ({
+      type,
+      label: biddingBusinessObjectTypeLabel(type),
+      count: Number(count || 0),
+    }))
+    .filter((item) => item.count > 0)
+    .sort((left, right) => right.count - left.count)
+})
+const biddingLlmReviewRows = computed(() => (
+  (biddingBusinessObjects.value || [])
+    .filter((item) => item.normalized?.llm_review || [
+      'pending_manual_confirm',
+      'accepted',
+      'rejected',
+      'modified',
+      'error',
+    ].includes(item.normalized?.llm_review_status))
+    .sort((left, right) => {
+      const statusOrder = {
+        pending_manual_confirm: 0,
+        error: 1,
+        modified: 2,
+        accepted: 3,
+        rejected: 4,
+      }
+      const leftStatus = statusOrder[left.normalized?.llm_review_status] ?? 5
+      const rightStatus = statusOrder[right.normalized?.llm_review_status] ?? 5
+      return leftStatus - rightStatus
+    })
+))
+const biddingLlmPendingRows = computed(() => (
+  (biddingBusinessObjects.value || []).filter((item) => biddingBusinessObjectNeedsLlmReview(item))
+))
+const biddingLlmProgressPercentage = computed(() => {
+  const total = Number(biddingBusinessObjectLlmProgress.total || 0)
+  if (!total) return 0
+  const done = Number(biddingBusinessObjectLlmProgress.completed || 0)
+    + Number(biddingBusinessObjectLlmProgress.error || 0)
+    + Number(biddingBusinessObjectLlmProgress.skipped || 0)
+  return Math.min(100, Math.round((done / total) * 100))
+})
+const latestBiddingParseSummary = computed(() => biddingParseRuns.value[0]?.summary || {})
+const biddingDocumentStructureRows = computed(() => {
+  const counts = latestBiddingParseSummary.value.document_structure?.segment_by_section || {}
+  return Object.entries(counts)
+    .map(([section, count]) => ({
+      section,
+      label: biddingDocumentSectionLabel(section),
+      count: Number(count || 0),
+    }))
+    .filter((item) => item.count > 0)
+    .sort((left, right) => right.count - left.count)
+})
+const biddingOverviewCards = computed(() => {
+  const projects = biddingProjects.value || []
+  const riskCount = projects.reduce((sum, row) => sum + Number(row.counts?.risk_count || 0), 0)
+  const highRiskCount = projects.reduce((sum, row) => sum + Number(row.counts?.high_risk_count || 0), 0)
+  const pendingRiskCount = projects.reduce((sum, row) => sum + Number(row.counts?.pending_risk_count || 0), 0)
+  const parsedCount = projects.filter((row) => row.status === 'parsed').length
+  return [
+    {
+      key: 'projects',
+      title: '当前项目',
+      value: `${biddingProjectTotal.value || projects.length}`,
+      detail: `已解析 ${parsedCount} 个`,
+      tone: 'is-info',
+    },
+    {
+      key: 'risks',
+      title: '识别风险',
+      value: `${riskCount}`,
+      detail: `高风险 ${highRiskCount} · 待复核 ${pendingRiskCount}`,
+      tone: highRiskCount ? 'is-danger' : 'is-success',
+    },
+    {
+      key: 'files',
+      title: '当前资料',
+      value: `${biddingFiles.value.length}`,
+      detail: biddingDrawer.project ? '详情抽屉内资料数' : '打开项目后查看',
+      tone: 'is-info',
+    },
+    {
+      key: 'runs',
+      title: '解析版本',
+      value: `${biddingParseRuns.value.length}`,
+      detail: biddingParseRuns.value[0]?.status ? `最近 ${biddingParseStatusLabel(biddingParseRuns.value[0].status)}` : '暂无解析',
+      tone: 'is-info',
+    },
+  ]
+})
+const enterpriseProfileOverviewCards = computed(() => {
+  const summary = enterpriseProfileSummary.value || {}
+  const statusCounts = summary.status_counts || {}
+  return [
+    {
+      key: 'total',
+      title: '资料总数',
+      value: `${summary.total || 0}`,
+      detail: `草稿 ${statusCounts.draft || 0} · 已归档 ${statusCounts.archived || 0}`,
+      tone: 'is-info',
+    },
+    {
+      key: 'active',
+      title: '可用于投标',
+      value: `${statusCounts.active || 0}`,
+      detail: '已启用资料才会进入后续填充候选',
+      tone: (statusCounts.active || 0) ? 'is-success' : 'is-warning',
+    },
+    {
+      key: 'expiry',
+      title: '有效期提醒',
+      value: `${summary.expired_count || 0}/${summary.expiring_soon_count || 0}`,
+      detail: '过期 / 30天内到期',
+      tone: (summary.expired_count || 0) ? 'is-danger' : ((summary.expiring_soon_count || 0) ? 'is-warning' : 'is-success'),
+    },
+    {
+      key: 'missing',
+      title: '缺附件',
+      value: `${summary.missing_attachment_count || 0}`,
+      detail: '证照、人员、业绩等需保留附件证据',
+      tone: (summary.missing_attachment_count || 0) ? 'is-warning' : 'is-success',
+    },
+  ]
 })
 const costMasterOverviewCards = computed(() => {
   const summary = costMasterSummary.value || {}
   const version = summary.active_version || {}
   const ragRun = summary.latest_successful_rag_sync || costRagSyncStatus.value?.latest_successful_run
-  const versionLabel = version.version_code || '暂无 active 版本'
+  const versionLabel = version.version_code || '暂无已启用版本'
   return [
     {
       key: 'version',
-      title: '当前 active 版本',
+      title: '当前已启用版本',
       value: versionLabel,
       detail: version.version_name || '请先激活企业定额版本',
       tone: version.id ? 'is-success' : 'is-warning',
@@ -7046,12 +12387,12 @@ const costMasterOverviewCards = computed(() => {
       key: 'resources',
       title: '资源价格',
       value: `${summary.resource_count || 0} 条`,
-      detail: summary.source || 'enterprise_quota.active',
+      detail: summary.source ? '已生成成本参考' : '暂无成本参考',
       tone: 'is-info',
     },
     {
       key: 'rag',
-      title: '最近 RAG 同步',
+      title: '最近成本参考更新',
       value: ragRun?.synced_count != null ? `${ragRun.synced_count} 条` : '暂无',
       detail: ragRun?.finished_at ? formatShanghaiDate(ragRun.finished_at) : '尚未发现成功同步记录',
       tone: ragRun ? 'is-success' : 'is-warning',
@@ -7060,7 +12401,7 @@ const costMasterOverviewCards = computed(() => {
 })
 const costDbOverviewCards = computed(() => {
   const counts = costCurrentPageStatusCounts.value
-  const statusDetail = `当前页 draft ${counts.draft || 0} · active ${counts.active || 0} · archived ${counts.archived || 0}`
+  const statusDetail = `当前页待核定 ${counts.draft || 0} · 已启用 ${counts.active || 0} · 已归档 ${counts.archived || 0}`
   const ragLabel = costRagSyncStatus.value?.status_label || costRagSyncSummaryLabel(costRagSyncStatus.value?.status)
   return [
     {
@@ -7082,15 +12423,15 @@ const costDbOverviewCards = computed(() => {
       title: '已选条目',
       value: `${selectedCostItemIds.value.length}`,
       detail: selectedCostItemIds.value.length
-        ? `draft ${selectedDraftCostItemCount.value} · active ${selectedActiveCostItemCount.value}`
+        ? `待核定 ${selectedDraftCostItemCount.value} · 已启用 ${selectedActiveCostItemCount.value}`
         : '用于批量核定、恢复或归档',
       tone: selectedCostItemIds.value.length ? 'is-warning' : 'is-info',
     },
     {
       key: 'rag',
-      title: 'RAG 同步',
+      title: '成本参考更新',
       value: ragLabel || '-',
-      detail: `active ${costRagSyncStatus.value?.active_count || 0} · 最近成功 ${formatShanghaiDate(costRagSyncStatus.value?.latest_successful_run?.finished_at)}`,
+      detail: `已启用 ${costRagSyncStatus.value?.active_count || 0} · 最近成功 ${formatShanghaiDate(costRagSyncStatus.value?.latest_successful_run?.finished_at)}`,
       tone: costRagSyncSummaryAlertType(costRagSyncStatus.value?.status) === 'success' ? 'is-success' : 'is-warning',
     },
   ]
@@ -7103,6 +12444,90 @@ const visibleExecutionAssignees = computed(() => (executionDashboard.value?.by_a
 const visibleProjectManagers = computed(() => (projectDashboard.value?.by_project_manager || []).slice(0, 12))
 const businessSectionErrorCount = computed(() => (businessDashboard.value?.section_errors || []).length)
 const businessRisks = computed(() => businessDashboard.value?.risks || [])
+const managementFocusLinks = computed(() => [
+  canViewProjectProgress.value ? { label: '项目进度', path: '/admin/projects' } : null,
+  canViewExecution.value ? { label: '执行任务', path: '/admin/execution' } : null,
+  canViewBusinessLedger.value ? { label: '商务台账', path: '/admin/business-ledger' } : null,
+].filter(Boolean))
+const managementFocusCards = computed(() => {
+  const cards = []
+  const project = projectDashboard.value || {}
+  const businessProject = businessDashboard.value?.project_progress || {}
+  const execution = executionDashboard.value || {}
+
+  if (canViewProjectProgress.value && !dashboardFeature.projectDisabled && projectDashboard.value) {
+    const blockedProjectCount = Number(project.blocked_count || 0)
+    const blockedTaskCount = Number(project.blocked_task_count || 0)
+    if (blockedProjectCount || blockedTaskCount) {
+      cards.push({
+        key: 'project_blocked',
+        title: '项目阻塞',
+        value: `${blockedProjectCount} 个项目`,
+        detail: `涉及 ${blockedTaskCount} 项阻塞任务，需要协调推进`,
+        action: '进入项目进度处理',
+        tone: 'danger',
+        priority: 0,
+        targetPath: '/admin/projects',
+      })
+    }
+
+    const delayedProjectCount = Number(project.delayed_count || 0)
+    const overdueTaskCount = Number(project.overdue_task_count || 0)
+    if (delayedProjectCount || overdueTaskCount) {
+      cards.push({
+        key: 'project_delayed',
+        title: '项目延期',
+        value: `${delayedProjectCount} 个项目`,
+        detail: `涉及 ${overdueTaskCount} 项逾期任务，建议复核计划`,
+        action: '进入项目进度处理',
+        tone: 'warning',
+        priority: 2,
+        targetPath: '/admin/projects',
+      })
+    }
+  }
+
+  if (canViewExecution.value && !dashboardFeature.executionDisabled && executionDashboard.value) {
+    const overdueCount = Number(execution.overdue_count || 0)
+    if (overdueCount) {
+      cards.push({
+        key: 'execution_overdue',
+        title: '执行任务逾期',
+        value: `${overdueCount} 项`,
+        detail: `当前未完成 ${Number(execution.open_count || 0)} 项，需明确下一步`,
+        action: '进入执行任务处理',
+        tone: 'danger',
+        priority: 1,
+        targetPath: '/admin/execution',
+      })
+    }
+  }
+
+  if (canViewProjectProgress.value && !dashboardFeature.businessDisabled && businessDashboard.value) {
+    const missingEvidenceCount = Number(businessProject.missing_evidence_task_count || 0)
+    const bypassedGateCount = Number(businessProject.hard_gate_bypassed_missing_evidence_count || 0)
+    if (missingEvidenceCount || bypassedGateCount) {
+      cards.push({
+        key: 'project_evidence',
+        title: '成果证据待补',
+        value: `${missingEvidenceCount} 项`,
+        detail: `其中放行后仍缺证据 ${bypassedGateCount} 项`,
+        action: '进入项目进度补充',
+        tone: bypassedGateCount ? 'danger' : 'warning',
+        priority: bypassedGateCount ? 0 : 3,
+        targetPath: '/admin/projects',
+      })
+    }
+  }
+
+  return cards.sort((left, right) => left.priority - right.priority)
+})
+const managementFocusSummary = computed(() => {
+  const count = managementFocusCards.value.length
+  return count
+    ? `已汇总 ${count} 类需要关注的事项，按风险优先级排序。`
+    : '未发现阻塞、延期、逾期或待补证据事项。'
+})
 const businessQuoteTrendRows = computed(() => visibleBusinessTrendRows(businessDashboard.value?.quote?.daily_trend || [], [
   'task_count',
   'success_count',
@@ -7182,12 +12607,12 @@ const businessMetricCards = computed(() => {
       key: 'cost_status',
       title: '成本库状态',
       value: `${cost.active_count ?? 0} / ${cost.draft_count ?? 0} / ${cost.archived_count ?? 0}`,
-      subtitle: 'active / draft / archived',
+      subtitle: '已启用 / 待核定 / 已归档',
       targetPath: '/admin/cost-db',
     },
     {
       key: 'rag_sync',
-      title: 'RAG 同步',
+      title: '成本参考更新',
       value: cost.rag_status_label || cost.rag_status || '-',
       subtitle: `最近成功 ${formatDate(cost.last_success_sync_at)}`,
       targetPath: '/admin/cost-db',
@@ -7196,7 +12621,7 @@ const businessMetricCards = computed(() => {
       key: 'no_cost_draft',
       title: '无底价待审',
       value: String(cost.no_cost_draft_count ?? 0),
-      subtitle: `成本库 draft 共 ${cost.draft_count ?? 0} 条`,
+      subtitle: `成本库待核定共 ${cost.draft_count ?? 0} 条`,
       targetPath: '/admin/cost-db',
     },
     {
@@ -7231,7 +12656,7 @@ const businessTrialReadinessCards = computed(() => {
   return [
     {
       key: 'quote',
-      label: '报价试运行',
+      label: '报价任务',
       value: `${quote.success_count ?? 0}/${quote.task_count ?? 0}`,
       detail: `成功/总任务，失败 ${quote.failed_count ?? 0}，超时 ${quote.timeout_count ?? 0}`,
       tone: (quote.failed_count || quote.timeout_count) ? 'is-warning' : 'is-success',
@@ -7239,8 +12664,8 @@ const businessTrialReadinessCards = computed(() => {
     {
       key: 'cost',
       label: '成本库准备',
-      value: `${cost.active_count ?? 0} active`,
-      detail: `draft ${cost.draft_count ?? 0}，无底价待审 ${cost.no_cost_draft_count ?? 0}`,
+      value: `${cost.active_count ?? 0} 条已启用`,
+      detail: `待核定 ${cost.draft_count ?? 0}，无底价待审 ${cost.no_cost_draft_count ?? 0}`,
       tone: (cost.no_cost_draft_count || cost.draft_count) ? 'is-warning' : 'is-success',
     },
     {
@@ -7254,7 +12679,7 @@ const businessTrialReadinessCards = computed(() => {
       key: 'system',
       label: '系统运行',
       value: businessOverallLabel(environment.overall_status),
-      detail: `局部降级 ${businessSectionErrorCount.value} 个区块，环境 ${businessModeLabel(environment.mode)}`,
+      detail: `局部降级 ${businessSectionErrorCount.value} 个区块，运行状态 ${businessModeLabel(environment.mode)}`,
       tone: environment.overall_status === 'degraded' ? 'is-danger' : (environment.overall_status === 'warning' ? 'is-warning' : 'is-success'),
     },
   ]
@@ -7288,7 +12713,7 @@ const businessSummaryRows = computed(() => {
       key: 'mode',
       label: '运行模式',
       value: businessModeLabel(data.environment?.mode),
-      detail: `开关 ${system.feature_flags?.dashboard_business_lite ? '已开启' : '未开启'}，head ${data.environment?.database_head || '-'}`,
+      detail: `功能状态：${system.feature_flags?.dashboard_business_lite ? '可用' : '暂不可用'}`,
     },
   ]
 })
@@ -7442,6 +12867,120 @@ const projectEvidenceSummary = computed(() => {
     evidence_completion_percent: requiredTasks.length ? Math.round((evidencedTasks.length * 100) / requiredTasks.length) : 0,
   }
 })
+const businessLedgerOverviewCards = computed(() => {
+  const rows = businessLedgers.value || []
+  const openCount = rows.filter((item) => isBusinessLedgerActionable(item)).length
+  const overdueCount = rows.filter((item) => isBusinessLedgerOverdue(item)).length
+  const dueSoonCount = rows.filter((item) => isBusinessLedgerDueSoon(item)).length
+  const quoteStageCount = rows.filter((item) => ['报价中', '跟进议价'].includes(item.stage) && isBusinessLedgerActionable(item)).length
+  return [
+    {
+      key: 'total',
+      title: '筛选客户',
+      value: `${businessLedgerTotal.value || rows.length}`,
+      detail: rows.length ? `当前页 ${rows.length} 条台账` : '暂无客户台账数据',
+      tone: 'is-info',
+    },
+    {
+      key: 'open',
+      title: '待跟进',
+      value: `${openCount}`,
+      detail: openCount ? '尚未进入结束阶段的客户' : '当前页无待跟进客户',
+      tone: openCount ? 'is-info' : 'is-success',
+    },
+    {
+      key: 'overdue',
+      title: '已逾期',
+      value: `${overdueCount}`,
+      detail: overdueCount ? '请优先联系并更新跟进计划' : '当前页暂无逾期跟进',
+      tone: overdueCount ? 'is-danger' : 'is-success',
+    },
+    {
+      key: 'quote-stage',
+      title: '报价/议价',
+      value: `${quoteStageCount}`,
+      detail: dueSoonCount ? `未来 3 天内需跟进 ${dueSoonCount} 条` : '当前页无近期跟进提醒',
+      tone: quoteStageCount ? 'is-warning' : 'is-info',
+    },
+  ]
+})
+
+const executionTaskOverviewCards = computed(() => {
+  const rows = executionTasks.value || []
+  const pendingCount = rows.filter((item) => item.status === 'pending').length
+  const progressingCount = rows.filter((item) => item.status === 'in_progress').length
+  const overdueCount = rows.filter((item) => item.is_overdue && !['done', 'cancelled'].includes(item.status)).length
+  const doneCount = rows.filter((item) => item.status === 'done').length
+  return [
+    {
+      key: 'total',
+      title: '执行任务',
+      value: `${executionTaskTotal.value || rows.length}`,
+      detail: rows.length ? `当前页 ${rows.length} 项任务` : '暂无任务数据',
+      tone: 'is-info',
+    },
+    {
+      key: 'pending',
+      title: '待开始',
+      value: `${pendingCount}`,
+      detail: progressingCount ? `推进中 ${progressingCount} 项` : '可从待开始任务安排推进',
+      tone: pendingCount ? 'is-info' : 'is-success',
+    },
+    {
+      key: 'priority',
+      title: '优先处理',
+      value: `${overdueCount}`,
+      detail: overdueCount ? '逾期任务需要优先处理' : '当前页暂无逾期任务',
+      tone: overdueCount ? 'is-danger' : 'is-success',
+    },
+    {
+      key: 'done',
+      title: '已完成',
+      value: `${doneCount}`,
+      detail: rows.length ? `当前页完成率 ${Math.round((doneCount * 100) / rows.length)}%` : '暂无完成记录',
+      tone: doneCount ? 'is-success' : 'is-info',
+    },
+  ]
+})
+
+const meetingOverviewCards = computed(() => {
+  const rows = meetings.value || []
+  const draftCount = rows.filter((item) => item.status === 'draft').length
+  const revisedCount = rows.filter((item) => item.status === 'revised').length
+  const pendingDraftCount = rows.reduce((sum, item) => sum + meetingPendingDraftCount(item), 0)
+  const confirmedCount = rows.filter((item) => item.status === 'confirmed').length
+  return [
+    {
+      key: 'total',
+      title: '会议纪要',
+      value: `${meetingTotal.value || rows.length}`,
+      detail: rows.length ? `当前页 ${rows.length} 条纪要` : '暂无纪要数据',
+      tone: 'is-info',
+    },
+    {
+      key: 'draft',
+      title: '待整理',
+      value: `${draftCount}`,
+      detail: draftCount ? '草稿纪要可继续完善' : '当前页无待整理纪要',
+      tone: draftCount ? 'is-warning' : 'is-success',
+    },
+    {
+      key: 'pending-drafts',
+      title: '待确认任务',
+      value: `${pendingDraftCount}`,
+      detail: pendingDraftCount ? '请核对负责人和截止时间' : '任务草稿已全部处理',
+      tone: pendingDraftCount ? 'is-warning' : 'is-success',
+    },
+    {
+      key: 'confirmed',
+      title: '已确认',
+      value: `${confirmedCount}`,
+      detail: revisedCount ? `另有 ${revisedCount} 条待跟进更正` : '当前页无待跟进更正',
+      tone: revisedCount ? 'is-info' : 'is-success',
+    },
+  ]
+})
+
 const projectListOverviewCards = computed(() => {
   const rows = projects.value || []
   const activeCount = rows.filter((item) => item.status === 'active').length
@@ -7572,22 +13111,35 @@ const businessLedgerResponderOptions = computed(() => {
 const businessLedgerDialogTitle = computed(() => (
   businessLedgerDialog.mode === 'edit' ? '编辑商务台账' : '新建商务台账'
 ))
+const enterpriseProfileDialogTitle = computed(() => {
+  if (enterpriseProfileDialog.mode === 'view') return '企业资料详情'
+  return enterpriseProfileDialog.mode === 'edit' ? '编辑企业资料' : '新建企业资料'
+})
 const costItemDialogTitle = computed(() => (
   costItemDialog.mode === 'edit' ? '编辑成本条目' : '新建成本条目'
 ))
 
 function routeFromPath(path) {
-  if (path === '/login') return 'login'
-  if (path === '/admin/dashboard') return 'dashboard'
-  if (path === '/admin/execution') return 'execution'
-  if (path === '/admin/projects') return 'projects'
-  if (path === '/admin/project-tasks/my') return 'projectMyTasks'
-  if (/^\/admin\/projects\/\d+$/.test(path)) return 'projectDetail'
-  if (path === '/admin/business-ledger') return 'businessLedger'
-  if (path === '/admin/cost-db') return 'costDb'
-  if (path === '/admin/requirement-standardization') return 'requirementStandardization'
-  if (path === '/admin/dwg-trial') return 'dwgTrial'
-  if (path === '/admin/agent-center') return 'agentCenter'
+  const pathname = String(path || '').split(/[?#]/)[0] || '/'
+  if (pathname === '/login') return 'login'
+  if (pathname === '/no-access') return 'noAccess'
+  if (pathname === '/quote/new') return 'quoteNew'
+  if (pathname === '/admin/budget-projects') return 'budgetProjects'
+  if (/^\/admin\/budget-projects\/\d+$/.test(pathname)) return 'budgetProjectDetail'
+  if (pathname === '/admin/dashboard') return 'dashboard'
+  if (pathname === '/admin/execution') return 'execution'
+  if (pathname === '/admin/projects') return 'projects'
+  if (pathname === '/admin/project-tasks/my') return 'projectMyTasks'
+  if (/^\/admin\/projects\/\d+$/.test(pathname)) return 'projectDetail'
+  if (pathname === '/admin/business-ledger') return 'businessLedger'
+  if (pathname === '/admin/bidding') return 'bidding'
+  if (pathname === '/admin/enterprise-profile') return 'enterpriseProfile'
+  if (pathname === '/admin/cost-measurement') return 'costMeasurement'
+  if (pathname === '/admin/cost-db') return 'costDb'
+  if (pathname === '/admin/account-quotas') return 'accountQuotas'
+  if (pathname === '/admin/requirement-standardization') return 'requirementStandardization'
+  if (pathname === '/admin/dwg-trial') return 'dwgTrial'
+  if (pathname === '/admin/agent-center') return 'agentCenter'
   return 'permissions'
 }
 
@@ -7601,6 +13153,20 @@ function apiErrorMessage(error, fallback = '请求失败') {
     EVIDENCE_HARD_GATE_BLOCKED: '该关键节点要求成果证据，请先登记证据再完成，或联系项目经理放行',
     EVIDENCE_BYPASS_REASON_REQUIRED: '请填写至少 6 个字的关键节点放行原因',
     EVIDENCE_CONFIRM_REASON_REQUIRED: '请填写无证据确认说明',
+    BIDDING_LLM_REVIEW_DISABLED: '请先开启 FEATURE_BIDDING_LLM_REVIEW=true 后使用 DeepSeek 复核',
+    INVALID_BIDDING_LLM_REVIEW_ACTION: 'DeepSeek建议处理动作无效',
+    BIDDING_LLM_REVIEW_NOT_AVAILABLE: '当前对象没有可处理的 DeepSeek 建议',
+    BIDDING_LLM_REVIEW_REJECT_NOTE_REQUIRED: '请填写驳回原因',
+    BIDDING_LLM_REVIEW_MODIFIED_REVIEW_REQUIRED: '请填写修改后的建议内容',
+    BID_DRAFT_SECTION_LLM_NOT_ALLOWED: '当前章节未通过 LLM 正文增强入口，请先处理质量画像、写作计划或质检问题',
+    BID_DRAFT_SECTION_ACCEPTANCE_BLOCKED: '当前 LLM 增强稿接受前检查未通过，请修改或重新生成后再接受',
+    BID_DRAFT_SECTION_LLM_NOT_CONFIGURED: 'DeepSeek 正文增强未配置 API Key',
+    BID_DRAFT_SECTION_LLM_FAILED: 'DeepSeek 正文增强调用失败',
+    BID_DRAFT_SECTION_LLM_BAD_RESPONSE: 'DeepSeek 正文增强返回格式异常',
+    BID_DRAFT_SECTION_LLM_EMPTY_CONTENT: 'DeepSeek 未返回章节正文',
+    TENDER_RESPONSE_ITEM_NOT_FOUND: '响应项不存在或已被删除',
+    INVALID_RESPONSE_ACTION: '响应动作无效',
+    INVALID_RESPONSE_STATUS: '响应状态无效',
   }
   if (detailMessages[detail]) return detailMessages[detail]
   if (typeof detail === 'string') return detail
@@ -7609,16 +13175,183 @@ function apiErrorMessage(error, fallback = '请求失败') {
   return fallback
 }
 
+function biddingTechnicalRequirementRequiredInformation(row) {
+  return String(row?.description || row?.item_title || row?.title || '本章节所需资料')
+    .replace(/^.*?需补充[：:]/, '')
+    .replace(/[。；;\s]+$/, '')
+    .trim()
+}
+
+function normalizeBiddingTechnicalFinalIssues(rawIssues) {
+  const issues = Array.isArray(rawIssues) ? rawIssues : []
+  const normalizeSection = (value) => String(value || '').replace(/^\d+(?:\.\d+)+\s*/, '').trim()
+  const openRequirements = biddingMaterialRequirementRows.value.filter((row) => ['missing', 'submitted'].includes(row.status))
+  const requirementForIssue = (item) => {
+    const section = normalizeSection(item?.section)
+    return openRequirements.find((row) => {
+      const rowSection = normalizeSection(row.item_title || row.section_key)
+      return section && rowSection && (section === rowSection || section.includes(rowSection) || rowSection.includes(section))
+    })
+  }
+  const result = []
+  const seen = new Set()
+  issues.forEach((item) => {
+    const requirement = requirementForIssue(item)
+    if (requirement && ['待补充', '资料需求清单'].includes(item?.code)) return
+    let normalized = item
+    if (requirement && (item?.code === 'material_requirement_missing' || String(item?.issue || '').includes('资料需求'))) {
+      const requiredInformation = item.required_information || biddingTechnicalRequirementRequiredInformation(requirement)
+      normalized = {
+        ...item,
+        code: 'material_requirement_missing',
+        section: requirement.item_title || item.section,
+        issue: `需补充：${requiredInformation}（当前状态：${biddingMaterialRequirementStatusLabel(requirement.status)}）。`,
+        suggestion: `处理入口：本页面“技术标资料需求与补齐清单”→“${requirement.title}”→“填写”；录入明确内容或资料位置，保存后点击“确认可用”，再重新生成对应章节。`,
+        required_information: requiredInformation,
+        requirement_uuid: requirement.requirement_uuid,
+        requirement_status: requirement.status,
+        action: 'fill_confirm_and_regenerate',
+      }
+    }
+    const key = normalized.requirement_uuid || `${normalized.section || '-'}|${normalized.issue || '-'}`
+    if (seen.has(key)) return
+    seen.add(key)
+    result.push(normalized)
+  })
+  return result
+}
+
+function biddingTechnicalFinalExportBlockMessage(error) {
+  const detail = error.response?.data?.detail
+  if (detail?.code !== 'BID_TECHNICAL_FINAL_EXPORT_BLOCKED') {
+    return apiErrorMessage(error, '正式技术标 Word 导出失败')
+  }
+  const issues = normalizeBiddingTechnicalFinalIssues(detail.issues)
+  const lines = [
+    `正式技术标导出被阻断，仍有 ${issues.length} 项需要处理。`,
+    '',
+    ...issues.flatMap((item, index) => [
+      `${index + 1}. ${item.section || '-'}`,
+      `需要补充：${item.required_information || item.issue || '-'}`,
+      `处理方法：${item.suggestion || '请在章节复核中处理后重新导出。'}`,
+      '',
+    ]),
+  ]
+  return lines.join('\n')
+}
+
+function biddingFinalQualityStatusLabel(status) {
+  return {
+    pass: '通过',
+    warning: '有提醒',
+    blocked: '阻断',
+  }[status] || status || '-'
+}
+
+function biddingFinalQualityStatusTag(status) {
+  return {
+    pass: 'success',
+    warning: 'warning',
+    blocked: 'danger',
+  }[status] || 'info'
+}
+
+function biddingCoverageStatusLabel(status) {
+  return {
+    covered: '已覆盖',
+    partially_covered: '部分覆盖',
+    missing: '未覆盖',
+    needs_manual_review: '需人工',
+  }[status] || status || '-'
+}
+
+function biddingCoverageStatusTag(status) {
+  return {
+    covered: 'success',
+    partially_covered: 'warning',
+    missing: 'danger',
+    needs_manual_review: 'warning',
+  }[status] || 'info'
+}
+
+function biddingReinforcementStatusLabel(status) {
+  return {
+    applied: '已自动补强',
+    manual_review_required: '需人工复核',
+    no_action: '无需补强',
+  }[status] || status || '-'
+}
+
+function biddingReinforcementStatusTag(status) {
+  return {
+    applied: 'success',
+    manual_review_required: 'warning',
+    no_action: 'info',
+  }[status] || 'info'
+}
+
+function biddingReinforcementSkipReasonLabel(reason) {
+  return {
+    hard_fact: '硬事实资料',
+    manual_or_enterprise_profile: '人工/企业资料',
+  }[reason] || reason || '-'
+}
+
+async function hydrateBlobErrorDetail(error) {
+  const data = error?.response?.data
+  if (!(data instanceof Blob)) return error
+  const type = String(data.type || '')
+  if (type && !type.includes('json')) return error
+  try {
+    const text = await data.text()
+    if (!text) return error
+    error.response.data = JSON.parse(text)
+  } catch (_err) {
+    // Keep the original error when the blob is not a JSON error body.
+  }
+  return error
+}
+
+async function promptText(title, message) {
+  try {
+    const result = await ElMessageBox.prompt(message, title, {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputValidator: (value) => Boolean(value && value.trim()),
+      inputErrorMessage: '请填写原因',
+    })
+    return result.value?.trim()
+  } catch (_error) {
+    return ''
+  }
+}
+
 function navigate(path) {
   window.history.pushState({}, '', path)
   routeName.value = routeFromPath(path)
-  if (path !== '/login') {
+  if (routeName.value !== 'login') {
     bootstrap()
   }
 }
 
 function openLegacy(path) {
   window.location.href = path
+}
+
+function openQuickQuote(mode = 'quick') {
+  const params = new URLSearchParams({ entry: 'new-quote' })
+  if (mode) params.set('mode', mode)
+  openLegacy(`/index.html?${params.toString()}`)
+}
+
+function openRequirementQuoteEntry() {
+  if (!canViewRequirementStandardization.value) {
+    state.error = 'forbidden'
+    return
+  }
+  resetRequirementStandardization()
+  navigate('/admin/requirement-standardization?entry=new-quote')
 }
 
 async function openBusinessTarget(path) {
@@ -7635,6 +13368,10 @@ async function openBusinessTarget(path) {
     } catch (error) {
       ElMessage.error(apiErrorMessage(error, '运维接口检查失败'))
     }
+    return
+  }
+  if (path === '/quote/new') {
+    navigate(path)
     return
   }
   if (path.startsWith('/admin/')) {
@@ -7820,7 +13557,7 @@ function businessOverallTagType(status) {
 
 function businessModeLabel(mode) {
   const labels = {
-    internal_trial: '内网试运行',
+    internal_trial: '内部使用',
     public_access: '公网访问',
   }
   return labels[mode] || mode || '-'
@@ -7889,6 +13626,59 @@ function executionStatusTag(status) {
   return 'primary'
 }
 
+function executionTaskNextStepLabel(row) {
+  if (row?.is_overdue && !['done', 'cancelled'].includes(row?.status)) return '先处理逾期任务'
+  if (row?.status === 'pending') return '开始处理'
+  if (row?.status === 'in_progress') return '更新进展或完成'
+  if (row?.status === 'done') return '任务已完成'
+  return '任务已取消'
+}
+
+function executionTaskNextStepDetail(row) {
+  if (row?.is_overdue && !['done', 'cancelled'].includes(row?.status)) return `截止时间 ${formatDate(row?.due_at)}`
+  if (row?.status === 'pending') return '开始后可持续更新进展'
+  if (row?.status === 'in_progress') return '完成后将沉淀为执行记录'
+  if (row?.status === 'done') return `完成于 ${formatDate(row?.completed_at)}`
+  return '如需继续推进，请重新建立任务'
+}
+
+function executionTaskNextStepTone(row) {
+  if (row?.is_overdue && !['done', 'cancelled'].includes(row?.status)) return 'is-danger'
+  if (row?.status === 'in_progress') return 'is-warning'
+  if (row?.status === 'done') return 'is-success'
+  return 'is-info'
+}
+
+function executionTaskRowClassName({ row }) {
+  if (row?.is_overdue && !['done', 'cancelled'].includes(row?.status)) return 'execution-task-row-overdue'
+  if (row?.status === 'in_progress') return 'execution-task-row-progressing'
+  return ''
+}
+
+function meetingPendingDraftCount(row) {
+  return Math.max(0, Number(row?.draft_count || 0) - Number(row?.accepted_draft_count || 0))
+}
+
+function meetingDraftProgressLabel(row) {
+  const draftCount = Number(row?.draft_count || 0)
+  const pendingCount = meetingPendingDraftCount(row)
+  if (!draftCount) return '未生成任务草稿'
+  if (pendingCount) return `待确认 ${pendingCount} 项`
+  return '草稿已全部确认'
+}
+
+function meetingDraftProgressTone(row) {
+  if (meetingPendingDraftCount(row)) return 'is-warning'
+  if (Number(row?.draft_count || 0)) return 'is-success'
+  return 'is-info'
+}
+
+function meetingRowClassName({ row }) {
+  if (row?.status !== 'cancelled' && meetingPendingDraftCount(row)) return 'meeting-row-pending'
+  if (row?.status === 'revised') return 'meeting-row-revised'
+  return ''
+}
+
 function projectStatusLabel(status) {
   const option = projectStatusOptions.find((item) => item.value === status)
   return option?.label || status || '-'
@@ -7912,6 +13702,48 @@ function projectRiskTag(risk) {
   if (risk === 'delayed') return 'danger'
   if (risk === 'warning') return 'warning'
   return 'success'
+}
+
+function projectFocusLabel(row) {
+  if (row?.risk_level === 'blocked') return '先解除阻塞'
+  if (row?.risk_level === 'delayed') return '优先追赶进度'
+  if (row?.risk_level === 'warning') return '关注风险提示'
+  const taskCount = Number(row?.task_count || 0)
+  const doneTaskCount = Number(row?.done_task_count || 0)
+  if (row?.status === 'active' && taskCount === 0) return '补充任务安排'
+  if (taskCount && doneTaskCount < taskCount) return '跟进未完成任务'
+  return '按计划推进'
+}
+
+function projectFocusDetail(row) {
+  if (row?.risk_level === 'blocked') return '项目存在阻塞风险，请先确认处理人和下一步'
+  if (row?.risk_level === 'delayed') return '项目已出现进度延迟，建议复核当前阶段'
+  if (row?.risk_level === 'warning') return '项目存在需关注事项，请提前安排处理'
+  const taskCount = Number(row?.task_count || 0)
+  const doneTaskCount = Number(row?.done_task_count || 0)
+  if (row?.status === 'active' && taskCount === 0) return '尚未建立任务闭环，可从当前阶段开始拆分'
+  if (taskCount && doneTaskCount < taskCount) return `已完成 ${doneTaskCount}/${taskCount} 项任务`
+  return '当前项目未发现需要优先处理的风险'
+}
+
+function projectFocusTone(row) {
+  if (['blocked', 'delayed'].includes(row?.risk_level)) return 'is-danger'
+  if (row?.risk_level === 'warning') return 'is-warning'
+  if (Number(row?.task_count || 0) > Number(row?.done_task_count || 0)) return 'is-info'
+  return 'is-success'
+}
+
+function projectListRowClassName({ row }) {
+  if (row?.risk_level === 'blocked') return 'project-row-critical'
+  if (row?.risk_level === 'delayed') return 'project-row-delayed'
+  return ''
+}
+
+function projectTaskRowClassName({ row }) {
+  if (row?.status === 'blocked') return 'project-task-row-blocked'
+  if (projectTaskRequiresHardGate(row) && !row?.evidence_count) return 'project-task-row-missing-evidence'
+  if (row?.status === 'submitted') return 'project-task-row-submitted'
+  return ''
 }
 
 function projectTaskStatusLabel(status) {
@@ -8147,7 +13979,7 @@ function costRagSyncSummaryLabel(status) {
     stale: '需同步',
     failed: '同步失败',
     never_synced: '未同步',
-    empty_active: '无 active 条目',
+    empty_active: '无已启用条目',
   }
   return labels[status] || status || '-'
 }
@@ -8277,14 +14109,55 @@ function isBusinessTerminal(stage) {
   return businessLedgerTerminalStages.has(stage)
 }
 
+function isBusinessLedgerActionable(row) {
+  return Boolean(row) && !row.cancelled_at && !isBusinessTerminal(row.stage)
+}
+
 function isBusinessLedgerOverdue(row) {
   const followupTime = toTimestamp(row.next_followup_at)
-  if (!followupTime || row.cancelled_at || isBusinessTerminal(row.stage)) return false
+  if (!followupTime || !isBusinessLedgerActionable(row)) return false
   return followupTime < Date.now()
 }
 
+function isBusinessLedgerDueSoon(row) {
+  const followupTime = toTimestamp(row?.next_followup_at)
+  if (!followupTime || !isBusinessLedgerActionable(row) || followupTime < Date.now()) return false
+  return followupTime <= Date.now() + 3 * 24 * 60 * 60 * 1000
+}
+
+function businessLedgerNextStepLabel(row) {
+  if (row?.cancelled_at) return '记录已作废'
+  if (row?.stage === '成单') return '沉淀成交结果'
+  if (row?.stage === '丢单') return '保留丢单复盘'
+  if (isBusinessLedgerOverdue(row)) return '立即联系客户'
+  if (isBusinessLedgerDueSoon(row)) return '安排近期跟进'
+  if (row?.stage === '初步接触') return '确认客户需求'
+  if (row?.stage === '需求确认') return '明确范围与报价条件'
+  if (row?.stage === '报价中') return '完成报价并及时跟进'
+  if (row?.stage === '跟进议价') return '推进议价与决策'
+  return '补充下次跟进计划'
+}
+
+function businessLedgerNextStepDetail(row) {
+  if (row?.cancelled_at) return '该记录不再参与后续跟进'
+  if (row?.stage === '成单') return '可完善成交信息，便于后续复盘'
+  if (row?.stage === '丢单') return '建议保留原因和后续机会线索'
+  if (row?.next_followup_at) return `下次跟进：${formatDate(row.next_followup_at)}`
+  return '尚未设置下次跟进时间'
+}
+
+function businessLedgerNextStepTone(row) {
+  if (isBusinessLedgerOverdue(row)) return 'is-danger'
+  if (isBusinessLedgerDueSoon(row) || ['报价中', '跟进议价'].includes(row?.stage)) return 'is-warning'
+  if (row?.stage === '成单') return 'is-success'
+  return 'is-info'
+}
+
 function businessLedgerRowClass({ row }) {
-  return isBusinessLedgerOverdue(row) ? 'ledger-overdue-row' : ''
+  if (isBusinessLedgerOverdue(row)) return 'ledger-overdue-row'
+  if (isBusinessLedgerDueSoon(row)) return 'ledger-due-soon-row'
+  if (['报价中', '跟进议价'].includes(row?.stage) && isBusinessLedgerActionable(row)) return 'ledger-active-row'
+  return ''
 }
 
 function businessLedgerPreview(row) {
@@ -8302,20 +14175,72 @@ function canCancelBusinessLedger(row) {
   return canManageBusinessLedger.value && row && !row.cancelled_at && !isBusinessTerminal(row.stage)
 }
 
+function safeRedirectPath(value) {
+  if (typeof value !== 'string') return ''
+  const candidate = value.trim()
+  if (!candidate.startsWith('/') || candidate.startsWith('//') || candidate.includes('\\')) return ''
+
+  let decoded = candidate
+  try {
+    decoded = decodeURIComponent(candidate)
+  } catch (_error) {
+    return ''
+  }
+  if (!decoded.startsWith('/') || decoded.startsWith('//') || decoded.includes('\\')) return ''
+
+  try {
+    const target = new URL(candidate, window.location.origin)
+    if (target.origin !== window.location.origin) return ''
+    if (['/login', '/app.html'].includes(target.pathname)) return ''
+    return `${target.pathname}${target.search}${target.hash}`
+  } catch (_error) {
+    return ''
+  }
+}
+
+const ROLE_DEFAULT_HOME_RULES = [
+  { roles: ['system_admin', 'admin'], path: '/admin/dashboard' },
+  { roles: ['quote_operator', 'viewer'], path: '/admin/dashboard' },
+  { roles: ['manager', 'project_manager'], path: '/admin/projects' },
+  { roles: ['project_member'], path: '/admin/project-tasks/my' },
+  { roles: ['project_viewer'], path: '/admin/projects' },
+  { roles: ['cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter'], path: '/admin/cost-db' },
+  { roles: ['enterprise_profile_viewer', 'enterprise_profile_editor', 'enterprise_profile_approver'], path: '/admin/enterprise-profile' },
+  { roles: ['staff', 'quote_user'], path: '/quote/new' },
+]
+
+function roleDefaultHomePath(user) {
+  const userRoles = Array.isArray(user?.roles) ? user.roles : []
+  return ROLE_DEFAULT_HOME_RULES.find((rule) => rule.roles.some((role) => userRoles.includes(role)))?.path || ''
+}
+
+function canUsePostLoginPath(user, path) {
+  const availablePaths = new Set(
+    (user?.available_modules || [])
+      .filter((item) => item.status === 'available')
+      .map((item) => item.path),
+  )
+  const pathname = new URL(path, window.location.origin).pathname
+  if (pathname === '/quote/new') return availablePaths.has('/index.html')
+  if (availablePaths.has(pathname)) return true
+  if (/^\/admin\/budget-projects\/\d+$/.test(pathname)) {
+    return availablePaths.has('/admin/budget-projects')
+  }
+  if (pathname === '/admin/project-tasks/my' || /^\/admin\/projects\/\d+$/.test(pathname)) {
+    return availablePaths.has('/admin/projects')
+  }
+  return false
+}
+
 function landingPath(user) {
-  const redirect = new URLSearchParams(window.location.search).get('redirect')
-  if (redirect?.startsWith('/')) return redirect
-  if (user.roles?.includes('system_admin') || user.roles?.includes('admin')) return '/admin/permissions'
-  if (user.roles?.includes('quote_operator') || user.roles?.includes('viewer')) return '/admin/dashboard'
-  if (user.roles?.some((role) => ['cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter'].includes(role))) {
-    return '/admin/cost-db'
-  }
-  if (user.roles?.includes('project_viewer') || user.roles?.includes('project_member') || user.roles?.includes('project_manager')) {
-    return '/admin/projects'
-  }
-  if (user.roles?.includes('staff')) return '/index.html'
+  const redirect = safeRedirectPath(new URLSearchParams(window.location.search).get('redirect'))
+  if (redirect && canUsePostLoginPath(user, redirect)) return redirect
+  const serverDefault = safeRedirectPath(user?.default_home_path)
+  if (serverDefault && canUsePostLoginPath(user, serverDefault)) return serverDefault
+  const roleDefault = roleDefaultHomePath(user)
+  if (roleDefault && canUsePostLoginPath(user, roleDefault)) return roleDefault
   const firstModule = user.available_modules?.find((item) => item.status === 'available')
-  return firstModule?.path || '/admin/permissions'
+  return firstModule?.path || '/no-access'
 }
 
 async function login() {
@@ -8332,7 +14257,7 @@ async function login() {
     const data = responseData(response)
     localStorage.setItem(TOKEN_KEY, data.access_token)
     const me = await loadMe()
-    window.location.href = landingPath(me)
+    window.location.replace(landingPath(me))
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '登录失败'))
   } finally {
@@ -10638,6 +16563,3014 @@ async function loadBusinessLedgers() {
   }
 }
 
+function isBiddingFeatureDisabled(error) {
+  return error.response?.status === 404 && error.response?.data?.detail === 'NOT_FOUND'
+}
+
+function isBiddingNoParseRun(error) {
+  return error.response?.status === 404 && error.response?.data?.detail === 'BID_PARSE_RUN_NOT_FOUND'
+}
+
+function resetBiddingDialog() {
+  biddingDialog.file = null
+  biddingDialog.form.project_name = ''
+  biddingDialog.form.tenderer_name = ''
+  biddingDialog.form.tender_agency = ''
+  biddingDialog.form.project_location = ''
+  biddingDialog.form.project_type = ''
+  biddingDialog.form.tender_deadline_at = ''
+  biddingProjectUploadRef.value?.clearFiles?.()
+}
+
+function openBiddingTenderUpload() {
+  resetBiddingDialog()
+  biddingDialog.visible = true
+}
+
+function isPrimaryTenderFile(file) {
+  const filename = String(file?.name || '').toLowerCase()
+  return filename.endsWith('.pdf') || filename.endsWith('.docx')
+}
+
+function tenderProjectNameFromFile(file) {
+  const filename = String(file?.name || '').trim()
+  const stem = filename.replace(/\.[^.]+$/, '').trim()
+  return stem || '未命名招标项目'
+}
+
+function handleBiddingProjectFileChange(uploadFile) {
+  const file = uploadFile?.raw || uploadFile || null
+  if (file && !isPrimaryTenderFile(file)) {
+    ElMessage.warning('首版仅支持甲方招标文件 PDF 或 Word(.docx)')
+    biddingDialog.file = null
+    biddingProjectUploadRef.value?.clearFiles?.()
+    return
+  }
+  biddingDialog.file = file
+}
+
+function clearBiddingProjectFile() {
+  biddingDialog.file = null
+}
+
+async function saveBiddingProject() {
+  if (!biddingDialog.file) {
+    ElMessage.warning('请先选择甲方招标文件')
+    return
+  }
+  if (!isPrimaryTenderFile(biddingDialog.file)) {
+    ElMessage.warning('首版仅支持甲方招标文件 PDF 或 Word(.docx)')
+    return
+  }
+  const form = new FormData()
+  form.append('file', biddingDialog.file)
+  const projectName = biddingDialog.form.project_name.trim()
+  if (projectName) form.append('project_name', projectName)
+  const tendererName = biddingDialog.form.tenderer_name.trim()
+  if (tendererName) form.append('tenderer_name', tendererName)
+  const tenderAgency = biddingDialog.form.tender_agency.trim()
+  if (tenderAgency) form.append('tender_agency', tenderAgency)
+  const projectLocation = biddingDialog.form.project_location.trim()
+  if (projectLocation) form.append('project_location', projectLocation)
+  const projectType = biddingDialog.form.project_type.trim()
+  if (projectType) form.append('project_type', projectType)
+  if (biddingDialog.form.tender_deadline_at) {
+    form.append('tender_deadline_at', biddingDialog.form.tender_deadline_at)
+  }
+  biddingDialog.loading = true
+  try {
+    let payload = null
+    try {
+      const response = await api.post('/admin/bidding/projects/from-tender-file', form)
+      payload = responseData(response) || {}
+    } catch (error) {
+      if (![404, 405].includes(error.response?.status)) throw error
+      payload = await createBiddingProjectWithLegacyUpload()
+    }
+    const project = payload.project
+    biddingDialog.visible = false
+    ElMessage.success('招标文件已上传，投标项目已创建')
+    biddingProjectUploadRef.value?.clearFiles?.()
+    await loadBiddingProjects()
+    if (project?.project_uuid) {
+      await openBiddingProjectDetail(project)
+    }
+  } catch (error) {
+    if (isBiddingFeatureDisabled(error)) {
+      biddingFeatureDisabled.value = true
+      biddingDialog.visible = false
+      return
+    }
+    ElMessage.error(apiErrorMessage(error, '创建投标项目失败'))
+  } finally {
+    biddingDialog.loading = false
+  }
+}
+
+async function createBiddingProjectWithLegacyUpload() {
+  const createResponse = await api.post('/admin/bidding/projects', {
+    project_name: biddingDialog.form.project_name.trim() || tenderProjectNameFromFile(biddingDialog.file),
+    tenderer_name: biddingDialog.form.tenderer_name.trim() || null,
+    tender_agency: biddingDialog.form.tender_agency.trim() || null,
+    project_location: biddingDialog.form.project_location.trim() || null,
+    project_type: biddingDialog.form.project_type.trim() || null,
+    tender_deadline_at: biddingDialog.form.tender_deadline_at || null,
+  })
+  const project = responseData(createResponse)
+  const uploadForm = new FormData()
+  uploadForm.append('file', biddingDialog.file)
+  uploadForm.append('file_type', 'tender_document')
+  const uploadResponse = await api.post(`/admin/bidding/projects/${project.project_uuid}/files`, uploadForm)
+  const detailResponse = await api.get(`/admin/bidding/projects/${project.project_uuid}`)
+  return {
+    project: responseData(detailResponse),
+    file: responseData(uploadResponse),
+  }
+}
+
+async function loadBiddingProjects() {
+  if (!canViewBidding.value) return
+  biddingFeatureDisabled.value = false
+  biddingLoading.value = true
+  const params = {
+    page: biddingProjectPage.value,
+    page_size: biddingProjectPageSize,
+  }
+  if (biddingFilters.status) params.status = biddingFilters.status
+  const keyword = biddingFilters.keyword.trim()
+  if (keyword) params.keyword = keyword
+  try {
+    const response = await api.get('/admin/bidding/projects', { params })
+    biddingProjects.value = responseData(response) || []
+    biddingProjectTotal.value = response.data?.total ?? biddingProjects.value.length
+  } catch (error) {
+    biddingProjects.value = []
+    biddingProjectTotal.value = 0
+    if (isBiddingFeatureDisabled(error)) {
+      biddingFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '投标项目加载失败'))
+  } finally {
+    biddingLoading.value = false
+  }
+}
+
+function applyBiddingFilters() {
+  biddingProjectPage.value = 1
+  loadBiddingProjects()
+}
+
+function currentBiddingProjectUuid() {
+  return biddingDrawer.project?.project_uuid || ''
+}
+
+async function openBiddingProjectDetail(row, tab = 'files') {
+  if (!row?.project_uuid) return
+  const nextTab = tab === 'bidDraft' ? 'businessBidDraft' : tab
+  biddingDrawer.visible = true
+  biddingDrawer.loading = true
+  biddingDrawer.project = row
+  biddingDrawer.activeTab = nextTab
+  biddingFiles.value = []
+  biddingParseRuns.value = []
+  biddingTenderAnalysis.value = null
+  biddingTenderAnalysisTab.value = 'summary'
+  biddingTenderReviewWorkbenchExpanded.value = true
+  biddingImportantInfoExpandedKeys.value = []
+  biddingTenderScoringExpandedKeys.value = []
+  biddingRiskClause.value = null
+  biddingBusinessObjectCollapse.value = []
+  biddingBusinessObjects.value = []
+  biddingBusinessObjectsTotal.value = 0
+  biddingBusinessObjectsSummary.value = {}
+  biddingResponseItems.value = []
+  biddingResponseItemsTotal.value = 0
+  biddingResponseMatrixSummary.value = {}
+  biddingFileFormatPlan.value = null
+  biddingMaterialRequirements.value = []
+  biddingMaterialRequirementSummary.value = {}
+  biddingTechnicalComposition.value = null
+  biddingDraftOutline.value = null
+  biddingDraftSections.value = []
+  biddingDraftPreviewDrawer.visible = false
+  biddingDraftPreviewDrawer.draft = null
+  biddingDraftPreviewDrawer.editing = false
+  biddingDraftPreviewDrawer.editContent = ''
+  biddingDraftPreviewDrawer.saving = false
+  biddingDraftPreviewDrawer.llmGenerating = false
+  biddingTechnicalFinalQualityDrawer.visible = false
+  biddingTechnicalFinalQualityDrawer.report = null
+  biddingRequirements.value = []
+  biddingRequirementsTotal.value = 0
+  biddingRisks.value = []
+  biddingRisksTotal.value = 0
+  biddingRiskCards.value = []
+  biddingRiskCardsSummary.value = {}
+  try {
+    await loadBiddingProjectDetail(row.project_uuid)
+    await Promise.all([
+      loadBiddingFiles(row.project_uuid),
+      loadBiddingParseRuns(row.project_uuid),
+      loadBiddingTenderAnalysis(row.project_uuid),
+      loadBiddingRiskClause(row.project_uuid),
+      loadBiddingBusinessObjects(row.project_uuid),
+      loadBiddingResponseMatrix(row.project_uuid),
+      loadBiddingFileFormatPlan(row.project_uuid),
+      loadBiddingTechnicalComposition(row.project_uuid),
+      loadBiddingMaterialRequirements(row.project_uuid),
+      loadBiddingDraftOutline(row.project_uuid),
+      loadBiddingDraftSections(row.project_uuid),
+      loadBiddingRequirements(row.project_uuid),
+      loadBiddingRiskCards(row.project_uuid),
+      loadBiddingRisks(row.project_uuid),
+    ])
+  } finally {
+    biddingDrawer.loading = false
+  }
+}
+
+async function refreshBiddingProjectDetail() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid) return
+  await Promise.all([
+    loadBiddingProjectDetail(projectUuid),
+    loadBiddingFiles(projectUuid),
+    loadBiddingParseRuns(projectUuid),
+    loadBiddingTenderAnalysis(projectUuid),
+    loadBiddingBusinessObjects(projectUuid),
+    loadBiddingResponseMatrix(projectUuid),
+    loadBiddingFileFormatPlan(projectUuid),
+    loadBiddingTechnicalComposition(projectUuid),
+    loadBiddingMaterialRequirements(projectUuid),
+    loadBiddingDraftOutline(projectUuid),
+    loadBiddingDraftSections(projectUuid),
+    loadBiddingRequirements(projectUuid),
+    loadBiddingRiskCards(projectUuid),
+    loadBiddingRisks(projectUuid),
+  ])
+}
+
+async function loadBiddingProjectDetail(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}`)
+    biddingDrawer.project = responseData(response)
+  } catch (error) {
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '投标项目详情加载失败'))
+  }
+}
+
+async function loadBiddingFiles(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/files`)
+    biddingFiles.value = responseData(response) || []
+  } catch (error) {
+    biddingFiles.value = []
+    if (!isBiddingFeatureDisabled(error)) ElMessage.error(apiErrorMessage(error, '投标资料加载失败'))
+  }
+}
+
+async function loadBiddingParseRuns(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/parse-runs`)
+    biddingParseRuns.value = responseData(response) || []
+  } catch (error) {
+    biddingParseRuns.value = []
+    if (!isBiddingFeatureDisabled(error)) ElMessage.error(apiErrorMessage(error, '解析版本加载失败'))
+  }
+}
+
+function clearBiddingImportantInfoProgressTimer() {
+  if (biddingImportantInfoProgressTimer) {
+    clearInterval(biddingImportantInfoProgressTimer)
+    biddingImportantInfoProgressTimer = null
+  }
+}
+
+function startBiddingImportantInfoProgress(stage = '准备解析招标文件') {
+  clearBiddingImportantInfoProgressTimer()
+  Object.assign(biddingImportantInfoProgress, {
+    visible: true,
+    percentage: 6,
+    status: 'active',
+    stage,
+    detail: '读取已上传文件和解析版本',
+  })
+  biddingImportantInfoProgressTimer = setInterval(() => {
+    if (biddingImportantInfoProgress.status !== 'active') return
+    const current = Number(biddingImportantInfoProgress.percentage || 0)
+    if (current < 88) biddingImportantInfoProgress.percentage = current + (current < 45 ? 2 : 1)
+  }, 900)
+}
+
+function updateBiddingImportantInfoProgress(percentage, stage, detail = '') {
+  if (!biddingImportantInfoProgress.visible) startBiddingImportantInfoProgress(stage)
+  biddingImportantInfoProgress.percentage = Math.max(Number(biddingImportantInfoProgress.percentage || 0), Number(percentage || 0))
+  biddingImportantInfoProgress.stage = stage || biddingImportantInfoProgress.stage
+  biddingImportantInfoProgress.detail = detail || biddingImportantInfoProgress.detail
+  biddingImportantInfoProgress.status = 'active'
+}
+
+function finishBiddingImportantInfoProgress(success, detail = '') {
+  clearBiddingImportantInfoProgressTimer()
+  Object.assign(biddingImportantInfoProgress, {
+    visible: true,
+    percentage: success ? 100 : Math.max(Number(biddingImportantInfoProgress.percentage || 0), 92),
+    status: success ? 'success' : 'error',
+    stage: success ? '结构化信息摘要表已生成' : '结构化提取未完成',
+    detail: detail || (success ? '可在页面预览，也可导出 Word' : '请查看错误信息后重试'),
+  })
+}
+
+function clearBiddingRiskClauseProgressTimer() {
+  if (biddingRiskClauseProgressTimer) {
+    clearInterval(biddingRiskClauseProgressTimer)
+    biddingRiskClauseProgressTimer = null
+  }
+}
+
+function startBiddingRiskClauseProgress(stage = '准备风险分析') {
+  clearBiddingRiskClauseProgressTimer()
+  Object.assign(biddingRiskClauseProgress, {
+    visible: true,
+    percentage: 6,
+    status: 'active',
+    stage,
+    detail: '准备调用风险条款专用提示词',
+  })
+  biddingRiskClauseProgressTimer = setInterval(() => {
+    if (biddingRiskClauseProgress.status !== 'active') return
+    const current = Number(biddingRiskClauseProgress.percentage || 0)
+    if (current < 88) biddingRiskClauseProgress.percentage = current + (current < 45 ? 2 : 1)
+  }, 900)
+}
+
+function updateBiddingRiskClauseProgress(percentage, stage, detail = '') {
+  if (!biddingRiskClauseProgress.visible) startBiddingRiskClauseProgress(stage)
+  biddingRiskClauseProgress.percentage = Math.max(Number(biddingRiskClauseProgress.percentage || 0), Number(percentage || 0))
+  biddingRiskClauseProgress.stage = stage || biddingRiskClauseProgress.stage
+  biddingRiskClauseProgress.detail = detail || biddingRiskClauseProgress.detail
+  biddingRiskClauseProgress.status = 'active'
+}
+
+function finishBiddingRiskClauseProgress(success, detail = '') {
+  clearBiddingRiskClauseProgressTimer()
+  Object.assign(biddingRiskClauseProgress, {
+    visible: true,
+    percentage: success ? 100 : Math.max(Number(biddingRiskClauseProgress.percentage || 0), 92),
+    status: success ? 'success' : 'error',
+    stage: success ? '风险条款清单已生成' : '风险分析未完成',
+    detail: detail || (success ? '可在页面预览，也可导出风险 Word' : '请查看错误信息后重试'),
+  })
+}
+
+async function loadBiddingTenderAnalysis(projectUuid = currentBiddingProjectUuid(), options = {}) {
+  if (!projectUuid) return
+  const trackProgress = Boolean(options.trackProgress || biddingImportantInfoProgress.visible)
+  if (trackProgress) updateBiddingImportantInfoProgress(55, '调用LLM结构化提取', '发送提示词、output_schema 和招标文件原文片段')
+  biddingTenderAnalysisLoading.value = true
+  biddingImportantInfoExpandedKeys.value = []
+  biddingTenderScoringExpandedKeys.value = []
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/tender-analysis/preview`, {
+      params: { run_uuid: 'latest' },
+    })
+    const payload = responseData(response) || null
+    biddingTenderAnalysis.value = payload
+    if (trackProgress) {
+      const status = payload?.important_info?.status
+      const metadata = payload?.important_info?.metadata || {}
+      if (['completed', 'cached'].includes(status)) {
+        finishBiddingImportantInfoProgress(true, status === 'cached' ? '已读取缓存的LLM结构化结果' : 'LLM结构化结果已返回并入表')
+      } else if (status === 'error') {
+        finishBiddingImportantInfoProgress(false, metadata.error || 'LLM结构化提取失败')
+      } else {
+        finishBiddingImportantInfoProgress(false, metadata.skip_reason || status || 'LLM结构化结果未生成')
+      }
+    }
+  } catch (error) {
+    biddingTenderAnalysis.value = null
+    if (trackProgress) finishBiddingImportantInfoProgress(false, apiErrorMessage(error, '招标分析成果表加载失败'))
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '招标分析成果表加载失败'))
+  } finally {
+    biddingTenderAnalysisLoading.value = false
+  }
+}
+
+async function loadBiddingRiskClause(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  biddingRiskClauseLoading.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/risk-clause/preview`, {
+      params: { run_uuid: biddingTenderAnalysis.value?.run_uuid || 'latest' },
+    })
+    biddingRiskClause.value = responseData(response) || null
+  } catch (error) {
+    biddingRiskClause.value = null
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '风险条款清单加载失败'))
+  } finally {
+    biddingRiskClauseLoading.value = false
+  }
+}
+
+async function analyzeBiddingRiskClause() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingRiskClauseAnalyzing.value) return
+  biddingRiskClauseAnalyzing.value = true
+  startBiddingRiskClauseProgress('准备风险分析')
+  try {
+    updateBiddingRiskClauseProgress(32, '调用LLM风险分析', '发送风险条款专用提示词和招标文件原文片段')
+    const response = await api.post(`/admin/bidding/projects/${projectUuid}/risk-clause/analyze`, null, {
+      params: { run_uuid: biddingTenderAnalysis.value?.run_uuid || 'latest', force: true },
+    })
+    biddingRiskClause.value = responseData(response) || null
+    const status = biddingRiskClause.value?.status
+    const metadata = biddingRiskClause.value?.metadata || {}
+    if (['completed', 'cached'].includes(status)) {
+      finishBiddingRiskClauseProgress(true, `已生成 ${biddingTenderRiskClauseRows.value.length} 条风险条款`)
+      biddingTenderAnalysisTab.value = 'risk_clause'
+      ElMessage.success('风险条款清单已生成')
+    } else {
+      finishBiddingRiskClauseProgress(false, metadata.error || metadata.skip_reason || status || '风险条款清单未生成')
+      ElMessage.warning(metadata.error || metadata.skip_reason || '风险条款清单未生成')
+    }
+  } catch (error) {
+    finishBiddingRiskClauseProgress(false, apiErrorMessage(error, '风险分析失败'))
+    ElMessage.error(apiErrorMessage(error, '风险分析失败'))
+  } finally {
+    biddingRiskClauseAnalyzing.value = false
+  }
+}
+
+function filenameFromDisposition(disposition, fallback) {
+  const raw = String(disposition || '')
+  const encodedMatch = raw.match(/filename\*=UTF-8''([^;]+)/i)
+  if (encodedMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedMatch[1])
+    } catch {
+      return encodedMatch[1]
+    }
+  }
+  const match = raw.match(/filename="?([^";]+)"?/i)
+  return match?.[1] || fallback
+}
+
+function downloadBlob(data, { filename, mimeType }) {
+  const blob = new Blob([data], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function openBiddingAnalysisTable(tableKey) {
+  const tabMap = {
+    summary: 'summary',
+    scoring: 'scoring',
+    risk_clause: 'risk_clause',
+  }
+  biddingTenderAnalysisTab.value = tabMap[tableKey] || 'review_queue'
+  nextTick(() => {
+    const target = biddingAnalysisTabsRef.value?.$el || document.querySelector('.bidding-analysis-tabs')
+    target?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  })
+  const labels = {
+    summary: '结构化信息摘要表',
+    scoring: '评分细则表',
+    risk_clause: '风险条款清单',
+    review_queue: '待复核队列',
+  }
+  ElMessage.info(`已切换到${labels[biddingTenderAnalysisTab.value] || '对应表'}`)
+}
+
+async function exportBiddingTenderAnalysis() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingTenderAnalysisExporting.value) return
+  biddingTenderAnalysisExporting.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/tender-analysis/export`, {
+      params: { run_uuid: biddingTenderAnalysis.value?.run_uuid || 'latest' },
+      responseType: 'blob',
+    })
+    const fallback = `${biddingDrawer.project?.project_name || '招标文件'}_投标重要信息提取.docx`
+    const filename = filenameFromDisposition(response.headers?.['content-disposition'], fallback)
+    downloadBlob(response.data, {
+      filename,
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    ElMessage.success('投标重要信息提取 Word 已导出')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '投标重要信息提取 Word 导出失败'))
+  } finally {
+    biddingTenderAnalysisExporting.value = false
+  }
+}
+
+async function exportBiddingRiskClause() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingRiskClauseExporting.value) return
+  biddingRiskClauseExporting.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/risk-clause/export`, {
+      params: { run_uuid: biddingTenderAnalysis.value?.run_uuid || 'latest' },
+      responseType: 'blob',
+    })
+    const fallback = `${biddingDrawer.project?.project_name || '招标文件'}_风险条款清单.docx`
+    const filename = filenameFromDisposition(response.headers?.['content-disposition'], fallback)
+    downloadBlob(response.data, {
+      filename,
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    ElMessage.success('风险条款清单 Word 已导出')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '风险条款清单 Word 导出失败'))
+  } finally {
+    biddingRiskClauseExporting.value = false
+  }
+}
+
+async function loadBiddingBusinessObjects(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/business-objects`, {
+      params: { page: 1, page_size: 300 },
+    })
+    biddingBusinessObjects.value = responseData(response) || []
+    biddingBusinessObjectsTotal.value = response.data?.total ?? biddingBusinessObjects.value.length
+    biddingBusinessObjectsSummary.value = response.data?.summary || {}
+  } catch (error) {
+    biddingBusinessObjects.value = []
+    biddingBusinessObjectsTotal.value = 0
+    biddingBusinessObjectsSummary.value = {}
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '业务对象加载失败'))
+  }
+}
+
+async function loadBiddingResponseMatrix(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/response-matrix`, {
+      params: { page: 1, page_size: 500 },
+    })
+    biddingResponseItems.value = responseData(response) || []
+    biddingResponseItemsTotal.value = response.data?.total ?? biddingResponseItems.value.length
+    biddingResponseMatrixSummary.value = response.data?.summary || {}
+  } catch (error) {
+    biddingResponseItems.value = []
+    biddingResponseItemsTotal.value = 0
+    biddingResponseMatrixSummary.value = {}
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '响应矩阵加载失败'))
+  }
+}
+
+async function loadBiddingFileFormatPlan(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  biddingFileFormatLoading.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/bid-draft/format-plan`, {
+      params: { run_uuid: 'latest' },
+    })
+    biddingFileFormatPlan.value = responseData(response) || null
+    biddingFileFormatPendingEvents.value = []
+  } catch (error) {
+    biddingFileFormatPlan.value = null
+    biddingFileFormatPendingEvents.value = []
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '投标文件格式加载失败'))
+  } finally {
+    biddingFileFormatLoading.value = false
+  }
+}
+
+async function generateBiddingFileFormatPlan() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingFileFormatGenerating.value) return
+  biddingFileFormatGenerating.value = true
+  try {
+    const response = await api.post(`/admin/bidding/projects/${projectUuid}/bid-draft/format-plan/generate`, {
+      run_uuid: 'latest',
+    })
+    biddingFileFormatPlan.value = responseData(response) || null
+    biddingFileFormatPendingEvents.value = []
+    biddingMaterialRequirements.value = []
+    biddingMaterialRequirementSummary.value = {}
+    ElMessage.success('投标文件格式确认表已生成')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '投标文件格式生成失败'))
+  } finally {
+    biddingFileFormatGenerating.value = false
+  }
+}
+
+async function confirmBiddingFileFormatPlan() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingFileFormatConfirming.value) return
+  try {
+    await ElMessageBox.confirm(
+      '确认后，后续投标书草稿会优先按当前文件包结构生成。请先核对分册、表单、附件和装订密封要求。',
+      '确认投标文件格式',
+      {
+        confirmButtonText: '确认格式',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+  biddingFileFormatConfirming.value = true
+  try {
+    if (!biddingFileFormatPlan.value?.plan_uuid) {
+      const response = await api.post(`/admin/bidding/projects/${projectUuid}/bid-draft/format-plan/generate`, {
+        run_uuid: 'latest',
+      })
+      biddingFileFormatPlan.value = responseData(response) || null
+    }
+    const planUuid = biddingFileFormatPlan.value?.plan_uuid
+    if (!planUuid) throw new Error('BID_FILE_FORMAT_PLAN_NOT_FOUND')
+    const response = await api.patch(`/admin/bidding/bid-draft/format-plan/${planUuid}/confirm`, {
+      structure: biddingFileFormatPlan.value?.structure || {},
+      reviewer_note: '人工确认投标文件格式',
+      edit_events: biddingFileFormatPendingEvents.value,
+    })
+    biddingFileFormatPlan.value = responseData(response) || null
+    biddingFileFormatPendingEvents.value = []
+    await loadBiddingMaterialRequirements(projectUuid)
+    ElMessage.success('投标文件格式已确认')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '投标文件格式确认失败'))
+  } finally {
+    biddingFileFormatConfirming.value = false
+  }
+}
+
+async function loadBiddingTechnicalComposition(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  biddingTechnicalCompositionLoading.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/bid-draft/technical-composition`, {
+      params: { run_uuid: 'latest' },
+    })
+    biddingTechnicalComposition.value = responseData(response) || null
+  } catch (error) {
+    biddingTechnicalComposition.value = null
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '技术标组成识别结果加载失败'))
+  } finally {
+    biddingTechnicalCompositionLoading.value = false
+  }
+}
+
+async function generateBiddingTechnicalComposition() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingTechnicalCompositionGenerating.value) return
+  biddingTechnicalCompositionGenerating.value = true
+  try {
+    const response = await api.post(`/admin/bidding/projects/${projectUuid}/bid-draft/technical-composition/generate`, {
+      run_uuid: 'latest',
+    })
+    biddingTechnicalComposition.value = responseData(response) || null
+    const generation = response.data?.generation || {}
+    await loadBiddingMaterialRequirements(projectUuid, 'technical')
+    ElMessage.success(`技术标组成已识别：自动匹配 ${generation.auto_submitted_count || 0} 项，待补 ${generation.missing_count || 0} 项`)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '技术标组成识别失败'))
+  } finally {
+    biddingTechnicalCompositionGenerating.value = false
+  }
+}
+
+async function loadBiddingMaterialRequirements(projectUuid = currentBiddingProjectUuid(), packageKey = undefined) {
+  if (!projectUuid) return
+  const scopePackageKey = packageKey === undefined ? biddingDraftPackageKey.value : packageKey
+  biddingMaterialRequirementsLoading.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/bid-draft/material-requirements`, {
+      params: { run_uuid: 'latest', package_key: scopePackageKey || undefined },
+    })
+    biddingMaterialRequirements.value = responseData(response) || []
+    biddingMaterialRequirementSummary.value = response.data?.summary || {}
+  } catch (error) {
+    biddingMaterialRequirements.value = []
+    biddingMaterialRequirementSummary.value = {}
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '资料需求清单加载失败'))
+  } finally {
+    biddingMaterialRequirementsLoading.value = false
+  }
+}
+
+async function generateBiddingMaterialRequirements() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingMaterialRequirementsGenerating.value) return
+  if (biddingDraftPackageKey.value === 'technical') {
+    await generateBiddingTechnicalComposition()
+    return
+  }
+  biddingMaterialRequirementsGenerating.value = true
+  try {
+    const response = await api.post(`/admin/bidding/projects/${projectUuid}/bid-draft/material-requirements/generate`, {
+      run_uuid: 'latest',
+      package_key: biddingDraftPackageKey.value || undefined,
+    })
+    biddingMaterialRequirements.value = responseData(response) || []
+    biddingMaterialRequirementSummary.value = response.data?.summary || {}
+    const generation = response.data?.generation || {}
+    ElMessage.success(`资料需求清单已生成：新增 ${generation.created_count || 0} 条，刷新 ${generation.refreshed_count || 0} 条`)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '资料需求清单生成失败'))
+  } finally {
+    biddingMaterialRequirementsGenerating.value = false
+  }
+}
+
+async function updateBiddingMaterialRequirement(row, patch, successMessage = '资料需求状态已更新') {
+  if (!row?.requirement_uuid || biddingMaterialRequirementUpdatingUuid.value) return false
+  biddingMaterialRequirementUpdatingUuid.value = row.requirement_uuid
+  try {
+    await api.patch(`/admin/bidding/bid-draft/material-requirements/${row.requirement_uuid}`, patch)
+    await loadBiddingMaterialRequirements(undefined, row.package_key || undefined)
+    ElMessage.success(successMessage)
+    return true
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '资料需求更新失败'))
+    return false
+  } finally {
+    biddingMaterialRequirementUpdatingUuid.value = ''
+  }
+}
+
+async function useBiddingMaterialCandidate(row) {
+  const itemUuid = row?.candidate_profile_item_uuid || row?.candidate_profile_item?.item_uuid
+  if (!itemUuid) return
+  await updateBiddingMaterialRequirement(
+    row,
+    {
+      submitted_profile_item_uuid: itemUuid,
+      status: 'approved',
+      notes: '采用企业资料库候选资料',
+    },
+    '已采用企业资料库候选资料',
+  )
+}
+
+async function submitBiddingMaterialValue(row) {
+  if (!row?.requirement_uuid) return
+  if (biddingMaterialShouldUseEnterpriseProfile(row)) {
+    await openBiddingMaterialProfileDialog(row)
+    return
+  }
+  await submitBiddingMaterialManualValue(row)
+}
+
+function biddingMaterialShouldUseEnterpriseProfile(row) {
+  return (
+    biddingDraftPackageKey.value === 'technical'
+    && (row?.fulfillment_mode === 'enterprise_profile' || Boolean(row?.profile_category))
+  )
+}
+
+async function openBiddingMaterialProfileDialog(row) {
+  biddingMaterialProfileDialog.row = row
+  Object.assign(biddingMaterialProfileDialog.form, {
+    category: row?.profile_category || '',
+    keyword: row?.normalized?.keyword || row?.item_title || row?.title || '',
+  })
+  biddingMaterialProfileDialog.candidates = Array.isArray(row?.candidates) ? row.candidates : []
+  biddingMaterialProfileDialog.selectedProfiles = []
+  biddingMaterialProfileDialog.uploadedFiles = []
+  biddingMaterialProfileDialog.visible = true
+  await loadBiddingMaterialProfileCandidates()
+}
+
+async function loadBiddingMaterialProfileCandidates() {
+  if (!biddingMaterialProfileDialog.visible) return
+  biddingMaterialProfileDialog.loading = true
+  try {
+    const response = await api.get('/enterprise-profile/candidates', {
+      params: {
+        category: biddingMaterialProfileDialog.form.category || undefined,
+        keyword: biddingMaterialProfileDialog.form.keyword || undefined,
+        limit: 50,
+      },
+    })
+    biddingMaterialProfileDialog.candidates = responseData(response) || []
+  } catch (error) {
+    biddingMaterialProfileDialog.candidates = []
+    ElMessage.error(apiErrorMessage(error, '企业资料候选加载失败'))
+  } finally {
+    biddingMaterialProfileDialog.loading = false
+  }
+}
+
+function handleBiddingMaterialProfileSelectionChange(selection) {
+  biddingMaterialProfileDialog.selectedProfiles = Array.isArray(selection) ? selection : []
+}
+
+async function uploadBiddingMaterialRequirementFile(uploadFile) {
+  const rawFile = uploadFile?.raw
+  if (!rawFile) return
+  biddingMaterialProfileDialog.uploading = true
+  try {
+    const formData = new FormData()
+    formData.append('file', rawFile)
+    formData.append('purpose', 'bidding_material_requirement')
+    const response = await api.post('/files', formData)
+    const data = responseData(response)
+    if (data?.file_id && !biddingMaterialProfileDialog.uploadedFiles.some((file) => file.file_id === data.file_id)) {
+      biddingMaterialProfileDialog.uploadedFiles.push({
+        file_id: data.file_id,
+        original_filename: data.original_filename || rawFile.name || '',
+      })
+    }
+    ElMessage.success('补充文件已上传')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '补充文件上传失败'))
+  } finally {
+    biddingMaterialProfileDialog.uploading = false
+  }
+}
+
+function removeBiddingMaterialRequirementUploadedFile(fileId) {
+  biddingMaterialProfileDialog.uploadedFiles = biddingMaterialProfileDialog.uploadedFiles.filter((file) => file.file_id !== fileId)
+}
+
+function uniqueCompact(values) {
+  const result = []
+  const seen = new Set()
+  for (const value of values || []) {
+    const text = String(value || '').trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    result.push(text)
+  }
+  return result
+}
+
+async function submitBiddingMaterialProfileCandidates(items = []) {
+  const row = biddingMaterialProfileDialog.row
+  if (!row?.requirement_uuid) return
+  const profileUuids = uniqueCompact([
+    ...(row.submitted_profile_item_uuids || []),
+    row.submitted_profile_item_uuid,
+    ...items.map((item) => item?.item_uuid),
+  ])
+  const fileIds = uniqueCompact([
+    ...(row.submitted_file_ids || []),
+    row.submitted_file_id,
+    ...biddingMaterialProfileDialog.uploadedFiles.map((file) => file.file_id),
+  ])
+  if (!profileUuids.length && !fileIds.length) {
+    ElMessage.warning('请先选择企业资料或上传补充文件')
+    return
+  }
+  const ok = await updateBiddingMaterialRequirement(
+    row,
+    {
+      submitted_profile_item_uuids: profileUuids,
+      submitted_file_ids: fileIds,
+      status: 'approved',
+      notes: `已提交 ${profileUuids.length} 份企业资料、${fileIds.length} 份补充文件`,
+    },
+    '已提交多份技术标资料',
+  )
+  if (ok) {
+    biddingMaterialProfileDialog.visible = false
+    biddingMaterialProfileDialog.row = null
+    biddingMaterialProfileDialog.candidates = []
+    biddingMaterialProfileDialog.selectedProfiles = []
+    biddingMaterialProfileDialog.uploadedFiles = []
+  }
+}
+
+async function submitBiddingMaterialManualValue(row) {
+  if (!row?.requirement_uuid) return
+  biddingMaterialProfileDialog.visible = false
+  try {
+    const requiredInformation = String(row.description || row.item_title || row.title || '本章节所需资料')
+      .replace(/^.*?需补充[：:]/, '')
+      .trim()
+    const result = await ElMessageBox.prompt(`需要补充：${requiredInformation}\n\n请填写明确内容、资料文件名称/位置或不适用理由。`, row.title || '补齐资料需求', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputValue: row.submitted_value || '',
+    })
+    const submittedValue = String(result.value || '').trim()
+    if (!submittedValue) return
+    await updateBiddingMaterialRequirement(
+      row,
+      {
+        submitted_value: submittedValue,
+        status: 'submitted',
+        notes: row.notes || '人工补充资料',
+      },
+      '资料需求已提交，待确认可用',
+    )
+  } catch {
+    // 用户取消
+  }
+}
+
+async function approveBiddingMaterialRequirement(row) {
+  await updateBiddingMaterialRequirement(
+    row,
+    { status: 'approved', notes: row.notes || '人工确认可用于投标草稿' },
+    '资料需求已确认可用；请重新生成对应技术标章节后再导出正式稿',
+  )
+}
+
+async function markBiddingMaterialRequirementNotApplicable(row) {
+  await updateBiddingMaterialRequirement(row, { status: 'not_applicable', notes: row.notes || '本项目不适用' }, '资料需求已标记不适用')
+}
+
+function biddingFileFormatHasPackage(packageKey) {
+  return biddingFileFormatPackages.value.some((pkg) => pkg.package_key === packageKey)
+}
+
+function biddingFileFormatPackageLabel(packageKey) {
+  return biddingFileFormatPackages.value.find((pkg) => pkg.package_key === packageKey)?.package_title || packageKey || ''
+}
+
+function appendBiddingFileFormatEditEvent(event) {
+  biddingFileFormatPendingEvents.value = [
+    ...biddingFileFormatPendingEvents.value,
+    {
+      ...event,
+      created_at: new Date().toISOString(),
+    },
+  ]
+}
+
+function openBiddingFileFormatItemDialog() {
+  const firstPackage = biddingFileFormatPackages.value.find((pkg) => pkg.package_key === biddingDraftPackageKey.value) || biddingFileFormatPackages.value[0]
+  biddingFileFormatItemDialog.visible = true
+  biddingFileFormatItemDialog.package_key = firstPackage?.package_key || 'business'
+  biddingFileFormatItemDialog.item_title = ''
+  biddingFileFormatItemDialog.content_type = 'draft_section'
+  biddingFileFormatItemDialog.owner_role = firstPackage?.package_key === 'business' ? '经营' : '技术'
+  biddingFileFormatItemDialog.generation_strategy = 'generate_draft'
+  biddingFileFormatItemDialog.requires_signature = false
+  biddingFileFormatItemDialog.requires_attachment = false
+}
+
+function syncBiddingFileFormatDialogStrategy() {
+  biddingFileFormatItemDialog.generation_strategy = biddingFileFormatDefaultGenerationStrategy(
+    biddingFileFormatItemDialog.content_type,
+  )
+  biddingFileFormatItemDialog.requires_attachment = ['attachment_proof', 'qualification_attachment'].includes(
+    biddingFileFormatItemDialog.content_type,
+  )
+  biddingFileFormatItemDialog.requires_signature = biddingFileFormatItemDialog.content_type === 'fixed_form'
+}
+
+function addBiddingFileFormatItem() {
+  const title = biddingFileFormatItemDialog.item_title.trim()
+  if (!title) {
+    ElMessage.warning('请填写目录项名称')
+    return
+  }
+  const structure = cloneBiddingFileFormatStructure()
+  const targetPackage = findBiddingFileFormatPackage(structure, biddingFileFormatItemDialog.package_key)
+  if (!targetPackage) {
+    ElMessage.warning('请先选择文件包')
+    return
+  }
+  const itemKey = `manual_${Date.now()}`
+  const contentType = biddingFileFormatItemDialog.content_type
+  const item = {
+    item_key: `${targetPackage.package_key}:${itemKey}`,
+    base_item_key: itemKey,
+    item_title: title,
+    package_key: targetPackage.package_key,
+    content_type: contentType,
+    content_type_label: biddingFileFormatContentTypeLabel(contentType),
+    owner_role: biddingFileFormatItemDialog.owner_role,
+    generation_strategy: biddingFileFormatItemDialog.generation_strategy,
+    is_required: true,
+    requires_signature: biddingFileFormatItemDialog.requires_signature,
+    requires_attachment: biddingFileFormatItemDialog.requires_attachment,
+    order_index: (targetPackage.items || []).length + 1,
+    evidence: [
+      {
+        source_file: '人工新增',
+        source_location: '格式确认表',
+        original_text: '人工新增目录项',
+        source_kind: 'manual',
+      },
+    ],
+  }
+  targetPackage.items = [...(targetPackage.items || []), item]
+  touchBiddingFileFormatStructure(structure)
+  appendBiddingFileFormatEditEvent({
+    event_type: 'add_item',
+    item_key: item.item_key,
+    item_title: item.item_title,
+    to_package_key: targetPackage.package_key,
+    detail: {
+      to_package_title: targetPackage.package_title,
+      content_type: item.content_type,
+      generation_strategy: item.generation_strategy,
+      owner_role: item.owner_role,
+      note: '人工新增投标文件格式目录项',
+    },
+  })
+  biddingFileFormatItemDialog.visible = false
+  ElMessage.success('目录项已新增，确认格式后保存')
+}
+
+function moveBiddingFileFormatItem(row, targetPackageKey) {
+  if (!row?.item_key || row.package_key === targetPackageKey) return
+  const structure = cloneBiddingFileFormatStructure()
+  const sourcePackage = findBiddingFileFormatPackage(structure, row.package_key)
+  const targetPackage = findBiddingFileFormatPackage(structure, targetPackageKey)
+  if (!sourcePackage || !targetPackage) return
+  const sourceItems = sourcePackage.items || []
+  const itemIndex = sourceItems.findIndex((item) => item.item_key === row.item_key)
+  if (itemIndex < 0) return
+  const [item] = sourceItems.splice(itemIndex, 1)
+  item.package_key = targetPackage.package_key
+  item.item_key = `${targetPackage.package_key}:${item.base_item_key || item.item_key.split(':').pop()}`
+  item.order_index = (targetPackage.items || []).length + 1
+  item.conflict_note = item.conflict_note || '人工调整过文件包归属。'
+  targetPackage.items = [...(targetPackage.items || []), item]
+  touchBiddingFileFormatStructure(structure)
+  appendBiddingFileFormatEditEvent({
+    event_type: 'move_item',
+    item_key: item.item_key,
+    item_title: item.item_title,
+    from_package_key: sourcePackage.package_key,
+    to_package_key: targetPackage.package_key,
+    detail: {
+      from_package_title: sourcePackage.package_title,
+      to_package_title: targetPackage.package_title,
+      content_type: item.content_type,
+      generation_strategy: item.generation_strategy,
+      owner_role: item.owner_role,
+      note: `人工从${sourcePackage.package_title}移动到${targetPackage.package_title}`,
+    },
+  })
+  ElMessage.success(`已移动到${targetPackage.package_title}，确认格式后保存`)
+}
+
+function removeBiddingFileFormatItem(row) {
+  if (!row?.item_key) return
+  const structure = cloneBiddingFileFormatStructure()
+  const sourcePackage = findBiddingFileFormatPackage(structure, row.package_key)
+  if (!sourcePackage) return
+  const removed = (sourcePackage.items || []).find((item) => item.item_key === row.item_key)
+  sourcePackage.items = (sourcePackage.items || []).filter((item) => item.item_key !== row.item_key)
+  touchBiddingFileFormatStructure(structure)
+  appendBiddingFileFormatEditEvent({
+    event_type: 'remove_item',
+    item_key: row.item_key,
+    item_title: row.item_title,
+    from_package_key: sourcePackage.package_key,
+    detail: {
+      from_package_title: sourcePackage.package_title,
+      content_type: removed?.content_type || row.content_type,
+      generation_strategy: removed?.generation_strategy || row.generation_strategy,
+      owner_role: removed?.owner_role || row.owner_role,
+      note: `人工从${sourcePackage.package_title}删除目录项`,
+    },
+  })
+  ElMessage.success('目录项已删除，确认格式后保存')
+}
+
+function cloneBiddingFileFormatStructure() {
+  return JSON.parse(JSON.stringify(biddingFileFormatPlan.value?.structure || { packages: [] }))
+}
+
+function findBiddingFileFormatPackage(structure, packageKey) {
+  return (structure?.packages || []).find((pkg) => pkg.package_key === packageKey)
+}
+
+function touchBiddingFileFormatStructure(structure) {
+  if (!biddingFileFormatPlan.value) return
+  const normalized = refreshBiddingFileFormatStructureStats(structure)
+  const wasConfirmed = biddingFileFormatPlan.value.review_status === 'confirmed'
+  biddingFileFormatPlan.value = {
+    ...biddingFileFormatPlan.value,
+    review_status: wasConfirmed ? 'needs_revision' : biddingFileFormatPlan.value.review_status || 'draft',
+    confirmed_at: wasConfirmed ? null : biddingFileFormatPlan.value.confirmed_at,
+    structure: normalized,
+    summary: buildLocalBiddingFileFormatSummary(normalized, biddingFileFormatPlan.value.summary || {}),
+  }
+}
+
+function refreshBiddingFileFormatStructureStats(structure) {
+  const packages = structure?.packages || []
+  for (const pkg of packages) {
+    const items = pkg.items || []
+    pkg.item_count = items.length
+    pkg.draft_section_count = items.filter((item) => item.content_type === 'draft_section').length
+    pkg.fixed_form_count = items.filter((item) => item.content_type === 'fixed_form').length
+    pkg.attachment_count = items.filter((item) => ['attachment_proof', 'qualification_attachment'].includes(item.content_type)).length
+    pkg.pricing_table_count = items.filter((item) => item.content_type === 'pricing_table').length
+  }
+  return structure
+}
+
+function buildLocalBiddingFileFormatSummary(structure, previousSummary = {}) {
+  const items = (structure?.packages || []).flatMap((pkg) => pkg.items || [])
+  const countByType = items.reduce((acc, item) => {
+    const key = item.content_type || 'unknown'
+    acc[key] = (acc[key] || 0) + 1
+    return acc
+  }, {})
+  return {
+    ...previousSummary,
+    package_count: (structure?.packages || []).length,
+    item_count: items.length,
+    fixed_form_count: countByType.fixed_form || 0,
+    draft_section_count: countByType.draft_section || 0,
+    pricing_table_count: countByType.pricing_table || 0,
+    attachment_count: (countByType.attachment_proof || 0) + (countByType.qualification_attachment || 0),
+    manual_input_count: items.filter((item) => ['manual_upload', 'manual_fill'].includes(item.generation_strategy)).length,
+    conflict_count: items.filter((item) => item.conflict_status === 'cross_package_duplicate').length,
+    by_content_type: countByType,
+  }
+}
+
+function biddingFileFormatDefaultGenerationStrategy(contentType) {
+  if (contentType === 'draft_section') return 'generate_draft'
+  if (contentType === 'pricing_table') return 'from_cost_quote'
+  if (['attachment_proof', 'qualification_attachment'].includes(contentType)) return 'manual_upload'
+  return 'manual_fill'
+}
+
+async function loadBiddingDraftOutline(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  biddingDraftOutlineLoading.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/bid-draft/outline`, {
+      params: { run_uuid: 'latest', package_key: biddingDraftPackageKey.value || undefined },
+    })
+    biddingDraftOutline.value = responseData(response) || null
+  } catch (error) {
+    biddingDraftOutline.value = null
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '投标书目录骨架加载失败'))
+  } finally {
+    biddingDraftOutlineLoading.value = false
+  }
+}
+
+async function generateBiddingDraftOutline() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingDraftOutlineGenerating.value) return
+  biddingDraftOutlineGenerating.value = true
+  try {
+    const response = await api.post(`/admin/bidding/projects/${projectUuid}/bid-draft/outline/generate`, {
+      run_uuid: 'latest',
+      package_key: biddingDraftPackageKey.value || undefined,
+    })
+    biddingDraftOutline.value = responseData(response) || null
+    ElMessage.success('投标书目录骨架已生成')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '投标书目录骨架生成失败'))
+  } finally {
+    biddingDraftOutlineGenerating.value = false
+  }
+}
+
+async function loadBiddingDraftSections(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  biddingDraftSectionsLoading.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/bid-draft/sections`, {
+      params: { run_uuid: 'latest', package_key: biddingDraftPackageKey.value || undefined },
+    })
+    biddingDraftSections.value = responseData(response) || []
+  } catch (error) {
+    biddingDraftSections.value = []
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '章节草稿加载失败'))
+  } finally {
+    biddingDraftSectionsLoading.value = false
+  }
+}
+
+async function generateBiddingTechnicalDraftMvp() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingTechnicalDraftGenerating.value) return
+  biddingTechnicalDraftGenerating.value = true
+  try {
+    const response = await api.post(`/admin/bidding/projects/${projectUuid}/bid-draft/technical-draft/generate`, {
+      run_uuid: 'latest',
+      overwrite: true,
+    })
+    const result = responseData(response) || {}
+    await loadBiddingDraftSections(projectUuid)
+    const firstDraft = (result.drafts || [])[0] || biddingTechnicalCompositionDraftSections.value[0]
+    if (firstDraft) {
+      biddingDraftPreviewDrawer.draft = firstDraft
+      biddingDraftPreviewDrawer.visible = true
+      biddingDraftPreviewDrawer.editing = false
+      biddingDraftPreviewDrawer.editContent = ''
+    }
+    ElMessage.success(`技术标草案已生成：${result.generated_count || 0} 章，占位 ${result.placeholder_count || 0} 章`)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '技术标草案生成失败'))
+  } finally {
+    biddingTechnicalDraftGenerating.value = false
+  }
+}
+
+async function exportBiddingTechnicalDraftWord() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingTechnicalDraftExporting.value) return
+  biddingTechnicalDraftExporting.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/bid-draft/technical-draft/export`, {
+      params: { run_uuid: 'latest' },
+      responseType: 'blob',
+    })
+    const fallback = `${biddingDrawer.project?.project_name || '技术标'}_技术标草稿.docx`
+    const filename = filenameFromDisposition(response.headers?.['content-disposition'], fallback)
+    downloadBlob(response.data, {
+      filename,
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    ElMessage.success('技术标 Word 草稿已导出')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '技术标 Word 草稿导出失败'))
+  } finally {
+    biddingTechnicalDraftExporting.value = false
+  }
+}
+
+async function exportBiddingTechnicalFinalWord() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingTechnicalFinalExporting.value) return
+  biddingTechnicalFinalExporting.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/bid-draft/technical-final/export`, {
+      params: { run_uuid: 'latest' },
+      responseType: 'blob',
+    })
+    const fallback = `${biddingDrawer.project?.project_name || '技术标'}_技术标正式稿.docx`
+    const filename = filenameFromDisposition(response.headers?.['content-disposition'], fallback)
+    downloadBlob(response.data, {
+      filename,
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    ElMessage.success('正式技术标 Word 已导出')
+  } catch (error) {
+    await hydrateBlobErrorDetail(error)
+    if (error.response?.data?.detail?.code === 'BID_TECHNICAL_FINAL_EXPORT_BLOCKED') {
+      await loadBiddingMaterialRequirements(projectUuid, 'technical')
+    }
+    const message = biddingTechnicalFinalExportBlockMessage(error)
+    if (error.response?.data?.detail?.code === 'BID_TECHNICAL_FINAL_EXPORT_BLOCKED') {
+      await ElMessageBox.alert(message, '正式导出阻断', {
+        type: 'warning',
+        confirmButtonText: '知道了',
+      })
+    } else {
+      ElMessage.error(message)
+    }
+  } finally {
+    biddingTechnicalFinalExporting.value = false
+  }
+}
+
+async function openBiddingTechnicalFinalQualityReport() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingTechnicalFinalQualityLoading.value) return
+  biddingTechnicalFinalQualityLoading.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/bid-draft/technical-final/quality`, {
+      params: { run_uuid: 'latest' },
+    })
+    await loadBiddingMaterialRequirements(projectUuid, 'technical')
+    const report = responseData(response) || {}
+    const issues = normalizeBiddingTechnicalFinalIssues(report.issues)
+    biddingTechnicalFinalQualityDrawer.report = { ...report, issues, issue_count: issues.length }
+    biddingTechnicalFinalQualityDrawer.visible = true
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '正式技术标质检报告加载失败'))
+  } finally {
+    biddingTechnicalFinalQualityLoading.value = false
+  }
+}
+
+async function generateBiddingDraftSection(row) {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || !row?.section_key || biddingDraftSectionGeneratingKey.value) return
+  biddingDraftSectionGeneratingKey.value = row.section_key
+  try {
+    const response = await api.post(`/admin/bidding/projects/${projectUuid}/bid-draft/sections/generate`, {
+      run_uuid: 'latest',
+      section_key: row.section_key,
+      generator_type: 'rule',
+      package_key: biddingDraftPackageKey.value || undefined,
+    })
+    const draft = responseData(response)
+    await loadBiddingDraftSections(projectUuid)
+    biddingDraftPreviewDrawer.draft = draft
+    biddingDraftPreviewDrawer.visible = true
+    biddingDraftPreviewDrawer.editing = false
+    biddingDraftPreviewDrawer.editContent = ''
+    ElMessage.success(['blocked', 'review_note'].includes(row.draft_mode) ? '已生成复核说明' : '章节草稿已生成')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '章节草稿生成失败'))
+  } finally {
+    biddingDraftSectionGeneratingKey.value = ''
+  }
+}
+
+function openBiddingDraftPreview(row) {
+  const draft = row?.draft_uuid ? row : biddingDraftForOutlineSection(row)
+  if (!draft) return
+  biddingDraftPreviewDrawer.draft = draft
+  biddingDraftPreviewDrawer.visible = true
+  biddingDraftPreviewDrawer.editing = false
+  biddingDraftPreviewDrawer.editContent = ''
+}
+
+function startEditingBiddingDraftSection() {
+  const draft = biddingDraftPreviewDrawer.draft
+  if (!draft) return
+  biddingDraftPreviewDrawer.editContent = draft.content_markdown || ''
+  biddingDraftPreviewDrawer.editing = true
+}
+
+function cancelEditingBiddingDraftSection() {
+  biddingDraftPreviewDrawer.editing = false
+  biddingDraftPreviewDrawer.editContent = ''
+}
+
+async function saveBiddingDraftSectionContent() {
+  const draft = biddingDraftPreviewDrawer.draft
+  if (!draft?.draft_uuid || biddingDraftPreviewDrawer.saving) return
+  biddingDraftPreviewDrawer.saving = true
+  try {
+    const response = await api.patch(`/admin/bidding/bid-draft/sections/${draft.draft_uuid}/content`, {
+      content_markdown: biddingDraftPreviewDrawer.editContent || '',
+      editor_note: '人工编辑保存',
+    })
+    const nextDraft = responseData(response)
+    biddingDraftPreviewDrawer.draft = nextDraft
+    biddingDraftPreviewDrawer.editing = false
+    biddingDraftPreviewDrawer.editContent = ''
+    await loadBiddingDraftSections()
+    ElMessage.success('章节正文已保存为新版本')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '章节正文保存失败'))
+  } finally {
+    biddingDraftPreviewDrawer.saving = false
+  }
+}
+
+async function generateBiddingDraftSectionWithLlm() {
+  const draft = biddingDraftPreviewDrawer.draft
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || !draft?.section_key || biddingDraftPreviewDrawer.llmGenerating) return
+  if (!biddingDraftCanLlmEnhance(draft)) {
+    const reasons = draft?.llm_entry?.blocked_reasons || []
+    ElMessage.warning(reasons[0] || '当前章节尚未通过 LLM 正文增强入口')
+    return
+  }
+  biddingDraftPreviewDrawer.llmGenerating = true
+  try {
+    const response = await api.post(`/admin/bidding/projects/${projectUuid}/bid-draft/sections/generate`, {
+      run_uuid: 'latest',
+      section_key: draft.section_key,
+      generator_type: 'llm',
+      package_key: biddingDraftPackageKey.value || draft.package_key || undefined,
+    })
+    const nextDraft = responseData(response)
+    biddingDraftPreviewDrawer.draft = nextDraft
+    biddingDraftPreviewDrawer.editing = false
+    biddingDraftPreviewDrawer.editContent = ''
+    await loadBiddingDraftSections(projectUuid)
+    ElMessage.success('DeepSeek 已生成正文版本')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, 'DeepSeek 正文生成失败'))
+  } finally {
+    biddingDraftPreviewDrawer.llmGenerating = false
+  }
+}
+
+async function reviewBiddingDraftSection(reviewStatus) {
+  const draft = biddingDraftPreviewDrawer.draft
+  if (!draft?.draft_uuid || biddingDraftSectionReviewing.value) return
+  if (reviewStatus === 'accepted' && draft.acceptance_check?.status === 'blocked') {
+    ElMessage.warning(draft.acceptance_check.summary || '当前 LLM 增强稿接受前检查未通过')
+    return
+  }
+  let reviewerNote = ''
+  if (reviewStatus === 'needs_revision') {
+    try {
+      const result = await ElMessageBox.prompt('请输入需要修改的原因或补充说明。', '章节草稿需修改', {
+        confirmButtonText: '提交',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+      })
+      reviewerNote = result.value || ''
+    } catch {
+      return
+    }
+  }
+  biddingDraftSectionReviewing.value = true
+  try {
+    const response = await api.patch(`/admin/bidding/bid-draft/sections/${draft.draft_uuid}/review`, {
+      review_status: reviewStatus,
+      reviewer_note: reviewerNote,
+    })
+    const nextDraft = responseData(response)
+    biddingDraftPreviewDrawer.draft = nextDraft
+    await loadBiddingDraftSections()
+    ElMessage.success('章节草稿复核状态已更新')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '章节草稿复核失败'))
+  } finally {
+    biddingDraftSectionReviewing.value = false
+  }
+}
+
+async function generateBiddingResponseMatrix() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingResponseMatrixGenerating.value) return
+  try {
+    await ElMessageBox.confirm(
+      '系统会从业务对象、风险和关键要求生成响应矩阵初稿；已存在的响应项不会重复生成，也不会覆盖人工修改。',
+      '生成响应矩阵',
+      {
+        confirmButtonText: '生成',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+  biddingResponseMatrixGenerating.value = true
+  try {
+    const response = await api.post(`/admin/bidding/projects/${projectUuid}/response-matrix/generate`, {
+      run_uuid: 'latest',
+    })
+    const data = responseData(response) || {}
+    ElMessage.success(`响应矩阵已生成：新增 ${data.created_count || 0} 条，已有 ${data.skipped_existing_count || 0} 条`)
+    await Promise.all([
+      loadBiddingResponseMatrix(projectUuid),
+      loadBiddingDraftOutline(projectUuid),
+      loadBiddingProjectDetail(projectUuid),
+      loadBiddingProjects(),
+    ])
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '响应矩阵生成失败'))
+  } finally {
+    biddingResponseMatrixGenerating.value = false
+  }
+}
+
+async function updateBiddingResponseItem(row, patch) {
+  if (!row?.response_item_uuid || biddingResponseItemUpdating.value) return
+  biddingResponseItemUpdating.value = true
+  try {
+    await api.patch(`/admin/bidding/response-items/${row.response_item_uuid}`, patch)
+    await Promise.all([loadBiddingResponseMatrix(), loadBiddingDraftOutline()])
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '响应项更新失败'))
+    await Promise.all([loadBiddingResponseMatrix(), loadBiddingDraftOutline()])
+  } finally {
+    biddingResponseItemUpdating.value = false
+  }
+}
+
+async function editBiddingResponseItemNote(row) {
+  if (!row?.response_item_uuid) return
+  try {
+    const result = await ElMessageBox.prompt('填写响应说明或处理备注，后续投标书生成会优先读取这里的人工说明。', '编辑响应说明', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputValue: row.response_note || '',
+      inputPlaceholder: '例如：已按招标文件要求在商务响应中承诺，报价已考虑该风险。',
+    })
+    await updateBiddingResponseItem(row, { response_note: result.value || '' })
+  } catch {
+    // cancel
+  }
+}
+
+async function editBiddingResponseItemOwner(row) {
+  if (!row?.response_item_uuid) return
+  try {
+    const result = await ElMessageBox.prompt('填写责任角色，便于投标协同跟进。', '编辑责任角色', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputValue: row.owner_role || '',
+      inputPlaceholder: '经营 / 预算 / 法务 / 技术',
+    })
+    await updateBiddingResponseItem(row, { owner_role: result.value || '' })
+  } catch {
+    // cancel
+  }
+}
+
+async function loadBiddingRequirements(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/requirements`, {
+      params: { page: 1, page_size: 200 },
+    })
+    biddingRequirements.value = responseData(response) || []
+    biddingRequirementsTotal.value = response.data?.total ?? biddingRequirements.value.length
+  } catch (error) {
+    biddingRequirements.value = []
+    biddingRequirementsTotal.value = 0
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '招标要求加载失败'))
+  }
+}
+
+async function loadBiddingRisks(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/risks`, {
+      params: { page: 1, page_size: 200 },
+    })
+    biddingRisks.value = responseData(response) || []
+    biddingRisksTotal.value = response.data?.total ?? biddingRisks.value.length
+  } catch (error) {
+    biddingRisks.value = []
+    biddingRisksTotal.value = 0
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '合同风险加载失败'))
+  }
+}
+
+async function loadBiddingRiskCards(projectUuid = currentBiddingProjectUuid()) {
+  if (!projectUuid) return
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/risk-cards`)
+    const payload = responseData(response) || {}
+    biddingRiskCards.value = payload.cards || []
+    biddingRiskCardsSummary.value = payload.summary || {}
+  } catch (error) {
+    biddingRiskCards.value = []
+    biddingRiskCardsSummary.value = {}
+    if (!isBiddingNoParseRun(error)) ElMessage.error(apiErrorMessage(error, '风险卡片加载失败'))
+  }
+}
+
+function handleBiddingFileChange(uploadFile) {
+  const file = uploadFile?.raw || uploadFile || null
+  if (file && !isPrimaryTenderFile(file)) {
+    ElMessage.warning('首版仅支持甲方招标文件 PDF 或 Word(.docx)')
+    biddingUpload.file = null
+    biddingUploadRef.value?.clearFiles?.()
+    return
+  }
+  biddingUpload.file = file
+}
+
+function clearBiddingFile() {
+  biddingUpload.file = null
+}
+
+async function uploadBiddingFile() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || !biddingUpload.file) return
+  if (!isPrimaryTenderFile(biddingUpload.file)) {
+    ElMessage.warning('首版仅支持甲方招标文件 PDF 或 Word(.docx)')
+    return
+  }
+  const form = new FormData()
+  form.append('file', biddingUpload.file)
+  form.append('file_type', biddingUpload.fileType || 'tender_document')
+  biddingUpload.loading = true
+  try {
+    await api.post(`/admin/bidding/projects/${projectUuid}/files`, form)
+    ElMessage.success('招标资料已上传并抽取文本')
+    biddingUpload.file = null
+    biddingUploadRef.value?.clearFiles?.()
+    await Promise.all([
+      loadBiddingFiles(projectUuid),
+      loadBiddingProjectDetail(projectUuid),
+      loadBiddingProjects(),
+    ])
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '资料上传失败'))
+  } finally {
+    biddingUpload.loading = false
+  }
+}
+
+async function parseBiddingProject() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid) return
+  biddingParsing.value = true
+  biddingRiskClause.value = null
+  startBiddingImportantInfoProgress('解析招标文件')
+  try {
+    updateBiddingImportantInfoProgress(18, '解析招标文件', '抽取招标文件文本和原文片段')
+    await api.post(`/admin/bidding/projects/${projectUuid}/parse`, { file_uuids: [] })
+    updateBiddingImportantInfoProgress(42, '准备LLM结构化提取', '整理提示词、output_schema 和招标文件原文片段')
+    biddingDrawer.activeTab = 'analysis'
+    await Promise.all([loadBiddingProjectDetail(projectUuid), loadBiddingFiles(projectUuid), loadBiddingParseRuns(projectUuid)])
+    await loadBiddingTenderAnalysis(projectUuid, { trackProgress: true })
+    await Promise.all([
+      loadBiddingRiskClause(projectUuid),
+      loadBiddingBusinessObjects(projectUuid),
+      loadBiddingResponseMatrix(projectUuid),
+      loadBiddingFileFormatPlan(projectUuid),
+      loadBiddingDraftOutline(projectUuid),
+      loadBiddingDraftSections(projectUuid),
+      loadBiddingRequirements(projectUuid),
+      loadBiddingRiskCards(projectUuid),
+      loadBiddingRisks(projectUuid),
+      loadBiddingProjects(),
+    ])
+    ElMessage.success('招标文件解析与LLM结构化提取完成')
+  } catch (error) {
+    finishBiddingImportantInfoProgress(false, apiErrorMessage(error, '招标文件解析失败'))
+    ElMessage.error(apiErrorMessage(error, '招标文件解析失败'))
+  } finally {
+    biddingParsing.value = false
+  }
+}
+
+async function reviewBiddingBusinessObjectsWithLlm() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid || biddingBusinessObjectLlmReviewing.value) return
+  const pendingRows = biddingLlmPendingRows.value.slice()
+  if (!pendingRows.length) {
+    ElMessage.info('当前没有新的 weak_split / needs_llm_review / needs_secondary_split 对象需要 DeepSeek 复核')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将逐条把 ${pendingRows.length} 个不确定业务对象交给 deepseek-v4-pro，页面会显示当前处理到哪一条；模型结果仅作为人工确认建议。`,
+      'DeepSeek 复核不确定对象',
+      {
+        confirmButtonText: '开始复核',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+  biddingBusinessObjectLlmReviewing.value = true
+  Object.assign(biddingBusinessObjectLlmProgress, {
+    visible: true,
+    total: pendingRows.length,
+    current: 0,
+    completed: 0,
+    error: 0,
+    skipped: 0,
+    currentTitle: '',
+    lastMessage: '准备提交 DeepSeek',
+  })
+  try {
+    for (let index = 0; index < pendingRows.length; index += 1) {
+      const row = pendingRows[index]
+      biddingBusinessObjectLlmProgress.current = index + 1
+      biddingBusinessObjectLlmProgress.currentTitle = row.title || row.object_subtype || row.object_uuid
+      biddingBusinessObjectLlmProgress.lastMessage = '正在请求 DeepSeek...'
+      try {
+        const response = await api.post(`/admin/bidding/projects/${projectUuid}/business-objects/llm-review`, {
+          run_uuid: 'latest',
+          limit: 1,
+          force: false,
+          only_pending: true,
+          object_uuids: [row.object_uuid],
+        })
+        const data = responseData(response) || {}
+        if (data.status === 'skipped' && data.skip_reason === 'deepseek_api_key_missing') {
+          biddingBusinessObjectLlmProgress.lastMessage = '未配置 DEEPSEEK_API_KEY，已停止'
+          ElMessage.warning('未配置 DEEPSEEK_API_KEY，已跳过 DeepSeek 复核')
+          break
+        }
+        if (data.status === 'no_candidates') {
+          biddingBusinessObjectLlmProgress.skipped += 1
+          biddingBusinessObjectLlmProgress.lastMessage = `已跳过：${row.title || row.object_subtype}`
+        } else {
+          const reviewedCount = Number(data.reviewed_count || 0)
+          const errorCount = Number(data.error_count || 0)
+          biddingBusinessObjectLlmProgress.completed += reviewedCount
+          biddingBusinessObjectLlmProgress.error += errorCount
+          const doneItem = data.items?.[0] || data.errors?.[0] || {}
+          biddingBusinessObjectLlmProgress.lastMessage = errorCount
+            ? `异常：${doneItem.title || row.title || row.object_subtype}`
+            : `已完成：${doneItem.title || row.title || row.object_subtype}`
+        }
+        await loadBiddingBusinessObjects(projectUuid)
+      } catch (error) {
+        biddingBusinessObjectLlmProgress.error += 1
+        biddingBusinessObjectLlmProgress.lastMessage = `请求失败：${row.title || row.object_subtype}`
+        ElMessage.error(apiErrorMessage(error, 'DeepSeek 单条复核失败'))
+        break
+      }
+    }
+    biddingBusinessObjectLlmProgress.currentTitle = '处理结束'
+    ElMessage.success(
+      `DeepSeek 复核结束：完成 ${biddingBusinessObjectLlmProgress.completed}，异常 ${biddingBusinessObjectLlmProgress.error}，跳过 ${biddingBusinessObjectLlmProgress.skipped}`,
+    )
+    await Promise.all([
+      loadBiddingBusinessObjects(projectUuid),
+      loadBiddingTenderAnalysis(projectUuid),
+      loadBiddingResponseMatrix(projectUuid),
+      loadBiddingProjectDetail(projectUuid),
+      loadBiddingProjects(),
+    ])
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, 'DeepSeek 复核失败'))
+  } finally {
+    biddingBusinessObjectLlmReviewing.value = false
+  }
+}
+
+async function submitBiddingLlmReviewDecision(row, action, payload = {}) {
+  if (!row?.object_uuid) return
+  biddingLlmDecisionSubmitting.value = true
+  try {
+    await api.patch(`/admin/bidding/business-objects/${row.object_uuid}/llm-review`, {
+      action,
+      ...payload,
+    })
+    const labels = { accept: '采纳', reject: '驳回', modify: '修改' }
+    ElMessage.success(`DeepSeek建议已${labels[action] || '处理'}`)
+    const projectUuid = currentBiddingProjectUuid()
+    await Promise.all([
+      loadBiddingBusinessObjects(projectUuid),
+      loadBiddingTenderAnalysis(projectUuid),
+      loadBiddingProjectDetail(projectUuid),
+      loadBiddingProjects(),
+    ])
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, 'DeepSeek建议处理失败'))
+  } finally {
+    biddingLlmDecisionSubmitting.value = false
+  }
+}
+
+async function acceptBiddingLlmReview(row) {
+  if (!row?.object_uuid) return
+  try {
+    await ElMessageBox.confirm(
+      '采纳后会把该 DeepSeek 建议标记为有效建议，后续响应矩阵可读取该结果；不会自动修改业务对象分类或人工复核状态。',
+      '采纳 DeepSeek 建议',
+      {
+        confirmButtonText: '采纳',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+  await submitBiddingLlmReviewDecision(row, 'accept', { reviewer_note: null })
+}
+
+async function rejectBiddingLlmReview(row) {
+  if (!row?.object_uuid) return
+  try {
+    const result = await ElMessageBox.prompt('请填写驳回原因，便于后续追溯为什么不采用该建议。', '驳回 DeepSeek 建议', {
+      confirmButtonText: '驳回',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '例如：原文证据不足，仍按系统原分类人工复核。',
+      inputValidator: (value) => Boolean(value && value.trim()),
+      inputErrorMessage: '请填写驳回原因',
+    })
+    await submitBiddingLlmReviewDecision(row, 'reject', {
+      reviewer_note: result.value.trim(),
+    })
+  } catch {
+    // cancel
+  }
+}
+
+function openModifyBiddingLlmReview(row) {
+  if (!row?.object_uuid) return
+  const review = row.normalized?.llm_review || {}
+  biddingLlmEditDialog.row = row
+  Object.assign(biddingLlmEditDialog.form, {
+    decision: review.decision || 'manual_review',
+    suggested_title: review.suggested_title || row.title || '',
+    suggested_object_subtype: review.suggested_object_subtype || row.object_subtype || '',
+    primary_business_action: review.primary_business_action || row.normalized?.business_action || '',
+    reason: review.reason || '',
+    suggested_reviewer_note: review.suggested_reviewer_note || '',
+    reviewer_note: '',
+  })
+  biddingLlmEditDialog.visible = true
+}
+
+async function submitModifyBiddingLlmReview() {
+  const row = biddingLlmEditDialog.row
+  if (!row?.object_uuid) return
+  if (!biddingLlmEditDialog.form.reviewer_note?.trim()) {
+    ElMessage.warning('请填写处理备注')
+    return
+  }
+  await submitBiddingLlmReviewDecision(row, 'modify', {
+    reviewer_note: biddingLlmEditDialog.form.reviewer_note.trim(),
+    modified_review: {
+      decision: biddingLlmEditDialog.form.decision,
+      suggested_title: biddingLlmEditDialog.form.suggested_title,
+      suggested_object_subtype: biddingLlmEditDialog.form.suggested_object_subtype,
+      primary_business_action: biddingLlmEditDialog.form.primary_business_action,
+      reason: biddingLlmEditDialog.form.reason,
+      suggested_reviewer_note: biddingLlmEditDialog.form.suggested_reviewer_note,
+    },
+  })
+  biddingLlmEditDialog.visible = false
+}
+
+async function reviewBiddingRisk(row, reviewStatus) {
+  if (!row?.risk_uuid) return
+  let reviewerNote = ''
+  if (reviewStatus !== 'confirmed') {
+    try {
+      const result = await ElMessageBox.prompt('请填写复核说明，便于后续答疑、报价预留或忽略追溯。', '风险复核说明', {
+        confirmButtonText: '提交',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '例如：转答疑，请甲方明确结算口径。',
+        inputValidator: (value) => Boolean(value && value.trim()),
+        inputErrorMessage: '请填写复核说明',
+      })
+      reviewerNote = result.value.trim()
+    } catch {
+      return
+    }
+  }
+  try {
+    await api.patch(`/admin/bidding/risks/${row.risk_uuid}/review`, {
+      review_status: reviewStatus,
+      reviewer_note: reviewerNote || null,
+    })
+    ElMessage.success('风险复核状态已更新')
+    await Promise.all([
+      loadBiddingRisks(),
+      loadBiddingRiskCards(),
+      loadBiddingTenderAnalysis(),
+      loadBiddingProjectDetail(),
+      loadBiddingProjects(),
+    ])
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '风险复核失败'))
+  }
+}
+
+async function reviewBiddingBusinessObject(row, reviewStatus) {
+  if (!row?.object_uuid) return
+  let reviewerNote = ''
+  if (reviewStatus !== 'confirmed') {
+    try {
+      const result = await ElMessageBox.prompt('请填写业务复核说明，便于后续答疑、报价预留或忽略追溯。', '业务对象复核说明', {
+        confirmButtonText: '提交',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '例如：转答疑，请甲方明确履约保证金是否可用保函替代。',
+        inputValidator: (value) => Boolean(value && value.trim()),
+        inputErrorMessage: '请填写复核说明',
+      })
+      reviewerNote = result.value.trim()
+    } catch {
+      return
+    }
+  }
+  try {
+    await api.patch(`/admin/bidding/business-objects/${row.object_uuid}/review`, {
+      review_status: reviewStatus,
+      reviewer_note: reviewerNote || null,
+    })
+    ElMessage.success('业务对象复核状态已更新')
+    await Promise.all([
+      loadBiddingBusinessObjects(),
+      loadBiddingTenderAnalysis(),
+      loadBiddingProjectDetail(),
+      loadBiddingProjects(),
+    ])
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '业务对象复核失败'))
+  }
+}
+
+async function reviewBiddingRiskCard(card, reviewStatus) {
+  if (!card?.card_id) return
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid) return
+  let reviewerNote = ''
+  if (reviewStatus !== 'confirmed') {
+    try {
+      const result = await ElMessageBox.prompt('请填写这张风险卡的复核说明，系统会同步更新卡片内所有风险明细。', '风险卡片复核', {
+        confirmButtonText: '提交',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '例如：转答疑，请甲方明确结算/品牌/违约责任边界。',
+        inputValidator: (value) => Boolean(value && value.trim()),
+        inputErrorMessage: '请填写复核说明',
+      })
+      reviewerNote = result.value.trim()
+    } catch {
+      return
+    }
+  }
+  try {
+    const response = await api.patch(`/admin/bidding/projects/${projectUuid}/risk-cards/${card.card_id}/review`, {
+      review_status: reviewStatus,
+      reviewer_note: reviewerNote || null,
+    })
+    const updated = responseData(response)
+    ElMessage.success(`风险卡片已更新，影响 ${updated?.updated_risk_count || card.risk_count || 0} 条明细`)
+    await Promise.all([
+      loadBiddingRiskCards(projectUuid),
+      loadBiddingRisks(projectUuid),
+      loadBiddingTenderAnalysis(projectUuid),
+      loadBiddingProjectDetail(projectUuid),
+      loadBiddingProjects(),
+    ])
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '风险卡片复核失败'))
+  }
+}
+
+function optionLabel(options, value) {
+  return options.find((item) => item.value === value)?.label || value || '-'
+}
+
+function enterpriseProfileCategoryLabel(value) {
+  return optionLabel(enterpriseProfileCategoryOptions, value)
+}
+
+function enterpriseProfileStatusLabel(value) {
+  return optionLabel(enterpriseProfileStatusOptions, value)
+}
+
+function enterpriseProfileStatusTag(value) {
+  if (value === 'active') return 'success'
+  if (value === 'archived') return 'info'
+  return 'warning'
+}
+
+function enterpriseProfileIssueLabel(code) {
+  const labels = {
+    missing_attachment: '缺附件',
+    missing_evidence: '缺内容/附件',
+    expired: '已过期',
+    expiring_soon: '即将到期',
+  }
+  return labels[code] || code || '-'
+}
+
+function enterpriseProfileIssueTag(code) {
+  if (code === 'expired' || code === 'missing_evidence') return 'danger'
+  if (code === 'missing_attachment' || code === 'expiring_soon') return 'warning'
+  return 'info'
+}
+
+function biddingStatusLabel(status) {
+  return optionLabel(biddingStatusOptions, status)
+}
+
+function biddingStatusTag(status) {
+  if (status === 'parsed') return 'success'
+  if (status === 'files_uploaded' || status === 'reviewing') return 'warning'
+  if (status === 'archived') return 'info'
+  return ''
+}
+
+function biddingFileTypeLabel(value) {
+  return optionLabel(biddingFileTypeOptions, value)
+}
+
+function biddingParseStatusLabel(status) {
+  const labels = {
+    running: '解析中',
+    completed: '已完成',
+    failed: '失败',
+  }
+  return labels[status] || status || '-'
+}
+
+function biddingDocumentSectionLabel(value) {
+  const labels = {
+    table_of_contents: '目录',
+    cover: '封面',
+    bid_instructions: '投标须知',
+    qualification: '资格要求',
+    evaluation: '评标办法',
+    contract_terms: '合同条款',
+    technical_requirements: '技术要求',
+    bill_of_quantities: '工程量清单',
+    bid_format: '投标格式',
+    material_brand: '材料品牌',
+    scope_boundary: '范围界面',
+    clarification: '澄清答疑',
+    other: '其他段落',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingRequirementTypeLabel(value) {
+  const labels = {
+    qualification: '资格要求',
+    technical: '技术要求',
+    commercial: '商务要求',
+    schedule: '工期要求',
+    submission: '递交要求',
+    bill: '清单要求',
+    drawing: '图纸要求',
+    brand: '品牌要求',
+    other: '其他要求',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingRiskLevelLabel(level) {
+  const labels = { high: '高', medium: '中', low: '低' }
+  return labels[level] || level || '-'
+}
+
+function biddingRiskLevelTag(level) {
+  if (level === 'high') return 'danger'
+  if (level === 'medium') return 'warning'
+  if (level === 'low') return 'info'
+  return ''
+}
+
+function biddingRiskGradeV2Label(grade) {
+  const labels = {
+    blocking: '阻断',
+    critical: '重大',
+    high: '高',
+    medium: '中',
+    low: '低',
+  }
+  return labels[grade] || grade || '-'
+}
+
+function biddingRiskGradeV2Tag(grade) {
+  if (grade === 'blocking') return 'danger'
+  if (grade === 'critical') return 'danger'
+  if (grade === 'high') return 'warning'
+  if (grade === 'medium') return 'primary'
+  if (grade === 'low') return 'info'
+  return ''
+}
+
+function biddingRiskActionLabel(action) {
+  const labels = {
+    manual_blocking_review: '阻断复核',
+    to_quote_allowance: '报价预留',
+    to_clarify: '转答疑',
+    confirmed: '确认跟踪',
+    bid_decision_review: '投标决策复核',
+    ignored: '忽略',
+  }
+  return labels[action] || action || '-'
+}
+
+function biddingRiskTypeLabel(value) {
+  const labels = {
+    contract: '合同风险',
+    disqualification: '废标风险',
+    payment: '付款风险',
+    settlement: '结算风险',
+    warranty: '质保风险',
+    schedule: '工期风险',
+    penalty: '违约处罚',
+    scope: '范围风险',
+    fixed_total_price: '总价包干',
+    omission_liability: '漏项责任',
+    no_price_adjustment: '价格不调',
+    advance_funding: '垫资/无预付款',
+    delayed_payment: '付款周期',
+    liquidated_damages: '违约金',
+    claim_time_limit: '签证索赔',
+    site_condition: '现场条件',
+    design_or_drawing_unclear: '图纸/范围不清',
+    material_brand_constraint: '材料品牌',
+    material_brand: '材料品牌',
+    bid_rejection: '废标/否决',
+    anonymous_bid: '暗标',
+    other: '其他风险',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingAnalysisReviewStatusLabel(value) {
+  const labels = {
+    pending: '待复核',
+    confirmed: '已确认',
+    needs_revision: '需补充',
+    ignored: '已忽略',
+    to_clarify: '需答疑',
+    to_quote_allowance: '报价预留',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingAnalysisReviewStatusTag(value) {
+  if (value === 'confirmed') return 'success'
+  if (value === 'needs_revision') return 'danger'
+  if (value === 'to_clarify') return 'primary'
+  if (value === 'to_quote_allowance') return 'warning'
+  if (value === 'ignored') return 'info'
+  return 'warning'
+}
+
+function biddingImportantInfoStatusLabel(value) {
+  const labels = {
+    found: '已识别',
+    unclear: '需澄清',
+    not_found: '未识别',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingImportantInfoStatusTag(value) {
+  if (value === 'found') return 'success'
+  if (value === 'unclear') return 'warning'
+  if (value === 'not_found') return 'danger'
+  return 'info'
+}
+
+function biddingImportantInfoSectionFoundCount(section) {
+  return (section?.items || []).filter((item) => item.status === 'found' && String(item.value || '').trim()).length
+}
+
+function biddingImportantInfoSourceLabel(row) {
+  const file = String(row?.source_file || '').trim()
+  const location = String(row?.source_location || '').trim()
+  if (file && location) return `${file} · ${location}`
+  return file || location || '-'
+}
+
+function formatBiddingPriorityClarificationText(rawItems) {
+  if (!Array.isArray(rawItems)) return ''
+  return rawItems
+    .map((raw, index) => {
+      if (!raw || typeof raw !== 'object') return ''
+      const item = String(raw.item || '').trim()
+      const reason = String(raw.reason || '').trim()
+      if (item && reason) return `${index + 1}. ${item}: ${reason}`
+      if (item) return `${index + 1}. ${item}`
+      if (reason) return `${index + 1}. ${reason}`
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
+function isBiddingImportantInfoSectionExpanded(section) {
+  return biddingImportantInfoExpandedKeys.value.includes(section?.section_key)
+}
+
+function toggleBiddingImportantInfoSection(section) {
+  const sectionKey = section?.section_key
+  if (!sectionKey) return
+  const keys = new Set(biddingImportantInfoExpandedKeys.value)
+  if (keys.has(sectionKey)) keys.delete(sectionKey)
+  else keys.add(sectionKey)
+  biddingImportantInfoExpandedKeys.value = Array.from(keys)
+}
+
+function expandAllBiddingImportantInfoSections() {
+  biddingImportantInfoExpandedKeys.value = [...biddingImportantInfoSectionKeys.value]
+}
+
+function collapseAllBiddingImportantInfoSections() {
+  biddingImportantInfoExpandedKeys.value = []
+}
+
+function toggleBiddingScoringGroup(row) {
+  if (!row?.row_key || !row.__scoringCanExpand) return
+  const keys = new Set(biddingTenderScoringExpandedKeys.value)
+  if (keys.has(row.row_key)) keys.delete(row.row_key)
+  else keys.add(row.row_key)
+  biddingTenderScoringExpandedKeys.value = Array.from(keys)
+}
+
+function biddingAnalysisPackageLabel(value) {
+  const labels = {
+    business: '商务标',
+    technical: '技术标',
+    pricing: '报价/商务标',
+    contract: '合同/法务',
+    mixed: '综合',
+    unknown: '待确认',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingBusinessObjectTypeLabel(value) {
+  const labels = {
+    bid_rule: '投标规则',
+    qualification: '资格审查',
+    contract_clause: '合同条款',
+    pricing_constraint: '报价约束',
+    document_checklist: '文件清单',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingBusinessObjectActionLabel(value) {
+  const labels = {
+    bid_compliance: '投标合规',
+    qualification_response: '资格响应',
+    document_response: '文件编制',
+    quote_allowance: '报价预留',
+    clarification: '转答疑',
+    legal_review: '法务复核',
+    delivery_planning: '履约策划',
+    reference: '信息参考',
+    to_quote_allowance: '报价预留',
+    to_clarify: '转答疑',
+    manual_blocking_review: '阻断复核',
+    bid_decision_review: '投标决策',
+    confirmed: '确认跟踪',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingBusinessObjectActionListLabel(values = []) {
+  const list = Array.isArray(values) ? values : [values]
+  return list.map((value) => biddingBusinessObjectActionLabel(value)).filter(Boolean).join(' / ')
+}
+
+function biddingBusinessObjectActionTag(value) {
+  if (value === 'quote_allowance') return 'warning'
+  if (value === 'clarification') return 'danger'
+  if (value === 'legal_review') return 'primary'
+  if (value === 'document_response' || value === 'qualification_response') return 'success'
+  if (value === 'delivery_planning') return 'info'
+  return ''
+}
+
+function biddingResponseReviewRoleLabel(value) {
+  const labels = {
+    business: '经营',
+    budget: '预算',
+    technical: '技术',
+    legal: '法务',
+    经营: '经营',
+    预算: '预算',
+    技术: '技术',
+    法务: '法务',
+  }
+  return labels[value] || null
+}
+
+function biddingResponseRowRoles(row) {
+  const rawRoles = Array.isArray(row?.review_roles) ? row.review_roles : row?.normalized?.review_roles
+  const roles = Array.isArray(rawRoles) ? rawRoles.map((role) => biddingResponseReviewRoleLabel(role)).filter(Boolean) : []
+  if (row?.owner_role) {
+    const ownerRole = biddingResponseReviewRoleLabel(row.owner_role)
+    if (ownerRole) roles.push(ownerRole)
+  }
+  for (const action of biddingResponseLinkedActions(row)) {
+    const ownerRole = biddingResponseReviewRoleLabel(action?.owner_role)
+    if (ownerRole) roles.push(ownerRole)
+  }
+  return Array.from(new Set(roles))
+}
+
+function biddingResponsePrimaryRole(row) {
+  return biddingResponseReviewRoleLabel(row?.primary_review_role || row?.normalized?.primary_review_role || row?.owner_role)
+}
+
+function biddingResponseSupportingRoles(row) {
+  const rawRoles = Array.isArray(row?.supporting_roles) ? row.supporting_roles : row?.normalized?.supporting_roles
+  const roles = Array.isArray(rawRoles)
+    ? rawRoles.map((role) => biddingResponseReviewRoleLabel(role)).filter(Boolean)
+    : biddingResponseRowRoles(row).filter((role) => role !== biddingResponsePrimaryRole(row))
+  return Array.from(new Set(roles)).filter((role) => role && role !== biddingResponsePrimaryRole(row))
+}
+
+function biddingResponseRowMatchesRole(row, role) {
+  const roleLabel = biddingResponseReviewRoleLabel(role)
+  if (!roleLabel) return true
+  return biddingResponsePrimaryRole(row) === roleLabel
+}
+
+function buildBiddingResponseTaskTree(rows = []) {
+  const clones = rows.map((row, index) => ({ ...row, __sortIndex: index, children: [] }))
+  const parentByGroupKey = new Map()
+  const childrenByGroupKey = new Map()
+  const childRows = []
+  for (const row of clones) {
+    const groupKey = biddingResponseEffectiveGroupKey(row)
+    if (biddingResponseIsSummaryTask(row) && groupKey) {
+      row.task_group_key = row.task_group_key || groupKey
+      parentByGroupKey.set(groupKey, row)
+    }
+    if (biddingResponseIsGroupTask(row) && groupKey) {
+      row.task_group_key = row.task_group_key || groupKey
+      if (!childrenByGroupKey.has(groupKey)) childrenByGroupKey.set(groupKey, [])
+      childrenByGroupKey.get(groupKey).push(row)
+    }
+  }
+  for (const [groupKey, children] of childrenByGroupKey.entries()) {
+    const parent = parentByGroupKey.get(groupKey)
+    if (parent) {
+      parent.children.push(...children)
+      childRows.push(...children.map((row) => row.response_item_uuid))
+    }
+  }
+  const childIds = new Set(childRows)
+  for (const row of parentByGroupKey.values()) {
+    row.children.sort((left, right) => Number(left.task_group_index || 0) - Number(right.task_group_index || 0))
+    if (!row.children.length) delete row.children
+  }
+
+  const virtualParents = []
+  for (const [groupKey, children] of childrenByGroupKey.entries()) {
+    if (parentByGroupKey.has(groupKey) || !children.length) continue
+    const virtualParent = buildBiddingResponseVirtualGroupParent(groupKey, children)
+    virtualParents.push(virtualParent)
+    for (const child of children) childIds.add(child.response_item_uuid)
+  }
+
+  return [...clones, ...virtualParents]
+    .filter((row) => !childIds.has(row.response_item_uuid))
+    .sort((left, right) => Number(left.__sortIndex || 0) - Number(right.__sortIndex || 0))
+    .map((row) => {
+      if (Array.isArray(row.children) && !row.children.length) {
+        const { children, __sortIndex, ...rest } = row
+        return rest
+      }
+      delete row.__sortIndex
+      return row
+    })
+}
+
+function biddingResponseIsSummaryTask(row) {
+  return row?.task_display_type === 'summary_task' || Boolean(row?.has_group_children)
+}
+
+function biddingResponseIsGroupTask(row) {
+  return row?.task_display_type === 'group_task' || biddingResponseGroupIndex(row) != null
+}
+
+function biddingResponseGroupIndex(row) {
+  if (row?.task_group_index != null) return Number(row.task_group_index)
+  const match = String(row?.response_title || '').match(/(?:（第(\d+)组）|\(第(\d+)组\))$/)
+  if (!match) return null
+  return Number(match[1] || match[2])
+}
+
+function biddingResponseEffectiveGroupKey(row) {
+  if (row?.task_group_key) return row.task_group_key
+  const baseTitle = biddingResponseGroupBaseTitle(row?.task_group_parent_title || row?.response_title)
+  if (!baseTitle || baseTitle === String(row?.response_title || '').trim()) {
+    if (!biddingResponseIsSummaryTask(row)) return ''
+  }
+  return [
+    biddingResponsePrimaryRole(row) || row?.owner_role || '',
+    row?.review_action || row?.normalized?.review_action || row?.response_action || '',
+    row?.response_category || '',
+    baseTitle,
+  ].join('|')
+}
+
+function biddingResponseTaskDisplayType(row) {
+  if (row?.task_display_type) return row.task_display_type
+  if (biddingResponseIsGroupTask(row)) return 'group_task'
+  if (biddingResponseIsSummaryTask(row)) return 'summary_task'
+  return ''
+}
+
+function biddingResponseTaskDisplayLabel(row) {
+  if (row?.task_display_label) return row.task_display_label
+  const type = biddingResponseTaskDisplayType(row)
+  if (type === 'group_task') return '分组任务'
+  if (type === 'summary_task') return '汇总任务'
+  return ''
+}
+
+function buildBiddingResponseVirtualGroupParent(groupKey, children) {
+  const sortedChildren = [...children].sort((left, right) => Number(left.task_group_index || 0) - Number(right.task_group_index || 0))
+  const first = sortedChildren[0] || {}
+  const requirementCount = sortedChildren.reduce((sum, row) => sum + Number(row.covered_requirement_count || 0), 0)
+  const riskCount = sortedChildren.reduce((sum, row) => sum + Number(row.covered_risk_count || 0), 0)
+  return {
+    ...first,
+    response_item_uuid: `virtual-group:${groupKey}`,
+    response_title: first.task_group_parent_title || biddingResponseGroupBaseTitle(first.response_title) || '分组任务汇总',
+    source_text: `此行为前端汇总行，展开后处理 ${sortedChildren.length} 个分组任务。`,
+    response_note: `当前视图缺少对应汇总父项，已自动收拢 ${sortedChildren.length} 个分组任务。`,
+    status: 'pending',
+    response_action: first.response_action,
+    task_display_type: 'summary_task',
+    task_display_label: '汇总任务',
+    task_group_key: groupKey,
+    task_group_child_count: sortedChildren.length,
+    has_group_children: true,
+    is_virtual_group_parent: true,
+    quality_flags: [],
+    covered_requirement_count: requirementCount,
+    covered_risk_count: riskCount,
+    evidence: [],
+    children: sortedChildren,
+    __sortIndex: Number(first.__sortIndex || 0) - 0.01,
+  }
+}
+
+function biddingResponseGroupBaseTitle(value) {
+  return String(value || '').replace(/（第\d+组）$/, '').replace(/\(第\d+组\)$/, '').trim()
+}
+
+function biddingResponseGroupChildren(row) {
+  return Array.isArray(row?.children) ? row.children : []
+}
+
+function biddingResponseIsGroupExpanded(row) {
+  if (!row?.response_item_uuid) return false
+  return biddingResponseExpandedKeys.value.includes(row.response_item_uuid)
+}
+
+function toggleBiddingResponseGroup(row) {
+  if (!biddingResponseGroupChildren(row).length || !row?.response_item_uuid) return
+  if (biddingResponseIsGroupExpanded(row)) {
+    biddingResponseExpandedKeys.value = biddingResponseExpandedKeys.value.filter((key) => key !== row.response_item_uuid)
+    return
+  }
+  biddingResponseExpandedKeys.value = Array.from(new Set([...biddingResponseExpandedKeys.value, row.response_item_uuid]))
+}
+
+function expandAllBiddingResponseGroups() {
+  biddingResponseExpandedKeys.value = biddingResponseExpandableRows.value.map((row) => row.response_item_uuid).filter(Boolean)
+}
+
+function collapseAllBiddingResponseGroups() {
+  biddingResponseExpandedKeys.value = []
+}
+
+function buildBiddingResponseLocalSummary(rows = []) {
+  const byStatus = {}
+  const byRiskLevel = {}
+  const byWorkflowAction = {}
+  const byReviewRole = {}
+  const byPrimaryReviewRole = {}
+  const byReviewAction = {}
+  const byTaskDisplayType = {}
+  const byReviewPriority = {}
+  const byReviewWave = {}
+  const requirementIds = new Set()
+  const riskIds = new Set()
+  let qualityFlagCount = 0
+  let splitItemCount = 0
+  let clusteredRequirementCount = 0
+  for (const row of rows) {
+    const status = row?.status || 'pending'
+    const riskLevel = row?.risk_level || 'low'
+    byStatus[status] = (byStatus[status] || 0) + 1
+    byRiskLevel[riskLevel] = (byRiskLevel[riskLevel] || 0) + 1
+    for (const action of biddingResponseLinkedActions(row)) {
+      if (!action?.action) continue
+      byWorkflowAction[action.action] = (byWorkflowAction[action.action] || 0) + 1
+    }
+    for (const role of biddingResponseRowRoles(row)) {
+      byReviewRole[role] = (byReviewRole[role] || 0) + 1
+    }
+    const primaryRole = biddingResponsePrimaryRole(row)
+    if (primaryRole) byPrimaryReviewRole[primaryRole] = (byPrimaryReviewRole[primaryRole] || 0) + 1
+    const reviewAction = row?.review_action || row?.normalized?.review_action
+    if (reviewAction) byReviewAction[reviewAction] = (byReviewAction[reviewAction] || 0) + 1
+    const taskDisplayType = row?.task_display_type || row?.normalized?.task_display_type
+    if (taskDisplayType) byTaskDisplayType[taskDisplayType] = (byTaskDisplayType[taskDisplayType] || 0) + 1
+    const reviewPriority = row?.review_priority || row?.normalized?.review_priority
+    if (reviewPriority) byReviewPriority[reviewPriority] = (byReviewPriority[reviewPriority] || 0) + 1
+    const reviewWave = row?.review_wave || row?.normalized?.review_wave
+    if (reviewWave) byReviewWave[reviewWave] = (byReviewWave[reviewWave] || 0) + 1
+    const coverage = row?.coverage || row?.normalized?.coverage || {}
+    for (const id of coverage.requirement_ids || []) requirementIds.add(id)
+    for (const id of coverage.risk_ids || []) riskIds.add(id)
+    qualityFlagCount += biddingResponseQualityTags(row).length
+    if (row?.created_from === 'quality_split' || row?.normalized?.source === 'quality_split') splitItemCount += 1
+    if (row?.created_from === 'requirement_cluster' || row?.normalized?.source === 'requirement_cluster') clusteredRequirementCount += 1
+  }
+  return {
+    item_count: rows.length,
+    pending_count: byStatus.pending || 0,
+    done_count: byStatus.done || 0,
+    ignored_count: byStatus.ignored || 0,
+    high_risk_count: byRiskLevel.high || 0,
+    covered_requirement_count: requirementIds.size,
+    covered_risk_count: riskIds.size,
+    clustered_requirement_count: clusteredRequirementCount,
+    quality_flag_count: qualityFlagCount,
+    split_item_count: splitItemCount,
+    by_workflow_action: byWorkflowAction,
+    by_review_role: byReviewRole,
+    by_primary_review_role: byPrimaryReviewRole,
+    by_review_action: byReviewAction,
+    by_task_display_type: byTaskDisplayType,
+    by_review_priority: byReviewPriority,
+    by_review_wave: byReviewWave,
+  }
+}
+
+function biddingResponseActionLabel(value) {
+  return optionLabel(biddingResponseActionOptions, value)
+}
+
+function biddingResponseStatusLabel(value) {
+  return optionLabel(biddingResponseStatusOptions, value)
+}
+
+function biddingResponseActionTag(value) {
+  if (value === 'quote_allowance') return 'warning'
+  if (value === 'clarification') return 'danger'
+  if (value === 'legal_review') return 'primary'
+  if (value === 'qualification_material') return 'success'
+  if (value === 'document_preparation') return 'info'
+  return ''
+}
+
+function biddingResponseLinkedActions(row) {
+  const actions = Array.isArray(row?.linked_actions) ? row.linked_actions : row?.normalized?.workflow_actions
+  return Array.isArray(actions) ? actions.filter((item) => item?.action) : []
+}
+
+function biddingResponseCoverageText(row) {
+  return row?.coverage_explanation || row?.normalized?.coverage_explanation || row?.coverage?.explanation || ''
+}
+
+function biddingResponseQualityText(row) {
+  return row?.quality_explanation || row?.normalized?.quality_explanation || ''
+}
+
+function biddingResponseReviewActionText(row) {
+  const label = row?.review_action_label || row?.normalized?.review_action_label
+  if (!label) return ''
+  return `复核动作：${label}`
+}
+
+function biddingResponseDoneText(row) {
+  const checklist = Array.isArray(row?.done_checklist) ? row.done_checklist : row?.normalized?.done_checklist
+  if (Array.isArray(checklist) && checklist.length) return checklist.slice(0, 3).join('；')
+  return row?.done_criteria || row?.normalized?.done_criteria || ''
+}
+
+function biddingResponsePriorityTag(value) {
+  if (value === 'P0') return 'danger'
+  if (value === 'P1') return 'warning'
+  if (value === 'P2') return 'primary'
+  return 'info'
+}
+
+function biddingResponseQualityTags(row) {
+  const flags = Array.isArray(row?.quality_flags) ? row.quality_flags : row?.normalized?.quality_flags
+  return Array.isArray(flags) ? flags.filter(Boolean).slice(0, 3) : []
+}
+
+function biddingResponseQualityLabel(value) {
+  const labels = {
+    quality_split_child: '拆分项',
+    merged_duplicates: '已合并',
+    duplicate_merged: '重复项',
+    overloaded_split_parent: '已拆分',
+    secondary_split_child: '风险族',
+    terminal_secondary_split_restored: '已恢复',
+  }
+  return labels[value] || value || '质量标记'
+}
+
+function biddingResponseWorkflowCount(action) {
+  return Number(biddingResponseVisibleSummary.value?.by_workflow_action?.[action] || 0)
+}
+
+function biddingResponseCreatedFromLabel(value) {
+  const labels = {
+    business_object: '业务对象',
+    risk: '风险明细',
+    requirement: '招标要求',
+    requirement_cluster: '要求聚类',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingResponseCategoryLabel(value) {
+  if (['bid_rule', 'qualification', 'contract_clause', 'pricing_constraint', 'document_checklist'].includes(value)) {
+    return biddingBusinessObjectTypeLabel(value)
+  }
+  const labels = {
+    requirement: '招标要求',
+    technical_requirement: '技术要求',
+    risk: '风险',
+    business_object: '业务对象',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingDraftOutlineSectionTypeLabel(value) {
+  const labels = {
+    business: '商务标',
+    qualification: '资格资料',
+    technical: '技术标',
+    pricing: '报价文件',
+    legal: '合同/法务',
+    clarification: '答疑清单',
+    attachment: '附件清单',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingDraftOutlineSourceText(source) {
+  if (source?.source_type === 'file_format_plan') return '格式确认表'
+  return '响应矩阵'
+}
+
+function biddingDraftOutlineSourceDetail(source, summary = {}) {
+  if (source?.source_type === 'file_format_plan') {
+    return `格式项 ${summary.format_item_count || source.format_item_count || 0} · 已映射 ${summary.mapped_format_item_count || 0} · 关联响应 ${summary.linked_response_item_count || 0}`
+  }
+  return `响应项 ${source?.response_item_count || 0} · 要求 ${source?.requirement_count || 0} · 风险 ${source?.risk_count || 0} · 综合拆分 ${summary.generic_split_section_count || 0}`
+}
+
+function biddingDraftOutlineMappingLabel(mapping) {
+  if (!mapping) return '未映射'
+  if (mapping.status !== 'mapped') return '待映射'
+  const labels = {
+    high: '映射高',
+    medium: '映射中',
+    low: '映射低',
+    none: '待映射',
+  }
+  return labels[mapping.confidence] || '已映射'
+}
+
+function biddingDraftOutlineMappingTag(mapping) {
+  if (!mapping || mapping.status !== 'mapped') return 'warning'
+  if (mapping.confidence === 'high') return 'success'
+  if (mapping.confidence === 'medium') return 'primary'
+  return 'info'
+}
+
+function biddingFileFormatReviewStatusLabel(value) {
+  const labels = {
+    preview: '待生成',
+    draft: '待确认',
+    confirmed: '已确认',
+    needs_revision: '需调整',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingFileFormatContentTypeLabel(value) {
+  const labels = {
+    fixed_form: '固定表单',
+    draft_section: '正文章节',
+    attachment_proof: '附件证明',
+    qualification_attachment: '资格附件',
+    pricing_table: '报价表',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingFileFormatGenerationStrategyLabel(value) {
+  const labels = {
+    generate_draft: '生成正文',
+    from_cost_quote: '报价链路',
+    manual_upload: '人工上传',
+    manual_fill: '人工填表',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingEnterpriseProfileCategoryLabel(value) {
+  return enterpriseProfileCategoryLabel(value)
+}
+
+function biddingTechnicalCompositionSourceLabel(value) {
+  const labels = {
+    enterprise_profile: '企业资料库',
+    tender_document: '招标文件抽取',
+    manual_input: '人工补充',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingTechnicalCompositionSourceTag(value) {
+  if (value === 'enterprise_profile') return 'success'
+  if (value === 'tender_document') return 'primary'
+  if (value === 'manual_input') return 'warning'
+  return 'info'
+}
+
+function biddingTechnicalCompositionClassLabel(value) {
+  const labels = {
+    fixed_enterprise_material: '固定企业资料',
+    tender_extracted_content: '招标文件抽取',
+    mixed: '混合来源',
+    manual_input: '人工补充',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingTechnicalCompositionRequirementFor(component, need) {
+  if (!component?.component_key || !need?.need_key) return null
+  return biddingTechnicalCompositionRequirementMap.value.get(`${component.component_key}:${need.need_key}`) || null
+}
+
+function biddingMaterialRequirementStatusLabel(value) {
+  const labels = {
+    missing: '缺失',
+    candidate_found: '有候选',
+    submitted: '已提交',
+    approved: '可用',
+    applied: '已应用',
+    not_applicable: '不适用',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingMaterialRequirementStatusTag(value) {
+  if (value === 'missing') return 'danger'
+  if (value === 'candidate_found') return 'warning'
+  if (value === 'submitted') return 'primary'
+  if (value === 'approved' || value === 'applied') return 'success'
+  if (value === 'not_applicable') return 'info'
+  return ''
+}
+
+function biddingMaterialRequirementTypeLabel(value) {
+  const labels = {
+    profile: '企业资料',
+    field: '字段确认',
+    attachment: '附件',
+    section_text: '正文素材',
+    form_value: '表单字段',
+    pricing: '报价数据',
+    other: '其他',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingMaterialFulfillmentModeLabel(value) {
+  const labels = {
+    enterprise_profile: '资料库',
+    manual_upload: '人工上传',
+    manual_fill: '人工填写',
+    generate_draft: '生成正文',
+    from_cost_quote: '报价链路',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingMaterialPriorityTag(value) {
+  if (value === 'high') return 'danger'
+  if (value === 'low') return 'info'
+  return 'warning'
+}
+
+function biddingFileFormatEventTypeLabel(value) {
+  const labels = {
+    add_item: '新增目录项',
+    move_item: '移动目录项',
+    remove_item: '删除目录项',
+    edit_item: '修改目录项',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingDraftOutlineStatusLabel(value) {
+  const labels = {
+    ready: '可起草',
+    needs_input: '待补充',
+    blocked: '阻断',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingDraftOutlineStatusTag(value) {
+  if (value === 'ready') return 'success'
+  if (value === 'blocked') return 'danger'
+  if (value === 'needs_input') return 'warning'
+  return 'info'
+}
+
+function biddingDraftOutlineDraftModeText(row) {
+  if (row?.draft_mode_label) return row.draft_mode_label
+  if (row?.can_generate_formal_draft) return '正式可成稿'
+  if (row?.can_generate_placeholder_draft || row?.can_generate_draft) return '可带占位起草'
+  return '暂不建议生成正文'
+}
+
+function biddingDraftOutlineGenerateButtonText(row) {
+  if (row?.draft_mode === 'blocked' || row?.draft_mode === 'review_note' || row?.can_generate_review_note) {
+    return '生成复核说明'
+  }
+  return '生成草稿'
+}
+
+function biddingDraftGenericSplitLabel(row) {
+  const labels = {
+    bid_guarantee: '保证金拆分',
+    rejection_deviation: '废标边界拆分',
+    submission_deadline: '时间规则拆分',
+    submission_seal: '递交密封拆分',
+    validity_evaluation: '评标规则拆分',
+    clarification: '答疑拆分',
+    response_table: '响应表拆分',
+    document_package: '文件清单拆分',
+    business_liability: '责任边界拆分',
+    generic_unresolved: '综合项待拆',
+  }
+  return labels[row?.split_family] || '综合项拆分'
+}
+
+function biddingDraftNeedsUpgrade(rowOrDraft) {
+  const draft = rowOrDraft?.draft_uuid ? rowOrDraft : biddingDraftForOutlineSection(rowOrDraft)
+  return Boolean(draft?.needs_upgrade || draft?.upgrade_hint?.needs_upgrade)
+}
+
+function biddingDraftOutlineActionButtonText(row) {
+  const draft = biddingDraftForOutlineSection(row)
+  if (draft?.upgrade_hint?.needs_upgrade || draft?.needs_upgrade) return '升级草稿'
+  if (draft) return '重新生成'
+  return biddingDraftOutlineGenerateButtonText(row)
+}
+
+function biddingDraftForOutlineSection(row) {
+  if (!row?.section_key) return null
+  return biddingDraftSectionsByKey.value.get(row.section_key) || null
+}
+
+function biddingDraftSectionReviewLabel(value) {
+  const labels = {
+    draft: '待复核',
+    reviewed: '已复核',
+    needs_revision: '需修改',
+    accepted: '已接受',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingDraftSectionReviewTag(value) {
+  if (value === 'accepted') return 'success'
+  if (value === 'reviewed') return 'primary'
+  if (value === 'needs_revision') return 'warning'
+  return 'info'
+}
+
+function biddingDraftQualityResultTag(value) {
+  if (value === 'pass') return 'success'
+  if (value === 'blocked') return 'danger'
+  if (value === 'needs_material' || value === 'needs_review') return 'warning'
+  return 'info'
+}
+
+function biddingDraftQualityCheckTag(value) {
+  if (value === 'pass') return 'success'
+  if (value === 'fail') return 'danger'
+  if (value === 'warn') return 'warning'
+  return 'info'
+}
+
+function biddingDraftEvidenceStatusTag(value) {
+  if (value === 'supported') return 'success'
+  if (value === 'unsupported') return 'danger'
+  if (value === 'needs_review') return 'warning'
+  return 'info'
+}
+
+function biddingDraftLlmEntryTag(entry) {
+  return entry?.eligible ? 'success' : 'info'
+}
+
+function biddingDraftCanLlmEnhance(draft) {
+  return Boolean(draft?.llm_entry?.eligible)
+}
+
+function biddingDraftPlanListText(value, limit = 3) {
+  if (!Array.isArray(value) || !value.length) return '-'
+  return value.slice(0, limit).join('；')
+}
+
+function biddingDraftSummaryListText(value, limit = 5) {
+  if (!Array.isArray(value) || !value.length) return '-'
+  return value.slice(0, limit).join('、')
+}
+
+function biddingDraftMarkdownPreview(value) {
+  return String(value || '').trim() || '暂无正文草稿'
+}
+
+function biddingDraftVersionTypeLabel(value) {
+  const labels = {
+    generated: '规则生成',
+    llm_generated: 'DeepSeek 生成',
+    manual_edit: '人工编辑',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingDraftOutlineListText(value, fallback = '-') {
+  if (Array.isArray(value) && value.length) return value.slice(0, 3).join('；')
+  return fallback
+}
+
+function biddingBusinessObjectNeedsLlmReview(row) {
+  const normalized = row?.normalized || {}
+  const hasUncertainFlag = Boolean(
+    normalized.weak_split || normalized.needs_llm_review || normalized.needs_secondary_split,
+  )
+  if (!hasUncertainFlag) return false
+  if (row?.review_status && row.review_status !== 'pending') return false
+  if (['pending_manual_confirm', 'accepted', 'rejected', 'modified', 'error'].includes(normalized.llm_review_status)) return false
+  return true
+}
+
+function biddingLlmDecisionLabel(value) {
+  const labels = {
+    keep: '保留',
+    rename: '建议改名/改类',
+    split: '建议拆分',
+    ignore: '建议忽略',
+    manual_review: '转人工判断',
+  }
+  return labels[value] || value || '待判断'
+}
+
+function biddingLlmDecisionTag(value) {
+  if (value === 'keep') return 'success'
+  if (value === 'split' || value === 'rename') return 'warning'
+  if (value === 'ignore') return 'info'
+  if (value === 'manual_review') return 'primary'
+  return ''
+}
+
+function biddingLlmReviewStatusLabel(value) {
+  const labels = {
+    pending_manual_confirm: '待人工确认',
+    accepted: '已采纳',
+    rejected: '已驳回',
+    modified: '已修改',
+    error: '调用异常',
+  }
+  return labels[value] || value || '-'
+}
+
+function biddingLlmReviewStatusTag(value) {
+  if (value === 'accepted') return 'success'
+  if (value === 'modified') return 'warning'
+  if (value === 'rejected') return 'info'
+  if (value === 'error') return 'danger'
+  if (value === 'pending_manual_confirm') return 'primary'
+  return ''
+}
+
+function biddingConfidenceLabel(value) {
+  const score = Number(value)
+  if (!Number.isFinite(score)) return '-'
+  return `${Math.round(score * 100)}%`
+}
+
+function biddingBusinessObjectEvidenceQualityLabel(value) {
+  const labels = {
+    high: '证据高相关',
+    medium: '证据中相关',
+    low: '证据低相关',
+  }
+  return labels[value] || '证据待判定'
+}
+
+function biddingBusinessObjectEvidenceContextLabel(value) {
+  const labels = {
+    body: '正文',
+    weak_context: '弱上下文',
+    structural_noise: '结构噪声',
+  }
+  return labels[value] || '未判定'
+}
+
+function biddingRiskReviewLabel(status) {
+  const labels = {
+    pending: '待复核',
+    confirmed: '已确认',
+    ignored: '已忽略',
+    to_clarify: '转答疑',
+    to_quote_allowance: '报价预留',
+    mixed: '部分处理',
+  }
+  return labels[status] || status || '-'
+}
+
+function biddingRiskReviewTag(status) {
+  if (status === 'confirmed') return 'success'
+  if (status === 'ignored') return 'info'
+  if (status === 'to_clarify') return 'warning'
+  if (status === 'to_quote_allowance') return 'primary'
+  if (status === 'mixed') return 'warning'
+  return 'danger'
+}
+
 function applyBusinessLedgerFilters() {
   businessLedgerPage.value = 1
   loadBusinessLedgers()
@@ -10651,6 +19584,307 @@ function clearCostMasterData() {
   enterpriseQuotaComponentTotal.value = 0
   enterpriseQuotaResources.value = []
   enterpriseQuotaResourceTotal.value = 0
+}
+
+function enterpriseProfileListParams() {
+  const params = {
+    page: enterpriseProfilePage.value,
+    page_size: enterpriseProfilePageSize,
+  }
+  if (enterpriseProfileFilters.category) params.category = enterpriseProfileFilters.category
+  if (enterpriseProfileFilters.status) params.status = enterpriseProfileFilters.status
+  if (enterpriseProfileFilters.keyword?.trim()) params.keyword = enterpriseProfileFilters.keyword.trim()
+  return params
+}
+
+async function loadEnterpriseProfileSummary(options = {}) {
+  if (!canViewEnterpriseProfile.value) return
+  try {
+    const response = await api.get('/admin/enterprise-profile/summary')
+    enterpriseProfileSummary.value = responseData(response) || {}
+  } catch (error) {
+    enterpriseProfileSummary.value = {}
+    if (isFeatureDisabled(error)) {
+      enterpriseProfileFeatureDisabled.value = true
+      return
+    }
+    if (!options.silent) ElMessage.error(apiErrorMessage(error, '企业资料库概览加载失败'))
+  }
+}
+
+async function loadEnterpriseProfileItems(options = {}) {
+  if (!canViewEnterpriseProfile.value) return
+  enterpriseProfileFeatureDisabled.value = false
+  enterpriseProfileLoading.value = true
+  try {
+    const response = await api.get('/admin/enterprise-profile/items', {
+      params: enterpriseProfileListParams(),
+    })
+    enterpriseProfileItems.value = responseData(response) || []
+    enterpriseProfileTotal.value = response.data?.total ?? enterpriseProfileItems.value.length
+  } catch (error) {
+    enterpriseProfileItems.value = []
+    enterpriseProfileTotal.value = 0
+    if (isFeatureDisabled(error)) {
+      enterpriseProfileFeatureDisabled.value = true
+      return
+    }
+    if (!options.silent) ElMessage.error(apiErrorMessage(error, '企业资料列表加载失败'))
+  } finally {
+    enterpriseProfileLoading.value = false
+  }
+}
+
+async function refreshEnterpriseProfile(options = {}) {
+  if (!canViewEnterpriseProfile.value) return
+  await Promise.all([
+    loadEnterpriseProfileSummary(options),
+    loadEnterpriseProfileItems(options),
+  ])
+}
+
+function resetEnterpriseProfileDialog(mode = 'create') {
+  enterpriseProfileDialog.mode = mode
+  enterpriseProfileDialog.uploading = false
+  enterpriseProfileDialog.itemUuid = ''
+  enterpriseProfileDialog.detail = null
+  Object.assign(enterpriseProfileDialog.form, {
+    category: 'basic_info',
+    subcategory: '',
+    profile_key: '',
+    title: '',
+    material_form: 'text',
+    summary: '',
+    content_text: '',
+    attachment_file_id: '',
+    attachment_type: 'source',
+    attachment_description: '',
+    tagsText: '',
+    applicable_scope: '',
+    valid_until: '',
+    change_reason: '',
+  })
+}
+
+async function openEnterpriseProfileDialog(mode = 'create', row = null) {
+  resetEnterpriseProfileDialog(mode)
+  if (row?.item_uuid) {
+    enterpriseProfileDialog.itemUuid = row.item_uuid
+    try {
+      const response = await api.get(`/admin/enterprise-profile/items/${row.item_uuid}`)
+      const detail = responseData(response)
+      enterpriseProfileDialog.detail = detail
+      const materialForm = detail.structured?.material_form || (detail.attachment_count ? 'attachment' : 'text')
+      Object.assign(enterpriseProfileDialog.form, {
+        category: detail.category || 'basic_info',
+        subcategory: detail.subcategory || '',
+        profile_key: detail.profile_key || '',
+        title: detail.title || '',
+        material_form: materialForm,
+        summary: detail.summary || '',
+        content_text: detail.content_text || '',
+        attachment_file_id: '',
+        attachment_type: 'source',
+        attachment_description: '',
+        tagsText: (detail.tags || []).join(', '),
+        applicable_scope: detail.applicable_scope || '',
+        valid_until: detail.valid_until || '',
+        change_reason: '',
+      })
+    } catch (error) {
+      ElMessage.error(apiErrorMessage(error, '企业资料详情加载失败'))
+      return
+    }
+  }
+  enterpriseProfileDialog.visible = true
+}
+
+function enterpriseProfileSubmitPayload() {
+  const form = enterpriseProfileDialog.form
+  const structured = {
+    ...(enterpriseProfileDialog.detail?.structured || {}),
+    material_form: form.material_form || 'text',
+  }
+  const payload = {
+    category: form.category,
+    subcategory: form.subcategory || null,
+    profile_key: form.profile_key || null,
+    title: form.title,
+    summary: form.summary || form.attachment_description || null,
+    content_text: form.content_text || null,
+    structured,
+    tags: form.tagsText
+      ? form.tagsText.split(/[,，]/).map((item) => item.trim()).filter(Boolean)
+      : [],
+    applicable_scope: form.applicable_scope || null,
+    valid_until: form.valid_until || null,
+  }
+  if (enterpriseProfileDialog.mode === 'edit') {
+    payload.change_reason = form.change_reason || null
+  }
+  return payload
+}
+
+async function submitEnterpriseProfileItem() {
+  if (!enterpriseProfileDialog.form.title?.trim()) {
+    ElMessage.warning('请填写资料名称')
+    return
+  }
+  const materialForm = enterpriseProfileDialog.form.material_form || 'text'
+  if (materialForm === 'text' && !enterpriseProfileDialog.form.content_text?.trim()) {
+    ElMessage.warning('文本形式请填写资料内容')
+    return
+  }
+  const hasExistingAttachment = Number(enterpriseProfileDialog.detail?.attachment_count || 0) > 0
+  if (
+    materialForm === 'attachment'
+    && !enterpriseProfileDialog.form.attachment_file_id?.trim()
+    && !(enterpriseProfileDialog.mode === 'edit' && hasExistingAttachment)
+  ) {
+    ElMessage.warning('附件形式请先上传资料附件')
+    return
+  }
+  state.submitting = true
+  try {
+    let savedItem = null
+    if (enterpriseProfileDialog.mode === 'edit') {
+      const response = await api.patch(
+        `/admin/enterprise-profile/items/${enterpriseProfileDialog.itemUuid}`,
+        enterpriseProfileSubmitPayload(),
+      )
+      savedItem = responseData(response)
+    } else {
+      const response = await api.post('/admin/enterprise-profile/items', enterpriseProfileSubmitPayload())
+      savedItem = responseData(response)
+    }
+    const itemUuid = enterpriseProfileDialog.itemUuid || savedItem?.item_uuid
+    const attachmentFileId = enterpriseProfileDialog.form.attachment_file_id?.trim()
+    if (materialForm === 'attachment' && itemUuid && attachmentFileId) {
+      await bindEnterpriseProfileAttachment(itemUuid, {
+        file_id: attachmentFileId,
+        attachment_type: enterpriseProfileDialog.form.attachment_type || 'source',
+        description: enterpriseProfileDialog.form.attachment_description || enterpriseProfileDialog.form.summary || null,
+        is_primary: true,
+      })
+    }
+    enterpriseProfileDialog.visible = false
+    ElMessage.success('企业资料已保存')
+    await refreshEnterpriseProfile({ silent: true })
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '企业资料保存失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function uploadEnterpriseProfileInlineAttachmentFile(uploadFile) {
+  const rawFile = uploadFile?.raw
+  if (!rawFile) return
+  enterpriseProfileDialog.uploading = true
+  try {
+    const formData = new FormData()
+    formData.append('file', rawFile)
+    formData.append('purpose', 'enterprise_profile')
+    const response = await api.post('/files', formData)
+    const data = responseData(response)
+    enterpriseProfileDialog.form.attachment_file_id = data.file_id
+    enterpriseProfileDialog.form.attachment_description = data.original_filename || rawFile.name || ''
+    ElMessage.success('附件已上传，file_id 已填入')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '附件上传失败'))
+  } finally {
+    enterpriseProfileDialog.uploading = false
+  }
+}
+
+function openEnterpriseProfileAttachmentDialog(row) {
+  enterpriseProfileAttachmentDialog.item = row
+  Object.assign(enterpriseProfileAttachmentDialog.form, {
+    file_id: '',
+    attachment_type: 'source',
+    description: '',
+    is_primary: true,
+  })
+  enterpriseProfileAttachmentDialog.visible = true
+}
+
+async function uploadEnterpriseProfileAttachmentFile(uploadFile) {
+  const rawFile = uploadFile?.raw
+  if (!rawFile) return
+  enterpriseProfileAttachmentDialog.uploading = true
+  try {
+    const formData = new FormData()
+    formData.append('file', rawFile)
+    formData.append('purpose', 'enterprise_profile')
+    const response = await api.post('/files', formData)
+    const data = responseData(response)
+    enterpriseProfileAttachmentDialog.form.file_id = data.file_id
+    enterpriseProfileAttachmentDialog.form.description = data.original_filename || rawFile.name || ''
+    ElMessage.success('附件已上传，file_id 已填入')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '附件上传失败'))
+  } finally {
+    enterpriseProfileAttachmentDialog.uploading = false
+  }
+}
+
+async function submitEnterpriseProfileAttachment() {
+  const itemUuid = enterpriseProfileAttachmentDialog.item?.item_uuid
+  const fileId = enterpriseProfileAttachmentDialog.form.file_id?.trim()
+  if (!itemUuid || !fileId) {
+    ElMessage.warning('请先上传附件或填写 file_id')
+    return
+  }
+  state.submitting = true
+  try {
+    await bindEnterpriseProfileAttachment(itemUuid, {
+      file_id: fileId,
+      attachment_type: enterpriseProfileAttachmentDialog.form.attachment_type || 'source',
+      description: enterpriseProfileAttachmentDialog.form.description || null,
+      is_primary: Boolean(enterpriseProfileAttachmentDialog.form.is_primary),
+    })
+    enterpriseProfileAttachmentDialog.visible = false
+    ElMessage.success('附件已绑定')
+    await refreshEnterpriseProfile({ silent: true })
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '附件绑定失败'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function bindEnterpriseProfileAttachment(itemUuid, payload) {
+  await api.post(`/admin/enterprise-profile/items/${itemUuid}/attachments`, payload)
+}
+
+async function activateEnterpriseProfileItem(row) {
+  const reason = await promptText('启用原因', '请填写启用原因')
+  if (!reason) return
+  try {
+    await api.post(`/admin/enterprise-profile/items/${row.item_uuid}/activate`, { reason })
+    ElMessage.success('资料已启用')
+    await refreshEnterpriseProfile({ silent: true })
+  } catch (error) {
+    const detail = error.response?.data?.detail
+    if (detail?.code === 'ENTERPRISE_PROFILE_QUALITY_BLOCKED') {
+      const labels = (detail.issues || []).map((issue) => enterpriseProfileIssueLabel(issue.code)).join('、')
+      ElMessage.error(`资料体检未通过：${labels || '请补齐资料'}`)
+      return
+    }
+    ElMessage.error(apiErrorMessage(error, '资料启用失败'))
+  }
+}
+
+async function archiveEnterpriseProfileItem(row) {
+  const reason = await promptText('归档原因', '请填写归档原因')
+  if (!reason) return
+  try {
+    await api.post(`/admin/enterprise-profile/items/${row.item_uuid}/archive`, { reason })
+    ElMessage.success('资料已归档')
+    await refreshEnterpriseProfile({ silent: true })
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '资料归档失败'))
+  }
 }
 
 async function loadCostMasterSummary(options = {}) {
@@ -10750,7 +19984,147 @@ async function loadEnterpriseQuotaResources(options = {}) {
   }
 }
 
+function selectProjectCostImportFiles(event) {
+  projectCostImportFiles.value = Array.from(event?.target?.files || []).filter((file) => {
+    const name = String(file?.name || '').toLowerCase()
+    return name.endsWith('.xlsx') || name.endsWith('.xlsm') || name.endsWith('.zip')
+  })
+  if (!projectCostImportProjectName.value && projectCostImportFiles.value[0]?.webkitRelativePath) {
+    projectCostImportProjectName.value = projectCostImportFiles.value[0].webkitRelativePath.split('/')[0] || ''
+  }
+}
+
+async function uploadProjectCostImport() {
+  if (!canEditCostDb.value || !projectCostImportProjectName.value.trim() || !projectCostImportFiles.value.length) return
+  projectCostImportUploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('project_name', projectCostImportProjectName.value.trim())
+    formData.append('source_name', `${projectCostImportFiles.value.length} 个采购资料文件`)
+    projectCostImportFiles.value.forEach((file) => formData.append('files', file, file.name))
+    const response = await api.post('/admin/project-cost-imports', formData)
+    const batch = responseData(response)
+    ElMessage.success(`解析完成：${batch.observation_count || 0} 条价格观察，${batch.candidate_count || 0} 个候选`)
+    projectCostImportFiles.value = []
+    if (projectCostImportFileInput.value) projectCostImportFileInput.value.value = ''
+    if (projectCostImportFolderInput.value) projectCostImportFolderInput.value.value = ''
+    await loadProjectCostImportBatches()
+    await openProjectCostImportBatch(batch)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '项目采购资料解析失败'))
+  } finally {
+    projectCostImportUploading.value = false
+  }
+}
+
+async function loadProjectCostImportBatches(options = {}) {
+  if (!canViewCostDb.value || costDbFeatureDisabled.value) return
+  if (!options.silent) projectCostImportLoading.value = true
+  try {
+    const response = await api.get('/admin/project-cost-imports', {
+      params: { page: projectCostImportPage.value, page_size: projectCostImportPageSize },
+    })
+    projectCostImportBatches.value = responseData(response) || []
+    projectCostImportTotal.value = Number(response.data?.total || projectCostImportBatches.value.length)
+    const selectedId = selectedProjectCostImportBatch.value?.id
+    if (selectedId) {
+      selectedProjectCostImportBatch.value = projectCostImportBatches.value.find((row) => row.id === selectedId)
+        || selectedProjectCostImportBatch.value
+    }
+  } catch (error) {
+    projectCostImportBatches.value = []
+    projectCostImportTotal.value = 0
+    if (isFeatureDisabled(error)) return
+    if (!options.silent) ElMessage.error(apiErrorMessage(error, '项目采购入库批次加载失败'))
+  } finally {
+    if (!options.silent) projectCostImportLoading.value = false
+  }
+}
+
+async function openProjectCostImportBatch(batch) {
+  selectedProjectCostImportBatch.value = batch
+  projectCostCandidatePage.value = 1
+  selectedProjectCostCandidates.value = []
+  await loadProjectCostCandidates()
+}
+
+async function loadProjectCostCandidates(options = {}) {
+  const batchId = selectedProjectCostImportBatch.value?.id
+  if (!batchId) return
+  if (!options.silent) projectCostCandidateLoading.value = true
+  const params = {
+    page: projectCostCandidatePage.value,
+    page_size: projectCostCandidatePageSize,
+  }
+  if (projectCostCandidateFilters.status) params.status = projectCostCandidateFilters.status
+  if (projectCostCandidateFilters.risk_level) params.risk_level = projectCostCandidateFilters.risk_level
+  if (projectCostCandidateFilters.keyword.trim()) params.keyword = projectCostCandidateFilters.keyword.trim()
+  try {
+    const response = await api.get(`/admin/project-cost-imports/${batchId}/candidates`, { params })
+    projectCostCandidates.value = responseData(response) || []
+    projectCostCandidateTotal.value = Number(response.data?.total || projectCostCandidates.value.length)
+    selectedProjectCostCandidates.value = []
+  } catch (error) {
+    projectCostCandidates.value = []
+    projectCostCandidateTotal.value = 0
+    if (!options.silent) ElMessage.error(apiErrorMessage(error, '采购价格候选加载失败'))
+  } finally {
+    if (!options.silent) projectCostCandidateLoading.value = false
+  }
+}
+
+function applyProjectCostCandidateFilters() {
+  projectCostCandidatePage.value = 1
+  loadProjectCostCandidates()
+}
+
+async function reviewSelectedProjectCostCandidates(action) {
+  if (!canApproveCostDb.value || !selectedProjectCostCandidates.value.length) return
+  const title = action === 'approve' ? '批量通过价格候选' : '批量驳回价格候选'
+  try {
+    const result = await ElMessageBox.prompt('请填写审核说明，后续可追溯到该批次和源文件。', title, {
+      inputPlaceholder: '审核说明',
+      inputValidator: (value) => String(value || '').trim().length >= 4 || '请至少填写 4 个字',
+    })
+    await api.post(`/admin/project-cost-imports/${selectedProjectCostImportBatch.value.id}/review`, {
+      candidate_ids: selectedProjectCostCandidates.value.map((row) => row.id),
+      action,
+      note: result.value.trim(),
+    })
+    ElMessage.success(action === 'approve' ? '价格候选已通过' : '价格候选已驳回')
+    await loadProjectCostImportBatches({ silent: true })
+    await loadProjectCostCandidates()
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(apiErrorMessage(error, '候选审核失败'))
+  }
+}
+
+async function createProjectCostDraftVersion() {
+  if (!canApproveCostDb.value || !selectedProjectCostImportBatch.value?.approved_count) return
+  try {
+    await ElMessageBox.confirm(
+      '系统将复制当前已启用的企业定额并把已审核采购价写入新的待核定版本；当前启用版本和报价成本参考不会立即变化。确认继续？',
+      '生成企业定额草稿',
+      { type: 'warning', confirmButtonText: '生成草稿', cancelButtonText: '取消' },
+    )
+    const response = await api.post(`/admin/project-cost-imports/${selectedProjectCostImportBatch.value.id}/draft-version`, {})
+    const data = responseData(response)
+    selectedProjectCostImportBatch.value = data.batch
+    ElMessage.success(`草稿 ${data.draft_version?.version_code || ''} 已生成，等待版本复核与启用`)
+    await loadProjectCostImportBatches({ silent: true })
+    await loadCostMasterSummary({ silent: true })
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(apiErrorMessage(error, '企业定额草稿生成失败'))
+  }
+}
+
 async function loadCostMasterActiveList(options = {}) {
+  if (costMasterActiveTab.value === 'purchaseImports') {
+    await loadProjectCostImportBatches(options)
+    return
+  }
   if (costMasterActiveTab.value === 'components') {
     await loadEnterpriseQuotaComponents(options)
     return
@@ -10786,6 +20160,239 @@ function handleCostMasterTabClick() {
   loadCostMasterActiveList()
 }
 
+async function loadCostMeasurements() {
+  costMeasurementLoading.value = true
+  try {
+    const response = await api.get('/admin/cost-measurements', {
+      params: { page: costMeasurementPage.value, page_size: costMeasurementPageSize },
+    })
+    costMeasurements.value = response.data?.data || []
+    costMeasurementTotal.value = Number(response.data?.total || 0)
+    costMeasurementFeatureDisabled.value = false
+  } catch (error) {
+    costMeasurements.value = []
+    costMeasurementTotal.value = 0
+    if (error.response?.status === 403 && error.response?.data?.detail === 'FEATURE_DISABLED') {
+      costMeasurementFeatureDisabled.value = true
+      return
+    }
+    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u5217\u8868\u52a0\u8f7d\u5931\u8d25'))
+  } finally {
+    costMeasurementLoading.value = false
+  }
+}
+
+async function handleCostMeasurementFile(event) {
+  const file = event.target?.files?.[0]
+  if (event.target) event.target.value = ''
+  if (!file) return
+  const form = new FormData()
+  form.append('file', file)
+  state.submitting = true
+  try {
+    const response = await api.post('/admin/cost-measurements/import-preview', form)
+    const preview = responseData(response)
+    costMeasurementImportDialog.file = file
+    costMeasurementImportDialog.preview = preview
+    costMeasurementImportDialog.name = `${preview.project_name || file.name}\u6210\u672c\u6d4b\u7b97`
+    costMeasurementImportDialog.project_name = preview.project_name || ''
+    costMeasurementImportDialog.visible = true
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, 'Excel \u89e3\u6790\u5931\u8d25'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function commitCostMeasurementImport() {
+  const file = costMeasurementImportDialog.file
+  if (!file) return
+  const form = new FormData()
+  form.append('file', file)
+  form.append('name', costMeasurementImportDialog.name || '')
+  form.append('project_name', costMeasurementImportDialog.project_name || '')
+  state.submitting = true
+  try {
+    const response = await api.post('/admin/cost-measurements/import', form)
+    costMeasurementImportDialog.visible = false
+    costMeasurementDetail.value = responseData(response)
+    costMeasurementDrawer.visible = true
+    ElMessage.success('\u6210\u672c\u6d4b\u7b97\u8349\u7a3f\u5df2\u521b\u5efa')
+    await loadCostMeasurements()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u5bfc\u5165\u5931\u8d25'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function openCostMeasurement(row) {
+  costMeasurementLoading.value = true
+  try {
+    const response = await api.get(`/admin/cost-measurements/${row.id}`)
+    costMeasurementDetail.value = responseData(response)
+    costMeasurementDrawer.visible = true
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u8be6\u60c5\u52a0\u8f7d\u5931\u8d25'))
+  } finally {
+    costMeasurementLoading.value = false
+  }
+}
+
+async function saveCostMeasurementLine(row) {
+  if (!costMeasurementDetail.value) return
+  state.submitting = true
+  try {
+    const response = await api.patch(
+      `/admin/cost-measurements/${costMeasurementDetail.value.id}/lines/${row.id}`,
+      {
+        quantity: Number(row.quantity || 0),
+        labor_unit_price: Number(row.labor_unit_price || 0),
+        main_material_unit_price: Number(row.main_material_unit_price || 0),
+        material_loss_rate: Number(row.material_loss_rate || 0),
+        auxiliary_machinery_unit_price: Number(row.auxiliary_machinery_unit_price || 0),
+        subcontract_unit_price: Number(row.subcontract_unit_price || 0),
+        review_status: 'reviewed',
+      },
+    )
+    const data = responseData(response)
+    Object.assign(row, data.line || {})
+    Object.assign(costMeasurementDetail.value, data.summary || {})
+    ElMessage.success('\u6d4b\u7b97\u884c\u5df2\u4fdd\u5b58\u5e76\u6807\u8bb0\u590d\u6838')
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '\u6d4b\u7b97\u884c\u4fdd\u5b58\u5931\u8d25'))
+  } finally {
+    state.submitting = false
+  }
+}
+
+async function recalculateCostMeasurement() {
+  if (!costMeasurementDetail.value) return
+  costMeasurementLoading.value = true
+  try {
+    const response = await api.post(`/admin/cost-measurements/${costMeasurementDetail.value.id}/recalculate`)
+    costMeasurementDetail.value = responseData(response)
+    ElMessage.success('\u7edf\u4e00\u91cd\u7b97\u5df2\u5b8c\u6210')
+    await loadCostMeasurements()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '\u7edf\u4e00\u91cd\u7b97\u5931\u8d25'))
+  } finally {
+    costMeasurementLoading.value = false
+  }
+}
+
+async function lockCostMeasurement() {
+  if (!costMeasurementDetail.value) return
+  try {
+    const result = await ElMessageBox.prompt(
+      '\u8bf7\u586b\u5199\u590d\u6838\u7ed3\u8bba\uff1b\u5b58\u5728\u5dee\u5f02\u6216\u4ec5\u7efc\u5408\u4ef7\u9879\u76ee\u65f6\u81f3\u5c11\u586b\u5199 6 \u4e2a\u5b57\u3002',
+      '\u590d\u6838\u5e76\u9501\u5b9a\u6210\u672c\u6d4b\u7b97',
+      { confirmButtonText: '\u9501\u5b9a', cancelButtonText: '\u53d6\u6d88', inputType: 'textarea' },
+    )
+    const response = await api.post(
+      `/admin/cost-measurements/${costMeasurementDetail.value.id}/lock`,
+      { note: result.value || '' },
+    )
+    costMeasurementDetail.value = responseData(response)
+    ElMessage.success('\u6210\u672c\u6d4b\u7b97\u5df2\u9501\u5b9a')
+    await loadCostMeasurements()
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u9501\u5b9a\u5931\u8d25'))
+  }
+}
+
+function costMeasurementDraftStatusLabel(status) {
+  const labels = {
+    ready: '\u53ef\u751f\u6210',
+    ready_with_archived_history: '\u53ef\u751f\u6210\uff0c\u5df2\u6709\u5f52\u6863\u5386\u53f2',
+    existing_active: '\u5df2\u6709\u5df2\u542f\u7528\u6761\u76ee',
+    existing_draft: '\u5df2\u6709\u5f85\u6838\u5b9a\u6761\u76ee',
+    duplicate_within_measurement: '\u91cd\u590d\u5019\u9009\uff0c\u9700\u4e8c\u9009\u4e00',
+    blocked: '\u5df2\u963b\u65ad',
+  }
+  return labels[status] || '\u5df2\u963b\u65ad'
+}
+
+function costMeasurementDraftStatusTag(status) {
+  if (status === 'ready') return 'success'
+  if (status === 'ready_with_archived_history' || status === 'duplicate_within_measurement') return 'warning'
+  if (status === 'existing_active' || status === 'existing_draft') return 'info'
+  return 'danger'
+}
+
+async function previewCostMeasurementDrafts() {
+  if (!costMeasurementDetail.value) return
+  costMeasurementDraftDialog.visible = true
+  costMeasurementDraftDialog.loading = true
+  costMeasurementDraftDialog.summary = null
+  costMeasurementDraftDialog.candidates = []
+  costMeasurementDraftDialog.note = ''
+  try {
+    const response = await api.post(
+      `/admin/cost-measurements/${costMeasurementDetail.value.id}/cost-drafts/preview`,
+      {},
+    )
+    const data = responseData(response)
+    costMeasurementDraftDialog.summary = data.summary || {}
+    costMeasurementDraftDialog.candidates = (data.candidates || []).map((row) => ({
+      ...row,
+      selected: Boolean(row.can_create && row.candidate_status !== 'duplicate_within_measurement'),
+    }))
+  } catch (error) {
+    costMeasurementDraftDialog.visible = false
+    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u5e93\u5019\u9009\u9884\u89c8\u5931\u8d25'))
+  } finally {
+    costMeasurementDraftDialog.loading = false
+  }
+}
+
+async function commitCostMeasurementDrafts() {
+  if (!costMeasurementDetail.value) return
+  const lineIds = costMeasurementDraftDialog.candidates
+    .filter((row) => row.can_create && row.selected)
+    .map((row) => row.line_id)
+  if (!lineIds.length) {
+    ElMessage.warning('\u8bf7\u81f3\u5c11\u9009\u62e9 1 \u6761\u53ef\u751f\u6210\u7684\u6d4b\u7b97\u660e\u7ec6')
+    return
+  }
+  costMeasurementDraftDialog.submitting = true
+  try {
+    const response = await api.post(
+      `/admin/cost-measurements/${costMeasurementDetail.value.id}/cost-drafts`,
+      { line_ids: lineIds, note: costMeasurementDraftDialog.note || null },
+    )
+    const result = responseData(response)
+    costMeasurementDraftDialog.visible = false
+    ElMessage.success(`\u5df2\u751f\u6210 ${result.created_count || 0} \u6761\u5f85\u6838\u5b9a\u6210\u672c\u6761\u76ee\uff0c\u8df3\u8fc7 ${result.skipped_count || 0} \u6761`)
+    await openCostMeasurement({ id: costMeasurementDetail.value.id })
+    await loadCostMeasurements()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '\u751f\u6210\u5f85\u6838\u5b9a\u6210\u672c\u6761\u76ee\u5931\u8d25'))
+  } finally {
+    costMeasurementDraftDialog.submitting = false
+  }
+}
+
+async function exportCostMeasurement() {
+  if (!costMeasurementDetail.value) return
+  try {
+    const response = await api.get(
+      `/admin/cost-measurements/${costMeasurementDetail.value.id}/export`,
+      { responseType: 'blob' },
+    )
+    const url = URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${costMeasurementDetail.value.measurement_code}-${costMeasurementDetail.value.name}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u5bfc\u51fa\u5931\u8d25'))
+  }
+}
 async function loadCostItems() {
   if (!canViewCostDb.value) return
   costDbFeatureDisabled.value = false
@@ -10934,7 +20541,7 @@ async function loadCostRagSyncStatus(options = {}) {
   } catch (error) {
     costRagSyncStatus.value = null
     if (!options.silent) {
-      ElMessage.error(apiErrorMessage(error, 'RAG 同步状态加载失败'))
+      ElMessage.error(apiErrorMessage(error, '成本参考更新状态加载失败'))
     }
   } finally {
     costRagSyncStatusLoading.value = false
@@ -11147,7 +20754,7 @@ async function openCostLineageDetail(row) {
 async function syncActiveCostItemsToRag() {
   if (!canApproveCostDb.value || costDbFeatureDisabled.value) return
   try {
-    await ElMessageBox.confirm('确认将 active 企业定额主库同步到 RAG？这会让企业定额成为报价检索主源。', '同步成本主库到 RAG', {
+    await ElMessageBox.confirm('确认将当前已启用的企业定额更新为报价成本参考？', '更新报价成本参考', {
       type: 'warning',
       confirmButtonText: '确认同步',
       cancelButtonText: '返回',
@@ -11159,9 +20766,9 @@ async function syncActiveCostItemsToRag() {
   try {
     const response = await api.post('/admin/cost-items/sync-rag')
     const data = responseData(response) || {}
-    ElMessage.success(response.data?.message || `已同步 ${data.synced_count || 0} 条 active 成本条目`)
+    ElMessage.success(response.data?.message || `已更新 ${data.synced_count || 0} 条已启用成本条目`)
   } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '同步 active 成本条目失败'))
+    ElMessage.error(apiErrorMessage(error, '更新已启用成本条目失败'))
   } finally {
     costRagSyncing.value = false
     if (costRagSyncDialog.visible) await loadCostRagSyncRuns()
@@ -11174,8 +20781,8 @@ async function bulkActivateCostItems() {
   let reason = ''
   try {
     const result = await ElMessageBox.prompt(
-      `确认将选中条目中的 ${selectedDraftCostItemCount.value} 条 draft 批量核定为 active？请输入核定原因`,
-      '批量核定 active',
+      `确认将选中条目中的 ${selectedDraftCostItemCount.value} 条待核定条目批量设为已启用？请输入核定原因`,
+      '批量核定为启用',
       {
         inputPattern: /\S+/,
         inputErrorMessage: '核定原因不能为空',
@@ -11210,8 +20817,8 @@ async function bulkRestoreCostItemsToDraft() {
   let reason = ''
   try {
     const result = await ElMessageBox.prompt(
-      `确认将选中条目中的 ${selectedActiveCostItemCount.value} 条 active 批量恢复为 draft？请输入恢复原因`,
-      '批量恢复 draft',
+      `确认将选中条目中的 ${selectedActiveCostItemCount.value} 条已启用条目批量恢复为待核定？请输入恢复原因`,
+      '批量恢复为待核定',
       {
         inputPattern: /\S+/,
         inputErrorMessage: '恢复原因不能为空',
@@ -11792,7 +21399,7 @@ function openProjectTrialCreate() {
   const finish = new Date(start)
   finish.setDate(finish.getDate() + 30)
   const dateText = `${start.getFullYear()}${String(start.getMonth() + 1).padStart(2, '0')}${String(start.getDate()).padStart(2, '0')}`
-  projectTrialDialog.form.name = `单人试运行项目-${dateText}`
+  projectTrialDialog.form.name = `项目-${dateText}`
   projectTrialDialog.form.client_name = ''
   projectTrialDialog.form.owner_department = '工程部'
   projectTrialDialog.form.address = ''
@@ -11819,11 +21426,11 @@ async function createProjectTrial() {
       description: projectTrialDialog.form.description,
     })
     projectTrialDialog.visible = false
-    ElMessage.success('已创建单人试运行项目')
+    ElMessage.success('已创建项目')
     const project = responseData(response)
     navigate(`/admin/projects/${project.id}`)
   } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '创建试运行项目失败'))
+    ElMessage.error(apiErrorMessage(error, '创建项目失败'))
   } finally {
     state.submitting = false
   }
@@ -12856,17 +22463,49 @@ async function loadDashboards() {
 }
 
 async function bootstrap() {
-  if (routeName.value === 'login') return
+  if (routeName.value === 'login') {
+    if (!localStorage.getItem(TOKEN_KEY)) return
+    state.loading = true
+    state.error = ''
+    try {
+      const me = await loadMe()
+      window.location.replace(landingPath(me))
+    } catch (error) {
+      if ([401, 403].includes(error.response?.status)) {
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(USER_INFO_KEY)
+        session.user = null
+      } else {
+        ElMessage.warning('暂时无法验证已有登录状态，请稍后重试')
+      }
+    } finally {
+      state.loading = false
+    }
+    return
+  }
   state.loading = true
   state.error = ''
   try {
     await loadMe()
+    if (routeName.value === 'noAccess') return
+    if (routeName.value === 'quoteNew') {
+      if (!canOpenLegacyQuote.value) state.error = 'forbidden'
+      return
+    }
     if (routeName.value === 'dashboard') {
       if (!canViewDashboard.value) {
         state.error = 'forbidden'
         return
       }
       await loadDashboards()
+      return
+    }
+    if (routeName.value === 'budgetProjects' || routeName.value === 'budgetProjectDetail') {
+      if (!canViewBudgetProjects.value) state.error = 'forbidden'
+      return
+    }
+    if (routeName.value === 'accountQuotas') {
+      if (!canViewAccountQuotas.value) state.error = 'forbidden'
       return
     }
     if (routeName.value === 'execution') {
@@ -12914,6 +22553,30 @@ async function bootstrap() {
       }
       await loadBusinessLedgerUsers()
       await loadBusinessLedgers()
+      return
+    }
+    if (routeName.value === 'bidding') {
+      if (!canViewBidding.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadBiddingProjects()
+      return
+    }
+    if (routeName.value === 'enterpriseProfile') {
+      if (!canViewEnterpriseProfile.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await refreshEnterpriseProfile()
+      return
+    }
+    if (routeName.value === 'costMeasurement') {
+      if (!canViewCostMeasurement.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadCostMeasurements()
       return
     }
     if (routeName.value === 'costDb') {
@@ -13086,5 +22749,10 @@ window.addEventListener('popstate', () => {
 
 onMounted(() => {
   bootstrap()
+})
+
+onBeforeUnmount(() => {
+  clearBiddingImportantInfoProgressTimer()
+  clearBiddingRiskClauseProgressTimer()
 })
 </script>

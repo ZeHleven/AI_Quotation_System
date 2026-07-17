@@ -921,7 +921,8 @@ def _extract_data_fields(
         warnings.append("AMBIGUOUS_HEADER")
         inferred = _infer_from_text(raw_text)
         item_name = inferred["item_name"]
-        spec = spec or inferred["spec"]
+        if not spec and "spec" not in column_map:
+            spec = inferred["spec"]
         quantity_raw = quantity_raw or inferred["quantity_raw"]
         unit_raw = unit_raw or inferred["unit_raw"]
         warnings.extend(inferred["warnings"])
@@ -934,7 +935,7 @@ def _extract_data_fields(
                 unit_raw = inferred["unit_raw"]
             if item_name and inferred["item_name"] and item_name == raw_text:
                 item_name = inferred["item_name"]
-            if not spec:
+            if not spec and "spec" not in column_map:
                 spec = inferred["spec"]
             if "quantity" not in column_map:
                 warnings.extend(inferred["warnings"])
@@ -965,10 +966,13 @@ def _extract_data_fields(
     if _needs_multiple_number_review(raw_text, selected_quantity_index, quantity_candidates):
         warnings.append("MULTIPLE_NUMBERS")
 
-    if item_name:
+    # An independently mapped specification column is authoritative.  Splitting
+    # digits out of the project name as an inferred spec in that case corrupts
+    # legitimate names such as ``新建120-200mm轻质砖墙``.
+    if item_name and not spec and "spec" not in column_map:
         split = _split_name_spec(item_name)
         item_name = split["item_name"]
-        if split["spec"] and not spec:
+        if split["spec"]:
             spec = split["spec"]
 
     return {

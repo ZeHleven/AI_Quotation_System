@@ -42,6 +42,7 @@ from app.services.project_progress import (
     get_accessible_task,
     get_project_stage,
     next_project_code,
+    non_budget_project_clause,
     normalize_priority,
     normalize_evidence_type,
     normalize_project_status,
@@ -1334,7 +1335,10 @@ async def list_my_project_tasks(
 ):
     _ensure_feature_enabled()
     require_project_access(current_user)
-    query = db.query(ProjectTask).filter(ProjectTask.owner_user_id == current_user.id)
+    query = db.query(ProjectTask).filter(
+        ProjectTask.owner_user_id == current_user.id,
+        non_budget_project_clause(ProjectTask.project_id),
+    )
     if status_filter:
         statuses = [normalize_task_status(item) for item in status_filter.split(",") if item.strip()]
         if statuses:

@@ -1779,15 +1779,16 @@ async def post_json_via_gateway(
     url: str,
     json_payload: Dict[str, Any],
     headers: Dict[str, str],
-    timeout: int,
+    timeout: Optional[float],
     username: Optional[str] = None,
     trace_id: Optional[str] = None,
 ) -> httpx.Response:
     _before_call(provider, endpoint_type)
     started = time.perf_counter()
     input_chars = len(str(json_payload))
+    client_timeout = None if timeout is None or timeout <= 0 else timeout
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=client_timeout) as client:
             response = await client.post(url, json=json_payload, headers=headers)
         latency_ms = (time.perf_counter() - started) * 1000
         output_chars = len(response.text or "")

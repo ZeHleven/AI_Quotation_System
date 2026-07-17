@@ -2,12 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.responses import api_ok
 from app.core.security import get_password_hash
 from app.dependencies import require_admin, require_system_admin
 from app.models.user import User, UserRoleEvent
 from app.services.rbac import grant_role, normalize_role, revoke_role, serialize_user_for_rbac
+from app.services.account_tenancy import (
+    AccountTenancyError,
+    assign_user_to_operator_default_account,
+)
 
 
 router = APIRouter()
@@ -70,32 +75,49 @@ async def create_user_by_admin(
     if existing:
         raise HTTPException(status_code=400, detail="该用户名已存在")
 
-    user = User(
-        username=username,
-        hashed_password=get_password_hash(password),
-        quota=body.quota,
-        role="user",
-        role_version=1,
-        is_active=True,
-        must_change_password=True,
-    )
-    db.add(user)
-    db.flush()
-    for role in roles:
-        grant_role(
-            db,
-            target_user=user,
-            role=role,
-            operator=current_user,
-            note=note,
-            request=request,
+    try:
+        user = User(
+            username=username,
+            hashed_password=get_password_hash(password),
+            quota=body.quota,
+            role="user",
+            role_version=1,
+            is_active=True,
+            must_change_password=True,
         )
-    user = (
-        db.query(User)
-        .options(selectinload(User.role_assignments))
-        .filter(User.id == user.id)
-        .first()
-    )
+        db.add(user)
+        db.flush()
+        for role in roles:
+            grant_role(
+                db,
+                target_user=user,
+                role=role,
+                operator=current_user,
+                note=note,
+                request=request,
+                commit=False,
+            )
+        if settings.feature_budget_pricing_drafts:
+            assign_user_to_operator_default_account(
+                db,
+                target_user=user,
+                operator=current_user,
+            )
+        user_id = user.id
+        db.commit()
+        db.expire_all()
+        user = (
+            db.query(User)
+            .options(selectinload(User.role_assignments))
+            .filter(User.id == user_id)
+            .one()
+        )
+    except AccountTenancyError as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception:
+        db.rollback()
+        raise
     return api_ok(serialize_user_for_rbac(user))
 
 

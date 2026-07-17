@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_
+from sqlalchemy import exists, or_
 from sqlalchemy.orm import Session
 
 from app.core.time_utils import app_local_naive, parse_iso_datetime
+from app.models.budget_project import BudgetProjectProfile
 from app.models.project_progress import Project, ProjectStage, ProjectTask, ProjectTaskEvent, ProjectTaskEvidence
 from app.models.user import User
 from app.services.rbac import has_any_role
@@ -582,9 +583,15 @@ def require_project_manager(user: User, project: Project | None = None) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
 
 
+def non_budget_project_clause(project_id_column):
+    """Keep budget workspaces out of the independent project-progress domain."""
+
+    return ~exists().where(BudgetProjectProfile.project_id == project_id_column)
+
+
 def accessible_project_query(db: Session, user: User):
     require_project_access(user)
-    query = db.query(Project)
+    query = db.query(Project).filter(non_budget_project_clause(Project.id))
     if can_view_all_projects(user):
         return query
     owned_task_project_ids = db.query(ProjectTask.project_id).filter(ProjectTask.owner_user_id == user.id)
@@ -758,7 +765,7 @@ def backfill_project_task_evidence_fields(db: Session, *, apply: bool = False, p
         "template_match_missing_task_ids": [],
         "requirement_parse_missing_task_ids": [],
     }
-    query = db.query(ProjectTask)
+    query = db.query(ProjectTask).filter(non_budget_project_clause(ProjectTask.project_id))
     if project_id is not None:
         query = query.filter(ProjectTask.project_id == project_id)
     tasks = query.order_by(ProjectTask.id.asc()).all()
@@ -1088,7 +1095,7 @@ def activate_project_task_hard_gates(db: Session, *, apply: bool = False, projec
         "template_match_missing_count": 0,
         "template_match_missing_task_ids": [],
     }
-    query = db.query(ProjectTask)
+    query = db.query(ProjectTask).filter(non_budget_project_clause(ProjectTask.project_id))
     if project_id is not None:
         query = query.filter(ProjectTask.project_id == project_id)
     tasks = query.order_by(ProjectTask.id.asc()).all()

@@ -25,16 +25,41 @@ def frontend_files(tmp_path, monkeypatch):
 
 def test_phase0_login_and_permissions_routes_are_served(client):
     assert client.get("/login").status_code == 200
+    assert client.get("/no-access").status_code == 200
     assert client.get("/admin/permissions").status_code == 200
 
 
-def test_legacy_html_routes_are_preserved(client):
-    assert client.get("/app.html").status_code == 200
+def test_root_and_legacy_portal_redirect_to_unified_login(client):
+    for path in ("/", "/app.html"):
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code in {302, 307}
+        assert response.headers["location"] == "/login"
+
+
+def test_legacy_business_html_routes_are_preserved(client):
     assert client.get("/index.html").status_code == 200
     assert client.get("/admin.html").status_code == 200
+
+
+def test_legacy_portal_remains_available_when_vite_is_disabled(client):
+    object.__setattr__(settings, "feature_vite_frontend", False)
+
+    response = client.get("/app.html")
+
+    assert response.status_code == 200
+    assert "legacy app" in response.text
 
 
 def test_phase1_dashboard_route_is_served_by_spa(client):
     response = client.get("/admin/dashboard")
     assert response.status_code == 200
     assert 'id="app"' in response.text
+
+
+def test_quote_new_falls_back_to_legacy_workspace_when_vite_is_disabled(client):
+    object.__setattr__(settings, "feature_vite_frontend", False)
+
+    response = client.get("/quote/new", follow_redirects=False)
+
+    assert response.status_code in {302, 307}
+    assert response.headers["location"] == "/index.html"

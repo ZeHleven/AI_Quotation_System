@@ -3,18 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>旗胜智价 · AI地产报价专家</title>
+    <title>旗胜智价 · 企业智能经营平台</title>
+    <link rel="icon" type="image/svg+xml" href="/static/brand-favicon.svg">
+    <script>
+        // 兼容当前尚未重启的后端进程：Vite 登录页可用时，旧门户立即归并到统一入口。
+        // 若 Vite 前端关闭，/login 返回非 2xx，继续保留本页作为旧版回退门户。
+        fetch('/login', { cache: 'no-store', credentials: 'same-origin' })
+            .then((response) => {
+                if (response.ok) window.location.replace('/login');
+            })
+            .catch(() => {});
+    </script>
     <style>
         /* ── Reset & Base ── */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --dark:   #1E2022;
-            --slate:  #52616B;
-            --steel:  #C9D6DF;
-            --bg:     #F0F5F9;
+            --dark:   #1D1D1F;
+            --strong: #0F1115;
+            --slate:  #6E727C;
+            --steel:  #E3E5EA;
+            --bg:     #F5F5F7;
+            --panel:  #FBFBFD;
             --white:  #FFFFFF;
-            --accent: #8BA7B5;
+            --accent: #0A84FF;
+            --green:  #1F8F5F;
+            --shadow-soft: 0 18px 42px rgba(15,17,21,0.07);
+            --shadow-card: 0 1px 2px rgba(15,17,21,0.04), 0 12px 28px rgba(15,17,21,0.05);
+            --shadow-focus: 0 0 0 4px rgba(10,132,255,0.13);
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --color-bg: var(--bg);
+            --color-bg-soft: var(--panel);
+            --color-surface: var(--white);
+            --color-surface-muted: #F7F7F9;
+            --color-border: var(--steel);
+            --color-text: var(--dark);
+            --color-text-strong: var(--strong);
+            --color-muted: var(--slate);
+            --color-primary: var(--accent);
+            --color-success: var(--green);
         }
 
         html { scroll-behavior: smooth; }
@@ -628,7 +656,7 @@
 <!-- ── 导航栏 ── -->
 <nav class="navbar" id="navbar">
     <a href="#hero" class="nav-logo">
-        <span class="nav-logo-mark">筑</span>
+        <span class="nav-logo-mark">QS</span>
         <span class="nav-logo-name">旗胜智价</span>
     </a>
 
@@ -636,7 +664,7 @@
         <li><a href="#about">系统简介</a></li>
         <li><a href="#features">功能特色</a></li>
         <li><a href="#tutorial">使用教程</a></li>
-        <li><a href="/index.html" class="nav-cta">开始使用 →</a></li>
+        <li><a href="/login?redirect=/index.html" class="nav-cta">统一登录 →</a></li>
     </ul>
 
     <div class="nav-toggle" id="navToggle" onclick="toggleNav()">
@@ -655,10 +683,10 @@
             一客一价，<span>智在分秒。</span>
         </h1>
         <p class="hero-subtitle">
-            旗胜智价是面向地产与装修行业的 AI 智能报价中台，融合多模态识别、知识库检索与人工预审，将复杂的造价流程压缩至分钟级别，精准输出每一份报价单。
+            旗胜智价是面向地产与装修行业的企业智能经营平台，融合多模态识别、企业定额检索与人工预审，辅助业务人员更高效地完成报价与项目协同。
         </p>
         <div class="hero-actions">
-            <a href="/index.html" class="btn-primary">开始使用 →</a>
+            <a href="/login?redirect=/index.html" class="btn-primary">统一登录 →</a>
             <a href="#about" class="btn-outline">了解更多</a>
         </div>
     </div>
@@ -670,20 +698,20 @@
 <div class="stats-band">
     <div class="stats-grid">
         <div class="stat-item">
-            <div class="stat-num">60<em>s</em></div>
-            <div class="stat-label">平均出价耗时</div>
+            <div class="stat-num">AI</div>
+            <div class="stat-label">智能报价辅助</div>
         </div>
         <div class="stat-item">
-            <div class="stat-num">40<em>+</em></div>
-            <div class="stat-label">知识库价格条目</div>
+            <div class="stat-num">成本参考</div>
+            <div class="stat-label">企业定额检索</div>
         </div>
         <div class="stat-item">
-            <div class="stat-num">95<em>%</em></div>
-            <div class="stat-label">识别准确率</div>
+            <div class="stat-num">人工</div>
+            <div class="stat-label">预审确认</div>
         </div>
         <div class="stat-item">
-            <div class="stat-num">0<em>次</em></div>
-            <div class="stat-label">重复手工输入</div>
+            <div class="stat-num">审计</div>
+            <div class="stat-label">全过程留痕</div>
         </div>
     </div>
 </div>
@@ -699,17 +727,17 @@
                     传统造价工作依赖人工查阅图纸、逐项核价、手写 Excel，耗时长、易出错、难复用。旗胜智价将 AI 大模型能力注入造价全流程——上传图纸或口述需求，系统即刻完成识别、检索、定价与审核。
                 </p>
                 <p>
-                    平台深度整合 GLM-4V 多模态识别、BCEmbedding 向量检索与 Milvus 知识库，确保每条工程单价都源自真实的北京 2024 年市场行情，而非凭空估算。
+        平台整合多模态识别、企业定额检索与审计追溯，为报价提供可核验的成本参考；最终报价仍由业务人员人工确认后下发。
                 </p>
                 <p>
                     最终报价单经人工预审确认后，一键生成 Excel 并自动推送至钉钉，全程无需人工搬运数据。
                 </p>
                 <div class="about-tags">
-                    <span class="tag">GLM-4V 多模态</span>
-                    <span class="tag">RAG 向量检索</span>
-                    <span class="tag">Human-in-the-Loop</span>
+                    <span class="tag">智能识别</span>
+                    <span class="tag">成本参考</span>
+                    <span class="tag">人工确认</span>
                     <span class="tag">钉钉自动推送</span>
-                    <span class="tag">DeepSeek-R1 优化</span>
+                    <span class="tag">报价优化</span>
                 </div>
             </div>
 
@@ -725,15 +753,15 @@
                 <div class="flow-step">
                     <div class="flow-num">2</div>
                     <div class="flow-body">
-                        <strong>GLM-4V 多模态识别</strong>
+                        <strong>智能识别</strong>
                         <span>从图纸中自动提取施工项目、材料和工程量</span>
                     </div>
                 </div>
                 <div class="flow-step">
                     <div class="flow-num">3</div>
                     <div class="flow-body">
-                        <strong>RAG 检索 + DeepSeek 优化</strong>
-                        <span>从知识库检索最新市场单价，DeepSeek-R1 生成优化报价方案</span>
+                        <strong>成本参考与报价优化</strong>
+                        <span>参考企业当前启用的成本数据，生成可人工确认的报价建议</span>
                     </div>
                 </div>
                 <div class="flow-step">
@@ -761,21 +789,21 @@
             <div class="feature-card">
                 <span class="feature-icon">📸</span>
                 <div class="feature-name">多模态图纸识别</div>
-                <p class="feature-desc">上传装修清单图片，GLM-4V 自动识别施工项目与工程量，无需手动录入，识别准确率超过 95%。</p>
+            <p class="feature-desc">上传装修清单图片后，系统辅助提取施工项目与工程量，并在人工预审中逐项确认。</p>
             </div>
             <div class="feature-card">
                 <span class="feature-icon">🔍</span>
-                <div class="feature-name">RAG 智能检索定价</div>
-                <p class="feature-desc">基于 Milvus 向量数据库与 BM25 混合检索，从 40+ 条北京 2024 年市场价格库中精准匹配底价，杜绝虚高报价。</p>
+                <div class="feature-name">企业成本参考</div>
+            <p class="feature-desc">基于企业当前启用的定额主库匹配成本参考，并保留来源、状态和审计记录。</p>
             </div>
             <div class="feature-card">
                 <span class="feature-icon">🤖</span>
-                <div class="feature-name">DeepSeek-R1 报价优化</div>
-                <p class="feature-desc">DeepSeek-R1 对报价方案进行二次优化，结合项目背景给出工艺建议与避坑提示，提升客户信任度。</p>
+                <div class="feature-name">智能报价建议</div>
+                <p class="feature-desc">系统结合项目背景生成报价建议与工艺提示，帮助您高效完成复核。</p>
             </div>
             <div class="feature-card">
                 <span class="feature-icon">👁️</span>
-                <div class="feature-name">Human-in-the-Loop 预审</div>
+                <div class="feature-name">人工确认后下发</div>
                 <p class="feature-desc">AI 报价生成后，进入人工预审面板，支持逐项修改单价与备注，确认无误再下发，全程可控。</p>
             </div>
             <div class="feature-card">
@@ -785,8 +813,8 @@
             </div>
             <div class="feature-card">
                 <span class="feature-icon">🛡️</span>
-                <div class="feature-name">企业级权限与监控</div>
-                <p class="feature-desc">JWT 鉴权、用户配额管理、Alembic 数据库迁移、运维监控面板，保障企业内部数据安全与系统稳定。</p>
+                <div class="feature-name">权限与数据保护</div>
+                <p class="feature-desc">通过账号权限、使用额度和运行监控，保障企业内部数据安全与系统稳定。</p>
             </div>
         </div>
     </div>
@@ -798,7 +826,7 @@
         <div class="section-header">
             <span class="section-badge">使用教程</span>
             <h2 class="section-title">四步完成一份专业报价</h2>
-            <p class="section-lead">无需任何造价专业知识，按以下步骤操作，分钟级输出完整报价单。</p>
+        <p class="section-lead">按以下步骤完成需求输入、AI 辅助、人工预审与确认下发。</p>
         </div>
 
         <div class="steps-grid">
@@ -837,7 +865,7 @@
         </div>
 
         <div style="text-align:center; margin-top:64px;">
-            <a href="/index.html" class="btn-primary">立即开始使用 →</a>
+            <a href="/login?redirect=/index.html" class="btn-primary">统一登录 →</a>
         </div>
     </div>
 </section>
@@ -845,15 +873,15 @@
 <!-- ── 页脚 ── -->
 <footer>
     <a href="#hero" class="footer-logo">
-        <span class="footer-logo-mark">筑</span>
+        <span class="footer-logo-mark">QS</span>
         <span class="footer-logo-name">旗胜智价</span>
     </a>
-    <p>AI地产报价专家 · 万千业态，一客一价，智在分秒</p>
+        <p>旗胜智能装饰 · 企业智能经营平台</p>
     <p style="margin-top:8px;">
         企业内部系统 &nbsp;·&nbsp;
-        <a href="/index.html">业务工作台</a> &nbsp;·&nbsp;
-        <a href="/admin.html">管理后台</a> &nbsp;·&nbsp;
-        <a href="/docs">接口文档</a>
+        <a href="/login?redirect=/index.html">业务工作台</a> &nbsp;·&nbsp;
+        <a href="/login?redirect=/admin/dashboard">管理后台</a> &nbsp;·&nbsp;
+        <a href="/docs">使用说明</a>
     </p>
     <p style="margin-top:20px; font-size:12px; color:#3d4a52;">© 2026 旗胜智价. 企业内部使用。</p>
 </footer>

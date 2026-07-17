@@ -187,6 +187,41 @@ def test_post_json_via_gateway_uses_async_httpx(monkeypatch):
     assert calls[0]["post_kwargs"]["headers"] == {"X-Test": "1"}
 
 
+def test_post_json_via_gateway_zero_timeout_means_unlimited(monkeypatch):
+    reset_circuit_breakers()
+    calls = []
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            calls.append({"client_kwargs": kwargs})
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, **kwargs):
+            return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr("app.services.model_gateway.httpx.AsyncClient", FakeAsyncClient)
+
+    response = asyncio.run(
+        post_json_via_gateway(
+            provider="deepseek",
+            model="deepseek-v4-pro",
+            endpoint_type="bidding_tender_important_info_extract",
+            url="http://example.test/chat",
+            json_payload={"messages": []},
+            headers={},
+            timeout=0,
+        )
+    )
+
+    assert response.status_code == 200
+    assert calls[0]["client_kwargs"]["timeout"] is None
+
+
 def test_call_openai_pdf_agent_evidence_extract_builds_responses_payload(monkeypatch):
     reset_circuit_breakers()
     calls = []

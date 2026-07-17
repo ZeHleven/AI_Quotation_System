@@ -128,6 +128,12 @@ function Stop-ProcessesOnPort {
     if ($processIds.Count -gt 0) {
         Start-Sleep -Seconds 2
     }
+
+    $remainingIds = Get-ListeningProcessIds -Port $Port
+    if ($remainingIds.Count -gt 0) {
+        $joinedIds = ($remainingIds -join ", ")
+        throw "Port $Port is still occupied by pid(s): $joinedIds. Stop them manually from an Administrator PowerShell before restarting."
+    }
 }
 
 function Invoke-DatabaseMigrations {

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>旗胜智价 · 业务工作台</title>
+  <link rel="icon" type="image/svg+xml" href="/static/brand-favicon.svg">
   <link rel="stylesheet" href="/static/element-plus.min.css">
   <style>
     :root {
@@ -21,6 +22,22 @@
       --shadow-focus: 0 0 0 4px rgba(10,132,255,0.13);
       --radius-md: 8px;
       --radius-lg: 12px;
+      --color-bg: var(--bg);
+      --color-bg-soft: var(--panel);
+      --color-surface: var(--white);
+      --color-surface-muted: #F7F7F9;
+      --color-border: var(--steel);
+      --color-text: var(--dark);
+      --color-text-strong: var(--strong);
+      --color-muted: var(--slate);
+      --color-primary: var(--blue);
+      --color-success: var(--green);
+      --surface: var(--white);
+      --surface-soft: var(--panel);
+      --border-subtle: var(--steel);
+      --text-primary: var(--strong);
+      --text-secondary: var(--slate);
+      --brand-primary: var(--blue);
     }
     *, *::before, *::after { box-sizing: border-box; }
     body { margin: 0; padding: 0; background: var(--bg); color: var(--dark); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
@@ -100,6 +117,11 @@
     .main-content { display: flex; justify-content: center; align-items: center; flex: 1; overflow: hidden; padding: 22px; }
     .auth-panel { width: 400px; }
     .full-btn { width: 100%; margin-top: 10px; }
+    .unified-login-redirect {
+      display: grid; justify-items: center; gap: 10px; padding: 18px 8px;
+      color: var(--dark); text-align: center;
+    }
+    .unified-login-redirect span { color: var(--slate); font-size: 13px; }
     .chat-panel { width: 100%; max-width: 1120px; height: 100%; display: flex; flex-direction: column; }
     .chat-card { height: 100%; display: flex; flex-direction: column; border-radius: 14px; background: var(--white); box-shadow: var(--shadow-soft); border: 1px solid var(--steel); overflow: hidden; }
     .chat-card .el-card__body { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
@@ -568,39 +590,27 @@
   <div id="app" class="app-container">
     <header class="sys-header">
       <div class="sys-logo">
-        <span class="sys-logo-mark">筑</span>
+        <span class="sys-logo-mark">QS</span>
         旗胜智价 · 业务工作台
       </div>
       <div class="sys-nav">
         <span class="sys-user" v-if="isLoggedIn">{{ currentUser }}</span>
         <a v-if="canOpenAdminShell" :href="adminShellPath">管理后台</a>
-        <a href="/app.html">← 返回门户</a>
+        <el-button v-if="isLoggedIn" link @click="logout">退出登录</el-button>
       </div>
     </header>
     <el-container style="height: calc(100% - 52px);">
 
       <el-main class="main-content">
-        <!-- 未登录 -->
+        <!-- 未登录：统一跳转到 Vite 登录入口 -->
         <div v-if="!isLoggedIn" class="auth-panel">
           <el-card class="box-card" shadow="hover">
-            <el-tabs v-model="activeTab">
-              <el-tab-pane label="安全登录 (API授权)" name="login">
-                <el-form :model="authForm" label-width="70px" @submit.prevent="handleLogin">
-                  <el-form-item label="账号"><el-input v-model="authForm.username" placeholder="请输入员工账号"></el-input></el-form-item>
-                  <el-form-item label="密码"><el-input v-model="authForm.password" type="password" placeholder="请输入密码" show-password></el-input></el-form-item>
-                  <el-button type="primary" class="full-btn" :loading="loading" @click="handleLogin">验证接口 Token</el-button>
-                </el-form>
-              </el-tab-pane>
-              <el-tab-pane label="账号开通" name="register">
-                <el-alert
-                  title="账号由管理员统一开通"
-                  type="info"
-                  :closable="false"
-                  show-icon>
-                </el-alert>
-                <el-button type="info" class="full-btn" disabled style="margin-top: 14px;">请联系管理员开通账号</el-button>
-              </el-tab-pane>
-            </el-tabs>
+            <div class="unified-login-redirect">
+              <div class="welcome-logo-big">QS</div>
+              <strong>正在验证统一登录状态</strong>
+              <span>未登录时将前往旗胜智价统一入口</span>
+              <el-button type="primary" class="full-btn" @click="redirectToUnifiedLogin">前往统一登录</el-button>
+            </div>
           </el-card>
         </div>
 
@@ -653,7 +663,7 @@
               <!-- 优化3：空状态欢迎卡 -->
               <div v-if="messageHistory.length === 0 && !sending" class="welcome-wrap">
                 <div class="welcome-card">
-                  <div class="welcome-logo-big">筑</div>
+                  <div class="welcome-logo-big">QS</div>
                   <p class="welcome-title">你好，{{ currentUser }}</p>
                   <p class="welcome-sub">告诉我您的装修需求，我来帮您生成专业报价</p>
                   <div class="quick-chips">
@@ -695,7 +705,6 @@
                   <div class="text-content">{{ msg.content }}<span v-if="index === messageHistory.length - 1 && isTyping" class="cursor"></span></div>
                   <div v-if="msg.jobId || msg.traceId" class="quote-meta">
                     <span v-if="msg.jobId" class="quote-meta-tag">任务 {{ msg.jobId }}</span>
-                    <span v-if="msg.traceId" class="quote-meta-tag">Trace {{ msg.traceId }}</span>
                   </div>
                   <div v-if="msg.recoveryHint" class="recovery-hint-card">
                     <strong>下一步建议</strong>
@@ -1371,7 +1380,7 @@
       >
         <div class="cost-switch-current">
           <strong>{{ costSwitchCurrentTitle }}</strong>
-          <span>请选择与当前施工项目规格最匹配的 active 成本条目。选用后会同步采用该条目的参考价重算本行单价和合计。</span>
+          <span>请选择与当前施工项目规格最匹配的已启用成本条目。选用后会同步采用该条目的参考价重算本行单价和合计。</span>
         </div>
         <div class="cost-switch-toolbar">
           <el-input
@@ -1389,7 +1398,7 @@
           border
           stripe
           height="360"
-          empty-text="暂无可选 active 成本条目"
+          empty-text="暂无可选的已启用成本条目"
         >
           <el-table-column label="条目" min-width="210" show-overflow-tooltip>
             <template #default="scope">
@@ -1428,7 +1437,7 @@
   <script src="/static/vue.global.prod.min.js"></script>
   <script src="/static/element-plus.full.min.js"></script>
   <script src="/static/axios.min.js"></script>
-  <script src="/static/js/shared.js"></script>
+  <script src="/static/js/shared.js?v=20260710-entry-brand"></script>
 
   <script>
     const { createApp, ref, computed, nextTick, onMounted, onBeforeUnmount, watch } = Vue;
@@ -1459,6 +1468,7 @@
       getUserInfo,
       setUserInfo,
       clearAuth,
+      loginUrl,
       authHeaders
     } = window.AIMO;
 
@@ -1880,7 +1890,7 @@
             return { reason: '后台任务队列或 Worker 异常', actions: ['不要连续重复提交', '把任务号和追踪ID发给管理员检查运维面板'] };
           }
           if (text.includes('rag') || text.includes('知识库') || text.includes('milvus')) {
-            return { reason: '知识库检索链路异常', actions: ['可先用更具体的项目名称重试', '通知管理员检查 RAG 服务和 Milvus'] };
+            return { reason: '成本参考服务异常', actions: ['可先用更具体的项目名称重试', '通知管理员检查成本参考服务'] };
           }
           if (text.includes('n8n') || text.includes('dify') || text.includes('workflow') || text.includes('webhook')) {
             return { reason: '报价工作流服务异常', actions: ['稍后重试', '把追踪ID发给管理员检查 n8n/Dify 流程'] };
@@ -2046,10 +2056,16 @@
           return textByStage[stageId] || quoteProgressText.value;
         };
 
+        const redirectToUnifiedLogin = () => {
+          isLoggedIn.value = false;
+          window.location.replace(loginUrl());
+        };
+
         const handleUnauthorized = () => {
           clearAuth();
           isLoggedIn.value = false;
           ElMessage.warning('登录状态已过期，请重新登录');
+          redirectToUnifiedLogin();
         };
 
         const finalTotalAmount = computed(() => {
@@ -2212,7 +2228,7 @@
             return {
               source: 'model_estimate',
               label: aiPriceSourceLabel('model_estimate'),
-              reason: explicitReason || '本行未命中 cost_items.active 成本条目，预审单价来自 N8N/Dify 工作流 AI 估价结果。',
+              reason: explicitReason || '本行未匹配到已启用的成本条目，预审单价来自智能估算结果。',
             };
           }
           const aiUnitPrice = aiSuggestedUnitPrice(row);
@@ -2691,7 +2707,7 @@
         const costCandidateConfirmationMessage = computed(() => {
           const count = ambiguousCostCandidateRows.value.length;
           if (!count) return '';
-          return `还有 ${count} 行存在多条 active 成本候选，请先确认当前依据或切换成本条目后再下发。`;
+          return `还有 ${count} 行存在多条已启用成本候选，请先确认当前依据或切换成本条目后再下发。`;
         });
 
         const costCandidateWarningText = (row = {}) => {
@@ -3096,7 +3112,7 @@
               section_name: item.section_name || null,
             },
             price_breakdown: priceBreakdown,
-            match_reason: '业务员在预审阶段手动选择该 active 成本条目。',
+            match_reason: '业务员在预审阶段手动选择该已启用成本条目。',
             price_source_reason: `参考价取自成本库 #${item.id} 的“${sourceLabel}”字段，当前值为 ${referencePrice === null ? '-' : formatMoney(referencePrice)} 元/${item.unit || '-'}。`,
           };
         };
@@ -3178,8 +3194,8 @@
             ...(row.quote_explanation || {}),
             ai_price_source: 'manual_selected',
             ai_price_source_label: aiPriceSourceLabel('manual_selected'),
-            ai_price_source_reason: `业务员在预审阶段手动切换为成本库 active 条目 #${item.id} “${item.item_name}”，并同步采用该条目参考价重算本行报价。`,
-            cost_context_basis: `业务员在预审阶段手动选择成本库 active 条目 #${item.id} “${item.item_name}”，并同步采用参考价 ${referencePrice === null ? '-' : formatMoney(referencePrice)} 元/${item.unit || '-'} 重算本行报价。`,
+            ai_price_source_reason: `业务员在预审阶段手动切换为已启用成本条目 #${item.id} “${item.item_name}”，并同步采用该条目参考价重算本行报价。`,
+            cost_context_basis: `业务员在预审阶段手动选择已启用成本条目 #${item.id} “${item.item_name}”，并同步采用参考价 ${referencePrice === null ? '-' : formatMoney(referencePrice)} 元/${item.unit || '-'} 重算本行报价。`,
             comparison: reference.price_delta === null
               ? '已切换成本库参考条目，请人工复核报价与规格是否一致。'
               : `当前报价单价与手动选择的成本库参考价差为 ${reference.price_delta >= 0 ? '+' : ''}${formatMoney(reference.price_delta)} 元/${item.unit || '-'}。`,
@@ -3243,7 +3259,7 @@
             aiNoteConflictReason: reference.ai_note_conflict_reason || explanation.ai_note_warning || 'AI 原始备注与成本库依据不一致，需人工确认。',
             costItemText: reference.matched
               ? `#${reference.cost_item_id} ${sourceItem.item_name || reference.item_name || '-'}（${sourceItem.category || reference.category || '-'}）`
-              : '未命中 active 成本条目',
+              : '未命中已启用成本条目',
             matchReason: reference.matched ? (reference.match_reason || costReferenceLabel(row)) : '本行暂无成本库命中。',
             priceSourceReason: reference.matched
               ? (reference.price_source_reason || `参考价取自成本库“${sourceLabel}”字段。`)
@@ -3467,7 +3483,7 @@
             Number(costReferenceSummary.value.unmatched || 0) > 0,
             'no-cost',
             '无底价参考',
-            `${costReferenceSummary.value.unmatched || 0} 行没有 active 成本库底价。`,
+            `${costReferenceSummary.value.unmatched || 0} 行没有已启用的成本库底价。`,
             '允许 AI 估价，但必须人工确认价格。',
             'is-warning'
           );
@@ -3559,6 +3575,41 @@
           isLoggedIn.value = false;
           authForm.value.password = '';
           messageHistory.value = [];
+          window.location.replace('/login');
+        };
+
+        const validateExistingSession = async () => {
+          const token = getToken();
+          if (!token) {
+            redirectToUnifiedLogin();
+            return;
+          }
+
+          try {
+            const response = await axios.get(`${API_BASE_URL}/auth/me`, { headers: authHeaders() });
+            const user = apiData(response, apiBody(response)) || {};
+            setUserInfo({
+              username: user.username || '已授权用户',
+              role: user.role,
+              roles: Array.isArray(user.roles) ? user.roles : [],
+            });
+            currentUser.value = user.username || '已授权用户';
+            isLoggedIn.value = true;
+            resetClientInfoDefaults();
+            nextTick(() => { resumeIncomingQuoteJob(); });
+          } catch (error) {
+            if ([401, 403].includes(error.response?.status)) {
+              handleUnauthorized();
+              return;
+            }
+
+            const cachedUser = getUserInfo();
+            currentUser.value = cachedUser?.username || '已授权用户';
+            isLoggedIn.value = true;
+            resetClientInfoDefaults();
+            ElMessage.warning('暂时无法验证登录状态，已保留当前会话，请稍后重试');
+            nextTick(() => { resumeIncomingQuoteJob(); });
+          }
         };
 
         const handleFileChange = (file) => {
@@ -3586,6 +3637,21 @@
           inputText.value = '';
           selectedFile.value = null;
           ElMessage.info('已清空当前输入');
+        };
+
+        const isUnifiedNewQuoteEntry = () => {
+          const params = new URLSearchParams(window.location.search || '');
+          return params.get('entry') === 'new-quote';
+        };
+
+        const prepareUnifiedNewQuoteEntry = () => {
+          if (!isUnifiedNewQuoteEntry() || sending.value || pushing.value) return;
+          inputText.value = '';
+          selectedFile.value = null;
+          messageHistory.value = [];
+          nextTick(() => {
+            document.querySelector('.input-textarea-wrap textarea')?.focus();
+          });
         };
 
         const parsePreviewPayload = (rawData) => {
@@ -4142,7 +4208,7 @@
           formData.append('client_name', clientForm.value.clientName || getDefaultClientName());
           if (clientForm.value.clientPhone) formData.append('client_phone', clientForm.value.clientPhone.trim());
           formData.append('inquiry_time', clientForm.value.inquiryTime || formatShanghaiNow());
-          formData.append('time_source', 'manual');
+          formData.append('time_source', clientTimeManual.value ? 'manual' : 'default');
 
           const userMsg = { role: 'user', content: text || '发起多模态文件解析请求' };
           if (selectedFile.value && selectedFile.value.type.startsWith('image/'))
@@ -4423,7 +4489,7 @@
             return;
           }
           if (costCandidateConfirmationBlocked.value) {
-            ElMessage.error(costCandidateConfirmationMessage.value || '存在多条 active 成本候选，请先人工确认成本依据');
+            ElMessage.error(costCandidateConfirmationMessage.value || '存在多条已启用成本候选，请先人工确认成本依据');
             return;
           }
           if (aiRewriteConfirmationBlocked.value) {
@@ -4477,8 +4543,8 @@
             messageHistory.value.push({
               role: 'assistant',
               content: shouldRecordKnowledge
-                ? `✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉。本次修改已记录为后续知识候选证据。${noCostNotice ? ` ${noCostNotice}` : ''}`
-                : `✅ [Human-in-the-Loop] 人工复核确认完毕，最终 Excel 已成功投递至钉钉！${noCostNotice ? ` ${noCostNotice}` : ''}`
+                ? `✅ 人工复核确认完毕，最终 Excel 已成功投递至钉钉。本次修改已记录为后续知识候选证据。${noCostNotice ? ` ${noCostNotice}` : ''}`
+                : `✅ 人工复核确认完毕，最终 Excel 已成功投递至钉钉！${noCostNotice ? ` ${noCostNotice}` : ''}`
             });
             scrollToBottom();
           } catch (error) {
@@ -4558,16 +4624,10 @@
           if (showPreviewDialog.value) setTimeout(() => { refreshPreviewTableScroll(); }, 0);
         });
 
-        onMounted(() => {
+        onMounted(async () => {
           window.addEventListener('resize', handlePreviewWindowResize);
-          const token = getToken();
-          if (token) {
-            isLoggedIn.value = true;
-            const sysUser = getUserInfo();
-            currentUser.value = sysUser ? sysUser.username : '已授权用户';
-            resetClientInfoDefaults();
-            nextTick(() => { resumeIncomingQuoteJob(); });
-          }
+          await validateExistingSession();
+          if (isLoggedIn.value) prepareUnifiedNewQuoteEntry();
         });
 
         onBeforeUnmount(() => {
@@ -4614,7 +4674,7 @@
           canSubmit, selectedFileSummary,
           clientSourceOptions, showClientInfo, clientForm, clientInfoSummary,
           toggleClientInfo, resetClientInfoDefaults, markClientTimeManual,
-          handleRegister, handleLogin, logout, handleFileChange, clearSelectedFile,
+          handleRegister, handleLogin, logout, redirectToUnifiedLogin, handleFileChange, clearSelectedFile,
           sendMessage, cancelPreview, submitFinalQuote, scrollToBottom,
           retryMessage, refreshQuoteJob, checkingJobId, useExample,
           showHistory, historyList, historyLoading, historyTotal, historyPage,

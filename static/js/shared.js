@@ -48,6 +48,12 @@
     window.localStorage.removeItem(USER_INFO_KEY);
   };
 
+  const currentPath = () =>
+    `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+  const loginUrl = (target = currentPath()) =>
+    `/login?redirect=${encodeURIComponent(target || '/')}`;
+
   const authHeaders = (onMissing) => {
     const token = getToken();
     if (!token && typeof onMissing === 'function') onMissing();
@@ -81,6 +87,8 @@
     getUserInfo,
     setUserInfo,
     clearAuth,
+    currentPath,
+    loginUrl,
     authHeaders,
     installAxiosUnauthorizedHandler,
   };

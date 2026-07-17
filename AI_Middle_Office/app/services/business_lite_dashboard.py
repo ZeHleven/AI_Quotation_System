@@ -22,6 +22,7 @@ from app.models.quote_history import QuoteHistory
 from app.models.quote_job import QuoteJob
 from app.models.quote_preview_draft import PREVIEW_DRAFT_STATUS_EDITING, QuotePreviewDraft
 from app.services.cost_rag_sync import cost_rag_sync_status_summary
+from app.services.project_progress import non_budget_project_clause
 from app.services.quote_dashboard import CN_TZ, VALID_RANGES, _avg, _db_time, _range_bounds, _to_local
 
 
@@ -357,14 +358,28 @@ def _build_project_section(db: Session, *, start: datetime, end: datetime, now: 
     db_start = _db_time(start)
     db_end = _db_time(end)
     now_db = _db_time(now)
-    project_counts = _status_counts(db.query(Project.status, func.count(Project.id)).group_by(Project.status).all())
-    task_counts = _status_counts(db.query(ProjectTask.status, func.count(ProjectTask.id)).group_by(ProjectTask.status).all())
-    active_evidence_task_ids = db.query(ProjectTaskEvidence.task_id).filter(ProjectTaskEvidence.status == "active")
+    project_counts = _status_counts(
+        db.query(Project.status, func.count(Project.id))
+        .filter(non_budget_project_clause(Project.id))
+        .group_by(Project.status)
+        .all()
+    )
+    task_counts = _status_counts(
+        db.query(ProjectTask.status, func.count(ProjectTask.id))
+        .filter(non_budget_project_clause(ProjectTask.project_id))
+        .group_by(ProjectTask.status)
+        .all()
+    )
+    active_evidence_task_ids = db.query(ProjectTaskEvidence.task_id).filter(
+        ProjectTaskEvidence.status == "active",
+        non_budget_project_clause(ProjectTaskEvidence.project_id),
+    )
 
     open_task_filter = ProjectTask.status.notin_(["done", "cancelled"])
     missing_evidence_count = (
         db.query(func.count(ProjectTask.id))
         .filter(
+            non_budget_project_clause(ProjectTask.project_id),
             ProjectTask.evidence_policy.in_(["soft_reminder", "complete_required"]),
             ProjectTask.status != "cancelled",
             ProjectTask.id.notin_(active_evidence_task_ids),
@@ -373,12 +388,17 @@ def _build_project_section(db: Session, *, start: datetime, end: datetime, now: 
     )
     complete_required_count = (
         db.query(func.count(ProjectTask.id))
-        .filter(ProjectTask.evidence_policy == "complete_required", ProjectTask.status != "cancelled")
+        .filter(
+            non_budget_project_clause(ProjectTask.project_id),
+            ProjectTask.evidence_policy == "complete_required",
+            ProjectTask.status != "cancelled",
+        )
         .scalar()
     )
     bypass_gate_event_count = (
         db.query(func.count(ProjectTaskEvent.id))
         .filter(
+            non_budget_project_clause(ProjectTaskEvent.project_id),
             ProjectTaskEvent.event_type == "task_completed_bypass_gate",
             ProjectTaskEvent.created_at >= db_start,
             ProjectTaskEvent.created_at <= db_end,
@@ -389,6 +409,7 @@ def _build_project_section(db: Session, *, start: datetime, end: datetime, now: 
         db.query(ProjectTaskEvent.task_id, ProjectTaskEvent.created_at)
         .join(ProjectTask, ProjectTask.id == ProjectTaskEvent.task_id)
         .filter(
+            non_budget_project_clause(ProjectTask.project_id),
             ProjectTaskEvent.event_type == "task_completed_bypass_gate",
             ProjectTaskEvent.created_at >= db_start,
             ProjectTaskEvent.created_at <= db_end,
@@ -403,6 +424,7 @@ def _build_project_section(db: Session, *, start: datetime, end: datetime, now: 
     soft_reminder_event_count = (
         db.query(func.count(ProjectTaskEvent.id))
         .filter(
+            non_budget_project_clause(ProjectTaskEvent.project_id),
             ProjectTaskEvent.event_type == "task_completed_without_evidence",
             ProjectTaskEvent.created_at >= db_start,
             ProjectTaskEvent.created_at <= db_end,
@@ -411,12 +433,18 @@ def _build_project_section(db: Session, *, start: datetime, end: datetime, now: 
     )
     overdue_task_count = (
         db.query(func.count(ProjectTask.id))
-        .filter(open_task_filter, ProjectTask.due_at.isnot(None), ProjectTask.due_at < now_db)
+        .filter(
+            non_budget_project_clause(ProjectTask.project_id),
+            open_task_filter,
+            ProjectTask.due_at.isnot(None),
+            ProjectTask.due_at < now_db,
+        )
         .scalar()
     )
     trend_event_rows = (
         db.query(ProjectTaskEvent.created_at, ProjectTaskEvent.event_type)
         .filter(
+            non_budget_project_clause(ProjectTaskEvent.project_id),
             ProjectTaskEvent.event_type.in_(["task_completed_bypass_gate", "task_completed_without_evidence"]),
             ProjectTaskEvent.created_at >= db_start,
             ProjectTaskEvent.created_at <= db_end,
@@ -705,7 +733,7 @@ def build_business_lite_dashboard(db: Session, *, range_name: str = "last_30_day
         "risks": risks,
         "links": [
             {"key": "dashboard", "label": "效率驾驶舱", "path": "/admin/dashboard"},
-            {"key": "quote_workspace", "label": "旧报价工作台", "path": "/index.html"},
+            {"key": "quote_workspace", "label": "新建报价", "path": "/quote/new"},
             {"key": "cost_db", "label": "企业定额主库", "path": "/admin/cost-db"},
             {"key": "project_progress", "label": "项目进度", "path": "/admin/projects"},
             {"key": "ops_dashboard", "label": "运维接口", "path": "/api/v1/admin/ops/dashboard"},

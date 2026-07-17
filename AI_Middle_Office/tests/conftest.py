@@ -45,6 +45,26 @@ os.environ["LOGIN_RATE_LIMIT"] = "1000/5minutes"
 os.environ["ALLOW_SELF_REGISTRATION"] = "true"
 
 from app.main import app  # noqa: E402
+from app.core.config import settings  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def isolate_account_pricing_feature_flags():
+    """Keep legacy tests independent from the developer machine's real .env.
+
+    P2-2A tests explicitly enable the flag inside the account-aware scenario.
+    Production remains fail-closed when the real flag is enabled.
+    """
+
+    previous = settings.feature_budget_pricing_drafts
+    previous_account_quotas = settings.feature_account_quotas
+    object.__setattr__(settings, "feature_budget_pricing_drafts", False)
+    object.__setattr__(settings, "feature_account_quotas", False)
+    try:
+        yield
+    finally:
+        object.__setattr__(settings, "feature_budget_pricing_drafts", previous)
+        object.__setattr__(settings, "feature_account_quotas", previous_account_quotas)
 
 
 @pytest.fixture(scope="session")

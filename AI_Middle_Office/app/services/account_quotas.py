@@ -29,7 +29,12 @@ from app.models.account_quota import (
     AccountQuotaItemHistory,
 )
 from app.models.user import User
-from app.schemas.account_quota import AccountQuotaCreateIn, AccountQuotaStatusIn, AccountQuotaUpdateIn
+from app.schemas.account_quota import (
+    AccountQuotaBatchStatusIn,
+    AccountQuotaCreateIn,
+    AccountQuotaStatusIn,
+    AccountQuotaUpdateIn,
+)
 from app.services.account_tenancy import resolve_current_account
 
 
@@ -587,6 +592,27 @@ def change_account_quota_status(
     )
     db.flush()
     return item
+
+
+def batch_change_account_quota_status(
+    db: Session,
+    current_user: User,
+    payload: AccountQuotaBatchStatusIn,
+) -> list[AccountQuotaItem]:
+    changed_items: list[AccountQuotaItem] = []
+    for entry in payload.items:
+        item = change_account_quota_status(
+            db,
+            current_user,
+            entry.item_identifier.strip(),
+            AccountQuotaStatusIn(
+                target_status=payload.target_status,
+                expected_revision=entry.expected_revision,
+                reason=payload.reason,
+            ),
+        )
+        changed_items.append(item)
+    return changed_items
 
 
 def list_account_quota_history(

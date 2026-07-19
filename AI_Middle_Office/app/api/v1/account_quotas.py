@@ -10,9 +10,15 @@ from app.core.database import get_db
 from app.core.responses import api_ok, api_page
 from app.dependencies import require_admin
 from app.models.user import User
-from app.schemas.account_quota import AccountQuotaCreateIn, AccountQuotaStatusIn, AccountQuotaUpdateIn
+from app.schemas.account_quota import (
+    AccountQuotaBatchStatusIn,
+    AccountQuotaCreateIn,
+    AccountQuotaStatusIn,
+    AccountQuotaUpdateIn,
+)
 from app.services.account_quotas import (
     AccountQuotaError,
+    batch_change_account_quota_status,
     change_account_quota_status,
     create_account_quota_item,
     get_account_quota_item,
@@ -86,6 +92,34 @@ async def create_account_quota_endpoint(
         db.rollback()
         raise
     return api_ok(serialize_account_quota_item(item), message="账号定额已创建")
+
+
+@router.post("/admin/account-quotas/status/batch", summary="批量流转当前账号定额状态")
+async def batch_change_account_quota_status_endpoint(
+    payload: AccountQuotaBatchStatusIn,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    try:
+        items = batch_change_account_quota_status(db, current_user, payload)
+        db.commit()
+        for item in items:
+            db.refresh(item)
+    except (AccountQuotaError, AccountTenancyError) as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(
+        {
+            "target_status": payload.target_status,
+            "updated_count": len(items),
+            "items": [serialize_account_quota_item(item) for item in items],
+        },
+        message="账户定额批量状态已更新",
+    )
 
 
 @router.get("/admin/account-quotas/{item_identifier}", summary="查看当前账号定额详情")

@@ -28,6 +28,7 @@ export const accountQuotaApi = Object.freeze({
   detail: (identifier) => accountQuotaApiClient.get(`/admin/account-quotas/${identifier}`),
   update: (identifier, payload) => accountQuotaApiClient.patch(`/admin/account-quotas/${identifier}`, payload),
   changeStatus: (identifier, payload) => accountQuotaApiClient.post(`/admin/account-quotas/${identifier}/status`, payload),
+  batchStatus: (payload) => accountQuotaApiClient.post('/admin/account-quotas/status/batch', payload),
   history: (identifier, params) => accountQuotaApiClient.get(`/admin/account-quotas/${identifier}/history`, { params }),
 })
 

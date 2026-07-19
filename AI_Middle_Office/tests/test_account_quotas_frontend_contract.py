@@ -42,6 +42,8 @@ def test_account_quota_api_uses_current_rest_contract():
     assert "get(`/admin/account-quotas/${identifier}`)" in api
     assert "patch(`/admin/account-quotas/${identifier}`, payload)" in api
     assert "post(`/admin/account-quotas/${identifier}/status`, payload)" in api
+    assert "batchStatus" in api
+    assert "post('/admin/account-quotas/status/batch', payload)" in api
     assert "get(`/admin/account-quotas/${identifier}/history`, { params })" in api
 
 
@@ -66,6 +68,13 @@ def test_account_quota_fields_decimal_revision_and_status_payload_are_wired():
     assert "changeStatus(row, 'active')" in component
     assert "changeStatus(row, 'draft')" in component
     assert "changeStatus(row, 'archived')" in component
+    assert "_bulk_selected" in component
+    assert "selectedDraftQuotaRows" in component
+    assert "selectedArchivableQuotaRows" in component
+    assert "batchChangeStatus('active')" in component
+    assert "batchChangeStatus('archived')" in component
+    assert "批量启用草稿" in component
+    assert "批量归档" in component
     assert "row.status !== 'archived'" in component
 
     payload_block = component.split("function formPayload()", 1)[1].split(

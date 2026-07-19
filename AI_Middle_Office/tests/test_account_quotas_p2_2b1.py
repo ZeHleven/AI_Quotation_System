@@ -429,6 +429,101 @@ def test_account_quota_crud_lifecycle_history_and_non_pollution(db, monkeypatch)
     assert db.query(BudgetProjectPricingRun).count() == baseline["formal_pricing_runs"]
 
 
+def test_account_quota_batch_enable_archive_and_atomic_conflict(db):
+    admin, _ = _seed_user_account(db, suffix="batch-status", role="admin")
+
+    with _account_quota_feature(True), _api_client(db, admin) as (client, _state):
+        first = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(quota_code="BATCH-001", item_name="批量草稿一", spec="batch-1"),
+            )
+        )
+        second = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(quota_code="BATCH-002", item_name="批量草稿二", spec="batch-2"),
+            )
+        )
+
+        enabled = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas/status/batch",
+                json={
+                    "target_status": "active",
+                    "reason": "批量审核启用",
+                    "items": [
+                        {"item_identifier": first["item_uuid"], "expected_revision": 1},
+                        {"item_identifier": second["item_uuid"], "expected_revision": 1},
+                    ],
+                },
+            )
+        )
+        assert enabled["target_status"] == "active"
+        assert enabled["updated_count"] == 2
+        assert {row["status"] for row in enabled["items"]} == {"active"}
+        assert {row["revision"] for row in enabled["items"]} == {2}
+
+        archived = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas/status/batch",
+                json={
+                    "target_status": "archived",
+                    "reason": "批量归档不用",
+                    "items": [
+                        {"item_identifier": first["item_uuid"], "expected_revision": 2},
+                        {"item_identifier": second["item_uuid"], "expected_revision": 2},
+                    ],
+                },
+            )
+        )
+        assert archived["updated_count"] == 2
+        assert {row["status"] for row in archived["items"]} == {"archived"}
+        assert {row["revision"] for row in archived["items"]} == {3}
+
+        history_count = (
+            db.query(AccountQuotaItemHistory)
+            .filter(AccountQuotaItemHistory.event_type == ACCOUNT_QUOTA_EVENT_STATUS_CHANGED)
+            .count()
+        )
+        assert history_count == 4
+
+        third = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(quota_code="BATCH-003", item_name="批量冲突一", spec="batch-3"),
+            )
+        )
+        fourth = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(quota_code="BATCH-004", item_name="批量冲突二", spec="batch-4"),
+            )
+        )
+        stale = client.post(
+            "/api/v1/admin/account-quotas/status/batch",
+            json={
+                "target_status": "active",
+                "reason": "批量冲突校验",
+                "items": [
+                    {"item_identifier": third["item_uuid"], "expected_revision": 1},
+                    {"item_identifier": fourth["item_uuid"], "expected_revision": 99},
+                ],
+            },
+        )
+        assert stale.status_code == 409, stale.text
+        assert _error_code(stale) == "ACCOUNT_QUOTA_REVISION_CONFLICT"
+
+        db.expire_all()
+        conflicted_rows = (
+            db.query(AccountQuotaItem)
+            .filter(AccountQuotaItem.item_uuid.in_([third["item_uuid"], fourth["item_uuid"]]))
+            .all()
+        )
+        assert {row.status for row in conflicted_rows} == {"draft"}
+        assert {row.revision for row in conflicted_rows} == {1}
+
+
 def test_account_quota_cross_account_is_404_and_fingerprint_is_tenant_scoped(db):
     admin_a, _ = _seed_user_account(db, suffix="tenant-a", role="admin")
     admin_b, _ = _seed_user_account(db, suffix="tenant-b", role="admin")

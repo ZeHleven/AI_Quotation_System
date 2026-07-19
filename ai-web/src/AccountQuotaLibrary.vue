@@ -24,7 +24,7 @@
       <section class="quota-boundary-card">
         <div>
           <strong>仅沉淀当前账户认可的成本价格</strong>
-          <span>人工改价可从项目计价草稿同步进来，并且一律先保存为账户草稿；active 只为下一阶段账户定额匹配做准备。企业定额 active 主库始终保持独立。</span>
+          <span>人工改价可从项目计价草稿同步进来，并且一律先保存为账户草稿；草稿经人工启用后才会参与账户定额模式匹配。企业定额 active 主库始终保持独立。</span>
         </div>
         <el-tag type="primary" effect="plain">账户隔离</el-tag>
       </section>
@@ -53,6 +53,30 @@
           </div>
           <span>共 {{ total }} 条</span>
         </div>
+        <div class="quota-bulk-toolbar">
+          <span>已选 {{ selectedQuotaRows.length }} 条</span>
+          <el-button size="small" plain @click="selectQuotaRows('all')">选择本页可操作</el-button>
+          <el-button size="small" plain @click="selectQuotaRows('draft')">只选草稿</el-button>
+          <el-button size="small" plain @click="selectQuotaRows('none')">取消选择</el-button>
+          <el-button
+            size="small"
+            type="success"
+            plain
+            :disabled="!selectedDraftQuotaRows.length"
+            @click="batchChangeStatus('active')"
+          >
+            批量启用草稿
+          </el-button>
+          <el-button
+            size="small"
+            type="danger"
+            plain
+            :disabled="!selectedArchivableQuotaRows.length"
+            @click="batchChangeStatus('archived')"
+          >
+            批量归档
+          </el-button>
+        </div>
 
         <el-table
           v-loading="loading"
@@ -61,6 +85,11 @@
           class="users-table"
           empty-text="当前账户暂无定额"
         >
+          <el-table-column label="选择" width="72" align="center">
+            <template #default="{ row }">
+              <el-checkbox v-model="row._bulk_selected" :disabled="row.status === 'archived'" />
+            </template>
+          </el-table-column>
           <el-table-column label="定额编码" width="150">
             <template #default="{ row }"><strong>{{ row.quota_code || '—' }}</strong></template>
           </el-table-column>
@@ -223,6 +252,9 @@ const history = reactive({ visible: false, loading: false, item: null, entries: 
 const moduleUnavailable = computed(() => !props.featureAvailable || featureDisabled.value)
 const formPricePreview = computed(() => normalizePrice(dialog.form.unit_price) || '—')
 const dialogSaveLabel = computed(() => dialog.mode === 'edit' ? '保存修改' : '保存为草稿')
+const selectedQuotaRows = computed(() => items.value.filter((row) => row._bulk_selected))
+const selectedDraftQuotaRows = computed(() => selectedQuotaRows.value.filter((row) => row.status === 'draft'))
+const selectedArchivableQuotaRows = computed(() => selectedQuotaRows.value.filter((row) => row.status !== 'archived'))
 
 function emptyForm() {
   return {
@@ -289,7 +321,7 @@ async function loadItems() {
     if (filters.keyword.trim()) params.keyword = filters.keyword.trim()
     if (filters.status) params.status = filters.status
     const response = await accountQuotaApi.list(params)
-    items.value = accountQuotaResponseItems(response)
+    items.value = accountQuotaResponseItems(response).map((row) => ({ ...row, _bulk_selected: false }))
     total.value = accountQuotaResponseTotal(response, items.value.length)
   } catch (error) {
     items.value = []
@@ -420,6 +452,64 @@ async function saveItem() {
   }
 }
 
+function selectQuotaRows(mode) {
+  items.value.forEach((row) => {
+    if (mode === 'none' || row.status === 'archived') {
+      row._bulk_selected = false
+      return
+    }
+    if (mode === 'draft') {
+      row._bulk_selected = row.status === 'draft'
+      return
+    }
+    row._bulk_selected = row.status !== 'archived'
+  })
+}
+
+async function batchChangeStatus(targetStatus) {
+  const rows = targetStatus === 'active' ? selectedDraftQuotaRows.value : selectedArchivableQuotaRows.value
+  if (!rows.length) {
+    ElMessage.warning(targetStatus === 'active' ? '请先勾选草稿定额' : '请先勾选可归档定额')
+    return
+  }
+  const action = targetStatus === 'active' ? '批量启用' : '批量归档'
+  const hint = targetStatus === 'active'
+    ? `将启用已选中的 ${rows.length} 条草稿定额。启用后仅进入账户定额 active 状态，不会修改企业定额主库。请填写启用依据。`
+    : `将归档已选中的 ${rows.length} 条账户定额。归档后记录冻结且不再参与匹配。请填写归档原因。`
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt(hint, `${action}账户定额`, {
+      inputPattern: /\S{2,}/,
+      inputErrorMessage: '请填写至少 2 个字符的操作说明',
+      confirmButtonText: `确认${action}`,
+      cancelButtonText: '取消',
+      type: targetStatus === 'archived' ? 'warning' : 'info',
+    })
+    reason = result.value.trim()
+  } catch {
+    return
+  }
+  try {
+    await accountQuotaApi.batchStatus({
+      target_status: targetStatus,
+      reason,
+      items: rows.map((row) => ({
+        item_identifier: String(quotaIdentifier(row)),
+        expected_revision: rowRevision(row),
+      })),
+    })
+    ElMessage.success(`已${action.replace('批量', '')} ${rows.length} 条账户定额`)
+    await loadItems()
+  } catch (error) {
+    if (error?.response?.status === 409) {
+      await loadItems()
+      ElMessage.warning('部分定额已产生新修订或状态变化，列表已刷新；请核对后重新批量操作')
+      return
+    }
+    ElMessage.error(accountQuotaApiErrorMessage(error, `${action}失败`))
+  }
+}
+
 async function changeStatus(row, targetStatus) {
   const action = ({ active: '启用', draft: '撤回为草稿', archived: '归档' })[targetStatus]
   const hint = targetStatus === 'active'
@@ -530,6 +620,6 @@ onMounted(loadItems)
 
 <style scoped>
 .quota-boundary-card{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px;padding:18px 20px;border:1px solid rgba(59,130,246,.16);border-radius:18px;background:linear-gradient(135deg,rgba(239,246,255,.94),rgba(255,255,255,.96));box-shadow:0 14px 34px rgba(15,23,42,.05)}
-.quota-boundary-card>div,.quota-name,.quota-price,.history-heading>div{display:flex;flex-direction:column;gap:5px}.quota-boundary-card span,.quota-title small,.quota-title>span,.quota-name small,.quota-price small,.history-heading span,.quota-form-tip{color:#64748b}.quota-filters{display:grid;grid-template-columns:minmax(300px,1fr) 170px auto auto;gap:12px;margin-bottom:16px}.quota-panel{padding:20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.92);box-shadow:0 14px 34px rgba(15,23,42,.06)}.quota-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.quota-title>div{display:flex;flex-direction:column;gap:4px}.quota-name strong{color:#0f172a}.quota-name small{line-height:1.45;white-space:normal}.quota-price{align-items:flex-end}.quota-price strong{font-variant-numeric:tabular-nums;color:#0f172a}.quota-price small{font-size:11px;font-variant-numeric:tabular-nums}.quota-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.quota-actions :deep(.el-button+.el-button){margin-left:0}.el-pagination{justify-content:flex-end;margin-top:16px}.quota-form-grid{display:grid;grid-template-columns:1fr 160px;gap:14px}.quota-form-tip{display:block;margin-top:6px;font-size:12px;font-variant-numeric:tabular-nums}.quota-dialog-alert{margin-bottom:16px}.history-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px;padding:16px 18px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#f8fafc}
-@media(max-width:900px){.quota-filters,.quota-form-grid{grid-template-columns:1fr}.quota-boundary-card{align-items:flex-start;flex-direction:column}.quota-panel{padding:14px}}
+.quota-boundary-card>div,.quota-name,.quota-price,.history-heading>div{display:flex;flex-direction:column;gap:5px}.quota-boundary-card span,.quota-title small,.quota-title>span,.quota-name small,.quota-price small,.history-heading span,.quota-form-tip{color:#64748b}.quota-filters{display:grid;grid-template-columns:minmax(300px,1fr) 170px auto auto;gap:12px;margin-bottom:16px}.quota-panel{padding:20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.92);box-shadow:0 14px 34px rgba(15,23,42,.06)}.quota-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}.quota-title>div{display:flex;flex-direction:column;gap:4px}.quota-bulk-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 12px;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(248,250,252,.92)}.quota-bulk-toolbar span{font-size:13px;color:#475569}.quota-bulk-toolbar :deep(.el-button+.el-button){margin-left:0}.quota-name strong{color:#0f172a}.quota-name small{line-height:1.45;white-space:normal}.quota-price{align-items:flex-end}.quota-price strong{font-variant-numeric:tabular-nums;color:#0f172a}.quota-price small{font-size:11px;font-variant-numeric:tabular-nums}.quota-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.quota-actions :deep(.el-button+.el-button){margin-left:0}.el-pagination{justify-content:flex-end;margin-top:16px}.quota-form-grid{display:grid;grid-template-columns:1fr 160px;gap:14px}.quota-form-tip{display:block;margin-top:6px;font-size:12px;font-variant-numeric:tabular-nums}.quota-dialog-alert{margin-bottom:16px}.history-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px;padding:16px 18px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#f8fafc}
+@media(max-width:900px){.quota-filters,.quota-form-grid{grid-template-columns:1fr}.quota-boundary-card{align-items:flex-start;flex-direction:column}.quota-panel{padding:14px}.quota-bulk-toolbar{align-items:flex-start;flex-direction:column}}
 </style>

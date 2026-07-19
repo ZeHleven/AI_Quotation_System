@@ -63,3 +63,25 @@ class AccountQuotaStatusIn(BaseModel):
     target_status: AccountQuotaStatus
     expected_revision: int = Field(gt=0)
     reason: str | None = Field(default=None, max_length=2000)
+
+
+class AccountQuotaBatchStatusItemIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_identifier: str = Field(min_length=1, max_length=64)
+    expected_revision: int = Field(gt=0)
+
+
+class AccountQuotaBatchStatusIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_status: Literal["active", "archived"]
+    reason: str = Field(min_length=2, max_length=2000)
+    items: list[AccountQuotaBatchStatusItemIn] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_unique_items(self):
+        identifiers = [item.item_identifier.strip() for item in self.items]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("批量状态流转条目不能重复")
+        return self

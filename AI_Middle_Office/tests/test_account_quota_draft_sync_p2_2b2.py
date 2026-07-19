@@ -268,6 +268,10 @@ def test_frontend_exposes_account_quota_draft_sync_contract():
     assert "确认同步为账户定额草稿" in pricing_page
     assert "previewAccountQuotaSync" in pricing_page
     assert "confirmAccountQuotaSync" in pricing_page
+    assert "quotaSyncSelectRows" in pricing_page
+    assert "全选可同步" in pricing_page
+    assert "只选新增" in pricing_page
+    assert "只选更新" in pricing_page
     assert "pricing_draft_synced: '报价草稿同步'" in quota_page
     assert "pricing-draft/account-quota-sync/preview" in api_client
     assert "pricing-draft/account-quota-sync/confirm" in api_client

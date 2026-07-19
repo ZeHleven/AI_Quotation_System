@@ -333,13 +333,21 @@
       description="同步不会改变当前计价草稿、企业定额主库或任何正式计价版本。命中已有账户定额时，请明确选择跳过或更新；更新已启用条目会撤回为草稿。" />
     <el-skeleton v-if="quotaSync.loading" :rows="8" animated />
     <template v-else>
-      <el-empty v-if="!quotaSync.items.length" description="当前草稿没有可预览的人工改价行" />
+      <el-empty v-if="!quotaSync.items.length" description="当前草稿没有可预览的有效价格行" />
       <template v-else>
         <div class="quota-sync-summary">
           <span>预览 {{ quotaSync.items.length }} 行</span>
+          <span>可同步 {{ quotaSyncEligibleCount }} 条</span>
+          <span>已选择 {{ quotaSyncSelectedCount }} 条</span>
           <span>将创建 {{ quotaSyncCreateCount }} 条</span>
           <span>将更新 {{ quotaSyncUpdateCount }} 条</span>
           <span>跳过/阻断 {{ quotaSyncSkipCount }} 条</span>
+        </div>
+        <div class="quota-sync-bulk-actions">
+          <el-button size="small" plain :disabled="!quotaSyncEligibleCount" @click="quotaSyncSelectRows('all')">全选可同步</el-button>
+          <el-button size="small" plain :disabled="!quotaSyncSelectedCount" @click="quotaSyncSelectRows('none')">取消全选</el-button>
+          <el-button size="small" plain :disabled="!quotaSyncCreatableCount" @click="quotaSyncSelectRows('create')">只选新增</el-button>
+          <el-button size="small" plain :disabled="!quotaSyncUpdatableCount" @click="quotaSyncSelectRows('update')">只选更新</el-button>
         </div>
         <el-table :data="quotaSync.items" class="users-table" max-height="440" :row-key="quotaSyncRowKey">
           <el-table-column label="同步" width="72" align="center">
@@ -538,6 +546,10 @@ const draftActionLabel = computed(() => {
 const quotaSyncCreateCount = computed(() => quotaSync.items.filter((row) => row.selected && row.action === 'create').length)
 const quotaSyncUpdateCount = computed(() => quotaSync.items.filter((row) => row.selected && row.action === 'update_existing').length)
 const quotaSyncSkipCount = computed(() => quotaSync.items.length - quotaSyncCreateCount.value - quotaSyncUpdateCount.value)
+const quotaSyncEligibleCount = computed(() => quotaSync.items.filter((row) => row.eligible).length)
+const quotaSyncSelectedCount = computed(() => quotaSync.items.filter((row) => row.selected).length)
+const quotaSyncCreatableCount = computed(() => quotaSync.items.filter((row) => row.eligible && (row.allowed_actions || []).includes('create')).length)
+const quotaSyncUpdatableCount = computed(() => quotaSync.items.filter((row) => row.eligible && (row.allowed_actions || []).includes('update_existing')).length)
 const quotaSyncCanConfirm = computed(() => (
   quotaSync.items.length > 0
   && (quotaSyncCreateCount.value + quotaSyncUpdateCount.value) > 0
@@ -1005,6 +1017,31 @@ function handleQuotaSyncSelection(row) {
   }
 }
 
+function quotaSyncSelectRows(mode) {
+  for (const row of quotaSync.items) {
+    if (!row.eligible) {
+      row.selected = false
+      row.action = 'skip'
+      continue
+    }
+    const allowed = row.allowed_actions || ['skip']
+    const defaultAction = allowed.find((value) => value !== 'skip') || 'skip'
+    if (mode === 'none') {
+      row.selected = false
+      row.action = 'skip'
+    } else if (mode === 'create') {
+      row.selected = allowed.includes('create')
+      row.action = row.selected ? 'create' : 'skip'
+    } else if (mode === 'update') {
+      row.selected = allowed.includes('update_existing')
+      row.action = row.selected ? 'update_existing' : 'skip'
+    } else {
+      row.selected = defaultAction !== 'skip'
+      row.action = defaultAction
+    }
+  }
+}
+
 async function openAccountQuotaSync() {
   if (!draft.value || !canManageDraft.value) return
   quotaSync.visible = true
@@ -1156,5 +1193,5 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .budget-panel{padding:20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.9);box-shadow:0 14px 34px rgba(15,23,42,.06);margin-bottom:18px}.budget-title{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.budget-title>div,.pricing-source{display:flex;flex-direction:column;gap:4px}.budget-title small,.pricing-source small,.pricing-context span,.pricing-metrics span,.pricing-run-meta{color:#64748b}.pricing-actions{align-items:flex-end;flex-direction:row!important}.pricing-alert{margin-bottom:14px}.pricing-context{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}.pricing-context>div,.pricing-metrics>div{padding:14px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#fff}.pricing-context strong{display:block;margin-top:7px}.pricing-run-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}.pricing-run-toolbar>.el-select{width:min(420px,100%)}.pricing-run-meta{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;font-size:13px}.pricing-metrics{display:grid;grid-template-columns:1.4fr repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.pricing-metrics strong{display:block;margin:7px 0;font-size:22px}.pricing-filters{display:grid;grid-template-columns:minmax(260px,1fr) 190px 190px auto;gap:12px;margin-bottom:14px}.drawer-section{margin-top:22px}.pricing-evidence{max-height:360px;overflow:auto;margin:0;padding:16px;border-radius:14px;background:#0f172a;color:#e2e8f0;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.el-pagination{margin-top:16px;justify-content:flex-end}@media(max-width:1100px){.pricing-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.pricing-context,.pricing-metrics,.pricing-filters{grid-template-columns:1fr}.pricing-run-toolbar{align-items:stretch;flex-direction:column}.pricing-run-meta{justify-content:flex-start}.budget-title{align-items:flex-start;flex-direction:column}.pricing-actions{align-items:flex-start!important}}
-.pricing-draft-workspace{margin:20px 0 24px;padding:18px;border:1px solid rgba(37,99,235,.18);border-radius:18px;background:linear-gradient(180deg,rgba(239,246,255,.72),rgba(255,255,255,.9))}.draft-mode-selector{margin-bottom:10px}.draft-mode-help{display:flex;flex-direction:column;gap:5px;margin-bottom:16px;padding:13px 15px;border-radius:14px;background:#fff;border:1px solid rgba(148,163,184,.2)}.draft-mode-help span,.draft-meta span{color:#64748b;font-size:13px}.draft-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.draft-meta>div{padding:14px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#fff}.draft-meta strong{display:block;margin-top:7px}.draft-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}.draft-boundary-note{margin:-2px 0 14px;padding:10px 13px;border-radius:12px;background:#f1f5f9;color:#475569;font-size:13px}.draft-quote-job-card{margin:0 0 14px;padding:14px;border:1px solid rgba(34,197,94,.22);border-radius:16px;background:#fff}.draft-quote-job-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.draft-quote-job-head>div{display:flex;flex-direction:column;gap:4px}.draft-quote-job-head small,.draft-quote-job-stats{color:#64748b;font-size:13px}.draft-quote-job-stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.draft-filters{margin-top:4px}.draft-status-stack{display:flex;align-items:flex-start;flex-direction:column;gap:5px}.draft-price-editor{display:grid;grid-template-columns:minmax(92px,1fr) auto auto auto;gap:5px}.draft-price-editor .el-button+.el-button{margin-left:0}@media(max-width:1100px){.draft-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.draft-meta{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.draft-meta{grid-template-columns:1fr}.pricing-draft-workspace{padding:14px}.draft-price-editor{grid-template-columns:1fr auto}.draft-price-editor .el-button:last-child{grid-column:2}}
+.pricing-draft-workspace{margin:20px 0 24px;padding:18px;border:1px solid rgba(37,99,235,.18);border-radius:18px;background:linear-gradient(180deg,rgba(239,246,255,.72),rgba(255,255,255,.9))}.draft-mode-selector{margin-bottom:10px}.draft-mode-help{display:flex;flex-direction:column;gap:5px;margin-bottom:16px;padding:13px 15px;border-radius:14px;background:#fff;border:1px solid rgba(148,163,184,.2)}.draft-mode-help span,.draft-meta span{color:#64748b;font-size:13px}.draft-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.draft-meta>div{padding:14px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#fff}.draft-meta strong{display:block;margin-top:7px}.draft-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}.draft-boundary-note{margin:-2px 0 14px;padding:10px 13px;border-radius:12px;background:#f1f5f9;color:#475569;font-size:13px}.draft-quote-job-card{margin:0 0 14px;padding:14px;border:1px solid rgba(34,197,94,.22);border-radius:16px;background:#fff}.draft-quote-job-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.draft-quote-job-head>div{display:flex;flex-direction:column;gap:4px}.draft-quote-job-head small,.draft-quote-job-stats{color:#64748b;font-size:13px}.draft-quote-job-stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.draft-filters{margin-top:4px}.draft-status-stack{display:flex;align-items:flex-start;flex-direction:column;gap:5px}.draft-price-editor{display:grid;grid-template-columns:minmax(92px,1fr) auto auto auto;gap:5px}.draft-price-editor .el-button+.el-button{margin-left:0}.quota-sync-summary,.quota-sync-bulk-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}.quota-sync-summary span{font-size:13px;color:#475569}.quota-sync-bulk-actions .el-button+.el-button{margin-left:0}@media(max-width:1100px){.draft-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.draft-meta{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.draft-meta{grid-template-columns:1fr}.pricing-draft-workspace{padding:14px}.draft-price-editor{grid-template-columns:1fr auto}.draft-price-editor .el-button:last-child{grid-column:2}}
 </style>

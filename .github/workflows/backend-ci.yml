@@ -1,14 +1,30 @@
 name: Backend CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "codex/**"]
+    paths:
+      - "AI_Middle_Office/**"
+      - ".github/workflows/backend-ci.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "AI_Middle_Office/**"
+      - ".github/workflows/backend-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:
+    name: Backend tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: AI_Middle_Office
@@ -22,6 +38,9 @@ jobs:
       N8N_WEBHOOK_URL_CALC: http://127.0.0.1:5678/webhook/budget-calc
       N8N_WEBHOOK_URL_PUSH: http://127.0.0.1:5678/webhook/budget-push
       MATERIALS_FILE: ./ci_rag_materials.json
+      PUBLIC_ACCESS_ENABLED: "false"
+      FEATURE_COST_DB: "true"
+      FEATURE_NO_COST_DRAFT_CAPTURE: "true"
 
     steps:
       - name: Checkout
@@ -42,7 +61,7 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Compile backend
-        run: python -m compileall app
+        run: python -m compileall app tests
 
       - name: Run tests
         run: pytest -q

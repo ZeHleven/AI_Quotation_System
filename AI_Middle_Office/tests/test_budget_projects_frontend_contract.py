@@ -69,3 +69,15 @@ def test_price_columns_and_layer_quantities_are_locked_and_quantity_is_unique():
     assert "每个 Sheet 只允许一个合计工程量列" in source
     assert "mappingChanged" in source
     assert "filters = reactive({ keyword: '', status: 'active' })" in source
+
+
+def test_import_workbook_limit_error_formats_sheet_objects():
+    api = _source("budgetProjectApi.js")
+
+    assert "function budgetSheetLimitText(sheet)" in api
+    assert "sheet.sheet_name || sheet.name || sheet.source_sheet" in api
+    assert "sheet.row_count != null" in api
+    assert "sheet.column_count != null" in api
+    assert "detail.sheets.map(budgetSheetLimitText)" in api
+    assert "BUDGET_IMPORT_WORKBOOK_LIMIT_EXCEEDED" in api
+    assert "单个 Sheet 上限" in api

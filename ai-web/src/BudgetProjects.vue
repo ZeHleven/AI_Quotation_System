@@ -120,18 +120,18 @@
         <div v-if="canRemapCurrent" class="budget-actions"><el-button type="primary" :loading="mappingLoading" :disabled="!mappingSheets.length" @click="regenerate">应用映射并重新生成当前批次</el-button></div>
       </section>
       <section class="budget-panel">
-        <div class="budget-title"><div><strong>标准清单</strong><small>数量异常行仍保留，计算工程量按 0 展示并给出原因</small></div></div>
+        <div class="budget-title"><div><strong>标准清单</strong><small>清单项目参与工程量统计和报价；编制说明、计算规则等参考信息仅展示，不参与计算</small></div></div>
         <el-tabs v-if="sheetNames.length" v-model="activeRowSheet">
           <el-tab-pane v-for="sheet in sheetNames" :key="sheet" :label="`${sheet} (${rowsBySheet(sheet).length})`" :name="sheet">
-            <el-table :data="rowsBySheet(sheet)" row-key="__key" class="users-table" max-height="620">
+            <el-table :data="rowsBySheet(sheet)" row-key="__key" :row-class-name="standardRowClassName" class="users-table" max-height="620">
               <el-table-column label="来源" width="100"><template #default="{ row }">行 {{ row.raw_row_index || row.source_row_number || '-' }}</template></el-table-column>
-              <el-table-column label="项目名称" min-width="210"><template #default="{ row }">{{ row.item_name || row.project_name || '-' }}</template></el-table-column>
-              <el-table-column label="项目特征" min-width="240"><template #default="{ row }">{{ row.spec || row.project_feature || '-' }}</template></el-table-column>
-              <el-table-column prop="unit" label="单位" width="85" />
-              <el-table-column label="原始工程量" width="135" align="right"><template #default="{ row }">{{ originalQuantity(row) }}</template></el-table-column>
-              <el-table-column label="计算工程量" width="135" align="right"><template #default="{ row }"><strong>{{ calculatedQuantity(row) }}</strong></template></el-table-column>
-              <el-table-column label="数量状态" width="125"><template #default="{ row }"><el-tag :type="quantityValid(row.quantity_status) ? 'success' : 'warning'" effect="plain">{{ quantityLabel(row.quantity_status) }}</el-tag></template></el-table-column>
-              <el-table-column label="原因" min-width="220"><template #default="{ row }">{{ quantityReason(row) }}</template></el-table-column>
+              <el-table-column label="项目名称 / 参考内容" min-width="280"><template #default="{ row }">{{ standardRowTitle(row) }}</template></el-table-column>
+              <el-table-column label="项目特征" min-width="240"><template #default="{ row }">{{ isReferenceRow(row) ? '-' : (row.spec || row.project_feature || '-') }}</template></el-table-column>
+              <el-table-column label="单位" width="85"><template #default="{ row }">{{ isReferenceRow(row) ? '-' : (row.unit || '-') }}</template></el-table-column>
+              <el-table-column label="原始工程量" width="135" align="right"><template #default="{ row }">{{ isReferenceRow(row) ? '-' : originalQuantity(row) }}</template></el-table-column>
+              <el-table-column label="计算工程量" width="135" align="right"><template #default="{ row }"><strong>{{ isReferenceRow(row) ? '-' : calculatedQuantity(row) }}</strong></template></el-table-column>
+              <el-table-column label="数量状态" width="125"><template #default="{ row }"><el-tag v-if="isReferenceRow(row)" type="info" effect="plain">参考信息</el-tag><el-tag v-else :type="quantityValid(row.quantity_status) ? 'success' : 'warning'" effect="plain">{{ quantityLabel(row.quantity_status) }}</el-tag></template></el-table-column>
+              <el-table-column label="原因" min-width="220"><template #default="{ row }">{{ isReferenceRow(row) ? '仅作为估价上下文，不参与工程量和报价计算' : quantityReason(row) }}</template></el-table-column>
             </el-table>
           </el-tab-pane>
         </el-tabs>
@@ -173,9 +173,15 @@ const uploadRef = ref(null)
 const uploading = ref(false), mappingLoading = ref(false), activeMappingSheet = ref(''), activeRowSheet = ref('')
 const mappings = reactive({})
 const dialog = reactive({ visible: false, loading: false, id: null, target: null, form: { name: '', client_name: '', description: '' } })
+const referenceSheetRoles = new Set(['metadata', 'calculation_rule', 'loss_reference', 'material_reference', 'optional_backup', 'summary_analysis'])
 const mappingSheets = computed(() => normalizeSheets(selectedImport.value))
-const standardRows = computed(() => importRows.value.filter((row) => row.is_standard_item === true || row.row_type === 'data_row'))
-const sheetNames = computed(() => Array.from(new Set(standardRows.value.map((row) => row.source_sheet || row.sheet_name || '默认 Sheet'))))
+const standardRows = computed(() => importRows.value.filter((row) => (
+  !isReferenceRow(row) && (row.row_type === 'data_row' || row.is_standard_item === true)
+)))
+const displayRows = computed(() => importRows.value.filter((row) => (
+  isReferenceRow(row) || row.is_standard_item === true || row.row_type === 'data_row'
+)))
+const sheetNames = computed(() => Array.from(new Set(displayRows.value.map((row) => row.source_sheet || row.sheet_name || '默认 Sheet'))))
 const abnormalCount = computed(() => selectedImport.value?.summary?.invalid_quantity_count ?? standardRows.value.filter((row) => !quantityValid(row.quantity_status)).length)
 const validQuantityCount = computed(() => standardRows.value.filter((row) => quantityValid(row.quantity_status)).length)
 const detailArchived = computed(() => projectStatus(detail.value) === 'archived')
@@ -228,7 +234,16 @@ const quantityReason = (row) => {
 }
 const originalQuantity = (row) => row.original_quantity ?? row.raw_quantity ?? row.source_quantity ?? row.quantity_original ?? '-'
 const calculatedQuantity = (row) => row.calculation_quantity ?? row.calculated_quantity ?? row.normalized_quantity ?? (quantityValid(row.quantity_status) ? (row.quantity ?? 0) : 0)
-const rowsBySheet = (sheet) => standardRows.value.filter((row) => (row.source_sheet || row.sheet_name || '默认 Sheet') === sheet)
+function isReferenceRow(row) {
+  if (row?.row_type === 'reference_row') return true
+  if (!referenceSheetRoles.has(row?.sheet_role) || row?.row_type === 'empty_row') return false
+  return Boolean(String(row?.raw_text || row?.item_name || row?.remark || '').trim())
+}
+const standardRowTitle = (row) => isReferenceRow(row)
+  ? (row.raw_text || row.item_name || row.project_name || row.remark || '-')
+  : (row.item_name || row.project_name || '-')
+const standardRowClassName = ({ row }) => isReferenceRow(row) ? 'budget-reference-row' : ''
+const rowsBySheet = (sheet) => displayRows.value.filter((row) => (row.source_sheet || row.sheet_name || '默认 Sheet') === sheet)
 const samples = (column) => Array.isArray(column.sample_values || column.samples) ? ((column.sample_values || column.samples).slice(0, 3).join(' / ') || '-') : '-'
 const priceHeaderPattern = /(单价|合价|金额|造价|成本价|投标价|税前价|含税价|税率|费率|人工费|材料费|主材费|辅材费|机械费|管理费|利润)/
 const layerQuantityPattern = /((地下|负?\d+|[一二三四五六七八九十百]+)层.*(工程量|数量)|(工程量|数量).*(地下|负?\d+|[一二三四五六七八九十百]+)层)/
@@ -418,4 +433,5 @@ onMounted(initialize)
 
 <style scoped>
 .budget-mode-alert,.budget-panel{margin-bottom:18px}.budget-filters{display:grid;grid-template-columns:minmax(260px,1fr) 180px auto;gap:12px;margin-bottom:16px}.budget-panel{padding:20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.9);box-shadow:0 14px 34px rgba(15,23,42,.06)}.budget-title{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.budget-title div,.budget-name{display:flex;flex-direction:column;gap:4px}.budget-title small,.budget-title span,.budget-name small,.budget-metrics span,.budget-metrics small{color:#64748b}.budget-upload{display:flex;align-items:flex-start;gap:12px}.budget-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.budget-metrics>div{padding:18px;border:1px solid rgba(148,163,184,.2);border-radius:18px;background:#fff}.budget-metrics strong{display:block;margin-top:8px;font-size:24px}.budget-actions{display:flex;justify-content:flex-end;margin-top:16px}.mapping-summary{display:flex;align-items:center;gap:10px;margin:0 0 12px;color:#64748b;font-size:13px}.mapping-field{display:flex;flex-direction:column;gap:4px}.mapping-field small{color:#64748b}.mapping-field small:first-of-type{color:#b45309}:deep(.current-import-row td.el-table__cell){background:#eff6ff!important}.el-pagination{margin-top:16px;justify-content:flex-end}@media(max-width:900px){.budget-filters{grid-template-columns:1fr}.budget-metrics{grid-template-columns:repeat(2,1fr)}.mapping-summary{align-items:flex-start;flex-direction:column}}
+:deep(.budget-reference-row td.el-table__cell){background:#f8fafc;color:#475569}
 </style>

@@ -6,7 +6,7 @@
         <h2>账户定额库</h2>
       </div>
       <div v-if="!moduleUnavailable" class="heading-actions">
-        <el-button :icon="Plus" type="primary" @click="openCreate">新建定额</el-button>
+        <el-button :icon="Plus" type="primary" @click="openCreate">新增{{ activeTabConfig.shortLabel }}</el-button>
         <el-button :icon="Refresh" plain :loading="loading" @click="loadItems">刷新</el-button>
       </div>
     </div>
@@ -29,100 +29,261 @@
         <el-tag type="primary" effect="plain">账户隔离</el-tag>
       </section>
 
-      <div class="quota-filters">
-        <el-input
-          v-model="filters.keyword"
-          :prefix-icon="Search"
-          clearable
-          placeholder="搜索定额编码、项目名称或项目特征"
-          @keyup.enter="searchItems"
-          @clear="searchItems"
-        />
-        <el-select v-model="filters.status" clearable placeholder="全部状态" @change="searchItems">
-          <el-option v-for="option in statusOptions" :key="option.value" :label="option.label" :value="option.value" />
-        </el-select>
-        <el-button type="primary" plain @click="searchItems">查询</el-button>
-        <el-button plain @click="resetFilters">重置</el-button>
-      </div>
-
       <section class="quota-panel">
-        <div class="quota-title">
-          <div>
-            <strong>定额明细</strong>
-            <small>价格以 6 位小数保存，列表同时展示业务友好的 2 位金额</small>
-          </div>
+        <el-tabs v-model="activeDetailType" class="quota-tabs" @tab-change="switchDetailType">
+          <el-tab-pane v-for="tab in detailTabs" :key="tab.value" :label="tab.label" :name="tab.value" />
+        </el-tabs>
+
+        <div class="quota-filters">
+          <el-input
+            v-model="filters.keyword"
+            :prefix-icon="Search"
+            clearable
+            :placeholder="activeTabConfig.searchPlaceholder"
+            @keyup.enter="searchItems"
+            @clear="searchItems"
+          />
+          <el-select v-if="activeDetailType === 'material'" v-model="filters.materialType" clearable placeholder="材料类型" @change="searchItems">
+            <el-option label="主材" value="主材" />
+            <el-option label="辅材" value="辅材" />
+          </el-select>
+          <el-select v-model="filters.status" clearable placeholder="全部状态" @change="searchItems">
+            <el-option v-for="option in statusOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+          <el-button type="primary" plain @click="searchItems">搜索</el-button>
+          <el-button plain @click="resetFilters">重置</el-button>
+        </div>
+
+        <div class="quota-toolbar-line">
+          <el-button :icon="Plus" type="primary" @click="openCreate">新增{{ activeTabConfig.shortLabel }}</el-button>
+          <el-button type="warning" plain :disabled="!selectedArchivableQuotaRows.length" @click="batchChangeStatus('active')">同步选中到基础定额</el-button>
           <span>共 {{ total }} 条</span>
         </div>
+
         <div class="quota-bulk-toolbar">
           <span>已选 {{ selectedQuotaRows.length }} 条</span>
           <el-button size="small" plain @click="selectQuotaRows('all')">选择本页可操作</el-button>
           <el-button size="small" plain @click="selectQuotaRows('draft')">只选草稿</el-button>
           <el-button size="small" plain @click="selectQuotaRows('none')">取消选择</el-button>
-          <el-button
-            size="small"
-            type="success"
-            plain
-            :disabled="!selectedDraftQuotaRows.length"
-            @click="batchChangeStatus('active')"
-          >
-            批量启用草稿
-          </el-button>
-          <el-button
-            size="small"
-            type="danger"
-            plain
-            :disabled="!selectedArchivableQuotaRows.length"
-            @click="batchChangeStatus('archived')"
-          >
-            批量归档
-          </el-button>
+          <el-button size="small" type="success" plain :disabled="!selectedDraftQuotaRows.length" @click="batchChangeStatus('active')">批量启用草稿</el-button>
+          <el-button size="small" type="danger" plain :disabled="!selectedArchivableQuotaRows.length" @click="batchChangeStatus('archived')">批量归档</el-button>
         </div>
 
         <el-table
           v-loading="loading"
-          :data="items"
+          :data="visibleItems"
           :row-key="quotaIdentifier"
-          class="users-table"
-          empty-text="当前账户暂无定额"
+          class="users-table quota-detail-table"
+          empty-text="当前账户暂无明细"
         >
-          <el-table-column label="选择" width="72" align="center">
+          <el-table-column label="选择" width="58" align="center" fixed="left">
             <template #default="{ row }">
               <el-checkbox v-model="row._bulk_selected" :disabled="row.status === 'archived'" />
             </template>
           </el-table-column>
-          <el-table-column label="定额编码" width="150">
-            <template #default="{ row }"><strong>{{ row.quota_code || '—' }}</strong></template>
+
+          <template v-if="activeDetailType === 'process'">
+            <el-table-column label="工序名" min-width="210" fixed="left">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ row.item_name || '未命名工序' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="采购单价" width="150" align="right">
+              <template #default="{ row }">
+                <div class="editable-cell align-right">
+                  <span class="money-text">{{ formatPriceFriendly(row.unit_price) }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="工序单位" width="120">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ row.unit || '—' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="调价系数" width="130" align="right">
+              <template #default="{ row }">
+                <div class="editable-cell align-right">
+                  <span>{{ detailValue(row, 'adjustment_factor', '1') }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="真实工序含量" width="150" align="right">
+              <template #default="{ row }">
+                <div class="editable-cell align-right">
+                  <span>{{ detailValue(row, 'real_content', '1') }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+          </template>
+
+          <template v-else-if="activeDetailType === 'material'">
+            <el-table-column label="材料名" min-width="150" fixed="left">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ row.item_name || '未命名材料' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="材料编码" width="135">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ row.quota_code || '—' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="材料类型" width="115">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ detailValue(row, 'material_type', '辅材') }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="损耗率" width="105" align="right">
+              <template #default="{ row }">
+                <div class="editable-cell align-right">
+                  <span>{{ detailValue(row, 'loss_rate', '0') }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="材料单价" width="135" align="right">
+              <template #default="{ row }">
+                <div class="editable-cell align-right">
+                  <span class="money-text">{{ formatPriceFriendly(row.unit_price) }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="单位" width="95">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ row.unit || '—' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="调价系数" width="120" align="right">
+              <template #default="{ row }">
+                <div class="editable-cell align-right">
+                  <span>{{ detailValue(row, 'adjustment_factor', '1') }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="规格型号" min-width="150">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ detailValue(row, 'spec_model') || row.spec || '—' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column v-for="column in resourceColumns" :key="column.key" :label="column.label" :width="column.width">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ detailValue(row, column.key) }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+          </template>
+
+          <template v-else>
+            <el-table-column label="分包名" min-width="150" fixed="left">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ row.item_name || '未命名分包' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="分包编码" width="135">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ row.quota_code || '—' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="损耗率" width="105" align="right">
+              <template #default="{ row }">
+                <div class="editable-cell align-right">
+                  <span>{{ detailValue(row, 'loss_rate', '0') }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="分包明细" width="175">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <div class="split-fees">
+                    <span>人工费：{{ detailValue(row, 'labor_fee', '0') }}</span>
+                    <span>主材费：{{ detailValue(row, 'main_material_fee', '0') }}</span>
+                    <span>辅材费：{{ detailValue(row, 'auxiliary_material_fee', '0') }}</span>
+                    <small v-if="detailValue(row, 'subcontract_breakdown_source', '')">{{ subcontractBreakdownSourceLabel(row) }}</small>
+                  </div>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="分包单价" width="135" align="right">
+              <template #default="{ row }">
+                <div class="editable-cell align-right">
+                  <span class="money-text">{{ formatPriceFriendly(row.unit_price) }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="单位" width="95">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ row.unit || '—' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="调价系数" width="120" align="right">
+              <template #default="{ row }">
+                <div class="editable-cell align-right">
+                  <span>{{ detailValue(row, 'adjustment_factor', '1') }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="规格型号" min-width="150">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ detailValue(row, 'spec_model') || row.spec || '—' }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column v-for="column in resourceColumns" :key="column.key" :label="column.label" :width="column.width">
+              <template #default="{ row }">
+                <div class="editable-cell">
+                  <span>{{ detailValue(row, column.key) }}</span>
+                  <el-button :icon="Edit" link type="primary" :disabled="!canEditRow(row)" @click="openEdit(row)" />
+                </div>
+              </template>
+            </el-table-column>
+          </template>
+
+          <el-table-column label="状态" width="95">
+            <template #default="{ row }"><el-tag :type="statusTag(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag></template>
           </el-table-column>
-          <el-table-column label="项目名称 / 特征" min-width="290">
-            <template #default="{ row }">
-              <div class="quota-name">
-                <strong>{{ row.item_name || '未命名项目' }}</strong>
-                <small>{{ row.item_features || '未填写项目特征' }}</small>
-                <small v-if="row.spec">规格：{{ row.spec }}</small>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="unit" label="单位" width="85" />
-          <el-table-column label="账户单价" width="175" align="right">
-            <template #default="{ row }">
-              <div class="quota-price">
-                <strong>¥{{ formatPriceFriendly(row.unit_price) }}</strong>
-                <small>精确值 {{ formatPriceExact(row.unit_price) }}</small>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag :type="statusTag(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="修订" width="90" align="center">
-            <template #default="{ row }">R{{ rowRevision(row) }}</template>
-          </el-table-column>
-          <el-table-column label="更新时间" width="170">
-            <template #default="{ row }">{{ formatDate(row.updated_at || row.created_at) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="330" fixed="right">
+          <el-table-column label="操作" width="285" fixed="right">
             <template #default="{ row }">
               <div class="quota-actions">
                 <el-button size="small" plain @click="openHistory(row)">历史</el-button>
@@ -146,7 +307,7 @@
       </section>
     </template>
 
-    <el-dialog v-model="dialog.visible" :title="dialog.mode === 'edit' ? '编辑账户定额' : '新建账户定额'" width="640px" destroy-on-close>
+    <el-dialog v-model="dialog.visible" :title="dialog.mode === 'edit' ? `编辑${dialogTabConfig.shortLabel}` : `新增${dialogTabConfig.shortLabel}`" width="760px" destroy-on-close>
       <el-alert
         v-if="dialog.conflict"
         class="quota-dialog-alert"
@@ -158,27 +319,79 @@
       />
       <el-form label-position="top" :model="dialog.form">
         <div class="quota-form-grid">
-          <el-form-item label="定额编码（可选）">
-            <el-input v-model="dialog.form.quota_code" maxlength="64" placeholder="例如 AC-QS-001" />
+          <el-form-item label="明细类型" required>
+            <el-select v-model="dialog.form.detail_type" @change="syncDialogDefaults">
+              <el-option v-for="tab in detailTabs" :key="tab.value" :label="tab.label" :value="tab.value" />
+            </el-select>
           </el-form-item>
-          <el-form-item label="单位" required>
+          <el-form-item :label="dialogTabConfig.codeLabel">
+            <el-input v-model="dialog.form.quota_code" maxlength="64" :placeholder="dialogTabConfig.codePlaceholder" />
+          </el-form-item>
+        </div>
+        <div class="quota-form-grid">
+          <el-form-item :label="dialogTabConfig.nameLabel" required>
+            <el-input v-model="dialog.form.item_name" maxlength="255" :placeholder="dialogTabConfig.namePlaceholder" />
+          </el-form-item>
+          <el-form-item :label="dialogTabConfig.unitLabel" required>
             <el-input v-model="dialog.form.unit" maxlength="24" placeholder="例如 ㎡、m、项" />
           </el-form-item>
         </div>
-        <el-form-item label="项目名称" required>
-          <el-input v-model="dialog.form.item_name" maxlength="255" placeholder="输入可识别、可复用的项目名称" />
-        </el-form-item>
+        <div class="quota-form-grid">
+          <el-form-item :label="dialogTabConfig.priceLabel" required>
+            <el-input v-model="dialog.form.unit_price" inputmode="decimal" maxlength="24" placeholder="最多 6 位小数">
+              <template #append>元</template>
+            </el-input>
+            <small class="quota-form-tip">保存后精确值：{{ formPricePreview }}</small>
+          </el-form-item>
+          <el-form-item label="调价系数">
+            <el-input v-model="dialog.form.adjustment_factor" inputmode="decimal" maxlength="24" placeholder="默认 1" />
+          </el-form-item>
+        </div>
+
+        <template v-if="dialog.form.detail_type === 'process'">
+          <el-form-item label="真实工序含量">
+            <el-input v-model="dialog.form.real_content" inputmode="decimal" maxlength="24" placeholder="默认 1" />
+          </el-form-item>
+        </template>
+
+        <template v-else>
+          <div class="quota-form-grid">
+            <el-form-item v-if="dialog.form.detail_type === 'material'" label="材料类型">
+              <el-select v-model="dialog.form.material_type" clearable placeholder="选择材料类型">
+                <el-option label="主材" value="主材" />
+                <el-option label="辅材" value="辅材" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="损耗率">
+              <el-input v-model="dialog.form.loss_rate" inputmode="decimal" maxlength="24" placeholder="默认 0" />
+            </el-form-item>
+          </div>
+          <div v-if="dialog.form.detail_type === 'subcontract'" class="quota-form-grid">
+            <el-form-item label="人工费">
+              <el-input v-model="dialog.form.labor_fee" inputmode="decimal" maxlength="24" placeholder="默认 0" />
+            </el-form-item>
+            <el-form-item label="主材费">
+              <el-input v-model="dialog.form.main_material_fee" inputmode="decimal" maxlength="24" placeholder="默认 0" />
+            </el-form-item>
+            <el-form-item label="辅材费">
+              <el-input v-model="dialog.form.auxiliary_material_fee" inputmode="decimal" maxlength="24" placeholder="默认 0" />
+            </el-form-item>
+          </div>
+          <el-form-item label="规格型号">
+            <el-input v-model="dialog.form.spec_model" maxlength="255" placeholder="例如 600*600、15厚、单开" />
+          </el-form-item>
+          <div class="quota-extra-grid">
+            <el-form-item v-for="column in resourceColumns" :key="column.key" :label="column.label">
+              <el-input v-model="dialog.form[column.key]" maxlength="255" />
+            </el-form-item>
+          </div>
+        </template>
+
         <el-form-item label="项目特征">
           <el-input v-model="dialog.form.item_features" type="textarea" :rows="3" maxlength="2000" show-word-limit placeholder="填写工艺、材质、规格、施工条件等匹配特征" />
         </el-form-item>
-        <el-form-item label="规格（可选）">
-          <el-input v-model="dialog.form.spec" type="textarea" :rows="2" maxlength="10000" show-word-limit placeholder="填写型号、尺寸或其他独立规格信息" />
-        </el-form-item>
-        <el-form-item label="账户单价（元）" required>
-          <el-input v-model="dialog.form.unit_price" inputmode="decimal" maxlength="24" placeholder="最多 6 位小数">
-            <template #append>元</template>
-          </el-input>
-          <small class="quota-form-tip">保存后精确值：{{ formPricePreview }}</small>
+        <el-form-item label="规格（原始备注，可选）">
+          <el-input v-model="dialog.form.spec" type="textarea" :rows="2" maxlength="10000" show-word-limit placeholder="保留原始型号、尺寸或其他说明" />
         </el-form-item>
         <el-form-item label="变更说明" required>
           <el-input v-model="dialog.form.reason" maxlength="255" placeholder="说明本次新增或调整依据" />
@@ -214,7 +427,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import {
   accountQuotaApi,
   accountQuotaApiErrorMessage,
@@ -227,6 +440,36 @@ const props = defineProps({
   featureAvailable: { type: Boolean, default: false },
 })
 
+const detailTabs = [
+  { value: 'process', label: '工序明细', shortLabel: '工序', nameLabel: '工序名', codeLabel: '工序编码（可选）', unitLabel: '工序单位', priceLabel: '采购单价（元）', searchPlaceholder: '工序名', namePlaceholder: '输入工序名称', codePlaceholder: '例如 GX-001' },
+  { value: 'material', label: '材料明细', shortLabel: '材料', nameLabel: '材料名', codeLabel: '材料编码', unitLabel: '单位', priceLabel: '材料单价（元）', searchPlaceholder: '材料名、材料编码或规格型号', namePlaceholder: '输入材料名称', codePlaceholder: '例如 CL-001' },
+  { value: 'subcontract', label: '专业分包明细', shortLabel: '分包', nameLabel: '分包名', codeLabel: '分包编码', unitLabel: '单位', priceLabel: '分包单价（元）', searchPlaceholder: '分包名、分包编码或规格型号', namePlaceholder: '输入分包名称', codePlaceholder: '例如 FB-001' },
+]
+const resourceColumns = [
+  { key: 'code_name', label: '代号', width: 90 },
+  { key: 'layer_count', label: '层数', width: 90 },
+  { key: 'color', label: '颜色', width: 100 },
+  { key: 'thickness_mm', label: '厚度 mm', width: 105 },
+  { key: 'width_mm', label: '宽度 mm', width: 105 },
+  { key: 'height', label: '高度', width: 90 },
+  { key: 'volume', label: '体积', width: 90 },
+  { key: 'area', label: '面积', width: 90 },
+  { key: 'unfold', label: '展开', width: 90 },
+  { key: 'material', label: '材质', width: 115 },
+  { key: 'position', label: '位置', width: 115 },
+  { key: 'brand', label: '品牌', width: 115 },
+]
+const extraFieldKeys = [
+  'material_type',
+  'loss_rate',
+  'adjustment_factor',
+  'real_content',
+  'labor_fee',
+  'main_material_fee',
+  'auxiliary_material_fee',
+  'spec_model',
+  ...resourceColumns.map((column) => column.key),
+]
 const statusOptions = [
   { value: 'draft', label: '草稿' },
   { value: 'active', label: '已启用' },
@@ -238,7 +481,8 @@ const page = ref(1)
 const pageSize = 20
 const loading = ref(false)
 const featureDisabled = ref(false)
-const filters = reactive({ keyword: '', status: '' })
+const activeDetailType = ref('process')
+const filters = reactive({ keyword: '', status: '', materialType: '' })
 const dialog = reactive({
   visible: false,
   loading: false,
@@ -250,14 +494,21 @@ const dialog = reactive({
 const history = reactive({ visible: false, loading: false, item: null, entries: [] })
 
 const moduleUnavailable = computed(() => !props.featureAvailable || featureDisabled.value)
+const activeTabConfig = computed(() => detailTabs.find((tab) => tab.value === activeDetailType.value) || detailTabs[0])
+const dialogTabConfig = computed(() => detailTabs.find((tab) => tab.value === dialog.form.detail_type) || activeTabConfig.value)
 const formPricePreview = computed(() => normalizePrice(dialog.form.unit_price) || '—')
 const dialogSaveLabel = computed(() => dialog.mode === 'edit' ? '保存修改' : '保存为草稿')
 const selectedQuotaRows = computed(() => items.value.filter((row) => row._bulk_selected))
 const selectedDraftQuotaRows = computed(() => selectedQuotaRows.value.filter((row) => row.status === 'draft'))
 const selectedArchivableQuotaRows = computed(() => selectedQuotaRows.value.filter((row) => row.status !== 'archived'))
+const visibleItems = computed(() => {
+  if (activeDetailType.value !== 'material' || !filters.materialType) return items.value
+  return items.value.filter((row) => detailValue(row, 'material_type', '辅材') === filters.materialType)
+})
 
 function emptyForm() {
   return {
+    detail_type: activeDetailType.value || 'process',
     quota_code: '',
     item_name: '',
     item_features: '',
@@ -266,6 +517,26 @@ function emptyForm() {
     unit_price: '',
     reason: '',
     expected_revision: null,
+    material_type: '',
+    loss_rate: '0',
+    adjustment_factor: '1',
+    real_content: '1',
+    labor_fee: '0',
+    main_material_fee: '0',
+    auxiliary_material_fee: '0',
+    spec_model: '',
+    code_name: '',
+    layer_count: '',
+    color: '',
+    thickness_mm: '',
+    width_mm: '',
+    height: '',
+    volume: '',
+    area: '',
+    unfold: '',
+    material: '',
+    position: '',
+    brand: '',
   }
 }
 
@@ -306,6 +577,67 @@ function formatPriceFriendly(value) {
   return number.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function normalizeFreeNumber(value, fallback = '') {
+  const text = String(value ?? '').trim()
+  if (!text) return fallback
+  return text
+}
+
+function parseNotes(value) {
+  if (!value) return {}
+  if (typeof value === 'object') return value
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function detailExtra(row) {
+  if (row?.detail_extra && typeof row.detail_extra === 'object') return row.detail_extra
+  const parsed = parseNotes(row?.notes)
+  return parsed && typeof parsed === 'object' ? parsed : {}
+}
+
+function rowDetailType(row) {
+  const parsedType = row?.detail_type || detailExtra(row).detail_type
+  return ['process', 'material', 'subcontract'].includes(parsedType) ? parsedType : 'process'
+}
+
+function detailValue(row, key, fallback = '—') {
+  const value = detailExtra(row)[key]
+  if (value === 0) return '0'
+  return value == null || String(value).trim() === '' ? fallback : value
+}
+
+function canEditRow(row) {
+  return row?.status !== 'archived'
+}
+
+function subcontractBreakdownSourceLabel(row) {
+  const source = detailValue(row, 'subcontract_breakdown_source', '')
+  const labels = {
+    pricing_breakdown: '来源：费用拆分',
+    pricing_breakdown_calibrated: '来源：费用拆分已校准',
+    rule_estimate_pending_llm: '来源：规则估算，待LLM/人工复核',
+    unavailable: '来源：待补充',
+  }
+  return labels[source] || `来源：${source}`
+}
+
+function buildNotesPayload(form) {
+  const detail = {
+    schema: 'account_quota_detail_v1',
+    detail_type: form.detail_type || 'process',
+  }
+  extraFieldKeys.forEach((key) => {
+    const value = normalizeFreeNumber(form[key])
+    if (value !== '') detail[key] = value
+  })
+  return JSON.stringify(detail)
+}
+
 function isFeatureDisabled(error) {
   if (![404, 503].includes(error?.response?.status)) return false
   const detail = error?.response?.data?.detail
@@ -317,11 +649,11 @@ async function loadItems() {
   if (moduleUnavailable.value) return
   loading.value = true
   try {
-    const params = { page: page.value, page_size: pageSize }
+    const params = { page: page.value, page_size: pageSize, detail_type: activeDetailType.value }
     if (filters.keyword.trim()) params.keyword = filters.keyword.trim()
     if (filters.status) params.status = filters.status
     const response = await accountQuotaApi.list(params)
-    items.value = accountQuotaResponseItems(response).map((row) => ({ ...row, _bulk_selected: false }))
+    items.value = accountQuotaResponseItems(response).map((row) => ({ ...row, detail_type: rowDetailType(row), _bulk_selected: false }))
     total.value = accountQuotaResponseTotal(response, items.value.length)
   } catch (error) {
     items.value = []
@@ -344,22 +676,40 @@ function searchItems() {
 function resetFilters() {
   filters.keyword = ''
   filters.status = ''
+  filters.materialType = ''
   searchItems()
+}
+
+function switchDetailType() {
+  filters.keyword = ''
+  filters.materialType = ''
+  page.value = 1
+  loadItems()
+}
+
+function syncDialogDefaults() {
+  if (dialog.form.detail_type === 'process') {
+    dialog.form.loss_rate = '0'
+    dialog.form.material_type = ''
+  } else if (dialog.form.detail_type === 'material' && !dialog.form.material_type) {
+    dialog.form.material_type = '辅材'
+  }
 }
 
 function openCreate() {
   dialog.mode = 'create'
   dialog.identifier = null
   dialog.conflict = false
-  dialog.form = { ...emptyForm(), reason: '新建账户定额' }
+  dialog.form = { ...emptyForm(), detail_type: activeDetailType.value, reason: `新增${activeTabConfig.value.shortLabel}` }
+  syncDialogDefaults()
   dialog.visible = true
 }
 
 function fillEditForm(item) {
-  dialog.mode = 'edit'
-  dialog.identifier = quotaIdentifier(item)
-  dialog.conflict = false
-  dialog.form = {
+  const extra = detailExtra(item)
+  const form = {
+    ...emptyForm(),
+    detail_type: rowDetailType(item),
     quota_code: item.quota_code || '',
     item_name: item.item_name || '',
     item_features: item.item_features || '',
@@ -369,6 +719,13 @@ function fillEditForm(item) {
     reason: '',
     expected_revision: rowRevision(item),
   }
+  extraFieldKeys.forEach((key) => {
+    if (extra[key] != null) form[key] = String(extra[key])
+  })
+  dialog.mode = 'edit'
+  dialog.identifier = quotaIdentifier(item)
+  dialog.conflict = false
+  dialog.form = form
 }
 
 async function openEdit(row) {
@@ -383,8 +740,8 @@ async function openEdit(row) {
 
 function validateForm() {
   const form = dialog.form
-  if (!form.item_name.trim() || !form.unit.trim()) {
-    ElMessage.warning('请填写项目名称和单位')
+  if (!form.detail_type || !form.item_name.trim() || !form.unit.trim()) {
+    ElMessage.warning('请填写明细类型、名称和单位')
     return false
   }
   const normalized = normalizePrice(form.unit_price)
@@ -407,6 +764,7 @@ function formPayload() {
     spec: dialog.form.spec.trim() || null,
     unit: dialog.form.unit.trim(),
     unit_price: normalizePrice(dialog.form.unit_price),
+    notes: buildNotesPayload(dialog.form),
   }
 }
 
@@ -439,9 +797,10 @@ async function saveItem() {
         source: 'manual',
         reason: dialog.form.reason.trim(),
       })
-      ElMessage.success('账户定额草稿已创建')
+      ElMessage.success(`${dialogTabConfig.value.shortLabel}草稿已创建`)
     }
     dialog.visible = false
+    activeDetailType.value = dialog.form.detail_type
     await loadItems()
   } catch (error) {
     if (!(await handleEditConflict(error))) {
@@ -620,6 +979,7 @@ onMounted(loadItems)
 
 <style scoped>
 .quota-boundary-card{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px;padding:18px 20px;border:1px solid rgba(59,130,246,.16);border-radius:18px;background:linear-gradient(135deg,rgba(239,246,255,.94),rgba(255,255,255,.96));box-shadow:0 14px 34px rgba(15,23,42,.05)}
-.quota-boundary-card>div,.quota-name,.quota-price,.history-heading>div{display:flex;flex-direction:column;gap:5px}.quota-boundary-card span,.quota-title small,.quota-title>span,.quota-name small,.quota-price small,.history-heading span,.quota-form-tip{color:#64748b}.quota-filters{display:grid;grid-template-columns:minmax(300px,1fr) 170px auto auto;gap:12px;margin-bottom:16px}.quota-panel{padding:20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.92);box-shadow:0 14px 34px rgba(15,23,42,.06)}.quota-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}.quota-title>div{display:flex;flex-direction:column;gap:4px}.quota-bulk-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 12px;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(248,250,252,.92)}.quota-bulk-toolbar span{font-size:13px;color:#475569}.quota-bulk-toolbar :deep(.el-button+.el-button){margin-left:0}.quota-name strong{color:#0f172a}.quota-name small{line-height:1.45;white-space:normal}.quota-price{align-items:flex-end}.quota-price strong{font-variant-numeric:tabular-nums;color:#0f172a}.quota-price small{font-size:11px;font-variant-numeric:tabular-nums}.quota-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.quota-actions :deep(.el-button+.el-button){margin-left:0}.el-pagination{justify-content:flex-end;margin-top:16px}.quota-form-grid{display:grid;grid-template-columns:1fr 160px;gap:14px}.quota-form-tip{display:block;margin-top:6px;font-size:12px;font-variant-numeric:tabular-nums}.quota-dialog-alert{margin-bottom:16px}.history-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px;padding:16px 18px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#f8fafc}
-@media(max-width:900px){.quota-filters,.quota-form-grid{grid-template-columns:1fr}.quota-boundary-card{align-items:flex-start;flex-direction:column}.quota-panel{padding:14px}.quota-bulk-toolbar{align-items:flex-start;flex-direction:column}}
+.quota-boundary-card>div,.history-heading>div,.split-fees{display:flex;flex-direction:column;gap:5px}.quota-boundary-card span,.quota-title small,.quota-title>span,.history-heading span,.quota-form-tip{color:#64748b}.quota-panel{padding:18px 20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.92);box-shadow:0 14px 34px rgba(15,23,42,.06)}.quota-tabs{margin-bottom:14px}.quota-tabs :deep(.el-tabs__header){margin:0}.quota-tabs :deep(.el-tabs__item){font-size:15px}.quota-tabs :deep(.el-tabs__item.is-active){font-weight:700}.quota-filters{display:grid;grid-template-columns:minmax(240px,360px) 160px 150px auto auto;gap:12px;margin-bottom:12px}.quota-toolbar-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}.quota-toolbar-line span{margin-left:auto;color:#64748b}.quota-bulk-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 12px;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(248,250,252,.92)}.quota-bulk-toolbar span{font-size:13px;color:#475569}.quota-bulk-toolbar :deep(.el-button+.el-button),.quota-actions :deep(.el-button+.el-button){margin-left:0}.quota-detail-table :deep(.el-table__cell){vertical-align:middle}.editable-cell{display:flex;align-items:center;gap:4px;min-width:0}.editable-cell>span,.editable-cell>.split-fees{min-width:0;overflow:hidden;text-overflow:ellipsis}.editable-cell.align-right{justify-content:flex-end}.money-text{font-variant-numeric:tabular-nums;color:#0f172a}.split-fees{font-size:12px;line-height:1.45;color:#475569}.quota-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.el-pagination{justify-content:flex-end;margin-top:16px}.quota-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.quota-extra-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.quota-form-tip{display:block;margin-top:6px;font-size:12px;font-variant-numeric:tabular-nums}.quota-dialog-alert{margin-bottom:16px}.history-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px;padding:16px 18px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#f8fafc}
+@media(max-width:1100px){.quota-filters{grid-template-columns:1fr 150px}.quota-extra-grid{grid-template-columns:1fr 1fr}.quota-toolbar-line span{margin-left:0}}
+@media(max-width:720px){.quota-form-grid,.quota-extra-grid,.quota-filters{grid-template-columns:1fr}.quota-boundary-card{align-items:flex-start;flex-direction:column}.quota-panel{padding:14px}.quota-bulk-toolbar{align-items:flex-start;flex-direction:column}}
 </style>

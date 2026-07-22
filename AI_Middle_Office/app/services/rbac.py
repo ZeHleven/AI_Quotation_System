@@ -253,21 +253,20 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_budget_projects else "pending",
             }
         )
-    if BUDGET_PRICING_VIEW_ROLES & roles:
+    if (BUDGET_PRICING_VIEW_ROLES | BUDGET_PROJECT_ACCESS_ROLES) & roles:
+        budget_pricing_enabled = settings.feature_budget_projects and settings.feature_budget_pricing
+        can_reach_budget_project = bool(BUDGET_PROJECT_ACCESS_ROLES & roles)
+        can_view_pricing = bool(BUDGET_PRICING_VIEW_ROLES & roles)
         modules.append(
             {
                 "key": "budget_pricing",
                 "name": "项目成本计价",
                 "path": "/admin/budget-projects",
-                "status": (
-                    "available"
-                    if (
-                        settings.feature_budget_projects
-                        and settings.feature_budget_pricing
-                        and bool(BUDGET_PROJECT_ACCESS_ROLES & roles)
-                    )
-                    else "pending"
-                ),
+                "status": "available"
+                if budget_pricing_enabled and can_reach_budget_project and can_view_pricing
+                else "forbidden"
+                if budget_pricing_enabled and can_reach_budget_project and not can_view_pricing
+                else "pending",
                 "stage": "trial",
             }
         )

@@ -5,6 +5,7 @@ import json
 import importlib.util
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -35,6 +36,7 @@ from app.models.budget_pricing import BudgetProjectPricingRun
 from app.models.budget_pricing_draft import (
     PRICING_MODE_ACCOUNT_STRICT,
     PRICING_MODE_ENTERPRISE_AI,
+    BudgetProjectPricingDraft,
     BudgetProjectPricingDraftLine,
     BudgetProjectPricingDraftQuoteJob,
     BudgetProjectPricingDraftQuoteJobLine,
@@ -47,9 +49,16 @@ from app.services.account_tenancy import AccountTenancyError, resolve_current_ac
 from app.services.budget_pricing import BudgetPricingError
 from app.services.budget_pricing_drafts import (
     create_or_rebuild_budget_pricing_draft,
+    get_current_budget_pricing_draft,
     patch_budget_pricing_draft_line,
+    refresh_budget_pricing_draft_summary,
+    serialize_budget_pricing_draft_line,
+    update_budget_pricing_draft_totals_config,
 )
-from app.services.budget_pricing_ai_estimates import estimate_budget_pricing_draft_line
+from app.services.budget_pricing_ai_estimates import (
+    build_budget_pricing_ai_estimate_input,
+    estimate_budget_pricing_draft_line,
+)
 from app.services import budget_pricing_draft_quote_jobs as quote_job_service
 from app.services.budget_pricing_draft_quote_jobs import (
     create_budget_pricing_draft_quote_job,
@@ -69,6 +78,18 @@ MIGRATION_0058_PATH = (
     / "alembic"
     / "versions"
     / "20260717_0058_add_budget_pricing_draft_quote_jobs.py"
+)
+MIGRATION_0059_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "alembic"
+    / "versions"
+    / "20260720_0059_allow_pricing_drafts_per_mode.py"
+)
+MIGRATION_0060_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "alembic"
+    / "versions"
+    / "20260720_0060_add_pricing_draft_breakdown_json.py"
 )
 
 
@@ -117,6 +138,56 @@ def _formal_rows() -> list[dict]:
             }
         )
     return rows
+
+
+def test_ai_estimate_input_includes_reference_context_and_effective_quantity():
+    draft = SimpleNamespace(
+        id=1,
+        draft_uuid="draft-1",
+        revision=2,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        source_snapshot_json=json.dumps(
+            {
+                "ai_reference_context": {
+                    "version": "budget-reference-context-v1",
+                    "metadata": [{"source_sheet": "编制说明", "source_row": 1, "text": "材料品牌按甲方要求"}],
+                    "calculation_rules": [{"source_sheet": "计算规则", "source_row": 2, "text": "门窗洞口按规则扣除"}],
+                }
+            }
+        ),
+    )
+    line = SimpleNamespace(
+        id=2,
+        line_uuid="line-2",
+        line_revision=3,
+        source_sheet="装饰部分清单（户内）",
+        source_raw_row_index=10,
+        source_row_key="室内:10",
+        item_name="墙面抹灰",
+        spec="20mm厚",
+        unit="㎡",
+        calculation_quantity=Decimal("12"),
+        quantity_status="valid",
+        match_status="unmatched",
+        pricing_status="pending_match",
+        source_row_snapshot_json=json.dumps(
+            {
+                "standard_row": {
+                    "budget_summary_multiplier": "88",
+                    "budget_summary_multiplier_sources": [{"summary_scope": [{"label": "栋号", "value": "5#"}]}],
+                }
+            }
+        ),
+        match_evidence_json="{}",
+        selected_source_snapshot_json=None,
+    )
+
+    payload = build_budget_pricing_ai_estimate_input(draft, line)
+
+    assert payload["summary_context"]["summary_multiplier"] == "88.000000"
+    assert payload["summary_context"]["effective_calculation_quantity"] == "1056.000000"
+    assert payload["reference_context"]["metadata"][0]["text"] == "材料品牌按甲方要求"
+    assert payload["reference_context"]["calculation_rules"][0]["text"] == "门窗洞口按规则扣除"
 
 
 def _seed_account_project(db, *, suffix: str):
@@ -397,6 +468,52 @@ def test_enterprise_ai_matches_and_keeps_unmatched_price_null(db):
     assert session.query(BudgetProjectPricingRun).count() == run_count_before
 
 
+def test_pricing_draft_uses_budget_summary_multiplier_for_totals_and_manual_prices(db):
+    session, _ = db
+    user, _, _, profile, batch, revision = _seed_account_project(session, suffix="summary-mult")
+    quota, _ = _seed_enterprise_quota(session, user)
+    rows = json.loads(revision.standard_rows_json)
+    rows[0]["standard_row"]["budget_summary_multiplier"] = "44"
+    revision.standard_rows_json = json.dumps(rows, ensure_ascii=False)
+    batch.valid_quantity_count = 2
+    session.commit()
+
+    draft = create_or_rebuild_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_active_quota_version_id=quota.id,
+    )
+    session.flush()
+    line = (
+        session.query(BudgetProjectPricingDraftLine)
+        .filter(BudgetProjectPricingDraftLine.draft_id == draft.id)
+        .order_by(BudgetProjectPricingDraftLine.source_sort_order)
+        .first()
+    )
+    assert line.calculation_quantity == Decimal("2.000000")
+    assert line.line_total == Decimal("880.000000")
+
+    patch_budget_pricing_draft_line(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        line_identifier=line.id,
+        expected_revision=draft.revision,
+        expected_line_revision=line.line_revision,
+        manual_unit_price=Decimal("12"),
+    )
+    session.flush()
+    assert line.line_total == Decimal("1056.000000")
+    serialized = serialize_budget_pricing_draft_line(line)
+    assert serialized["summary_multiplier"] == "44.000000"
+    assert serialized["effective_calculation_quantity"] == "88.000000"
+
+
 def test_pricing_draft_http_api_is_account_scoped_and_rejects_account_id(db):
     session, _ = db
     user_a, _, project_a, _, batch_a, revision_a = _seed_account_project(
@@ -471,7 +588,7 @@ def test_pricing_draft_http_api_is_account_scoped_and_rejects_account_id(db):
         object.__setattr__(settings, "feature_budget_pricing_drafts", pricing_drafts_enabled)
 
 
-def test_mode_switch_same_draft_manual_patch_clear_and_optimistic_locks(db):
+def test_modes_keep_separate_drafts_manual_patch_clear_and_optimistic_locks(db):
     session, engine = db
     user, _, _, profile, batch, revision = _seed_account_project(
         session,
@@ -507,15 +624,43 @@ def test_mode_switch_same_draft_manual_patch_clear_and_optimistic_locks(db):
             pricing_mode=PRICING_MODE_ACCOUNT_STRICT,
             source_import_batch_id=batch.id,
             source_import_revision_id=revision.id,
-            expected_revision=enterprise_revision,
+            expected_revision=None,
         )
         session.flush()
     finally:
         event.remove(engine, "before_cursor_execute", capture_sql)
-    assert account_draft.id == enterprise_id
-    assert account_draft.revision == enterprise_revision + 1
+    assert account_draft.id != enterprise_id
+    assert account_draft.revision == 1
     assert not any("enterprise_quota_versions" in statement for statement in statements)
     assert not any("enterprise_quota_items" in statement for statement in statements)
+
+    retained_enterprise_draft = get_current_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+    )
+    retained_account_draft = get_current_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ACCOUNT_STRICT,
+    )
+    assert retained_enterprise_draft.id == enterprise_id
+    assert retained_enterprise_draft.revision == enterprise_revision
+    assert retained_account_draft.id == account_draft.id
+
+    enterprise_lines = (
+        session.query(BudgetProjectPricingDraftLine)
+        .filter(BudgetProjectPricingDraftLine.draft_id == enterprise_id)
+        .order_by(BudgetProjectPricingDraftLine.source_sort_order)
+        .all()
+    )
+    assert len(enterprise_lines) == 2
+    assert enterprise_lines[0].base_unit_price == Decimal("10.000000")
+    assert enterprise_lines[0].effective_unit_price == Decimal("10.000000")
+    assert enterprise_lines[0].line_total == Decimal("20.000000")
+
     account_lines = (
         session.query(BudgetProjectPricingDraftLine)
         .filter(BudgetProjectPricingDraftLine.draft_id == account_draft.id)
@@ -535,6 +680,7 @@ def test_mode_switch_same_draft_manual_patch_clear_and_optimistic_locks(db):
         session,
         profile,
         user,
+        pricing_mode=PRICING_MODE_ACCOUNT_STRICT,
         line_identifier=line.id,
         expected_revision=price_draft_revision,
         expected_line_revision=old_line_revision,
@@ -552,6 +698,7 @@ def test_mode_switch_same_draft_manual_patch_clear_and_optimistic_locks(db):
             session,
             profile,
             user,
+            pricing_mode=PRICING_MODE_ACCOUNT_STRICT,
             line_identifier=line.id,
             expected_revision=price_draft_revision,
             expected_line_revision=line.line_revision,
@@ -564,6 +711,7 @@ def test_mode_switch_same_draft_manual_patch_clear_and_optimistic_locks(db):
             session,
             profile,
             user,
+            pricing_mode=PRICING_MODE_ACCOUNT_STRICT,
             line_identifier=line.id,
             expected_revision=account_draft.revision,
             expected_line_revision=old_line_revision,
@@ -575,6 +723,65 @@ def test_mode_switch_same_draft_manual_patch_clear_and_optimistic_locks(db):
         session,
         profile,
         user,
+        pricing_mode=PRICING_MODE_ACCOUNT_STRICT,
+        line_identifier=line.id,
+        expected_revision=account_draft.revision,
+        expected_line_revision=line.line_revision,
+        manual_unit_price=Decimal("99"),
+        pricing_breakdown={
+            "labor_unit_cost": "8.5",
+            "main_material_unit_cost": "9.25",
+            "auxiliary_material_unit_cost": "1.25",
+            "management_unit_cost": "0.5",
+            "tax_amount": "0.95",
+            "loss_rate": "0.03",
+            "material_supply_mode": "乙供",
+            "remark": "拆分费用试算",
+        },
+        reason="拆分费用",
+    )
+    assert line.manual_unit_price == Decimal("19.500000")
+    assert line.effective_unit_price == Decimal("19.500000")
+    assert line.line_total == Decimal("39.000000")
+    assert line.price_source == "manual_breakdown"
+    assert json.loads(line.pricing_breakdown_json)["composite_unit_price"] == "19.500000"
+    assert json.loads(line.pricing_breakdown_json)["tax_amount"] == "1.755000"
+    summary = json.loads(account_draft.summary_json)
+    assert summary["totals"]["labor_total"] == "17.000000"
+    assert summary["totals"]["main_material_total"] == "18.500000"
+    assert summary["totals"]["auxiliary_material_total"] == "2.500000"
+    assert summary["totals"]["tax_total"] == "3.510000"
+    assert summary["totals"]["tax_included_total"] == "42.510000"
+
+    account_draft = update_budget_pricing_draft_totals_config(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ACCOUNT_STRICT,
+        expected_revision=account_draft.revision,
+        config_patch={"measures_rate": "2", "management_rate": "3", "other_fee": "10", "quote_adjustment_percent": "5"},
+        reason="调整费率",
+    )
+    summary = json.loads(account_draft.summary_json)
+    assert summary["totals_config"]["quote_adjustment_percent"] == "5.000000"
+    assert summary["totals"]["measures_fee"] == "0.760000"
+    assert summary["totals"]["management_fee"] == "1.140000"
+    assert summary["totals"]["quote_amount"] == "53.445000"
+
+    line.pricing_breakdown_json = None
+    session.flush()
+    summary = refresh_budget_pricing_draft_summary(session, account_draft)
+    serialized_line = serialize_budget_pricing_draft_line(line)
+    assert serialized_line["pricing_breakdown"]["source"] == "derived_breakdown"
+    assert serialized_line["pricing_breakdown"]["tax_amount"] == "1.755000"
+    assert summary["totals"]["tax_excluded_total"] == "39.000000"
+    assert Decimal(summary["totals"]["labor_total"]) > 0
+
+    account_draft, line = patch_budget_pricing_draft_line(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ACCOUNT_STRICT,
         line_identifier=line.id,
         expected_revision=account_draft.revision,
         expected_line_revision=line.line_revision,
@@ -584,6 +791,14 @@ def test_mode_switch_same_draft_manual_patch_clear_and_optimistic_locks(db):
     assert line.manual_unit_price is None
     assert line.effective_unit_price is None
     assert line.line_total is None
+    retained_enterprise_draft = get_current_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+    )
+    assert retained_enterprise_draft.id == enterprise_id
+    assert retained_enterprise_draft.revision == enterprise_revision
     assert session.query(BudgetProjectPricingRun).count() == run_count_before
 
 
@@ -644,8 +859,17 @@ def test_p2_2c1_manual_ai_estimate_enters_draft_and_manual_price_still_wins(db):
         assert line.effective_unit_price == line.ai_estimated_unit_price
         assert line.price_source == "ai_estimate"
         assert line.line_total is not None
+        pricing_breakdown = json.loads(line.pricing_breakdown_json)
+        assert pricing_breakdown["tax_rate"] == "0.090000"
+        assert Decimal(pricing_breakdown["tax_amount"]) == (line.ai_estimated_unit_price * Decimal("0.09")).quantize(Decimal("0.000001"))
+        assert "labor_unit_cost" in pricing_breakdown
+        assert "main_material_unit_cost" in pricing_breakdown
+        assert "auxiliary_material_unit_cost" in pricing_breakdown
+        assert "main_material_without_loss" in pricing_breakdown
+        assert "loss_rate" in pricing_breakdown
         estimate_snapshot = json.loads(line.ai_estimate_snapshot_json)
         assert estimate_snapshot["estimate"]["provider"] == "rule"
+        assert estimate_snapshot["estimate"]["pricing_breakdown"]["tax_rate"] == "0.090000"
         assert estimate_snapshot["input"]["pricing_mode"] == PRICING_MODE_ACCOUNT_STRICT
         assert json.loads(draft.summary_json)["ai_estimate_count"] == 1
         assert session.query(BudgetProjectPricingRun).count() == run_count_before
@@ -797,8 +1021,15 @@ def test_p2_2c2_one_click_quote_job_prices_unmatched_lines_in_background(db, mon
     assert draft_lines[1].ai_estimated_unit_price == Decimal("22.500000")
     assert draft_lines[1].effective_unit_price == Decimal("22.500000")
     assert draft_lines[1].price_source == "ai_estimate"
+    pricing_breakdown = json.loads(draft_lines[1].pricing_breakdown_json)
+    assert pricing_breakdown["tax_rate"] == "0.090000"
+    assert pricing_breakdown["tax_amount"] == "2.025000"
+    assert "labor_unit_cost" in pricing_breakdown
+    assert "main_material_unit_cost" in pricing_breakdown
+    assert "auxiliary_material_unit_cost" in pricing_breakdown
     snapshot = json.loads(draft_lines[1].ai_estimate_snapshot_json)
     assert snapshot["estimate"]["provider"] == "deepseek"
+    assert snapshot["estimate"]["pricing_breakdown"]["tax_amount"] == "2.025000"
     assert session.query(BudgetProjectPricingRun).count() == run_count_before
 
 
@@ -920,3 +1151,30 @@ def test_p2_2c2_migration_declares_background_quote_job_tables():
     assert "budget_project_pricing_draft_quote_job_lines" in text
     assert "budget_project_pricing_draft_quote_jobs" in Base.metadata.tables
     assert "budget_project_pricing_draft_quote_job_lines" in Base.metadata.tables
+
+
+def test_pricing_draft_unique_constraint_allows_one_draft_per_mode():
+    text = MIGRATION_0059_PATH.read_text(encoding="utf-8")
+    assert 'revision: str = "20260720_0059"' in text
+    assert 'down_revision: Union[str, None] = "20260717_0058"' in text
+    assert '"uq_budget_pricing_drafts_account_project"' in text
+    assert '"uq_budget_pricing_drafts_account_project_mode"' in text
+    assert '["account_id", "project_id", "pricing_mode"]' in text
+    unique_constraints = {
+        constraint.name: tuple(constraint.columns.keys())
+        for constraint in BudgetProjectPricingDraft.__table__.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    }
+    assert unique_constraints["uq_budget_pricing_drafts_account_project_mode"] == (
+        "account_id",
+        "project_id",
+        "pricing_mode",
+    )
+
+
+def test_pricing_draft_breakdown_migration_declares_json_column():
+    text = MIGRATION_0060_PATH.read_text(encoding="utf-8")
+    assert 'revision: str = "20260720_0060"' in text
+    assert 'down_revision: Union[str, None] = "20260720_0059"' in text
+    assert '"pricing_breakdown_json"' in text
+    assert "pricing_breakdown_json" in BudgetProjectPricingDraftLine.__table__.c

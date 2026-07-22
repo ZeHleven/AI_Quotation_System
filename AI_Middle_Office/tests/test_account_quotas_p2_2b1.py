@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from decimal import Decimal
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
@@ -427,6 +428,190 @@ def test_account_quota_crud_lifecycle_history_and_non_pollution(db, monkeypatch)
     )
     assert db.query(EnterpriseQuotaItem).count() == baseline["enterprise_items"]
     assert db.query(BudgetProjectPricingRun).count() == baseline["formal_pricing_runs"]
+
+
+def test_account_quota_detail_type_filter_uses_notes_extension_and_preserves_legacy_rows(db):
+    admin, _ = _seed_user_account(db, suffix="detail-tabs", role="admin")
+
+    with _account_quota_feature(True), _api_client(db, admin) as (client, _state):
+        legacy_process = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(
+                    quota_code="GX-LEGACY",
+                    item_name="旧工序数据",
+                    item_features="基层安装处理",
+                    notes="旧备注不是 JSON",
+                ),
+            )
+        )
+        glass_install_process = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(
+                    quota_code="GX-GLASS-INSTALL",
+                    item_name="钢化玻璃安装",
+                    item_features="旧数据未写 detail_type",
+                    notes=None,
+                ),
+            )
+        )
+        material = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(
+                    quota_code="CL-001",
+                    item_name="阻燃板",
+                    item_features="材料测试",
+                    notes='{"schema":"account_quota_detail_v1","detail_type":"material","material_type":"主材","loss_rate":"3"}',
+                ),
+            )
+        )
+        inferred_material = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(
+                    quota_code="CL-INFER",
+                    item_name="阻燃板",
+                    item_features="旧数据未写 detail_type",
+                    notes=None,
+                ),
+            )
+        )
+        coating_material = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(
+                    quota_code="CL-COATING",
+                    item_name="防腐涂料",
+                    item_features="旧数据未写 detail_type",
+                    notes=None,
+                ),
+            )
+        )
+        subcontract = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(
+                    quota_code="FB-001",
+                    item_name="钢化玻璃分包",
+                    item_features="分包测试",
+                    notes='{"schema":"account_quota_detail_v1","detail_type":"subcontract","labor_fee":"93.2","main_material_fee":"838.8","auxiliary_material_fee":"0"}',
+                ),
+            )
+        )
+        inferred_subcontract = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(
+                    quota_code="FB-INFER",
+                    item_name="钢化玻璃",
+                    item_features="旧数据未写 detail_type",
+                    notes=None,
+                ),
+            )
+        )
+        door_subcontract = _response_data(
+            client.post(
+                "/api/v1/admin/account-quotas",
+                json=_payload(
+                    quota_code="FB-DOOR",
+                    item_name="玻璃门",
+                    item_features="旧数据未写 detail_type",
+                    notes=None,
+                ),
+            )
+        )
+
+        process_rows = _response_data(client.get("/api/v1/admin/account-quotas", params={"detail_type": "process"}))
+        material_rows = _response_data(client.get("/api/v1/admin/account-quotas", params={"detail_type": "material"}))
+        subcontract_rows = _response_data(client.get("/api/v1/admin/account-quotas", params={"detail_type": "subcontract"}))
+
+        assert {row["item_uuid"] for row in process_rows} == {legacy_process["item_uuid"], glass_install_process["item_uuid"]}
+        assert {row["item_uuid"] for row in material_rows} == {material["item_uuid"], inferred_material["item_uuid"], coating_material["item_uuid"]}
+        assert {row["item_uuid"] for row in subcontract_rows} == {subcontract["item_uuid"], inferred_subcontract["item_uuid"], door_subcontract["item_uuid"]}
+        by_material_code = {row["quota_code"]: row for row in material_rows}
+        by_subcontract_code = {row["quota_code"]: row for row in subcontract_rows}
+        assert by_material_code["CL-001"]["detail_type"] == "material"
+        assert by_material_code["CL-001"]["detail_extra"]["material_type"] == "主材"
+        assert by_material_code["CL-INFER"]["detail_type"] == "material"
+        fb001_extra = by_subcontract_code["FB-001"]["detail_extra"]
+        assert fb001_extra["subcontract_breakdown_source"] == "manual_split_calibrated"
+        assert (
+            Decimal(fb001_extra["labor_fee"])
+            + Decimal(fb001_extra["main_material_fee"])
+            + Decimal(fb001_extra["auxiliary_material_fee"])
+        ) == Decimal(by_subcontract_code["FB-001"]["unit_price"])
+        assert by_subcontract_code["FB-INFER"]["detail_type"] == "subcontract"
+        fbinfer_extra = by_subcontract_code["FB-INFER"]["detail_extra"]
+        assert fbinfer_extra["subcontract_breakdown_source"] == "rule_estimate_pending_llm"
+        assert (
+            Decimal(fbinfer_extra["labor_fee"])
+            + Decimal(fbinfer_extra["main_material_fee"])
+            + Decimal(fbinfer_extra["auxiliary_material_fee"])
+        ) == Decimal(by_subcontract_code["FB-INFER"]["unit_price"])
+
+        invalid = client.get("/api/v1/admin/account-quotas", params={"detail_type": "unknown"})
+        assert invalid.status_code == 422, invalid.text
+        assert _error_code(invalid) == "ACCOUNT_QUOTA_DETAIL_TYPE_INVALID"
+
+
+def test_account_quota_legacy_detail_type_inference_matches_current_account_data_examples():
+    examples = [
+        (
+            "配电箱1F-AL",
+            "成套配电箱，含箱体及元器件",
+            None,
+            "台",
+            "material",
+        ),
+        (
+            "1楼满堂脚手架",
+            "脚手架材料及周转使用",
+            None,
+            "项",
+            "material",
+        ),
+        (
+            "墙面抹灰",
+            "20mm 水泥砂浆找平，含基层处理",
+            None,
+            "平米",
+            "process",
+        ),
+        (
+            "墙砖铺贴CT-06",
+            "瓷砖 300*600，含水泥砂浆结合层",
+            "300*600",
+            "平米",
+            "process",
+        ),
+        (
+            "防腐涂料",
+            "主材涂料",
+            None,
+            "公斤",
+            "material",
+        ),
+        (
+            "玻璃门",
+            "成品定制，含安装",
+            "1800*2320mm",
+            "平米",
+            "subcontract",
+        ),
+    ]
+
+    for name, features, spec, unit, expected in examples:
+        item = AccountQuotaItem(
+            item_name=name,
+            item_features=features,
+            spec=spec,
+            unit=unit,
+            unit_price=Decimal("1"),
+            notes=None,
+        )
+        assert account_quotas_service._infer_detail_type_from_text(item) == expected
 
 
 def test_account_quota_batch_enable_archive_and_atomic_conflict(db):

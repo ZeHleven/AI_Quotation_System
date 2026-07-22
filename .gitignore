@@ -5,10 +5,12 @@ __pycache__/
 *.pyd
 .Python
 .pytest_cache/
+AI_Middle_Office/.pytest_tmp*/
 
 # Environment & secrets
 .env
 *.env
+.codex_ssh/
 
 # Database
 *.db

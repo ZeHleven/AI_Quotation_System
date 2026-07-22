@@ -21,6 +21,7 @@ from app.models.budget_pricing_draft import (
     BUDGET_PRICING_DRAFT_QUOTE_JOB_LINE_ENTERPRISE_MATCHED,
     BUDGET_PRICING_DRAFT_QUOTE_JOB_LINE_SKIPPED,
     BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_FAILED,
+    BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_CANCELED,
     BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_PARTIAL_FAILED,
     BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_QUEUED,
     BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_RUNNING,
@@ -56,6 +57,7 @@ TERMINAL_JOB_STATUSES = {
     BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_SUCCEEDED,
     BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_PARTIAL_FAILED,
     BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_FAILED,
+    BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_CANCELED,
 }
 
 BATCH_CIRCUIT_RETRY_LIMIT = 3
@@ -251,16 +253,100 @@ def get_current_budget_pricing_draft_quote_job(
     *,
     account_id: int,
     project_id: int,
+    draft_id: int | None = None,
 ) -> BudgetProjectPricingDraftQuoteJob | None:
-    return (
-        db.query(BudgetProjectPricingDraftQuoteJob)
-        .filter(
-            BudgetProjectPricingDraftQuoteJob.account_id == account_id,
-            BudgetProjectPricingDraftQuoteJob.project_id == project_id,
-        )
-        .order_by(BudgetProjectPricingDraftQuoteJob.id.desc())
-        .first()
+    query = db.query(BudgetProjectPricingDraftQuoteJob).filter(
+        BudgetProjectPricingDraftQuoteJob.account_id == account_id,
+        BudgetProjectPricingDraftQuoteJob.project_id == project_id,
     )
+    if draft_id is not None:
+        query = query.filter(BudgetProjectPricingDraftQuoteJob.draft_id == draft_id)
+    return query.order_by(BudgetProjectPricingDraftQuoteJob.id.desc()).first()
+
+def cancel_budget_pricing_draft_quote_job(
+    db: Session,
+    job: BudgetProjectPricingDraftQuoteJob,
+    current_user: User,
+) -> BudgetProjectPricingDraftQuoteJob:
+    """Stop future AI writes while preserving estimates already completed."""
+
+    locked_job = (
+        db.query(BudgetProjectPricingDraftQuoteJob)
+        .filter(BudgetProjectPricingDraftQuoteJob.id == job.id)
+        .with_for_update()
+        .one()
+    )
+    if locked_job.status == BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_CANCELED:
+        return locked_job
+    if locked_job.status in TERMINAL_JOB_STATUSES:
+        raise BudgetPricingError("BUDGET_PRICING_DRAFT_QUOTE_JOB_ALREADY_FINISHED", status_code=409)
+
+    now = _utcnow()
+    cancelled_count = (
+        db.query(BudgetProjectPricingDraftQuoteJobLine)
+        .filter(
+            BudgetProjectPricingDraftQuoteJobLine.job_id == locked_job.id,
+            BudgetProjectPricingDraftQuoteJobLine.status.in_([
+                BUDGET_PRICING_DRAFT_QUOTE_JOB_LINE_AI_PENDING,
+                BUDGET_PRICING_DRAFT_QUOTE_JOB_LINE_AI_RUNNING,
+            ]),
+        )
+        .update(
+            {
+                BudgetProjectPricingDraftQuoteJobLine.status: BUDGET_PRICING_DRAFT_QUOTE_JOB_LINE_SKIPPED,
+                BudgetProjectPricingDraftQuoteJobLine.source: "cancelled",
+                BudgetProjectPricingDraftQuoteJobLine.finished_at: now,
+                BudgetProjectPricingDraftQuoteJobLine.error_json: _json_dump(
+                    {"code": "BUDGET_PRICING_DRAFT_QUOTE_JOB_CANCELLED"}
+                ),
+            },
+            synchronize_session=False,
+        )
+    )
+    _recount_job_progress(db, locked_job)
+    locked_job.status = BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_CANCELED
+    locked_job.progress_percent = 100
+    locked_job.current_message = f"Cancelled by user; stopped {cancelled_count} pending estimates"
+    locked_job.result_json = _json_dump(
+        {
+            "total_line_count": locked_job.total_line_count,
+            "enterprise_priced_count": locked_job.enterprise_priced_count,
+            "ai_total_count": locked_job.ai_total_count,
+            "ai_completed_count": locked_job.ai_completed_count,
+            "ai_failed_count": locked_job.ai_failed_count,
+            "skipped_count": locked_job.skipped_count,
+            "cancelled_count": cancelled_count,
+        }
+    )
+    locked_job.finished_at = now
+    draft = db.query(BudgetProjectPricingDraft).filter(BudgetProjectPricingDraft.id == locked_job.draft_id).one()
+    _append_event(
+        db,
+        draft=draft,
+        current_user=current_user,
+        event_type="quote_job_cancelled",
+        from_mode=draft.pricing_mode,
+        from_revision=draft.revision,
+        event={"job_uuid": locked_job.job_uuid, "cancelled_count": cancelled_count},
+    )
+    return locked_job
+
+
+def _job_is_active(job_id: int) -> bool:
+    db = SessionLocal()
+    try:
+        status = (
+            db.query(BudgetProjectPricingDraftQuoteJob.status)
+            .filter(BudgetProjectPricingDraftQuoteJob.id == job_id)
+            .scalar()
+        )
+        return status in {
+            BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_QUEUED,
+            BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_RUNNING,
+        }
+    finally:
+        db.close()
+
 
 
 def _mark_job_running(job_id: int) -> tuple[int, int, int]:
@@ -331,6 +417,11 @@ def _snapshot_for_job_line(job_line_id: int) -> tuple[dict[str, Any] | None, Sim
         if job_line is None:
             return None, None, "missing_job_line"
         job = db.query(BudgetProjectPricingDraftQuoteJob).filter(BudgetProjectPricingDraftQuoteJob.id == job_line.job_id).one()
+        if job.status not in {
+            BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_QUEUED,
+            BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_RUNNING,
+        }:
+            return None, None, "job_not_active"
         line = (
             db.query(BudgetProjectPricingDraftLine)
             .filter(BudgetProjectPricingDraftLine.id == job_line.draft_line_id)
@@ -383,6 +474,10 @@ def _mark_job_line_failed(job_line_id: int, exc: BaseException) -> None:
     try:
         job_line = db.query(BudgetProjectPricingDraftQuoteJobLine).filter(BudgetProjectPricingDraftQuoteJobLine.id == job_line_id).one_or_none()
         if job_line is not None:
+            job = db.query(BudgetProjectPricingDraftQuoteJob).filter(BudgetProjectPricingDraftQuoteJob.id == job_line.job_id).one()
+            if job.status in TERMINAL_JOB_STATUSES:
+                db.commit()
+                return
             job_line.status = BUDGET_PRICING_DRAFT_QUOTE_JOB_LINE_AI_FAILED
             job_line.error_json = _json_dump(_error_payload(exc))
             job_line.finished_at = _utcnow()
@@ -414,6 +509,9 @@ def _mark_job_line_succeeded(
             .filter(BudgetProjectPricingDraftQuoteJob.id == job_line.job_id)
             .one()
         )
+        if job.status in TERMINAL_JOB_STATUSES:
+            db.commit()
+            return
         try:
             draft, line = apply_budget_pricing_ai_estimate_to_line(
                 db,
@@ -461,9 +559,14 @@ async def _process_job_line_batch(
     job_line_ids: list[int],
     semaphore: asyncio.Semaphore,
     *,
+    job_id: int,
     depth: int = 0,
 ) -> None:
+    if not _job_is_active(job_id):
+        return
     async with semaphore:
+        if not _job_is_active(job_id):
+            return
         await _process_job_line_batch_unlocked(job_line_ids, depth=depth)
 
 
@@ -590,7 +693,7 @@ async def run_budget_pricing_draft_quote_job(job_id: int) -> None:
     if pending:
         semaphore = asyncio.Semaphore(concurrency)
         batches = _chunked(pending, batch_size)
-        await asyncio.gather(*[_process_job_line_batch(batch, semaphore) for batch in batches])
+        await asyncio.gather(*[_process_job_line_batch(batch, semaphore, job_id=actual_job_id) for batch in batches])
     _finish_job(actual_job_id)
 
 

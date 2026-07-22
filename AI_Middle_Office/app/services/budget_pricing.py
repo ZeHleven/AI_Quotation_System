@@ -459,6 +459,10 @@ def _source_quota_code(standard_row: dict[str, Any]) -> str | None:
 def _source_values(row: dict[str, Any]) -> dict[str, Any]:
     standard = row["standard_row"]
     quantity = _decimal(standard.get("calculation_quantity"))
+    summary_multiplier = _decimal(standard.get("budget_summary_multiplier"))
+    if summary_multiplier is None or summary_multiplier <= 0:
+        summary_multiplier = Decimal("1.000000")
+    summary_multiplier = _q6(summary_multiplier) or Decimal("1.000000")
     quantity_status = _clean(row.get("quantity_status") or standard.get("quantity_status"), 32) or "missing"
     quantity_resolved = (
         quantity_status == "valid"
@@ -480,6 +484,8 @@ def _source_values(row: dict[str, Any]) -> dict[str, Any]:
         "normalized_unit": normalize_pricing_unit(standard.get("unit")),
         "quota_code": _source_quota_code(standard),
         "quantity": safe_quantity,
+        "summary_multiplier": summary_multiplier,
+        "effective_quantity": _q6(safe_quantity * summary_multiplier) if quantity_resolved else Decimal("0.000000"),
         "quantity_status": quantity_status,
         "quantity_resolved": quantity_resolved,
         "snapshot": row,
@@ -690,14 +696,15 @@ def _pricing_values(source: dict[str, Any], match: dict[str, Any]) -> dict[str, 
             "totals": totals,
             "breakdown_covered": breakdown_covered,
         }
-    line_total = quantity * price
+    summary_multiplier: Decimal = source.get("summary_multiplier") or Decimal("1")
+    line_total = quantity * summary_multiplier * price
     if not _fits_numeric(line_total, _NUMERIC_24_6_MAX):
         return {
             "pricing_status": "numeric_overflow", "unit_price": price, "line_total": None,
             "amount_included": False, "unit_costs": unit_costs, "totals": (None, None, None, None),
             "breakdown_covered": False, "warning_codes": ["BUDGET_PRICING_LINE_TOTAL_OVERFLOW"],
         }
-    raw_totals = tuple(quantity * value if value is not None else None for value in unit_costs)
+    raw_totals = tuple(quantity * summary_multiplier * value if value is not None else None for value in unit_costs)
     totals = tuple(_q6(value) if _fits_numeric(value, _NUMERIC_24_6_MAX) else None for value in raw_totals)
     component_total_overflow = any(raw is not None and safe is None for raw, safe in zip(raw_totals, totals))
     warning_codes = []
@@ -1202,8 +1209,25 @@ def serialize_budget_pricing_run(run: BudgetProjectPricingRun) -> dict[str, Any]
     }
 
 
+def _source_row_context(snapshot_json: str | None) -> dict[str, Any]:
+    snapshot = _json_load(snapshot_json, {})
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    standard_row = snapshot.get("standard_row") if isinstance(snapshot.get("standard_row"), dict) else {}
+    raw_fields = standard_row.get("raw_fields") if isinstance(standard_row.get("raw_fields"), dict) else {}
+    location = standard_row.get("location") or standard_row.get("work_area")
+    return {
+        "region": standard_row.get("region") or standard_row.get("area"),
+        "work_area": standard_row.get("work_area") or location,
+        "location": location,
+        "remark": standard_row.get("remark"),
+        "raw_fields": raw_fields,
+    }
+
+
 def serialize_budget_pricing_line(line: BudgetProjectPricingRunLine) -> dict[str, Any]:
     selected = _json_load(line.selected_quota_item_snapshot_json, None)
+    source_context = _source_row_context(line.source_row_snapshot_json)
     return {
         "id": line.id,
         "line_uuid": line.line_uuid,
@@ -1212,6 +1236,10 @@ def serialize_budget_pricing_line(line: BudgetProjectPricingRunLine) -> dict[str
         "source_sheet": line.source_sheet,
         "source_raw_row_index": line.source_raw_row_index,
         "source_sort_order": line.source_sort_order,
+        "source_context": source_context,
+        "region": source_context.get("region"),
+        "work_area": source_context.get("work_area"),
+        "remark": source_context.get("remark"),
         "item_name": line.item_name,
         "spec": line.spec,
         "unit": line.unit,

@@ -76,16 +76,51 @@ def test_account_quota_fields_decimal_revision_and_status_payload_are_wired():
     assert "批量启用草稿" in component
     assert "批量归档" in component
     assert "row.status !== 'archived'" in component
+    assert "同步选中到基础定额" in component
 
     payload_block = component.split("function formPayload()", 1)[1].split(
         "async function handleEditConflict", 1
     )[0]
     assert "account_id" not in payload_block
+    assert "notes: buildNotesPayload(dialog.form)" in payload_block
 
     create_block = component.split("await accountQuotaApi.create({", 1)[1].split("})", 1)[0]
     assert "source: 'manual'" in create_block
     assert "reason: dialog.form.reason.trim()" in create_block
-    assert "notes:" not in create_block
+
+
+def test_account_quota_detail_tabs_and_extension_fields_are_wired():
+    component = _source("AccountQuotaLibrary.vue")
+
+    for label in ("工序明细", "材料明细", "专业分包明细"):
+        assert label in component
+    for field in (
+        "detail_type",
+        "material_type",
+        "loss_rate",
+        "adjustment_factor",
+        "real_content",
+        "labor_fee",
+        "main_material_fee",
+        "auxiliary_material_fee",
+        "subcontract_breakdown_source",
+        "spec_model",
+        "thickness_mm",
+        "width_mm",
+        "brand",
+    ):
+        assert field in component
+
+    assert "detail_type: activeDetailType.value" in component
+    assert "detail_type: form.detail_type || 'process'" in component
+    assert "account_quota_detail_v1" in component
+    assert "新增{{ activeTabConfig.shortLabel }}" in component
+    assert "params = { page: page.value, page_size: pageSize, detail_type: activeDetailType.value }" in component
+    assert "subcontractBreakdownSourceLabel" in component
+    assert "function canEditRow(row)" in component
+    assert ".editable-cell" in component
+    assert ':disabled="!canEditRow(row)"' in component
+    assert 'v-for="column in resourceColumns"' in component
 
 
 def test_account_quota_conflicts_and_history_are_visible_without_overwrite():

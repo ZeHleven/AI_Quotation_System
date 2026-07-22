@@ -63,6 +63,64 @@ from app.services.budget_pricing import (
 
 SUPPORTED_PRICING_MODES = {PRICING_MODE_ENTERPRISE_AI, PRICING_MODE_ACCOUNT_STRICT}
 ACCOUNT_STRICT_ENGINE_VERSION = "account-quota-strict-p2-2b3"
+_AI_REFERENCE_SHEET_ROLES = {"metadata", "calculation_rule"}
+_AI_REFERENCE_CONTEXT_CHAR_LIMIT = 6000
+
+
+def _reference_row_text(row: dict[str, Any]) -> str:
+    standard = row.get("standard_row") if isinstance(row.get("standard_row"), dict) else {}
+    candidates = (
+        standard.get("item_name"),
+        standard.get("spec"),
+        standard.get("remark"),
+        standard.get("raw_text"),
+        row.get("item_name"),
+        row.get("spec"),
+        row.get("remark"),
+        row.get("raw_text"),
+    )
+    return " ".join(str(value).strip() for value in candidates if value and str(value).strip())[:800]
+
+
+def _build_ai_reference_context(revision: Any) -> dict[str, Any]:
+    """Create a bounded, auditable document context for AI unit-price estimates."""
+
+    rows = _json_load(revision.standard_rows_json, [])
+    context: dict[str, list[dict[str, Any]]] = {"metadata": [], "calculation_rules": []}
+    seen: set[tuple[str, str]] = set()
+    used_chars = 0
+    truncated = False
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        role = str(row.get("sheet_role") or "")
+        if role not in _AI_REFERENCE_SHEET_ROLES:
+            continue
+        text = _reference_row_text(row)
+        if not text:
+            continue
+        source_sheet = str(row.get("source_sheet") or "")[:255]
+        key = (role, text)
+        if key in seen:
+            continue
+        if used_chars + len(text) > _AI_REFERENCE_CONTEXT_CHAR_LIMIT:
+            truncated = True
+            break
+        seen.add(key)
+        used_chars += len(text)
+        entry = {
+            "source_sheet": source_sheet,
+            "source_row": int(row.get("raw_row_index") or 0),
+            "text": text,
+        }
+        context["metadata" if role == "metadata" else "calculation_rules"].append(entry)
+    return {
+        "version": "budget-reference-context-v1",
+        "metadata": context["metadata"],
+        "calculation_rules": context["calculation_rules"],
+        "truncated": truncated,
+        "character_count": used_chars,
+    }
 
 
 def _mode_guard(pricing_mode: str) -> str:
@@ -90,12 +148,43 @@ def _locked_profile(db: Session, profile: BudgetProjectProfile) -> BudgetProject
     return locked
 
 
-def _current_draft_query(db: Session, *, account_id: int, project_id: int):
-    return db.query(BudgetProjectPricingDraft).filter(
+def _current_draft_query(
+    db: Session,
+    *,
+    account_id: int,
+    project_id: int,
+    pricing_mode: str | None = None,
+):
+    query = db.query(BudgetProjectPricingDraft).filter(
         BudgetProjectPricingDraft.account_id == account_id,
         BudgetProjectPricingDraft.project_id == project_id,
         BudgetProjectPricingDraft.status == PRICING_DRAFT_STATUS_ACTIVE,
     )
+    if pricing_mode:
+        query = query.filter(BudgetProjectPricingDraft.pricing_mode == _mode_guard(pricing_mode))
+    return query
+
+
+def ensure_budget_pricing_draft_uses_active_import(
+    profile: BudgetProjectProfile,
+    draft: BudgetProjectPricingDraft,
+) -> None:
+    """Do not estimate a line from an import revision that is no longer active."""
+
+    if (
+        int(draft.source_import_batch_id) != int(profile.active_import_batch_id or 0)
+        or int(draft.source_import_revision_id) != int(profile.active_import_revision_id or 0)
+    ):
+        raise BudgetPricingError(
+            "BUDGET_PRICING_DRAFT_SOURCE_STALE",
+            status_code=409,
+            context={
+                "draft_batch_id": draft.source_import_batch_id,
+                "draft_revision_id": draft.source_import_revision_id,
+                "active_batch_id": profile.active_import_batch_id,
+                "active_revision_id": profile.active_import_revision_id,
+            },
+        )
 
 
 def get_current_budget_pricing_draft(
@@ -103,6 +192,7 @@ def get_current_budget_pricing_draft(
     profile: BudgetProjectProfile,
     current_user: User,
     *,
+    pricing_mode: str | None = None,
     for_update: bool = False,
 ) -> BudgetProjectPricingDraft | None:
     account, _ = require_budget_project_account(
@@ -111,10 +201,17 @@ def get_current_budget_pricing_draft(
         current_user=current_user,
         for_update=for_update,
     )
-    query = _current_draft_query(db, account_id=account.id, project_id=profile.project_id)
+    query = _current_draft_query(
+        db,
+        account_id=account.id,
+        project_id=profile.project_id,
+        pricing_mode=pricing_mode,
+    )
     if for_update:
         query = query.with_for_update()
-    return query.one_or_none()
+    if pricing_mode:
+        return query.one_or_none()
+    return query.order_by(BudgetProjectPricingDraft.updated_at.desc(), BudgetProjectPricingDraft.id.desc()).first()
 
 
 def _append_event(
@@ -160,6 +257,239 @@ def _line_base_status(line: BudgetProjectPricingDraftLine) -> str:
     return PRICING_LINE_STATUS_QUANTITY_UNRESOLVED
 
 
+_BREAKDOWN_UNIT_PRICE_KEYS = (
+    "labor_unit_cost",
+    "main_material_unit_cost",
+    "auxiliary_material_unit_cost",
+    "machinery_unit_cost",
+    "comprehensive_unit_cost",
+    "management_unit_cost",
+    "profit_unit_cost",
+    "measure_unit_cost",
+)
+_BREAKDOWN_NUMERIC_KEYS = set(_BREAKDOWN_UNIT_PRICE_KEYS) | {
+    "tax_amount",
+    "main_material_without_loss",
+    "loss_rate",
+    "owner_material_unit_price",
+    "owner_material_loss_amount",
+}
+_BREAKDOWN_TEXT_KEYS = {"material_supply_mode", "remark"}
+_BREAKDOWN_ALLOWED_KEYS = _BREAKDOWN_NUMERIC_KEYS | _BREAKDOWN_TEXT_KEYS
+_BREAKDOWN_TAX_RATE = Decimal("0.09")
+_TOTALS_CONFIG_KEYS = {
+    "measures_rate",
+    "management_rate",
+    "other_fee",
+    "suspended_amount",
+    "area",
+    "quote_adjustment_percent",
+}
+
+
+def _normalize_pricing_breakdown(raw: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise BudgetPricingError("BUDGET_PRICING_DRAFT_BREAKDOWN_INVALID", status_code=422)
+    normalized: dict[str, Any] = {}
+    for key, value in raw.items():
+        if key not in _BREAKDOWN_ALLOWED_KEYS:
+            continue
+        if value is None or value == "":
+            continue
+        if key in _BREAKDOWN_NUMERIC_KEYS:
+            parsed = _decimal(value)
+            if parsed is None or parsed < 0 or not _fits_numeric(parsed, _NUMERIC_20_6_MAX):
+                raise BudgetPricingError(
+                    "BUDGET_PRICING_DRAFT_BREAKDOWN_INVALID",
+                    status_code=422,
+                    context={"field": key},
+                )
+            normalized[key] = _decimal_text(_q6(parsed))
+            continue
+        text = str(value).strip()
+        if text:
+            normalized[key] = text[:2000] if key == "remark" else text[:64]
+
+    composite = sum((Decimal(normalized[key]) for key in _BREAKDOWN_UNIT_PRICE_KEYS if key in normalized), Decimal("0"))
+    if composite > 0:
+        if not _fits_numeric(composite, _NUMERIC_20_6_MAX):
+            raise BudgetPricingError("BUDGET_PRICING_DRAFT_BREAKDOWN_TOTAL_OVERFLOW", status_code=422)
+        normalized["composite_unit_price"] = _decimal_text(_q6(composite))
+        normalized["tax_rate"] = _decimal_text(_q6(_BREAKDOWN_TAX_RATE))
+        normalized["tax_amount"] = _decimal_text(_q6(composite * _BREAKDOWN_TAX_RATE))
+        normalized["source"] = "manual_breakdown"
+    return normalized
+
+
+def _normalize_totals_config(raw: dict[str, Any] | None) -> dict[str, str]:
+    source = raw if isinstance(raw, dict) else {}
+    result: dict[str, str] = {}
+    for key in _TOTALS_CONFIG_KEYS:
+        parsed = _decimal(source.get(key))
+        if parsed is None:
+            parsed = Decimal("0")
+        if key == "quote_adjustment_percent":
+            parsed = max(Decimal("-100"), min(parsed, Decimal("1000")))
+        elif parsed < 0:
+            parsed = Decimal("0")
+        result[key] = _decimal_text(_q6(parsed))
+    return result
+
+
+def _fallback_breakdown_from_price(line: BudgetProjectPricingDraftLine, unit_price: Decimal) -> dict[str, Any]:
+    text = f"{line.item_name or ''} {line.spec or ''}"
+    labor_only = any(token in text for token in ("拆除", "清运", "铲除", "搬运", "保洁", "开孔", "剔凿", "打磨", "成品保护"))
+    material_heavy = any(token in text for token in ("石材", "瓷砖", "地砖", "木地板", "墙纸", "玻璃", "不锈钢", "铝板", "涂料", "乳胶漆", "防水", "龙骨", "石膏板", "吊顶", "隔断", "灯", "开关", "插座", "给水", "排水", "阀门"))
+    lossy = material_heavy and any(token in text for token in ("石材", "瓷砖", "地砖", "木地板", "墙纸", "涂料", "乳胶漆", "防水", "龙骨", "石膏板", "吊顶", "玻璃", "铝板"))
+    if labor_only:
+        ratios = {
+            "labor_unit_cost": Decimal("1"),
+            "main_material_unit_cost": Decimal("0"),
+            "auxiliary_material_unit_cost": Decimal("0"),
+            "machinery_unit_cost": Decimal("0"),
+            "comprehensive_unit_cost": Decimal("0"),
+            "management_unit_cost": Decimal("0"),
+            "profit_unit_cost": Decimal("0"),
+            "measure_unit_cost": Decimal("0"),
+        }
+        loss_rate = Decimal("0")
+        supply_mode = "无主材"
+    elif material_heavy:
+        ratios = {
+            "labor_unit_cost": Decimal("0.25"),
+            "main_material_unit_cost": Decimal("0.55"),
+            "auxiliary_material_unit_cost": Decimal("0.08"),
+            "machinery_unit_cost": Decimal("0.04"),
+            "comprehensive_unit_cost": Decimal("0"),
+            "management_unit_cost": Decimal("0.04"),
+            "profit_unit_cost": Decimal("0.04"),
+            "measure_unit_cost": Decimal("0"),
+        }
+        loss_rate = Decimal("0.03") if lossy else Decimal("0")
+        supply_mode = "乙供"
+    else:
+        ratios = {
+            "labor_unit_cost": Decimal("0.45"),
+            "main_material_unit_cost": Decimal("0.35"),
+            "auxiliary_material_unit_cost": Decimal("0.08"),
+            "machinery_unit_cost": Decimal("0.03"),
+            "comprehensive_unit_cost": Decimal("0"),
+            "management_unit_cost": Decimal("0.05"),
+            "profit_unit_cost": Decimal("0.04"),
+            "measure_unit_cost": Decimal("0"),
+        }
+        loss_rate = Decimal("0.02")
+        supply_mode = "乙供"
+    breakdown = {key: _decimal_text(_q6(unit_price * ratio)) for key, ratio in ratios.items()}
+    main_material = _decimal(breakdown["main_material_unit_cost"]) or Decimal("0")
+    breakdown["loss_rate"] = _decimal_text(_q6(loss_rate))
+    breakdown["main_material_without_loss"] = _decimal_text(_q6(main_material / (Decimal("1") + loss_rate))) if loss_rate > 0 else _decimal_text(_q6(main_material))
+    breakdown["material_supply_mode"] = supply_mode
+    normalized = _normalize_pricing_breakdown(breakdown)
+    normalized["source"] = "derived_breakdown"
+    return normalized
+
+
+def _line_pricing_breakdown(line: BudgetProjectPricingDraftLine) -> dict[str, Any]:
+    stored = _json_load(line.pricing_breakdown_json, {})
+    if isinstance(stored, dict) and stored:
+        return stored
+    selected = _json_load(line.selected_source_snapshot_json, {})
+    if isinstance(selected, dict) and selected:
+        raw = {
+            "labor_unit_cost": selected.get("labor_fee"),
+            "main_material_unit_cost": selected.get("main_material_fee"),
+            "auxiliary_material_unit_cost": selected.get("auxiliary_material_fee"),
+            "machinery_unit_cost": selected.get("machinery_fee"),
+        }
+        normalized = _normalize_pricing_breakdown(raw)
+        if normalized.get("composite_unit_price"):
+            normalized["source"] = "selected_source_breakdown"
+            return normalized
+    unit_price = _q6(_decimal(line.effective_unit_price))
+    if unit_price is not None and unit_price > 0:
+        return _fallback_breakdown_from_price(line, unit_price)
+    return {}
+
+
+def _source_component_unit(line: BudgetProjectPricingDraftLine, key: str) -> Decimal:
+    breakdown = _line_pricing_breakdown(line)
+    value = _decimal(breakdown.get(key)) if isinstance(breakdown, dict) else None
+    if value is not None:
+        return value
+    selected = _json_load(line.selected_source_snapshot_json, {})
+    alias = {
+        "labor_unit_cost": "labor_fee",
+        "main_material_unit_cost": "main_material_fee",
+        "auxiliary_material_unit_cost": "auxiliary_material_fee",
+        "machinery_unit_cost": "machinery_fee",
+        "subcontract_unit_cost": "subcontract_fee",
+    }.get(key)
+    value = _decimal(selected.get(alias)) if alias and isinstance(selected, dict) else None
+    return value or Decimal("0")
+
+
+def _line_summary_multiplier(line: BudgetProjectPricingDraftLine) -> Decimal:
+    snapshot = _json_load(line.source_row_snapshot_json, {})
+    standard = snapshot.get("standard_row") if isinstance(snapshot, dict) else None
+    multiplier = _decimal(standard.get("budget_summary_multiplier")) if isinstance(standard, dict) else None
+    if multiplier is None or multiplier <= 0:
+        multiplier = Decimal("1")
+    return _q6(multiplier) or Decimal("1.000000")
+
+
+def _amount_from_unit(line: BudgetProjectPricingDraftLine, key: str) -> Decimal:
+    if not line.amount_included:
+        return Decimal("0")
+    quantity = _decimal(line.calculation_quantity) or Decimal("0")
+    if quantity <= 0:
+        return Decimal("0")
+    return quantity * _line_summary_multiplier(line) * _source_component_unit(line, key)
+
+
+def _draft_totals_summary(
+    lines: list[BudgetProjectPricingDraftLine],
+    *,
+    subtotal: Decimal,
+    config: dict[str, str],
+) -> dict[str, Any]:
+    labor = sum((_amount_from_unit(line, "labor_unit_cost") for line in lines), Decimal("0"))
+    main_material = sum((_amount_from_unit(line, "main_material_unit_cost") for line in lines), Decimal("0"))
+    auxiliary = sum((_amount_from_unit(line, "auxiliary_material_unit_cost") for line in lines), Decimal("0"))
+    subcontract = sum((_amount_from_unit(line, "subcontract_unit_cost") for line in lines), Decimal("0"))
+    tax = sum((_amount_from_unit(line, "tax_amount") for line in lines), Decimal("0"))
+    if tax <= 0 and subtotal > 0:
+        tax = subtotal * _BREAKDOWN_TAX_RATE
+    direct_subtotal = labor + main_material + auxiliary + subcontract
+    measures = direct_subtotal * ((_decimal(config.get("measures_rate")) or Decimal("0")) / Decimal("100"))
+    management = direct_subtotal * ((_decimal(config.get("management_rate")) or Decimal("0")) / Decimal("100"))
+    other_fee = _decimal(config.get("other_fee")) or Decimal("0")
+    suspended = _decimal(config.get("suspended_amount")) or Decimal("0")
+    cost_total = subtotal + measures + management + other_fee + suspended
+    quote_adjustment = (_decimal(config.get("quote_adjustment_percent")) or Decimal("0")) / Decimal("100")
+    quote_amount = cost_total * (Decimal("1") + quote_adjustment)
+    area = _decimal(config.get("area")) or Decimal("0")
+    unit_cost = cost_total / area if area > 0 else None
+    return {
+        "tax_rate": _decimal_text(_q6(_BREAKDOWN_TAX_RATE)),
+        "labor_total": _decimal_text(_q6(labor)),
+        "main_material_total": _decimal_text(_q6(main_material)),
+        "auxiliary_material_total": _decimal_text(_q6(auxiliary)),
+        "subcontract_total": _decimal_text(_q6(subcontract)),
+        "tax_excluded_total": _decimal_text(_q6(subtotal)),
+        "tax_total": _decimal_text(_q6(tax)),
+        "tax_included_total": _decimal_text(_q6(subtotal + tax)),
+        "direct_subtotal": _decimal_text(_q6(direct_subtotal)),
+        "measures_fee": _decimal_text(_q6(measures)),
+        "management_fee": _decimal_text(_q6(management)),
+        "other_fee": _decimal_text(_q6(other_fee)),
+        "suspended_amount": _decimal_text(_q6(suspended)),
+        "cost_total": _decimal_text(_q6(cost_total)),
+        "quote_amount": _decimal_text(_q6(quote_amount)),
+        "unit_cost": _decimal_text(_q6(unit_cost)) if unit_cost is not None else None,
+    }
+
+
 def _apply_effective_price(
     line: BudgetProjectPricingDraftLine,
     *,
@@ -201,7 +531,7 @@ def _apply_effective_price(
         line.amount_included = False
         line.pricing_status = PRICING_LINE_STATUS_QUANTITY_UNRESOLVED
         return
-    total = quantity * effective
+    total = quantity * _line_summary_multiplier(line) * effective
     if not _fits_numeric(total, _NUMERIC_24_6_MAX):
         raise BudgetPricingError(
             "BUDGET_PRICING_DRAFT_LINE_TOTAL_OVERFLOW",
@@ -214,6 +544,10 @@ def _apply_effective_price(
 
 def _refresh_summary(db: Session, draft: BudgetProjectPricingDraft) -> dict[str, Any]:
     db.flush()
+    previous_summary = _json_load(draft.summary_json, {})
+    totals_config = _normalize_totals_config(
+        previous_summary.get("totals_config") if isinstance(previous_summary, dict) else {}
+    )
     lines = (
         db.query(BudgetProjectPricingDraftLine)
         .filter(BudgetProjectPricingDraftLine.draft_id == draft.id)
@@ -264,6 +598,8 @@ def _refresh_summary(db: Session, draft: BudgetProjectPricingDraft) -> dict[str,
         "llm_auto_estimation_connected": False,
         "manual_ai_estimation_connected": True,
         "account_quota_connected": draft.pricing_mode == PRICING_MODE_ACCOUNT_STRICT,
+        "totals_config": totals_config,
+        "totals": _draft_totals_summary(lines, subtotal=subtotal, config=totals_config),
         "mode_notice": (
             "未匹配行将在后续阶段接入 LLM 自动估价；P2-2A 保持空值"
             if draft.pricing_mode == PRICING_MODE_ENTERPRISE_AI
@@ -282,6 +618,61 @@ def _refresh_summary(db: Session, draft: BudgetProjectPricingDraft) -> dict[str,
     draft.summary_json = _json_dump(summary)
     db.flush()
     return summary
+
+
+def refresh_budget_pricing_draft_summary(db: Session, draft: BudgetProjectPricingDraft) -> dict[str, Any]:
+    return _refresh_summary(db, draft)
+
+
+def update_budget_pricing_draft_totals_config(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    *,
+    pricing_mode: str | None,
+    expected_revision: int,
+    config_patch: dict[str, Any],
+    reason: str | None = None,
+) -> BudgetProjectPricingDraft:
+    draft = get_current_budget_pricing_draft(
+        db,
+        profile,
+        current_user,
+        pricing_mode=pricing_mode,
+        for_update=True,
+    )
+    if draft is None:
+        raise BudgetPricingError("BUDGET_PRICING_DRAFT_NOT_FOUND", status_code=404)
+    if int(draft.revision) != int(expected_revision):
+        raise BudgetPricingError(
+            "BUDGET_PRICING_DRAFT_REVISION_CONFLICT",
+            context={"expected_revision": expected_revision, "current_revision": draft.revision},
+        )
+    previous_revision = int(draft.revision)
+    previous_summary = _json_load(draft.summary_json, {})
+    previous_config = _normalize_totals_config(
+        previous_summary.get("totals_config") if isinstance(previous_summary, dict) else {}
+    )
+    merged = {**previous_config, **{key: value for key, value in config_patch.items() if key in _TOTALS_CONFIG_KEYS}}
+    draft.summary_json = _json_dump({"totals_config": _normalize_totals_config(merged)})
+    draft.revision = int(draft.revision) + 1
+    draft.updated_by = current_user.id
+    summary = _refresh_summary(db, draft)
+    _append_event(
+        db,
+        draft=draft,
+        current_user=current_user,
+        event_type="totals_config_updated",
+        from_mode=draft.pricing_mode,
+        from_revision=previous_revision,
+        event={
+            "previous_totals_config": previous_config,
+            "totals_config": summary.get("totals_config"),
+            "reason": (reason or "").strip()[:2000] or None,
+        },
+    )
+    db.flush()
+    return draft
 
 
 def _account_quota_snapshot(item: AccountQuotaItem) -> dict[str, Any]:
@@ -470,7 +861,12 @@ def create_or_rebuild_budget_pricing_draft(
         expected_revision_id=source_import_revision_id,
     )
     draft = (
-        _current_draft_query(db, account_id=account.id, project_id=profile.project_id)
+        _current_draft_query(
+            db,
+            account_id=account.id,
+            project_id=profile.project_id,
+            pricing_mode=mode,
+        )
         .with_for_update()
         .one_or_none()
     )
@@ -528,6 +924,7 @@ def create_or_rebuild_budget_pricing_draft(
         "revision_number": revision.revision_number,
         "revision_snapshot_sha256": revision.snapshot_sha256,
         "standard_rows": formal_rows,
+        "ai_reference_context": _build_ai_reference_context(revision),
     }
     previous_mode = draft.pricing_mode if draft else None
     previous_revision = int(draft.revision) if draft else None
@@ -744,16 +1141,19 @@ def patch_budget_pricing_draft_line(
     profile: BudgetProjectProfile,
     current_user: User,
     *,
+    pricing_mode: str | None = None,
     line_identifier: str | int,
     expected_revision: int,
     expected_line_revision: int,
     manual_unit_price: Decimal | None,
+    pricing_breakdown: dict[str, Any] | None = None,
     reason: str | None = None,
 ) -> tuple[BudgetProjectPricingDraft, BudgetProjectPricingDraftLine]:
     draft = get_current_budget_pricing_draft(
         db,
         profile,
         current_user,
+        pricing_mode=pricing_mode,
         for_update=True,
     )
     if draft is None:
@@ -781,8 +1181,15 @@ def patch_budget_pricing_draft_line(
             status_code=422,
         )
     previous_price = _decimal_text(line.manual_unit_price)
+    previous_breakdown = _json_load(line.pricing_breakdown_json, {})
+    normalized_breakdown = _normalize_pricing_breakdown(pricing_breakdown) if pricing_breakdown is not None else None
+    breakdown_unit_price = _decimal(normalized_breakdown.get("composite_unit_price")) if normalized_breakdown else None
     previous_revision = int(draft.revision)
-    _apply_effective_price(line, manual_unit_price=parsed)
+    _apply_effective_price(line, manual_unit_price=breakdown_unit_price if breakdown_unit_price is not None else parsed)
+    if pricing_breakdown is not None:
+        line.pricing_breakdown_json = _json_dump(normalized_breakdown) if normalized_breakdown else None
+        if breakdown_unit_price is not None:
+            line.price_source = "manual_breakdown"
     line.line_revision = int(line.line_revision) + 1
     line.updated_by = current_user.id
     draft.revision = int(draft.revision) + 1
@@ -799,7 +1206,9 @@ def patch_budget_pricing_draft_line(
             "line_id": line.id,
             "line_uuid": line.line_uuid,
             "previous_manual_unit_price": previous_price,
-            "manual_unit_price": _decimal_text(parsed),
+            "manual_unit_price": _decimal_text(line.manual_unit_price),
+            "previous_pricing_breakdown": previous_breakdown,
+            "pricing_breakdown": normalized_breakdown,
             "reason": (reason or "").strip()[:2000] or None,
             "summary": summary,
         },
@@ -843,7 +1252,25 @@ def serialize_budget_pricing_draft(draft: BudgetProjectPricingDraft) -> dict[str
     }
 
 
+def _source_row_context(snapshot_json: str | None) -> dict[str, Any]:
+    snapshot = _json_load(snapshot_json, {})
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    standard_row = snapshot.get("standard_row") if isinstance(snapshot.get("standard_row"), dict) else {}
+    raw_fields = standard_row.get("raw_fields") if isinstance(standard_row.get("raw_fields"), dict) else {}
+    location = standard_row.get("location") or standard_row.get("work_area")
+    return {
+        "region": standard_row.get("region") or standard_row.get("area"),
+        "work_area": standard_row.get("work_area") or location,
+        "location": location,
+        "remark": standard_row.get("remark"),
+        "raw_fields": raw_fields,
+    }
+
+
 def serialize_budget_pricing_draft_line(line: BudgetProjectPricingDraftLine) -> dict[str, Any]:
+    source_context = _source_row_context(line.source_row_snapshot_json)
+    pricing_breakdown = _line_pricing_breakdown(line)
     return {
         "id": line.id,
         "line_uuid": line.line_uuid,
@@ -852,11 +1279,19 @@ def serialize_budget_pricing_draft_line(line: BudgetProjectPricingDraftLine) -> 
         "source_sheet": line.source_sheet,
         "source_raw_row_index": line.source_raw_row_index,
         "source_sort_order": line.source_sort_order,
+        "source_context": source_context,
+        "region": source_context.get("region"),
+        "work_area": source_context.get("work_area"),
+        "remark": source_context.get("remark"),
         "item_name": line.item_name,
         "spec": line.spec,
         "unit": line.unit,
         "quantity": _decimal_text(line.calculation_quantity),
         "calculation_quantity": _decimal_text(line.calculation_quantity),
+        "summary_multiplier": _decimal_text(_line_summary_multiplier(line)),
+        "effective_calculation_quantity": _decimal_text(
+            _q6((_decimal(line.calculation_quantity) or Decimal("0")) * _line_summary_multiplier(line))
+        ),
         "quantity_status": line.quantity_status,
         "match_status": line.match_status,
         "pricing_status": line.pricing_status,
@@ -871,6 +1306,8 @@ def serialize_budget_pricing_draft_line(line: BudgetProjectPricingDraftLine) -> 
         "ai_estimate": _json_load(line.ai_estimate_snapshot_json, None),
         "manual_unit_price": _decimal_text(line.manual_unit_price),
         "effective_unit_price": _decimal_text(line.effective_unit_price),
+        "pricing_breakdown": pricing_breakdown,
+        "cost_breakdown": pricing_breakdown,
         "line_total": _decimal_text(line.line_total),
         "amount_included": bool(line.amount_included),
         "price_source": line.price_source,

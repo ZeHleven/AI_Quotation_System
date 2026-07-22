@@ -8553,7 +8553,7 @@
                   >
                     <el-table-column label="进入清单" width="92">
                       <template #default="{ row }">
-                        <el-checkbox v-model="row.include"></el-checkbox>
+                        <el-checkbox v-model="row.include" :disabled="isRequirementReferenceRow(row)"></el-checkbox>
                       </template>
                     </el-table-column>
                     <el-table-column label="来源" width="96">
@@ -8571,23 +8571,23 @@
                     </el-table-column>
                     <el-table-column label="项目名称" min-width="220">
                       <template #default="{ row }">
-                        <el-input v-model="row.item_name" size="small" />
+                        <el-input v-model="row.item_name" size="small" :disabled="isRequirementReferenceRow(row)" />
                       </template>
                     </el-table-column>
                     <el-table-column label="规格/特征" min-width="220">
                       <template #default="{ row }">
-                        <el-input v-model="row.spec" size="small" />
+                        <el-input v-model="row.spec" size="small" :disabled="isRequirementReferenceRow(row)" />
                       </template>
                     </el-table-column>
                     <el-table-column label="标准数量" width="130">
                       <template #default="{ row }">
-                        <el-input v-model="row.quantity" size="small" />
+                        <el-input v-model="row.quantity" size="small" :disabled="isRequirementReferenceRow(row)" />
                       </template>
                     </el-table-column>
                     <el-table-column label="数量来源" min-width="190">
                       <template #default="{ row }">
                         <el-select
-                          v-if="row.quantity_candidates?.length"
+                          v-if="row.quantity_candidates?.length && !isRequirementReferenceRow(row)"
                           v-model="row.quantity_source_key"
                           size="small"
                           @change="applyRequirementQuantitySource(row, $event)"
@@ -8610,12 +8610,12 @@
                     </el-table-column>
                     <el-table-column label="单位" width="110">
                       <template #default="{ row }">
-                        <el-input v-model="row.unit" size="small" />
+                        <el-input v-model="row.unit" size="small" :disabled="isRequirementReferenceRow(row)" />
                       </template>
                     </el-table-column>
                     <el-table-column label="备注" min-width="180">
                       <template #default="{ row }">
-                        <el-input v-model="row.remark" size="small" />
+                        <el-input v-model="row.remark" size="small" :disabled="isRequirementReferenceRow(row)" />
                       </template>
                     </el-table-column>
                     <el-table-column label="风险" min-width="220">
@@ -8628,7 +8628,7 @@
                     </el-table-column>
                     <el-table-column label="人工确认" width="110">
                       <template #default="{ row }">
-                        <el-checkbox v-model="row.confirmed" :disabled="!row.include"></el-checkbox>
+                        <el-checkbox v-model="row.confirmed" :disabled="!row.include || isRequirementReferenceRow(row)"></el-checkbox>
                       </template>
                     </el-table-column>
                   </el-table>
@@ -10776,6 +10776,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import axios from 'axios'
 import BudgetProjects from './BudgetProjects.vue'
 import AccountQuotaLibrary from './AccountQuotaLibrary.vue'
+import { cleanupSharedAuthStorage, clearAuth, getToken, setToken, setUserInfo } from './authStorage'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
@@ -10801,8 +10802,6 @@ import {
   Warning,
 } from '@element-plus/icons-vue'
 
-const TOKEN_KEY = 'ai_token'
-const USER_INFO_KEY = 'app_user_info'
 const REQUIREMENT_HISTORY_DB_NAME = 'ai_requirement_standardization_history'
 const REQUIREMENT_HISTORY_DB_VERSION = 1
 const REQUIREMENT_HISTORY_RECORD_STORE = 'records'
@@ -10812,7 +10811,7 @@ const REQUIREMENT_HISTORY_VERSION_LIMIT = 20
 const api = axios.create({ baseURL: '/api/v1' })
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY)
+  const token = getToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -10823,8 +10822,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(USER_INFO_KEY)
+      clearAuth()
     }
     return Promise.reject(error)
   },
@@ -11017,6 +11015,7 @@ const requirementFieldOptions = [
 ]
 
 const requirementRowFilterOptions = [
+  { value: 'reference', label: '参考信息行' },
   { value: 'all', label: '全部候选行' },
   { value: 'included', label: '已选行' },
   { value: 'excluded', label: '未选行' },
@@ -12049,7 +12048,7 @@ const budgetProjectsFeatureAvailable = computed(() => budgetProjectsModule.value
 const budgetPricingModule = computed(() => (session.user?.available_modules || []).find(
   (module) => module.key === 'budget_pricing',
 ))
-const budgetPricingFeatureAvailable = computed(() => budgetPricingModule.value?.status === 'available')
+const budgetPricingFeatureAvailable = computed(() => ['available', 'forbidden'].includes(budgetPricingModule.value?.status))
 const accountQuotasModule = computed(() => (session.user?.available_modules || []).find(
   (module) => module.key === 'account_quotas' || module.path === '/admin/account-quotas',
 ))
@@ -12773,7 +12772,7 @@ const dwgTrialFinalizationFiles = computed(() => dwgTrialFinalizationResult.valu
 const dwgTrialFinalizationIssues = computed(() => dwgTrialFinalizationResult.value?.issues || [])
 const selectedRequirementRows = computed(() => requirementRows.value.filter((row) => row.include))
 const visibleRequirementRows = computed(() => (
-  requirementRows.value.filter((row) => row.row_type === 'data_row' || row.include || row.confirmed)
+  requirementRows.value.filter((row) => ['data_row', 'reference_row'].includes(row.row_type) || row.include || row.confirmed)
 ))
 const requirementBlockedRows = computed(() => {
   const blockedRows = requirementConfirmed.value?.blocked_rows || []
@@ -12829,9 +12828,10 @@ const visibleRequirementSheetMappings = computed(() => {
   const filtered = requirementSheetMappings.value.filter((sheet) => {
     const sheetRows = requirementRows.value.filter((row) => row.source_sheet === sheet.sheet_name)
     const hasDataRows = sheetRows.some((row) => row.row_type === 'data_row')
+    const hasReferenceRows = sheetRows.some((row) => row.row_type === 'reference_row')
     const mappedFields = Object.values(sheet.field_mapping || {})
     const hasCoreMapping = mappedFields.some((field) => ['item_name', 'spec', 'quantity', 'unit'].includes(field))
-    return hasDataRows || hasCoreMapping
+    return hasDataRows || hasReferenceRows || hasCoreMapping
   })
   return filtered.length ? filtered : requirementSheetMappings.value
 })
@@ -14255,7 +14255,7 @@ async function login() {
     params.append('password', loginForm.password)
     const response = await api.post('/auth/login', params)
     const data = responseData(response)
-    localStorage.setItem(TOKEN_KEY, data.access_token)
+    setToken(data.access_token)
     const me = await loadMe()
     window.location.replace(landingPath(me))
   } catch (error) {
@@ -14268,14 +14268,11 @@ async function login() {
 async function loadMe() {
   const response = await api.get('/auth/me')
   session.user = responseData(response)
-  localStorage.setItem(
-    USER_INFO_KEY,
-    JSON.stringify({
-      username: session.user.username,
-      role: session.user.role,
-      roles: Array.isArray(session.user.roles) ? session.user.roles : [],
-    }),
-  )
+  setUserInfo({
+    username: session.user.username,
+    role: session.user.role,
+    roles: Array.isArray(session.user.roles) ? session.user.roles : [],
+  })
   return session.user
 }
 
@@ -14875,6 +14872,10 @@ function defaultRequirementInclude(row) {
   return row.row_type === 'data_row' && row.confidence !== 'low'
 }
 
+function isRequirementReferenceRow(row) {
+  return row?.row_type === 'reference_row'
+}
+
 function hydrateRequirementPreview(preview) {
   requirementPreview.value = preview
   requirementRowFilters.keyword = ''
@@ -15032,6 +15033,7 @@ function requirementConfirmationRiskMessages(row) {
 
 function requirementRowClassName({ row }) {
   const classes = []
+  if (isRequirementReferenceRow(row)) classes.push('requirement-row-reference')
   if (requirementRowIsBlocked(row)) classes.push('requirement-row-blocked')
   if (requirementActiveBlockedRowKey.value && requirementLookupKeys(row).includes(requirementActiveBlockedRowKey.value)) {
     classes.push('requirement-row-focused')
@@ -15063,6 +15065,7 @@ function markRequirementConfirmationDirty() {
 
 function bulkIncludeRequirementRows(include) {
   for (const row of filteredRequirementRows.value) {
+    if (isRequirementReferenceRow(row)) continue
     row.include = include
     if (!include) row.confirmed = false
   }
@@ -15072,6 +15075,7 @@ function bulkIncludeRequirementRows(include) {
 
 function bulkConfirmRequirementRows(confirmed) {
   for (const row of filteredRequirementRows.value) {
+    if (isRequirementReferenceRow(row)) continue
     if (confirmed) row.include = true
     row.confirmed = confirmed
   }
@@ -15082,6 +15086,7 @@ function bulkConfirmRequirementRows(confirmed) {
 function requirementRowMatchesFilters(row) {
   const keyword = requirementRowFilters.keyword.trim().toLowerCase()
   if (keyword && !requirementRowSearchText(row).includes(keyword)) return false
+  if (requirementRowFilters.status === 'reference') return isRequirementReferenceRow(row)
   if (requirementRowFilters.status === 'included') return Boolean(row.include)
   if (requirementRowFilters.status === 'excluded') return !row.include
   if (requirementRowFilters.status === 'blocked') return requirementRowIsBlocked(row)
@@ -15090,6 +15095,7 @@ function requirementRowMatchesFilters(row) {
   if (requirementRowFilters.status === 'with_warnings') return Boolean(row.warnings?.length)
   if (requirementRowFilters.status === 'multi_quantity') return (row.quantity_candidates || []).length > 1
   if (requirementRowFilters.status === 'quantity_missing') {
+    if (isRequirementReferenceRow(row)) return false
     return row.quantity === null || row.quantity === undefined || row.quantity === '' || !row.quantity_source?.key
   }
   return true
@@ -22463,8 +22469,9 @@ async function loadDashboards() {
 }
 
 async function bootstrap() {
+  cleanupSharedAuthStorage()
   if (routeName.value === 'login') {
-    if (!localStorage.getItem(TOKEN_KEY)) return
+    if (!getToken()) return
     state.loading = true
     state.error = ''
     try {
@@ -22472,8 +22479,7 @@ async function bootstrap() {
       window.location.replace(landingPath(me))
     } catch (error) {
       if ([401, 403].includes(error.response?.status)) {
-        localStorage.removeItem(TOKEN_KEY)
-        localStorage.removeItem(USER_INFO_KEY)
+        clearAuth()
         session.user = null
       } else {
         ElMessage.warning('暂时无法验证已有登录状态，请稍后重试')
@@ -22736,8 +22742,7 @@ async function revokeSelectedRole() {
 }
 
 function logout() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_INFO_KEY)
+  clearAuth()
   session.user = null
   window.location.href = '/login'
 }

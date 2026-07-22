@@ -20,6 +20,7 @@ BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_RUNNING = "running"
 BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_SUCCEEDED = "succeeded"
 BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_PARTIAL_FAILED = "partial_failed"
 BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_FAILED = "failed"
+BUDGET_PRICING_DRAFT_QUOTE_JOB_STATUS_CANCELED = "canceled"
 BUDGET_PRICING_DRAFT_QUOTE_JOB_LINE_ENTERPRISE_MATCHED = "enterprise_matched"
 BUDGET_PRICING_DRAFT_QUOTE_JOB_LINE_AI_PENDING = "ai_pending"
 BUDGET_PRICING_DRAFT_QUOTE_JOB_LINE_AI_RUNNING = "ai_running"
@@ -36,7 +37,7 @@ class BudgetProjectPricingDraft(Base):
     __tablename__ = "budget_project_pricing_drafts"
     __table_args__ = (
         UniqueConstraint("draft_uuid", name="uq_budget_pricing_drafts_uuid"),
-        UniqueConstraint("account_id", "project_id", name="uq_budget_pricing_drafts_account_project"),
+        UniqueConstraint("account_id", "project_id", "pricing_mode", name="uq_budget_pricing_drafts_account_project_mode"),
         Index("ix_budget_pricing_drafts_account_updated", "account_id", "updated_at"),
         Index("ix_budget_pricing_drafts_project_mode", "project_id", "pricing_mode"),
     )
@@ -135,6 +136,7 @@ class BudgetProjectPricingDraftLine(Base):
     ai_estimate_snapshot_json = Column(_longtext_type(), nullable=True)
     manual_unit_price = Column(Numeric(20, 6), nullable=True)
     effective_unit_price = Column(Numeric(20, 6), nullable=True)
+    pricing_breakdown_json = Column(_longtext_type(), nullable=True)
     line_total = Column(Numeric(24, 6), nullable=True)
     amount_included = Column(Boolean, nullable=False, default=False, server_default="0")
     price_source = Column(String(32), nullable=False, default="none", server_default="none")

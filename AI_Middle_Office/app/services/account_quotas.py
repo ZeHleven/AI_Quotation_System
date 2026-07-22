@@ -49,6 +49,137 @@ _MUTABLE_FIELDS = {
     "unit_price",
     "notes",
 }
+_DETAIL_TYPES = {"process", "material", "subcontract"}
+_DETAIL_NOTE_SCHEMA = "account_quota_detail_v1"
+_PROCESS_VERBS = (
+    "安装",
+    "拆除",
+    "处理",
+    "砌筑",
+    "铺贴",
+    "铺装",
+    "涂刷",
+    "修复",
+    "施工",
+    "制作",
+    "找平",
+    "开槽",
+    "开孔",
+    "清运",
+    "搬运",
+    "打磨",
+    "焊接",
+)
+_PROCESS_CONTEXT_KEYWORDS = ("人工", "工序", "劳务")
+_PROCESS_METHOD_KEYWORDS = (
+    "抹灰",
+    "铺贴",
+    "粘贴",
+    "挂贴",
+    "干挂",
+    "湿贴",
+    "找平",
+    "凿毛",
+    "贴膜",
+    "开槽",
+    "修复",
+    "回填",
+    "砌筑",
+    "清运",
+    "外运",
+    "保洁",
+    "收口",
+    "保护层",
+)
+_SUBCONTRACT_STRONG_KEYWORDS = (
+    "分包",
+    "外协",
+    "定制",
+    "成品",
+    "半成品",
+)
+_SUBCONTRACT_DELIVERABLE_KEYWORDS = (
+    "玻璃门",
+    "木饰面门",
+    "木饰面",
+    "钢化玻璃",
+    "铝扣板",
+    "门",
+    "窗",
+    "柜",
+    "栏杆",
+    "扶手",
+    "台面",
+    "隔断",
+    "吊顶天棚",
+    "天花吊顶",
+    "造型吊顶",
+)
+_MATERIAL_OBJECT_KEYWORDS = (
+    "配电箱",
+    "接线箱",
+    "脚手架",
+    "桥架",
+    "电线管",
+    "塑料电线管",
+    "水管",
+    "风管",
+    "线管",
+    "电气配线",
+    "电力电缆",
+    "电缆",
+    "灯具",
+    "射灯",
+    "灯带",
+    "条形灯",
+    "吊灯",
+    "荧光灯",
+    "开关",
+    "插座",
+    "控制器",
+    "感应开关",
+    "阀",
+    "水表",
+    "地漏",
+    "坐便器",
+    "蹲便器",
+    "小便器",
+    "马桶",
+    "水槽",
+    "水龙头",
+    "小厨宝",
+    "纸巾架",
+    "纸巾盒",
+)
+_MATERIAL_KEYWORDS = (
+    "涂料",
+    "乳胶漆",
+    "腻子",
+    "美缝剂",
+    "药剂",
+    "陶粒",
+    "龙骨",
+    "石材",
+    "瓷砖",
+    "地砖",
+    "墙纸",
+    "壁纸",
+    "砂浆",
+    "水泥",
+    "胶",
+    "线管",
+    "电线",
+    "阀门",
+    "灯具",
+    "开关",
+    "插座",
+    "阻燃板",
+    "石膏板",
+    "水泥板",
+    "基层板",
+    "板材",
+)
+_MATERIAL_UNITS = {"kg", "公斤", "吨", "t", "张", "块", "根", "卷", "桶", "袋", "支", "瓶"}
 
 
 class AccountQuotaError(RuntimeError):
@@ -183,6 +314,159 @@ def _json_load(value: str | None) -> Any:
         return None
 
 
+def _validate_detail_type(detail_type: str | None) -> str | None:
+    cleaned = _clean_optional(detail_type)
+    if not cleaned:
+        return None
+    if cleaned not in _DETAIL_TYPES:
+        raise AccountQuotaError(
+            "ACCOUNT_QUOTA_DETAIL_TYPE_INVALID",
+            status_code=422,
+            context={"detail_type": cleaned},
+        )
+    return cleaned
+
+
+def _parse_detail_notes(notes: str | None) -> tuple[str | None, dict[str, Any], str | None]:
+    parsed = _json_load(notes)
+    if isinstance(parsed, dict):
+        raw_type = str(parsed.get("detail_type") or "").strip()
+        detail_type = raw_type if raw_type in _DETAIL_TYPES else None
+        extra = {key: value for key, value in parsed.items() if key not in {"schema", "detail_type", "legacy_note"}}
+        legacy_note = _clean_optional(parsed.get("legacy_note"))
+        return detail_type, extra, legacy_note
+    return None, {}, _clean_optional(notes)
+
+
+def _decimal_or_zero(value: Any) -> Decimal:
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
+    return parsed if parsed.is_finite() else Decimal("0")
+
+
+def _q6(value: Decimal) -> Decimal:
+    return value.quantize(_Q6, rounding=ROUND_HALF_UP)
+
+
+def _money_text(value: Decimal) -> str:
+    return format(_q6(value), "f")
+
+
+def _has_subcontract_fee_split(extra: dict[str, Any]) -> bool:
+    keys = ("labor_fee", "main_material_fee", "auxiliary_material_fee")
+    if not all(key in extra for key in keys):
+        return False
+    return sum((_decimal_or_zero(extra.get(key)) for key in keys), Decimal("0")) > 0
+
+
+def _is_process_text(text: str) -> bool:
+    stripped = text.strip()
+    if any(stripped.startswith(verb) or stripped.endswith(verb) for verb in _PROCESS_VERBS):
+        return True
+    return any(keyword in stripped for keyword in _PROCESS_CONTEXT_KEYWORDS + _PROCESS_METHOD_KEYWORDS)
+
+
+def _is_material_text(name: str, text: str, unit: str | None) -> bool:
+    if any(keyword in name for keyword in _MATERIAL_OBJECT_KEYWORDS):
+        return True
+    if _is_process_text(name):
+        return False
+    normalized_unit = str(unit or "").strip().lower()
+    if normalized_unit in _MATERIAL_UNITS:
+        return True
+    if any(keyword in name for keyword in _MATERIAL_KEYWORDS):
+        return True
+    return any(keyword in text for keyword in _MATERIAL_KEYWORDS) and not any(
+        keyword in name for keyword in _PROCESS_METHOD_KEYWORDS
+    )
+
+
+def _infer_detail_type_from_text(item: AccountQuotaItem, extra: dict[str, Any] | None = None) -> str:
+    extra = extra or {}
+    if _has_subcontract_fee_split(extra):
+        return "subcontract"
+    name = str(item.item_name or "")
+    text = f"{name} {item.item_features or ''} {item.spec or ''} {item.notes or ''}"
+    if any(keyword in text for keyword in _SUBCONTRACT_STRONG_KEYWORDS):
+        return "subcontract"
+    if _is_material_text(name, text, item.unit):
+        return "material"
+    if _is_process_text(name) or any(keyword in text for keyword in _PROCESS_CONTEXT_KEYWORDS):
+        return "process"
+    if any(keyword in text for keyword in _SUBCONTRACT_DELIVERABLE_KEYWORDS):
+        return "subcontract"
+    return "process"
+
+
+def _detail_type_for_item(item: AccountQuotaItem) -> str:
+    explicit, extra, _legacy_note = _parse_detail_notes(item.notes)
+    return explicit or _infer_detail_type_from_text(item, extra)
+
+
+def _subcontract_split_ratios(item: AccountQuotaItem) -> tuple[Decimal, Decimal, Decimal]:
+    text = f"{item.item_name or ''} {item.item_features or ''} {item.spec or ''}"
+    if "玻璃" in text:
+        return Decimal("0.15"), Decimal("0.78"), Decimal("0.07")
+    if "门" in text or "窗" in text:
+        return Decimal("0.18"), Decimal("0.74"), Decimal("0.08")
+    if "木饰面" in text or "铝扣板" in text:
+        return Decimal("0.20"), Decimal("0.72"), Decimal("0.08")
+    return Decimal("0.25"), Decimal("0.65"), Decimal("0.10")
+
+
+def _ensure_subcontract_fee_split(item: AccountQuotaItem, extra: dict[str, Any]) -> dict[str, Any]:
+    if _has_subcontract_fee_split(extra):
+        labor = _decimal_or_zero(extra.get("labor_fee"))
+        main = _decimal_or_zero(extra.get("main_material_fee"))
+        auxiliary = _decimal_or_zero(extra.get("auxiliary_material_fee"))
+        total = _q6(labor + main + auxiliary)
+        unit_price = _unit_price(item.unit_price)
+        if total == unit_price:
+            return extra
+        if total > 0:
+            adjusted = dict(extra)
+            calibrated_labor = _q6(labor * unit_price / total)
+            calibrated_main = _q6(main * unit_price / total)
+            calibrated_auxiliary = _q6(unit_price - calibrated_labor - calibrated_main)
+            adjusted.update(
+                {
+                    "labor_fee": _money_text(calibrated_labor),
+                    "main_material_fee": _money_text(calibrated_main),
+                    "auxiliary_material_fee": _money_text(calibrated_auxiliary),
+                    "subcontract_breakdown_total": _money_text(unit_price),
+                    "subcontract_breakdown_source": "manual_split_calibrated",
+                    "subcontract_breakdown_note": "已有三费拆分已按分包单价等比例校准，三费合计等于分包单价。",
+                }
+            )
+            return adjusted
+
+    unit_price = _unit_price(item.unit_price)
+    labor_ratio, main_ratio, _auxiliary_ratio = _subcontract_split_ratios(item)
+    labor = _q6(unit_price * labor_ratio)
+    main = _q6(unit_price * main_ratio)
+    auxiliary = _q6(unit_price - labor - main)
+    adjusted = dict(extra)
+    adjusted.update(
+        {
+            "labor_fee": _money_text(labor),
+            "main_material_fee": _money_text(main),
+            "auxiliary_material_fee": _money_text(auxiliary),
+            "subcontract_breakdown_total": _money_text(labor + main + auxiliary),
+            "subcontract_breakdown_source": "rule_estimate_pending_llm",
+            "subcontract_breakdown_note": "按分包单价规则拆分，三费合计已校准为分包单价，建议后续用LLM或人工复核。",
+        }
+    )
+    return adjusted
+
+
+def _detail_extra_for_item(item: AccountQuotaItem, detail_type: str, extra: dict[str, Any]) -> dict[str, Any]:
+    if detail_type == "subcontract":
+        return _ensure_subcontract_fee_split(item, extra)
+    return extra
+
+
 def _duplicate_query(db: Session, *, account_id: int, fingerprint: str, exclude_id: int | None = None):
     query = db.query(AccountQuotaItem).filter(
         AccountQuotaItem.account_id == account_id,
@@ -267,6 +551,7 @@ def list_account_quota_items(
     *,
     status_filter: str | None = None,
     source: str | None = None,
+    detail_type: str | None = None,
     keyword: str | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -289,6 +574,7 @@ def list_account_quota_items(
                 context={"source": source},
             )
         query = query.filter(AccountQuotaItem.source == source)
+    cleaned_detail_type = _validate_detail_type(detail_type)
     cleaned_keyword = _clean_optional(keyword)
     if cleaned_keyword:
         pattern = f"%{cleaned_keyword}%"
@@ -299,15 +585,18 @@ def list_account_quota_items(
                 AccountQuotaItem.item_features.like(pattern),
                 AccountQuotaItem.spec.like(pattern),
                 AccountQuotaItem.unit.like(pattern),
+                AccountQuotaItem.notes.like(pattern),
             )
         )
-    total = query.count()
-    rows = (
-        query.order_by(AccountQuotaItem.updated_at.desc(), AccountQuotaItem.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    ordered_query = query.order_by(AccountQuotaItem.updated_at.desc(), AccountQuotaItem.id.desc())
+    if cleaned_detail_type:
+        matched = [item for item in ordered_query.all() if _detail_type_for_item(item) == cleaned_detail_type]
+        total = len(matched)
+        start = (page - 1) * page_size
+        rows = matched[start : start + page_size]
+    else:
+        total = query.count()
+        rows = ordered_query.offset((page - 1) * page_size).limit(page_size).all()
     return rows, total
 
 
@@ -378,6 +667,7 @@ def create_account_quota_item_from_pricing_draft_sync(
     unit: str,
     unit_price: Any,
     reason: str,
+    notes: str | None = None,
 ) -> AccountQuotaItem:
     """Internal-only creation path used by confirmed pricing-draft sync runs.
 
@@ -411,7 +701,7 @@ def create_account_quota_item_from_pricing_draft_sync(
         fingerprint=fingerprint,
         source=ACCOUNT_QUOTA_SOURCE_PRICING_DRAFT_SYNC,
         status=ACCOUNT_QUOTA_STATUS_DRAFT,
-        notes=None,
+        notes=_clean_optional(notes),
         revision=1,
         created_by=current_user.id,
         updated_by=current_user.id,
@@ -445,6 +735,7 @@ def update_account_quota_item_from_pricing_draft_sync(
     expected_revision: int,
     unit_price: Any,
     reason: str,
+    notes: str | None = None,
 ) -> tuple[AccountQuotaItem, dict[str, Any]]:
     """Apply a deliberate sync price update without changing catalog identity.
 
@@ -458,6 +749,8 @@ def update_account_quota_item_from_pricing_draft_sync(
     _ensure_editable(item)
     before = _snapshot(item)
     item.unit_price = _unit_price(unit_price)
+    if notes is not None:
+        item.notes = _clean_optional(notes)
     item.status = ACCOUNT_QUOTA_STATUS_DRAFT
     item.revision = int(item.revision) + 1
     item.updated_by = current_user.id
@@ -640,8 +933,15 @@ def list_account_quota_history(
 
 def serialize_account_quota_item(item: AccountQuotaItem) -> dict[str, Any]:
     data = _snapshot(item)
+    detail_type, detail_extra, legacy_note = _parse_detail_notes(item.notes)
+    resolved_detail_type = detail_type or _infer_detail_type_from_text(item, detail_extra)
+    resolved_detail_extra = _detail_extra_for_item(item, resolved_detail_type, detail_extra)
     data.update(
         {
+            "detail_type": resolved_detail_type,
+            "detail_extra": resolved_detail_extra,
+            "legacy_note": legacy_note,
+            "detail_note_schema": _DETAIL_NOTE_SCHEMA if resolved_detail_extra else None,
             "created_at": _datetime_text(item.created_at),
             "updated_at": _datetime_text(item.updated_at),
         }

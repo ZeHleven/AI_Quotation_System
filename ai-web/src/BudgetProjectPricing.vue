@@ -32,7 +32,8 @@
       type="warning"
       show-icon
       :closable="false"
-      title="当前账号无权查看项目计价"
+      title="当前账号无项目成本计价权限"
+      description="请让管理员授予 cost_viewer、cost_editor 或 cost_approver 等成本角色；清单导入与确认仍可继续使用。"
     />
     <template v-else>
       <el-alert
@@ -81,7 +82,7 @@
         <div class="budget-title">
           <div>
             <strong>双模式计价草稿</strong>
-            <small>草稿只属于当前账号，可反复编辑；创建、重建、切换模式和改价均不会生成正式计价版本</small>
+            <small>草稿只属于当前账号；基础定额和账户定额会分别保留，切换模式只切换查看范围，不覆盖另一种模式</small>
           </div>
           <div class="draft-actions">
             <el-button v-if="draft" plain :disabled="!canManageDraft" @click="openAccountQuotaSync">同步到账户定额</el-button>
@@ -94,6 +95,16 @@
             >
               一键生成报价
             </el-button>
+            <el-button
+              v-if="draftQuoteJobRunning"
+              type="danger"
+              plain
+              :loading="draftQuoteJobCancelling"
+              :disabled="!canManageDraft"
+              @click="cancelDraftQuoteJob"
+            >
+              取消生成
+            </el-button>
             <el-button type="primary" :loading="draftSaving" :disabled="!canManageDraft" @click="saveDraft">
               {{ draftActionLabel }}
             </el-button>
@@ -105,6 +116,7 @@
           <el-radio-button value="account_strict">账户定额</el-radio-button>
         </el-radio-group>
         <div class="draft-mode-help">
+          <span>两种模式的草稿与报价结果会分别保留；你可以先看基础定额报价，再切到账户定额报价做对比。</span>
           <template v-if="selectedDraftMode === 'enterprise_ai'">
             <strong>企业定额匹配 → 未匹配项自动 AI 估价</strong>
             <span>基础定额模式会先匹配企业 active 定额；未匹配行可通过“一键生成报价”后台任务自动进入 AI 估价队列。</span>
@@ -150,6 +162,34 @@
             <div><span>人工改价</span><strong>{{ draftSummaryCount('manual_price_count', 'manual_priced_count', 'manual_count') }}</strong></div>
             <div><span>已计价小计</span><strong>{{ formatMoney(draft.priced_subtotal ?? draftSummary.priced_subtotal) }}</strong></div>
           </div>
+          <div class="quote-stat-strip">
+            <span class="quote-stat-title">统计信息</span>
+            <div v-for="item in quoteStatCards" :key="item.key" class="quote-stat-card">
+              <span>{{ item.label }}:</span>
+              <strong>{{ formatMoney(item.value ?? 0) }}</strong>
+            </div>
+            <el-button text @click="totalsExpanded = !totalsExpanded">{{ totalsExpanded ? '收起' : '展开' }}</el-button>
+          </div>
+          <div v-if="totalsExpanded" class="quote-totals-panel">
+            <el-table :data="quoteTotalsRows" class="users-table" size="small" empty-text="暂无统计明细">
+              <el-table-column prop="order" label="序号" width="70" />
+              <el-table-column prop="name" label="中文名" width="150" />
+              <el-table-column label="合计" width="145" align="right"><template #default="{ row }">{{ row.is_rate ? formatRate(row.amount || 0) : formatMoney(row.amount) }}</template></el-table-column>
+              <el-table-column label="默认标段" width="145" align="right"><template #default="{ row }">{{ row.is_rate ? formatRate(row.default_amount || 0) : formatMoney(row.default_amount) }}</template></el-table-column>
+              <el-table-column prop="formula" label="公式" min-width="260" />
+              <el-table-column prop="remark" label="备注" min-width="220" />
+              <el-table-column prop="edit_type" label="编辑类型" width="120" />
+            </el-table>
+            <div class="quote-rate-editor">
+              <label><span>措施费率(%)</span><el-input-number v-model="totalsConfigInputs.measures_rate" :min="0" :controls="false" size="small" /></label>
+              <label><span>管理费率(%)</span><el-input-number v-model="totalsConfigInputs.management_rate" :min="0" :controls="false" size="small" /></label>
+              <label><span>其它费用</span><el-input-number v-model="totalsConfigInputs.other_fee" :min="0" :controls="false" size="small" /></label>
+              <label><span>暂列金额</span><el-input-number v-model="totalsConfigInputs.suspended_amount" :min="0" :controls="false" size="small" /></label>
+              <label><span>面积</span><el-input-number v-model="totalsConfigInputs.area" :min="0" :controls="false" size="small" /></label>
+              <label><span>报价上下浮(%)</span><el-input-number v-model="totalsConfigInputs.quote_adjustment_percent" :min="-100" :controls="false" size="small" /></label>
+              <el-button type="primary" plain :loading="totalsSaving" :disabled="!canManageDraft" @click="saveDraftTotalsConfig">保存费率</el-button>
+            </div>
+          </div>
           <div class="draft-boundary-note">
             当前是可变草稿，不是正式计价结果；人工改价可同步为账户定额草稿，但不会立即重算当前草稿；{{ draftModeOf(draft) === 'enterprise_ai' ? '一键生成报价会自动处理企业定额未匹配行。' : '账户定额仅匹配当前账号 active 条目；未匹配行保持空价，可由用户手动触发 AI 估价。' }}
           </div>
@@ -173,20 +213,67 @@
             </el-select>
             <el-button type="primary" plain :loading="draftLinesLoading" @click="searchDraftLines">查询</el-button>
           </div>
-          <el-table v-loading="draftLinesLoading" :data="draftLines" :row-key="lineIdOf" class="users-table" max-height="620" empty-text="当前筛选条件下暂无草稿行">
-            <el-table-column label="来源" width="110"><template #default="{ row }"><div class="pricing-source"><strong>{{ row.source_sheet || '—' }}</strong><small>行 {{ row.source_raw_row_index || row.source_row_index || row.raw_row_index || '—' }}</small></div></template></el-table-column>
-            <el-table-column label="清单项目" min-width="230"><template #default="{ row }"><div class="pricing-source"><strong>{{ row.item_name || row.project_name || '—' }}</strong><small>{{ row.spec || row.project_feature || '无项目特征' }}</small></div></template></el-table-column>
-            <el-table-column prop="unit" label="单位" width="70" />
-            <el-table-column label="工程量" width="100" align="right"><template #default="{ row }">{{ formatQuantity(row.quantity ?? row.calculation_quantity) }}</template></el-table-column>
-            <el-table-column label="匹配/计价" width="140"><template #default="{ row }"><div class="draft-status-stack"><el-tag :type="matchStatusTag(row.match_status)" size="small" effect="plain">{{ matchStatusLabel(row.match_status) }}</el-tag><el-tag :type="pricingStatusTag(row.pricing_status)" size="small" effect="plain">{{ pricingStatusLabel(row.pricing_status) }}</el-tag></div></template></el-table-column>
-            <el-table-column label="价格依据" min-width="180"><template #default="{ row }"><div class="pricing-source"><strong>{{ draftPriceSourceLabel(row) }}</strong><small>{{ draftPriceSourceMeta(row) }}</small></div></template></el-table-column>
-            <el-table-column label="基础单价" width="105" align="right"><template #default="{ row }">{{ formatMoney(row.base_unit_price ?? row.matched_unit_price ?? row.quota_unit_price) }}</template></el-table-column>
-            <el-table-column label="当前单价" width="105" align="right"><template #default="{ row }"><strong>{{ formatMoney(draftLineUnitPrice(row)) }}</strong></template></el-table-column>
-            <el-table-column label="行金额" width="115" align="right"><template #default="{ row }">{{ formatMoney(lineTotalCost(row)) }}</template></el-table-column>
-            <el-table-column label="人工单价" width="315" fixed="right">
+          <el-table v-loading="draftLinesLoading" :data="draftLines" :row-key="lineIdOf" class="users-table quote-line-table" max-height="620" empty-text="当前筛选条件下暂无草稿行">
+            <el-table-column type="selection" width="46" fixed="left" />
+            <el-table-column label="项目名称" width="190" fixed="left"><template #default="{ row }">{{ row.item_name || row.project_name || '—' }}</template></el-table-column>
+            <el-table-column label="特征描述" min-width="260" show-overflow-tooltip><template #default="{ row }">{{ row.spec || row.project_feature || '无项目特征' }}</template></el-table-column>
+            <el-table-column label="区域" width="150"><template #default="{ row }"><div class="pricing-source"><span>区域：{{ rowRegion(row) }}</span><small>部位：{{ rowWorkArea(row) }}</small></div></template></el-table-column>
+            <el-table-column label="主材采购方式" width="130">
+              <template #default="{ row }">
+                <div class="breakdown-edit-cell">
+                  <el-select v-if="isDraftBreakdownEditing(row, 'material_supply_mode')" :model-value="draftBreakdownInputValue(row, 'material_supply_mode')" size="small" clearable :disabled="!canManageDraft || draftLineSaving[lineIdOf(row)]" @update:model-value="setDraftBreakdownInput(row, 'material_supply_mode', $event)">
+                    <el-option label="乙供" value="乙供" />
+                    <el-option label="甲供" value="甲供" />
+                    <el-option label="无主材" value="无主材" />
+                  </el-select>
+                  <template v-else>
+                    <span>{{ materialSupplyMode(row) }}</span>
+                    <el-button v-if="canManageDraft" :icon="Edit" circle text size="small" title="编辑主材采购方式" @click="beginDraftBreakdownEdit(row, 'material_supply_mode')" />
+                  </template>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="工程量" width="135" align="right"><template #default="{ row }"><strong class="quote-quantity">{{ formatQuantity(row.quantity ?? row.calculation_quantity) }}{{ row.unit ? ` (${row.unit})` : '' }}</strong></template></el-table-column>
+            <el-table-column label="不含税综合单价" width="135" align="right"><template #default="{ row }"><strong>{{ formatMoney(draftPreviewUnitPrice(row) ?? quoteUnitPrice(row)) }}</strong></template></el-table-column>
+            <el-table-column label="不含税综合合价" width="145" align="right"><template #default="{ row }">{{ formatMoney(draftPreviewLineTotal(row) ?? lineTotalCost(row)) }}</template></el-table-column>
+            <el-table-column v-for="column in draftBreakdownColumns" :key="column.key" :label="column.label" :width="column.width" align="right">
+              <template #default="{ row }">
+                <div class="breakdown-edit-cell breakdown-edit-cell-right">
+                  <span v-if="column.readonly" title="税率固定 9%，由不含税综合单价自动计算">{{ formatMoney(draftPreviewTaxAmount(row) ?? taxAmount(row) ?? 0) }}</span>
+                  <el-input
+                    v-else-if="isDraftBreakdownEditing(row, column.key)"
+                    :model-value="draftBreakdownInputValue(row, column.key)"
+                    size="small"
+                    inputmode="decimal"
+                    clearable
+                    class="breakdown-input"
+                    :disabled="!canManageDraft || draftLineSaving[lineIdOf(row)]"
+                    @update:model-value="setDraftBreakdownInput(row, column.key, $event)"
+                    @keyup.enter="saveDraftLinePrice(row)"
+                  />
+                  <template v-else>
+                    <span>{{ formatBreakdownDisplay(row, column) }}</span>
+                    <el-button v-if="canManageDraft" :icon="Edit" circle text size="small" :title="`编辑${column.label}`" @click="beginDraftBreakdownEdit(row, column.key)" />
+                  </template>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="价格来源" width="170"><template #default="{ row }"><div class="draft-status-stack"><el-tag size="small" effect="plain">{{ draftPriceSourceLabel(row) }}</el-tag><el-tag :type="pricingStatusTag(row.pricing_status)" size="small" effect="plain">{{ pricingStatusLabel(row.pricing_status) }}</el-tag></div></template></el-table-column>
+            <el-table-column label="备注" min-width="180">
+              <template #default="{ row }">
+                <div class="breakdown-edit-cell">
+                  <el-input v-if="isDraftBreakdownEditing(row, 'remark')" :model-value="draftBreakdownInputValue(row, 'remark')" size="small" clearable :disabled="!canManageDraft || draftLineSaving[lineIdOf(row)]" @update:model-value="setDraftBreakdownInput(row, 'remark', $event)" @keyup.enter="saveDraftLinePrice(row)" />
+                  <template v-else>
+                    <span>{{ rowRemark(row) }}</span>
+                    <el-button v-if="canManageDraft" :icon="Edit" circle text size="small" title="编辑备注" @click="beginDraftBreakdownEdit(row, 'remark')" />
+                  </template>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="调整" width="330" fixed="right">
               <template #default="{ row }">
                 <div class="draft-price-editor">
-                  <el-input v-model="draftPriceInputs[lineIdOf(row)]" inputmode="decimal" clearable placeholder="留空清除人工价" :disabled="!canManageDraft || draftLineSaving[lineIdOf(row)]" @keyup.enter="saveDraftLinePrice(row)" />
+                  <el-input v-model="draftPriceInputs[lineIdOf(row)]" inputmode="decimal" clearable placeholder="直接单价" :disabled="!canManageDraft || draftLineSaving[lineIdOf(row)]" @keyup.enter="saveDraftLinePrice(row)" />
                   <el-button size="small" type="primary" plain :loading="draftLineSaving[lineIdOf(row)]" :disabled="!canManageDraft" @click="saveDraftLinePrice(row)">保存</el-button>
                   <el-button size="small" type="success" plain :loading="draftLineAiEstimating[lineIdOf(row)]" :disabled="!canManageDraft || !canAiEstimateDraftLine(row)" @click="estimateDraftLine(row)">AI估价</el-button>
                   <el-button size="small" :loading="draftLineSaving[lineIdOf(row)]" :disabled="!canManageDraft || !hasManualPrice(row)" @click="clearDraftLinePrice(row)">清空</el-button>
@@ -270,38 +357,33 @@
           v-loading="linesLoading"
           :data="lines"
           :row-key="lineIdOf"
-          class="users-table"
+          class="users-table quote-line-table"
           max-height="620"
           empty-text="当前筛选条件下暂无计价行"
         >
-          <el-table-column label="来源" width="125">
-            <template #default="{ row }">
-              <div class="pricing-source"><strong>{{ row.source_sheet || '—' }}</strong><small>行 {{ row.source_raw_row_index || row.source_row_index || row.raw_row_index || '—' }}</small></div>
-            </template>
-          </el-table-column>
-          <el-table-column label="清单项目" min-width="250">
-            <template #default="{ row }">
-              <div class="pricing-source"><strong>{{ row.item_name || row.project_name || '—' }}</strong><small>{{ row.spec || row.project_feature || '无项目特征' }}</small></div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="unit" label="单位" width="80" />
-          <el-table-column label="工程量" width="110" align="right"><template #default="{ row }">{{ formatQuantity(row.quantity ?? row.calculation_quantity) }}</template></el-table-column>
-          <el-table-column label="匹配状态" width="120">
-            <template #default="{ row }"><el-tag :type="matchStatusTag(row.match_status)" effect="plain">{{ matchStatusLabel(row.match_status) }}</el-tag></template>
-          </el-table-column>
-          <el-table-column label="计价状态" width="130">
-            <template #default="{ row }"><el-tag :type="pricingStatusTag(row.pricing_status)" effect="plain">{{ pricingStatusLabel(row.pricing_status) }}</el-tag></template>
-          </el-table-column>
-          <el-table-column label="命中企业定额" min-width="260">
-            <template #default="{ row }">
-              <div class="pricing-source">
-                <strong>{{ matchedQuotaLabel(row) }}</strong>
-                <small>{{ matchedQuotaMeta(row) }}</small>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="单位成本" width="120" align="right"><template #default="{ row }">{{ formatMoney(lineUnitCost(row)) }}</template></el-table-column>
-          <el-table-column label="行成本" width="130" align="right"><template #default="{ row }"><strong>{{ formatMoney(lineTotalCost(row)) }}</strong></template></el-table-column>
+          <el-table-column type="selection" width="46" fixed="left" />
+          <el-table-column label="项目名称" width="190" fixed="left"><template #default="{ row }">{{ row.item_name || row.project_name || '—' }}</template></el-table-column>
+          <el-table-column label="特征描述" min-width="260" show-overflow-tooltip><template #default="{ row }">{{ row.spec || row.project_feature || '无项目特征' }}</template></el-table-column>
+          <el-table-column label="区域" width="150"><template #default="{ row }"><div class="pricing-source"><span>区域：{{ rowRegion(row) }}</span><small>部位：{{ rowWorkArea(row) }}</small></div></template></el-table-column>
+          <el-table-column label="主材采购方式" width="120"><template #default="{ row }">{{ materialSupplyMode(row) }}</template></el-table-column>
+          <el-table-column label="工程量" width="135" align="right"><template #default="{ row }"><strong class="quote-quantity">{{ formatQuantity(row.quantity ?? row.calculation_quantity) }}{{ row.unit ? ` (${row.unit})` : '' }}</strong></template></el-table-column>
+          <el-table-column label="不含税综合单价" width="135" align="right"><template #default="{ row }"><strong>{{ formatMoney(quoteUnitPrice(row)) }}</strong></template></el-table-column>
+          <el-table-column label="不含税综合合价" width="145" align="right"><template #default="{ row }">{{ formatMoney(lineTotalCost(row)) }}</template></el-table-column>
+          <el-table-column label="人工费" width="105" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'labor')) }}</template></el-table-column>
+          <el-table-column label="主材费" width="105" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'main_material')) }}</template></el-table-column>
+          <el-table-column label="辅材费" width="105" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'auxiliary_material')) }}</template></el-table-column>
+          <el-table-column label="税金" width="95" align="right"><template #default="{ row }">{{ formatMoney(taxAmount(row)) }}</template></el-table-column>
+          <el-table-column label="主材费不含损耗" width="140" align="right"><template #default="{ row }">{{ formatMoney(mainMaterialWithoutLoss(row)) }}</template></el-table-column>
+          <el-table-column label="损耗率" width="95" align="right"><template #default="{ row }">{{ formatRate(lossRate(row)) }}</template></el-table-column>
+          <el-table-column label="机械费" width="105" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'machinery')) }}</template></el-table-column>
+          <el-table-column label="综合费" width="105" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'comprehensive')) }}</template></el-table-column>
+          <el-table-column label="管理费" width="105" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'management')) }}</template></el-table-column>
+          <el-table-column label="利润费" width="105" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'profit')) }}</template></el-table-column>
+          <el-table-column label="措施费" width="105" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'measure')) }}</template></el-table-column>
+          <el-table-column label="甲供材单价" width="120" align="right"><template #default="{ row }">{{ formatMoney(ownerMaterialUnitPrice(row)) }}</template></el-table-column>
+          <el-table-column label="甲供材损耗金" width="130" align="right"><template #default="{ row }">{{ formatMoney(ownerMaterialLossAmount(row)) }}</template></el-table-column>
+          <el-table-column label="价格来源" width="180"><template #default="{ row }"><div class="draft-status-stack"><el-tag :type="matchStatusTag(row.match_status)" size="small" effect="plain">{{ matchStatusLabel(row.match_status) }}</el-tag><el-tag :type="pricingStatusTag(row.pricing_status)" size="small" effect="plain">{{ pricingStatusLabel(row.pricing_status) }}</el-tag></div></template></el-table-column>
+          <el-table-column label="备注" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ rowRemark(row) }}</template></el-table-column>
           <el-table-column label="候选/证据" width="130" fixed="right">
             <template #default="{ row }">
               <el-button
@@ -413,6 +495,7 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Edit } from '@element-plus/icons-vue'
 import { budgetApiErrorMessage, budgetProjectApi, budgetResponseData, budgetResponseItems } from './budgetProjectApi'
 
 const props = defineProps({
@@ -445,8 +528,21 @@ const draftLinePageSize = 50
 const draftLineTotal = ref(0)
 const draftFilters = reactive({ keyword: '', match_status: '', pricing_status: '' })
 const draftPriceInputs = reactive({})
+const draftBreakdownInputs = reactive({})
+const draftBreakdownEditing = reactive({})
 const draftLineSaving = reactive({})
 const draftLineAiEstimating = reactive({})
+const totalsExpanded = ref(false)
+const totalsSaving = ref(false)
+const totalsConfigInputs = reactive({
+  measures_rate: 0,
+  management_rate: 0,
+  other_fee: 0,
+  suspended_amount: 0,
+  area: 0,
+  quote_adjustment_percent: 0,
+})
+const draftQuoteJobCancelling = ref(false)
 const draftQuoteJob = ref(null)
 const draftQuoteJobStarting = ref(false)
 let draftQuoteJobPollTimer = null
@@ -527,9 +623,35 @@ const candidateEvidenceText = computed(() => {
   try { return JSON.stringify(evidence, null, 2) } catch { return String(evidence) }
 })
 const draftSummary = computed(() => draft.value?.summary || draft.value?.pricing_summary || {})
+const draftTotals = computed(() => draftSummary.value?.totals || {})
+const draftTotalsConfig = computed(() => draftSummary.value?.totals_config || {})
+const quoteStatCards = computed(() => [
+  { key: 'main_material_total', label: '主材', value: draftTotals.value.main_material_total },
+  { key: 'auxiliary_material_total', label: '辅材', value: draftTotals.value.auxiliary_material_total },
+  { key: 'labor_total', label: '人工费', value: draftTotals.value.labor_total },
+  { key: 'subcontract_total', label: '分包', value: draftTotals.value.subcontract_total },
+  { key: 'tax_excluded_total', label: '不含税', value: draftTotals.value.tax_excluded_total },
+  { key: 'tax_included_total', label: '含税', value: draftTotals.value.tax_included_total },
+])
+const quoteTotalsRows = computed(() => [
+  { order: '一', name: '直接费小计', amount: draftTotals.value.direct_subtotal, default_amount: draftTotals.value.direct_subtotal, formula: '人工费+主材费+辅材费+分包', remark: '', edit_type: '按明细' },
+  { order: '1.1', name: '人工费', amount: draftTotals.value.labor_total, default_amount: draftTotals.value.labor_total, formula: '清单人工费汇总', remark: '', edit_type: '按明细' },
+  { order: '1.2', name: '主材费', amount: draftTotals.value.main_material_total, default_amount: draftTotals.value.main_material_total, formula: '清单主材费汇总', remark: '', edit_type: '按明细' },
+  { order: '1.3', name: '辅材费', amount: draftTotals.value.auxiliary_material_total, default_amount: draftTotals.value.auxiliary_material_total, formula: '清单辅材费汇总', remark: '', edit_type: '按明细' },
+  { order: '1.4', name: '分包', amount: draftTotals.value.subcontract_total, default_amount: draftTotals.value.subcontract_total, formula: '清单分包费汇总', remark: '', edit_type: '按明细' },
+  { order: '二', name: '措施费', amount: draftTotals.value.measures_fee, default_amount: draftTotals.value.measures_fee, formula: '直接费小计×措施费率', remark: `当前 ${formatRate(draftTotalsConfig.value.measures_rate || 0)}`, edit_type: '按费率' },
+  { order: '三', name: '管理费', amount: draftTotals.value.management_fee, default_amount: draftTotals.value.management_fee, formula: '直接费小计×管理费率', remark: `当前 ${formatRate(draftTotalsConfig.value.management_rate || 0)}`, edit_type: '按费率' },
+  { order: '四', name: '其它费用', amount: draftTotals.value.other_fee, default_amount: draftTotals.value.other_fee, formula: '人工录入', remark: '', edit_type: '按金额' },
+  { order: '五', name: '税金', amount: draftTotals.value.tax_total, default_amount: draftTotals.value.tax_total, formula: '不含税综合价×9%', remark: '税率固定 9%', edit_type: '自动' },
+  { order: '六', name: '暂列金额', amount: draftTotals.value.suspended_amount, default_amount: draftTotals.value.suspended_amount, formula: '人工录入', remark: '', edit_type: '按金额' },
+  { order: '七', name: '成本合计', amount: draftTotals.value.cost_total, default_amount: draftTotals.value.cost_total, formula: '不含税+措施费+管理费+其它费用+暂列金额', remark: '', edit_type: '自动' },
+  { order: '八', name: '单方成本', amount: draftTotals.value.unit_cost, default_amount: draftTotals.value.unit_cost, formula: '成本合计/面积', remark: '', edit_type: '自动' },
+  { order: '九', name: '报价上下浮百分比', amount: draftTotalsConfig.value.quote_adjustment_percent, default_amount: draftTotalsConfig.value.quote_adjustment_percent, formula: '报价金额=成本合计×(1+上下浮/100)', remark: '可输入负数下浮', edit_type: '按费率', is_rate: true },
+  { order: '十', name: '报价金额', amount: draftTotals.value.quote_amount, default_amount: draftTotals.value.quote_amount, formula: '成本合计×(1+报价上下浮百分比/100)', remark: '', edit_type: '自动' },
+])
 const draftRevision = computed(() => Number(draft.value?.revision ?? draft.value?.draft_revision ?? 0))
 const draftQuoteJobRunning = computed(() => ['queued', 'running'].includes(draftQuoteJob.value?.status))
-const draftQuoteJobTerminal = computed(() => Boolean(draftQuoteJob.value?.terminal || ['succeeded', 'partial_failed', 'failed'].includes(draftQuoteJob.value?.status)))
+const draftQuoteJobTerminal = computed(() => Boolean(draftQuoteJob.value?.terminal || ['succeeded', 'partial_failed', 'failed', 'canceled'].includes(draftQuoteJob.value?.status)))
 const draftQuoteJobPercent = computed(() => Math.min(100, Math.max(0, Number(draftQuoteJob.value?.progress_percent || 0))))
 const canStartDraftQuoteJob = computed(() => (
   canManageDraft.value
@@ -540,8 +662,9 @@ const canStartDraftQuoteJob = computed(() => (
   && !draftQuoteJobRunning.value
 ))
 const draftActionLabel = computed(() => {
-  if (!draft.value) return '创建计价草稿'
-  return draftModeOf(draft.value) === selectedDraftMode.value ? '重建当前草稿' : '切换模式并重建'
+  const label = draftModeLabel(selectedDraftMode.value)
+  if (!draft.value) return `创建${label}草稿`
+  return `重建${label}草稿`
 })
 const quotaSyncCreateCount = computed(() => quotaSync.items.filter((row) => row.selected && row.action === 'create').length)
 const quotaSyncUpdateCount = computed(() => quotaSync.items.filter((row) => row.selected && row.action === 'update_existing').length)
@@ -595,8 +718,33 @@ const matchStatusLabel = (value) => ({ auto_matched: '自动匹配', manual_matc
 const matchStatusTag = (value) => ({ auto_matched: 'success', manual_matched: 'success', ambiguous: 'warning', unmatched: 'info', unit_conflict: 'danger' })[value] || 'info'
 const pricingStatusLabel = (value) => ({ priced: '完成计价', quantity_unresolved: '工程量待解决', missing_unit_price: '定额单价缺失', pending_match: '待匹配', unit_conflict: '单位冲突', numeric_overflow: '数值超限' })[value] || value || '未知'
 const pricingStatusTag = (value) => ({ priced: 'success', quantity_unresolved: 'warning', missing_unit_price: 'warning', pending_match: 'info', unit_conflict: 'danger', numeric_overflow: 'danger' })[value] || 'info'
-const draftQuoteJobStatusLabel = (value) => ({ queued: '排队中', running: '生成中', succeeded: '已完成', partial_failed: '部分失败', failed: '失败' })[value] || value || '未知'
-const draftQuoteJobStatusTag = (value) => ({ queued: 'info', running: 'warning', succeeded: 'success', partial_failed: 'warning', failed: 'danger' })[value] || 'info'
+const draftQuoteJobStatusLabel = (value) => ({ queued: '排队中', running: '生成中', succeeded: '已完成', partial_failed: '部分失败', failed: '失败', canceled: '已取消' })[value] || value || '未知'
+const draftQuoteJobStatusTag = (value) => ({ queued: 'info', running: 'warning', succeeded: 'success', partial_failed: 'warning', failed: 'danger', canceled: 'info' })[value] || 'info'
+const draftBreakdownColumns = [
+  { key: 'labor_unit_cost', label: '人工费', width: 110 },
+  { key: 'main_material_unit_cost', label: '主材费', width: 110 },
+  { key: 'auxiliary_material_unit_cost', label: '辅材费', width: 110 },
+  { key: 'tax_amount', label: '税金', width: 100, readonly: true },
+  { key: 'main_material_without_loss', label: '主材费不含损耗', width: 145 },
+  { key: 'loss_rate', label: '损耗率', width: 105 },
+  { key: 'machinery_unit_cost', label: '机械费', width: 110 },
+  { key: 'comprehensive_unit_cost', label: '综合费', width: 110 },
+  { key: 'management_unit_cost', label: '管理费', width: 110 },
+  { key: 'profit_unit_cost', label: '利润费', width: 110 },
+  { key: 'measure_unit_cost', label: '措施费', width: 110 },
+  { key: 'owner_material_unit_price', label: '甲供材单价', width: 125 },
+  { key: 'owner_material_loss_amount', label: '甲供材损耗金', width: 135 },
+]
+const breakdownUnitPriceKeys = [
+  'labor_unit_cost',
+  'main_material_unit_cost',
+  'auxiliary_material_unit_cost',
+  'machinery_unit_cost',
+  'comprehensive_unit_cost',
+  'management_unit_cost',
+  'profit_unit_cost',
+  'measure_unit_cost',
+]
 const summaryCount = (key) => Number(selectedRun.value?.[key] ?? runSummary.value?.[key] ?? 0)
 const matchedQuota = (row) => row?.selected_quota || row?.matched_quota || row?.selected_candidate || row?.quota_item || row?.selected_source || row?.selected_quota_snapshot || row?.selected_quota_item_snapshot || null
 const matchedQuotaLabel = (row) => {
@@ -612,12 +760,134 @@ const matchedQuotaMeta = (row) => {
 const lineUnitCost = (row) => row?.effective_unit_cost ?? row?.quota_unit_price ?? row?.unit_cost ?? row?.unit_price ?? matchedQuota(row)?.unit_price ?? null
 const lineTotalCost = (row) => row?.line_total ?? row?.line_cost ?? row?.total_cost ?? row?.amount ?? null
 const draftLineUnitPrice = (row) => row?.effective_unit_price ?? row?.final_unit_price ?? row?.manual_unit_price ?? row?.base_unit_price ?? row?.unit_price ?? null
+const quoteSource = (row) => row?.selected_source || matchedQuota(row) || {}
+const sourceContext = (row) => row?.source_context || row?.source_row_context || {}
+const pricingBreakdown = (row) => row?.pricing_breakdown || row?.cost_breakdown || {}
+const quoteUnitPrice = (row) => draftLineUnitPrice(row) ?? lineUnitCost(row)
+const firstValue = (sources, keys) => {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue
+    for (const key of keys) {
+      const value = source[key]
+      if (value !== null && value !== undefined && value !== '') return value
+    }
+  }
+  return null
+}
+const rowRegion = (row) => firstValue([row, sourceContext(row), sourceContext(row).raw_fields], ['region', 'area', 'work_region']) || '—'
+const rowWorkArea = (row) => firstValue([row, sourceContext(row), sourceContext(row).raw_fields], ['work_area', 'location', 'part', 'position']) || '—'
+const rowRemark = (row) => firstValue([pricingBreakdown(row), row, sourceContext(row), sourceContext(row).raw_fields], ['remark', 'notes', 'comment']) || '—'
+const feeKeyMap = {
+  labor: ['labor_unit_cost', 'labor_fee', 'labor_unit_price', 'labor_cost'],
+  main_material: ['main_material_unit_cost', 'main_material_fee', 'main_material_unit_price', 'main_material_cost', 'material_fee'],
+  auxiliary_material: ['auxiliary_material_unit_cost', 'auxiliary_material_fee', 'auxiliary_material_unit_price', 'auxiliary_material_cost'],
+  machinery: ['machinery_unit_cost', 'machinery_fee', 'machinery_unit_price', 'machinery_cost', 'machine_fee'],
+  comprehensive: ['comprehensive_unit_cost', 'comprehensive_fee', 'composite_fee', 'overhead_fee'],
+  management: ['management_unit_cost', 'management_fee', 'management_cost'],
+  profit: ['profit_unit_cost', 'profit_fee', 'profit_cost'],
+  measure: ['measure_unit_cost', 'measure_fee', 'measure_cost'],
+}
+const breakdownSources = (row) => [pricingBreakdown(row), row, row?.cost_breakdown, quoteSource(row), quoteSource(row)?.cost_breakdown]
+const feeUnitValue = (row, bucket) => firstValue(breakdownSources(row), feeKeyMap[bucket] || [])
+const lossRate = (row) => firstValue(breakdownSources(row), ['loss_rate', 'material_loss_rate', 'main_material_loss_rate'])
+const mainMaterialWithoutLoss = (row) => firstValue(breakdownSources(row), ['main_material_without_loss', 'main_material_fee_without_loss', 'main_material_no_loss_fee'])
+const ownerMaterialUnitPrice = (row) => firstValue(breakdownSources(row), ['owner_material_unit_price', 'client_material_unit_price', 'jia_material_unit_price'])
+const ownerMaterialLossAmount = (row) => firstValue(breakdownSources(row), ['owner_material_loss_amount', 'client_material_loss_amount', 'jia_material_loss_amount'])
+const taxAmount = (row) => firstValue(breakdownSources(row), ['tax_amount', 'tax_fee'])
+const formatRate = (value) => {
+  if (value === null || value === undefined || value === '') return '—'
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '—'
+  return (Math.abs(number) <= 1 ? number * 100 : number).toFixed(2) + '%'
+}
+const materialSupplyMode = (row) => {
+  const explicit = firstValue([pricingBreakdown(row), row, sourceContext(row), quoteSource(row), quoteSource(row)?.cost_breakdown], ['material_supply_mode', 'main_material_supply_mode', 'purchase_mode'])
+  if (explicit) return explicit
+  if (ownerMaterialUnitPrice(row) !== null || ownerMaterialLossAmount(row) !== null) return '甲供'
+  if (feeUnitValue(row, 'main_material') !== null || mainMaterialWithoutLoss(row) !== null) return '乙供'
+  return '—'
+}
+const draftBreakdownKeys = [...draftBreakdownColumns.map((column) => column.key), 'material_supply_mode', 'remark']
+const draftBreakdownInitialValue = (row, key) => {
+  const value = firstValue([pricingBreakdown(row), row, sourceContext(row), quoteSource(row), quoteSource(row)?.cost_breakdown], [key])
+  return value === null || value === undefined ? '' : String(value)
+}
+const ensureDraftBreakdownInputs = (row) => {
+  const lineId = lineIdOf(row)
+  if (!lineId) return
+  if (!draftBreakdownInputs[lineId]) draftBreakdownInputs[lineId] = {}
+  for (const key of draftBreakdownKeys) {
+    if (draftBreakdownInputs[lineId][key] === undefined) draftBreakdownInputs[lineId][key] = draftBreakdownInitialValue(row, key)
+  }
+}
+const draftBreakdownInputValue = (row, key) => {
+  ensureDraftBreakdownInputs(row)
+  return draftBreakdownInputs[lineIdOf(row)]?.[key] ?? ''
+}
+const setDraftBreakdownInput = (row, key, value) => {
+  ensureDraftBreakdownInputs(row)
+  draftBreakdownInputs[lineIdOf(row)][key] = value
+}
+const draftBreakdownEditKey = (row, key) => `${lineIdOf(row)}:${key}`
+const isDraftBreakdownEditing = (row, key) => draftBreakdownEditing[draftBreakdownEditKey(row, key)] === true
+const beginDraftBreakdownEdit = (row, key) => {
+  ensureDraftBreakdownInputs(row)
+  const lineId = lineIdOf(row)
+  if (draftBreakdownInputs[lineId][key] === '') {
+    draftBreakdownInputs[lineId][key] = key === 'material_supply_mode' || key === 'remark' ? '' : '0'
+  }
+  draftBreakdownEditing[draftBreakdownEditKey(row, key)] = true
+}
+const parseDraftDecimal = (value) => {
+  const raw = String(value ?? '').replace(/,/g, '').trim()
+  if (!raw) return null
+  const number = Number(raw)
+  return Number.isFinite(number) && number >= 0 ? number : NaN
+}
+const draftBreakdownPayload = (row) => {
+  ensureDraftBreakdownInputs(row)
+  const values = draftBreakdownInputs[lineIdOf(row)] || {}
+  const payload = {}
+  for (const column of draftBreakdownColumns) {
+    const number = parseDraftDecimal(values[column.key])
+    if (Number.isNaN(number)) return null
+    if (number !== null) payload[column.key] = number
+  }
+  for (const key of ['material_supply_mode', 'remark']) {
+    const value = String(values[key] ?? '').trim()
+    if (value) payload[key] = value
+  }
+  return payload
+}
+const draftBreakdownCompositePrice = (payload) => {
+  if (!payload) return null
+  const total = breakdownUnitPriceKeys.reduce((sum, key) => sum + Number(payload[key] || 0), 0)
+  return total > 0 ? Number(total.toFixed(6)) : null
+}
+const draftPreviewUnitPrice = (row) => draftBreakdownCompositePrice(draftBreakdownPayload(row))
+const draftPreviewLineTotal = (row) => {
+  const unitPrice = draftPreviewUnitPrice(row)
+  if (unitPrice === null) return null
+  const quantity = Number(row?.quantity ?? row?.calculation_quantity)
+  return Number.isFinite(quantity) && quantity > 0 ? Number((quantity * unitPrice).toFixed(6)) : 0
+}
+const draftPreviewTaxAmount = (row) => {
+  const unitPrice = draftPreviewUnitPrice(row) ?? quoteUnitPrice(row)
+  return unitPrice === null || unitPrice === undefined ? null : Number((Number(unitPrice) * 0.09).toFixed(6))
+}
+const formatBreakdownDisplay = (row, column) => {
+  const value = column.key === 'loss_rate'
+    ? lossRate(row)
+    : firstValue(breakdownSources(row), [column.key])
+  if (column.key === 'loss_rate') return formatRate(value ?? 0)
+  return formatMoney(value ?? 0)
+}
 const hasManualPrice = (row) => row?.manual_unit_price !== null && row?.manual_unit_price !== undefined && row?.manual_unit_price !== ''
 const hasBasePrice = (row) => row?.base_unit_price !== null && row?.base_unit_price !== undefined && row?.base_unit_price !== ''
 const canAiEstimateDraftLine = (row) => !hasManualPrice(row) && !hasBasePrice(row)
 const draftPriceSourceLabel = (row) => ({
   enterprise_quota: '企业定额', enterprise: '企业定额', account_quota: '账户定额', account: '账户定额',
-  manual: '人工调整', manual_adjusted: '人工调整', llm: 'AI 估价', ai_estimate: 'AI 估价',
+  manual: '人工调整', manual_breakdown: '拆分计价', manual_adjusted: '人工调整', llm: 'AI 估价', ai_estimate: 'AI 估价',
   unmatched: '暂无价格', pending: '暂无价格',
 })[row?.price_source || row?.pricing_source || row?.unit_price_source] || (hasManualPrice(row) ? '人工调整' : (draftLineUnitPrice(row) === null ? '暂无价格' : '草稿价格'))
 const draftPriceSourceMeta = (row) => {
@@ -640,6 +910,41 @@ const draftSummaryCount = (...keys) => {
     if (value !== null && value !== undefined && value !== '') return Number(value) || 0
   }
   return 0
+}
+const syncTotalsConfigInputs = () => {
+  const config = draftTotalsConfig.value || {}
+  for (const key of Object.keys(totalsConfigInputs)) {
+    totalsConfigInputs[key] = Number(config[key] ?? 0) || 0
+  }
+}
+async function saveDraftTotalsConfig() {
+  if (!canManageDraft.value || !draft.value) return
+  totalsSaving.value = true
+  try {
+    const response = await budgetProjectApi.updatePricingDraftTotalsConfig(projectId.value, {
+      pricing_mode: selectedDraftMode.value,
+      expected_revision: draftRevision.value,
+      measures_rate: totalsConfigInputs.measures_rate,
+      management_rate: totalsConfigInputs.management_rate,
+      other_fee: totalsConfigInputs.other_fee,
+      suspended_amount: totalsConfigInputs.suspended_amount,
+      area: totalsConfigInputs.area,
+      quote_adjustment_percent: totalsConfigInputs.quote_adjustment_percent,
+      reason: 'quote_totals_config_edit',
+    })
+    draft.value = budgetResponseData(response)
+    syncTotalsConfigInputs()
+    ElMessage.success('统计费率已保存')
+  } catch (error) {
+    if (error?.response?.status === 409) {
+      ElMessage.warning('草稿已被其他操作更新，已重新加载最新内容，请再次保存费率')
+      await loadDraft(true)
+    } else {
+      ElMessage.error(budgetApiErrorMessage(error, '统计费率保存失败'))
+    }
+  } finally {
+    totalsSaving.value = false
+  }
 }
 const candidateCount = (row) => Number(row?.candidate_count ?? row?.candidates?.length ?? 0)
 const candidateQuota = (row) => row?.quota_item || row?.quota_snapshot || row?.quota_item_snapshot || row?.quota || row
@@ -681,15 +986,21 @@ function resetPricing() {
   resetDraft()
 }
 
-function resetDraft() {
-  stopDraftQuoteJobPolling()
-  draftQuoteJob.value = null
-  draft.value = null
+function clearDraftLinesState() {
   draftLines.value = []
   draftLineTotal.value = 0
   draftLinePage.value = 1
-  selectedDraftMode.value = 'enterprise_ai'
   for (const key of Object.keys(draftPriceInputs)) delete draftPriceInputs[key]
+  for (const key of Object.keys(draftBreakdownInputs)) delete draftBreakdownInputs[key]
+  for (const key of Object.keys(draftBreakdownEditing)) delete draftBreakdownEditing[key]
+}
+
+function resetDraft(resetMode = true) {
+  stopDraftQuoteJobPolling()
+  draftQuoteJob.value = null
+  draft.value = null
+  clearDraftLinesState()
+  if (resetMode) selectedDraftMode.value = 'enterprise_ai'
 }
 
 function stopDraftQuoteJobPolling() {
@@ -707,8 +1018,12 @@ function scheduleDraftQuoteJobPolling(jobId) {
 
 async function loadCurrentDraftQuoteJob(silent = false) {
   if (!projectId.value || !canViewPricing.value) return
+  if (selectedDraftMode.value !== 'enterprise_ai') {
+    draftQuoteJob.value = null
+    return
+  }
   try {
-    const response = await budgetProjectApi.currentPricingDraftQuoteJob(projectId.value)
+    const response = await budgetProjectApi.currentPricingDraftQuoteJob(projectId.value, { pricing_mode: selectedDraftMode.value })
     const job = budgetResponseData(response)
     draftQuoteJob.value = job && (job.id || job.job_uuid) ? job : null
     if (draftQuoteJobRunning.value) scheduleDraftQuoteJobPolling(draftQuoteJob.value.job_uuid || draftQuoteJob.value.id)
@@ -725,11 +1040,12 @@ async function pollDraftQuoteJob(jobId) {
     const response = await budgetProjectApi.pricingDraftQuoteJob(projectId.value, jobId)
     const job = budgetResponseData(response)
     draftQuoteJob.value = job
-    if (job?.terminal || ['succeeded', 'partial_failed', 'failed'].includes(job?.status)) {
+    if (job?.terminal || ['succeeded', 'partial_failed', 'failed', 'canceled'].includes(job?.status)) {
       stopDraftQuoteJobPolling()
       if (job.status === 'succeeded') ElMessage.success('一键生成报价已完成')
       if (job.status === 'partial_failed') ElMessage.warning('报价已生成，但有部分 AI 估价失败，请人工补价')
       if (job.status === 'failed') ElMessage.error('一键生成报价失败，请查看任务提示')
+      if (job.status === 'canceled') ElMessage.info('一键生成报价已取消')
       await loadDraft(true)
       return
     }
@@ -777,16 +1093,17 @@ async function loadDraft(silent = false) {
   }
   draftLoading.value = true
   try {
-    const response = await budgetProjectApi.currentPricingDraft(projectId.value)
+    const response = await budgetProjectApi.currentPricingDraft(projectId.value, { pricing_mode: selectedDraftMode.value })
     const data = budgetResponseData(response)
     const current = data?.draft ?? data?.current_draft ?? data
     draft.value = current && (current.id || current.draft_id || current.draft_uuid || current.pricing_mode) ? current : null
+    syncTotalsConfigInputs()
     if (!draft.value) {
       draftLines.value = []
       draftLineTotal.value = 0
+      syncTotalsConfigInputs()
       return
     }
-    selectedDraftMode.value = draftModeOf(draft.value)
     await loadCurrentDraftQuoteJob(true)
     await loadDraftLines()
   } catch (error) {
@@ -806,14 +1123,11 @@ async function saveDraft() {
   if (!canManageDraft.value) return ElMessage.warning('当前账号无权编辑计价草稿')
   if (!formalPointersMatch.value) return ElMessage.warning('正式清单指针已变化，请刷新后再创建草稿')
   if (draft.value) {
-    const switching = draftModeOf(draft.value) !== selectedDraftMode.value
     try {
       await ElMessageBox.confirm(
-        switching
-          ? '切换模式会按新模式重建可变草稿，并清除草稿行上的人工调整；P2-1 历史版本不会变化。'
-          : '重建会重新读取当前正式清单，并清除草稿行上的人工调整；P2-1 历史版本不会变化。',
-        switching ? '确认切换计价模式' : '确认重建计价草稿',
-        { type: 'warning', confirmButtonText: switching ? '切换并重建' : '确认重建', cancelButtonText: '取消' },
+        `重建会重新读取当前正式清单，并清除${draftModeLabel(selectedDraftMode.value)}草稿行上的人工调整；另一种模式的草稿不会变化，P2-1 历史版本也不会变化。`,
+        `确认重建${draftModeLabel(selectedDraftMode.value)}草稿`,
+        { type: 'warning', confirmButtonText: '确认重建', cancelButtonText: '取消' },
       )
     } catch {
       return
@@ -825,7 +1139,7 @@ async function saveDraft() {
       pricing_mode: selectedDraftMode.value,
       source_import_batch_id: Number(props.project.active_import_batch_id),
       source_import_revision_id: Number(props.project.active_import_revision_id),
-      ...(draft.value ? { expected_revision: draftRevision.value } : {}),
+      ...(draft.value && draftModeOf(draft.value) === selectedDraftMode.value ? { expected_revision: draftRevision.value } : {}),
       ...(selectedDraftMode.value === 'enterprise_ai' && readinessQuotaVersion.value?.id
         ? { expected_active_quota_version_id: Number(readinessQuotaVersion.value.id) }
         : {}),
@@ -850,17 +1164,6 @@ async function startDraftQuoteJob() {
   if (!canStartDraftQuoteJob.value) {
     return ElMessage.warning('当前只能在基础定额模式、正式清单和企业定额均就绪时一键生成报价')
   }
-  if (draft.value && draftModeOf(draft.value) !== 'enterprise_ai') {
-    try {
-      await ElMessageBox.confirm(
-        '当前草稿不是基础定额模式，启动后会切换并重建为基础定额草稿，原草稿行上的人工调整会被清空。',
-        '确认一键生成报价',
-        { type: 'warning', confirmButtonText: '确认生成', cancelButtonText: '取消' },
-      )
-    } catch {
-      return
-    }
-  }
   draftQuoteJobStarting.value = true
   try {
     const response = await budgetProjectApi.createPricingDraftQuoteJob(projectId.value, {
@@ -868,7 +1171,7 @@ async function startDraftQuoteJob() {
       source_import_batch_id: Number(props.project.active_import_batch_id),
       source_import_revision_id: Number(props.project.active_import_revision_id),
       expected_active_quota_version_id: Number(readinessQuotaVersion.value.id),
-      ...(draft.value ? { expected_revision: draftRevision.value } : {}),
+      ...(draft.value && draftModeOf(draft.value) === 'enterprise_ai' ? { expected_revision: draftRevision.value } : {}),
       ai_concurrency: 3,
       ai_batch_size: 6,
       reason: 'one_click_enterprise_ai_quote',
@@ -896,6 +1199,32 @@ async function startDraftQuoteJob() {
   }
 }
 
+async function cancelDraftQuoteJob() {
+  const jobId = draftQuoteJob.value?.job_uuid || draftQuoteJob.value?.id
+  if (!jobId || !projectId.value || !draftQuoteJobRunning.value) return
+  try {
+    await ElMessageBox.confirm(
+      '取消后会停止未开始和正在等待的 AI 估价，已完成的报价行会保留。',
+      '确认取消生成报价',
+      { type: 'warning', confirmButtonText: '确认取消', cancelButtonText: '继续生成' },
+    )
+  } catch {
+    return
+  }
+  draftQuoteJobCancelling.value = true
+  try {
+    const response = await budgetProjectApi.cancelPricingDraftQuoteJob(projectId.value, jobId)
+    draftQuoteJob.value = budgetResponseData(response)
+    stopDraftQuoteJobPolling()
+    ElMessage.success('已取消报价生成')
+    await loadDraft(true)
+  } catch (error) {
+    ElMessage.error(budgetApiErrorMessage(error, '取消报价生成失败'))
+  } finally {
+    draftQuoteJobCancelling.value = false
+  }
+}
+
 function searchDraftLines() {
   draftLinePage.value = 1
   loadDraftLines()
@@ -910,6 +1239,7 @@ async function loadDraftLines() {
   draftLinesLoading.value = true
   try {
     const params = {
+      pricing_mode: selectedDraftMode.value,
       page: draftLinePage.value,
       page_size: draftLinePageSize,
       ...(draftFilters.keyword.trim() ? { keyword: draftFilters.keyword.trim() } : {}),
@@ -920,7 +1250,10 @@ async function loadDraftLines() {
     draftLines.value = budgetResponseItems(response)
     const data = budgetResponseData(response)
     draftLineTotal.value = Number(response.data?.total ?? (!Array.isArray(data) ? data?.total : null) ?? draftLines.value.length)
-    for (const row of draftLines.value) draftPriceInputs[lineIdOf(row)] = hasManualPrice(row) ? String(row.manual_unit_price) : ''
+    for (const row of draftLines.value) {
+      draftPriceInputs[lineIdOf(row)] = hasManualPrice(row) ? String(row.manual_unit_price) : ''
+      ensureDraftBreakdownInputs(row)
+    }
   } catch (error) {
     ElMessage.error(budgetApiErrorMessage(error, '计价草稿明细加载失败'))
   } finally {
@@ -932,20 +1265,27 @@ async function saveDraftLinePrice(row, clear = false) {
   if (!canManageDraft.value || !draft.value) return
   const lineId = lineIdOf(row)
   const raw = clear ? '' : String(draftPriceInputs[lineId] ?? '').replace(/,/g, '').trim()
+  const breakdown = clear ? {} : draftBreakdownPayload(row)
+  if (breakdown === null) return ElMessage.warning('拆分费用只能填写非负数字')
+  const breakdownPrice = draftBreakdownCompositePrice(breakdown)
   let price = null
-  if (raw !== '') {
+  if (breakdownPrice !== null) {
+    price = breakdownPrice
+  } else if (raw !== '') {
     price = Number(raw)
     if (!Number.isFinite(price) || price <= 0) return ElMessage.warning('请输入大于 0 的有效人工单价，或留空后清除')
   }
   draftLineSaving[lineId] = true
   try {
     await budgetProjectApi.updatePricingDraftLine(projectId.value, lineId, {
+      pricing_mode: selectedDraftMode.value,
       expected_revision: draftRevision.value,
       expected_line_revision: Number(row.line_revision ?? row.revision ?? 0),
       manual_unit_price: price,
-      reason: price === null ? 'clear_manual_price' : 'manual_price_edit',
+      pricing_breakdown: breakdown,
+      reason: clear ? 'clear_manual_price' : (breakdownPrice !== null ? 'pricing_breakdown_edit' : 'manual_price_edit'),
     })
-    ElMessage.success(price === null ? '人工单价已清除' : '人工单价已保存')
+    ElMessage.success(price === null ? '人工单价已清除' : (breakdownPrice !== null ? '拆分费用已保存' : '人工单价已保存'))
     await loadDraft(true)
   } catch (error) {
     if (error?.response?.status === 409) {
@@ -960,7 +1300,12 @@ async function saveDraftLinePrice(row, clear = false) {
 }
 
 function clearDraftLinePrice(row) {
-  draftPriceInputs[lineIdOf(row)] = ''
+  const lineId = lineIdOf(row)
+  draftPriceInputs[lineId] = ''
+  draftBreakdownInputs[lineId] = {}
+  for (const key of Object.keys(draftBreakdownEditing)) {
+    if (key.startsWith(`${lineId}:`)) delete draftBreakdownEditing[key]
+  }
   return saveDraftLinePrice(row, true)
 }
 
@@ -971,6 +1316,7 @@ async function estimateDraftLine(row) {
   draftLineAiEstimating[lineId] = true
   try {
     await budgetProjectApi.estimatePricingDraftLine(projectId.value, lineId, {
+      pricing_mode: selectedDraftMode.value,
       expected_revision: draftRevision.value,
       expected_line_revision: Number(row.line_revision ?? row.revision ?? 0),
       reason: 'manual_ai_estimate',
@@ -1050,7 +1396,10 @@ async function openAccountQuotaSync() {
   quotaSync.items = []
   quotaSync.reason = '从项目计价草稿同步账户认可的有效价格'
   try {
-    const response = await budgetProjectApi.previewAccountQuotaSync(projectId.value, { expected_revision: draftRevision.value })
+    const response = await budgetProjectApi.previewAccountQuotaSync(projectId.value, {
+      pricing_mode: selectedDraftMode.value,
+      expected_revision: draftRevision.value,
+    })
     const data = budgetResponseData(response) || {}
     quotaSync.items = (data.items || []).map((row) => ({
       ...row,
@@ -1070,6 +1419,7 @@ async function confirmAccountQuotaSync() {
   quotaSync.confirming = true
   try {
     const response = await budgetProjectApi.confirmAccountQuotaSync(projectId.value, {
+      pricing_mode: selectedDraftMode.value,
       expected_revision: draftRevision.value,
       reason: quotaSync.reason.trim(),
       items: quotaSync.items.map((row) => ({
@@ -1186,6 +1536,17 @@ watch(
   { immediate: true },
 )
 
+watch(
+  selectedDraftMode,
+  () => {
+    stopDraftQuoteJobPolling()
+    draftQuoteJob.value = null
+    draft.value = null
+    clearDraftLinesState()
+    if (pricingAvailable.value && canViewPricing.value && projectId.value) loadDraft(true)
+  },
+)
+
 onBeforeUnmount(() => {
   stopDraftQuoteJobPolling()
 })
@@ -1193,5 +1554,5 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .budget-panel{padding:20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.9);box-shadow:0 14px 34px rgba(15,23,42,.06);margin-bottom:18px}.budget-title{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.budget-title>div,.pricing-source{display:flex;flex-direction:column;gap:4px}.budget-title small,.pricing-source small,.pricing-context span,.pricing-metrics span,.pricing-run-meta{color:#64748b}.pricing-actions{align-items:flex-end;flex-direction:row!important}.pricing-alert{margin-bottom:14px}.pricing-context{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}.pricing-context>div,.pricing-metrics>div{padding:14px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#fff}.pricing-context strong{display:block;margin-top:7px}.pricing-run-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}.pricing-run-toolbar>.el-select{width:min(420px,100%)}.pricing-run-meta{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;font-size:13px}.pricing-metrics{display:grid;grid-template-columns:1.4fr repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.pricing-metrics strong{display:block;margin:7px 0;font-size:22px}.pricing-filters{display:grid;grid-template-columns:minmax(260px,1fr) 190px 190px auto;gap:12px;margin-bottom:14px}.drawer-section{margin-top:22px}.pricing-evidence{max-height:360px;overflow:auto;margin:0;padding:16px;border-radius:14px;background:#0f172a;color:#e2e8f0;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.el-pagination{margin-top:16px;justify-content:flex-end}@media(max-width:1100px){.pricing-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.pricing-context,.pricing-metrics,.pricing-filters{grid-template-columns:1fr}.pricing-run-toolbar{align-items:stretch;flex-direction:column}.pricing-run-meta{justify-content:flex-start}.budget-title{align-items:flex-start;flex-direction:column}.pricing-actions{align-items:flex-start!important}}
-.pricing-draft-workspace{margin:20px 0 24px;padding:18px;border:1px solid rgba(37,99,235,.18);border-radius:18px;background:linear-gradient(180deg,rgba(239,246,255,.72),rgba(255,255,255,.9))}.draft-mode-selector{margin-bottom:10px}.draft-mode-help{display:flex;flex-direction:column;gap:5px;margin-bottom:16px;padding:13px 15px;border-radius:14px;background:#fff;border:1px solid rgba(148,163,184,.2)}.draft-mode-help span,.draft-meta span{color:#64748b;font-size:13px}.draft-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.draft-meta>div{padding:14px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#fff}.draft-meta strong{display:block;margin-top:7px}.draft-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}.draft-boundary-note{margin:-2px 0 14px;padding:10px 13px;border-radius:12px;background:#f1f5f9;color:#475569;font-size:13px}.draft-quote-job-card{margin:0 0 14px;padding:14px;border:1px solid rgba(34,197,94,.22);border-radius:16px;background:#fff}.draft-quote-job-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.draft-quote-job-head>div{display:flex;flex-direction:column;gap:4px}.draft-quote-job-head small,.draft-quote-job-stats{color:#64748b;font-size:13px}.draft-quote-job-stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.draft-filters{margin-top:4px}.draft-status-stack{display:flex;align-items:flex-start;flex-direction:column;gap:5px}.draft-price-editor{display:grid;grid-template-columns:minmax(92px,1fr) auto auto auto;gap:5px}.draft-price-editor .el-button+.el-button{margin-left:0}.quota-sync-summary,.quota-sync-bulk-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}.quota-sync-summary span{font-size:13px;color:#475569}.quota-sync-bulk-actions .el-button+.el-button{margin-left:0}@media(max-width:1100px){.draft-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.draft-meta{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.draft-meta{grid-template-columns:1fr}.pricing-draft-workspace{padding:14px}.draft-price-editor{grid-template-columns:1fr auto}.draft-price-editor .el-button:last-child{grid-column:2}}
+.pricing-draft-workspace{margin:20px 0 24px;padding:18px;border:1px solid rgba(37,99,235,.18);border-radius:18px;background:linear-gradient(180deg,rgba(239,246,255,.72),rgba(255,255,255,.9))}.draft-mode-selector{margin-bottom:10px}.draft-mode-help{display:flex;flex-direction:column;gap:5px;margin-bottom:16px;padding:13px 15px;border-radius:14px;background:#fff;border:1px solid rgba(148,163,184,.2)}.draft-mode-help span,.draft-meta span{color:#64748b;font-size:13px}.draft-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.draft-meta>div{padding:14px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#fff}.draft-meta strong{display:block;margin-top:7px}.draft-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}.quote-stat-strip{display:grid;grid-template-columns:auto repeat(6,minmax(140px,1fr)) auto;gap:4px;margin:-2px 0 14px;align-items:center}.quote-stat-title,.quote-stat-card{height:36px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(148,163,184,.2);background:#fff}.quote-stat-title{padding:0 14px;color:#475569;font-size:13px}.quote-stat-card{gap:6px;border-radius:8px}.quote-stat-card span{color:#64748b}.quote-stat-card strong{font-size:16px}.quote-totals-panel{margin:-4px 0 14px;padding:12px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:#fff}.quote-rate-editor{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr)) auto;gap:10px;margin-top:12px;align-items:end}.quote-rate-editor label{display:flex;flex-direction:column;gap:5px;color:#64748b;font-size:12px}.draft-boundary-note{margin:-2px 0 14px;padding:10px 13px;border-radius:12px;background:#f1f5f9;color:#475569;font-size:13px}.draft-quote-job-card{margin:0 0 14px;padding:14px;border:1px solid rgba(34,197,94,.22);border-radius:16px;background:#fff}.draft-quote-job-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.draft-quote-job-head>div{display:flex;flex-direction:column;gap:4px}.draft-quote-job-head small,.draft-quote-job-stats{color:#64748b;font-size:13px}.draft-quote-job-stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.draft-filters{margin-top:4px}.draft-status-stack{display:flex;align-items:flex-start;flex-direction:column;gap:5px}.draft-price-editor{display:grid;grid-template-columns:minmax(92px,1fr) auto auto auto;gap:5px}.draft-price-editor .el-button+.el-button{margin-left:0}.quote-quantity{color:#2563eb}.quote-line-table:deep(.el-table__cell){vertical-align:top}.breakdown-input:deep(.el-input__inner){text-align:right}.breakdown-edit-cell{display:flex;align-items:center;gap:4px;min-height:24px}.breakdown-edit-cell-right{justify-content:flex-end}.quota-sync-summary,.quota-sync-bulk-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}.quota-sync-summary span{font-size:13px;color:#475569}.quota-sync-bulk-actions .el-button+.el-button{margin-left:0}@media(max-width:1100px){.draft-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.draft-meta{grid-template-columns:repeat(2,minmax(0,1fr))}.quote-stat-strip{grid-template-columns:1fr 1fr}.quote-rate-editor{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.draft-meta{grid-template-columns:1fr}.pricing-draft-workspace{padding:14px}.draft-price-editor{grid-template-columns:1fr auto}.draft-price-editor .el-button:last-child{grid-column:2}.quote-stat-strip,.quote-rate-editor{grid-template-columns:1fr}}
 </style>

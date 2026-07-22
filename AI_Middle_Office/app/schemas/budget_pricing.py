@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -44,13 +44,31 @@ class BudgetPricingDraftCreate(BaseModel):
 
 
 class BudgetPricingDraftLinePatch(BaseModel):
-    """Optimistic-lock manual price edit; explicit null clears the override."""
+    """Optimistic-lock manual draft edit; explicit null clears the override."""
 
     model_config = ConfigDict(extra="forbid")
 
+    pricing_mode: Literal["enterprise_ai", "account_strict"] = "enterprise_ai"
     expected_revision: int = Field(gt=0)
     expected_line_revision: int = Field(gt=0)
     manual_unit_price: Decimal | None = Field(gt=Decimal("0"), max_digits=20, decimal_places=6)
+    pricing_breakdown: dict[str, Any] | None = Field(default=None)
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class BudgetPricingDraftTotalsConfigPatch(BaseModel):
+    """Draft-level editable totals/rate settings for the quote summary panel."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pricing_mode: Literal["enterprise_ai", "account_strict"] = "enterprise_ai"
+    expected_revision: int = Field(gt=0)
+    measures_rate: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("1000"), max_digits=12, decimal_places=6)
+    management_rate: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("1000"), max_digits=12, decimal_places=6)
+    other_fee: Decimal | None = Field(default=None, ge=Decimal("0"), max_digits=20, decimal_places=6)
+    suspended_amount: Decimal | None = Field(default=None, ge=Decimal("0"), max_digits=20, decimal_places=6)
+    area: Decimal | None = Field(default=None, ge=Decimal("0"), max_digits=20, decimal_places=6)
+    quote_adjustment_percent: Decimal | None = Field(default=None, ge=Decimal("-100"), le=Decimal("1000"), max_digits=12, decimal_places=6)
     reason: str | None = Field(default=None, max_length=2000)
 
 
@@ -59,6 +77,7 @@ class BudgetPricingDraftLineAiEstimateIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    pricing_mode: Literal["enterprise_ai", "account_strict"] = "enterprise_ai"
     expected_revision: int = Field(gt=0)
     expected_line_revision: int = Field(gt=0)
     reason: str | None = Field(default=None, max_length=2000)
@@ -88,6 +107,7 @@ class BudgetPricingDraftAccountQuotaSyncPreviewIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    pricing_mode: Literal["enterprise_ai", "account_strict"] = "enterprise_ai"
     expected_revision: int = Field(gt=0)
     line_identifiers: list[str] | None = Field(default=None, max_length=500)
 
@@ -104,6 +124,7 @@ class BudgetPricingDraftAccountQuotaSyncLineIn(BaseModel):
 class BudgetPricingDraftAccountQuotaSyncConfirmIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    pricing_mode: Literal["enterprise_ai", "account_strict"] = "enterprise_ai"
     expected_revision: int = Field(gt=0)
     reason: str = Field(min_length=2, max_length=2000)
     items: list[BudgetPricingDraftAccountQuotaSyncLineIn] = Field(min_length=1, max_length=500)

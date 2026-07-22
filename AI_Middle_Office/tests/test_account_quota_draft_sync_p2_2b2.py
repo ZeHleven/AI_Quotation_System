@@ -119,13 +119,24 @@ def test_preview_confirm_and_existing_update_are_account_scoped_and_non_pollutin
             )
             session.commit()
             line = draft.lines[0]
+            line.item_name = "阻燃板"
+            line.spec = "15厚"
             draft, line = patch_budget_pricing_draft_line(
                 session, profile, user, line_identifier=line.line_uuid, expected_revision=draft.revision,
                 expected_line_revision=line.line_revision, manual_unit_price="123.456789", reason="manual accepted",
             )
+            line.pricing_breakdown_json = json.dumps(
+                {
+                    "labor_unit_cost": "0",
+                    "main_material_unit_cost": "115.000000",
+                    "auxiliary_material_unit_cost": "8.456789",
+                    "loss_rate": "3",
+                },
+                ensure_ascii=False,
+            )
             session.commit()
 
-            preview = preview_account_quota_sync(session, profile, user, BudgetPricingDraftAccountQuotaSyncPreviewIn(expected_revision=draft.revision))
+            preview = preview_account_quota_sync(session, profile, user, BudgetPricingDraftAccountQuotaSyncPreviewIn(pricing_mode="account_strict", expected_revision=draft.revision))
             assert preview["summary"]["requested_count"] == 1
             item = preview["items"][0]
             assert item["suggested_action"] == "create"
@@ -133,6 +144,7 @@ def test_preview_confirm_and_existing_update_are_account_scoped_and_non_pollutin
             assert item["target_status"] == "draft"
 
             confirmed = confirm_account_quota_sync(session, profile, user, BudgetPricingDraftAccountQuotaSyncConfirmIn(
+                pricing_mode="account_strict",
                 expected_revision=draft.revision, reason="用户确认沉淀人工改价", items=[
                     BudgetPricingDraftAccountQuotaSyncLineIn(line_identifier=item["line_identifier"], expected_line_revision=item["expected_line_revision"], action="create")
                 ],
@@ -145,6 +157,11 @@ def test_preview_confirm_and_existing_update_are_account_scoped_and_non_pollutin
             assert quota.source == "pricing_draft_sync"
             assert quota.status == "draft"
             assert str(quota.unit_price) == "123.456789"
+            notes = json.loads(quota.notes)
+            assert notes["schema"] == "account_quota_detail_v1"
+            assert notes["detail_type"] == "material"
+            assert notes["material_type"] == "主材"
+            assert notes["loss_rate"] == "3"
             assert session.query(AccountQuotaSyncRun).count() == 1
             assert session.query(AccountQuotaSyncLine).count() == 1
             assert session.query(BudgetProjectPricingRun).count() == protected["formal_runs"]
@@ -155,12 +172,22 @@ def test_preview_confirm_and_existing_update_are_account_scoped_and_non_pollutin
                 session, profile, user, line_identifier=line.line_uuid, expected_revision=draft.revision,
                 expected_line_revision=line.line_revision, manual_unit_price="130.000001", reason="manual refined",
             )
+            line.pricing_breakdown_json = json.dumps(
+                {
+                    "labor_unit_cost": "0",
+                    "main_material_unit_cost": "120.000001",
+                    "auxiliary_material_unit_cost": "10.000000",
+                    "loss_rate": "5",
+                },
+                ensure_ascii=False,
+            )
             session.commit()
-            preview2 = preview_account_quota_sync(session, profile, user, BudgetPricingDraftAccountQuotaSyncPreviewIn(expected_revision=draft.revision))
+            preview2 = preview_account_quota_sync(session, profile, user, BudgetPricingDraftAccountQuotaSyncPreviewIn(pricing_mode="account_strict", expected_revision=draft.revision))
             item2 = preview2["items"][0]
             assert item2["existing_item"]["id"] == quota.id
             assert item2["suggested_action"] == "skip"
             confirmed2 = confirm_account_quota_sync(session, profile, user, BudgetPricingDraftAccountQuotaSyncConfirmIn(
+                pricing_mode="account_strict",
                 expected_revision=draft.revision, reason="用户确认更新已沉淀价格", items=[
                     BudgetPricingDraftAccountQuotaSyncLineIn(
                         line_identifier=item2["line_identifier"], expected_line_revision=item2["expected_line_revision"],
@@ -174,6 +201,9 @@ def test_preview_confirm_and_existing_update_are_account_scoped_and_non_pollutin
             assert quota.status == "draft"
             assert quota.revision == 2
             assert str(quota.unit_price) == "130.000001"
+            updated_notes = json.loads(quota.notes)
+            assert updated_notes["detail_type"] == "material"
+            assert updated_notes["loss_rate"] == "5"
             assert session.query(AccountQuotaSyncRun).count() == 2
             assert session.query(AccountQuotaSyncLine).count() == 2
     finally:
@@ -193,21 +223,40 @@ def test_preview_and_confirm_accept_all_priced_draft_lines_not_only_manual_price
                 expected_revision=None, reason="create",
             )
             ai_line, base_line = draft.lines[:2]
+            ai_line.item_name = "玻璃门"
+            ai_line.spec = "1800*2320mm，双开"
             ai_line.ai_estimated_unit_price = Decimal("77.777777")
             ai_line.effective_unit_price = Decimal("77.777777")
             ai_line.price_source = "ai_estimate"
             ai_line.pricing_status = "priced"
+            ai_line.pricing_breakdown_json = json.dumps(
+                {
+                    "labor_unit_cost": "12.000000",
+                    "main_material_unit_cost": "60.000000",
+                    "auxiliary_material_unit_cost": "5.777777",
+                },
+                ensure_ascii=False,
+            )
+            base_line.item_name = "防腐涂料"
             base_line.base_unit_price = Decimal("33.333333")
             base_line.effective_unit_price = Decimal("33.333333")
             base_line.price_source = "enterprise_quota"
             base_line.pricing_status = "priced"
+            base_line.pricing_breakdown_json = json.dumps(
+                {
+                    "labor_unit_cost": "0",
+                    "main_material_unit_cost": "33.333333",
+                    "auxiliary_material_unit_cost": "0",
+                },
+                ensure_ascii=False,
+            )
             session.commit()
 
             preview = preview_account_quota_sync(
                 session,
                 profile,
                 user,
-                BudgetPricingDraftAccountQuotaSyncPreviewIn(expected_revision=draft.revision),
+                BudgetPricingDraftAccountQuotaSyncPreviewIn(pricing_mode="account_strict", expected_revision=draft.revision),
             )
 
             assert preview["summary"]["requested_count"] == 2
@@ -223,6 +272,7 @@ def test_preview_and_confirm_accept_all_priced_draft_lines_not_only_manual_price
                 profile,
                 user,
                 BudgetPricingDraftAccountQuotaSyncConfirmIn(
+                    pricing_mode="account_strict",
                     expected_revision=draft.revision,
                     reason="accept priced draft lines",
                     items=[
@@ -241,6 +291,11 @@ def test_preview_and_confirm_accept_all_priced_draft_lines_not_only_manual_price
             prices = sorted(str(item.unit_price) for item in session.query(AccountQuotaItem).all())
             assert prices == ["33.333333", "77.777777"]
             assert {item.account_id for item in session.query(AccountQuotaItem).all()} == {account.id}
+            notes_by_name = {item.item_name: json.loads(item.notes) for item in session.query(AccountQuotaItem).all()}
+            assert notes_by_name["玻璃门"]["detail_type"] == "subcontract"
+            assert notes_by_name["玻璃门"]["main_material_fee"] == "60.000000"
+            assert notes_by_name["防腐涂料"]["detail_type"] == "material"
+            assert notes_by_name["防腐涂料"]["material_type"] == "主材"
             sync_lines = session.query(AccountQuotaSyncLine).all()
             snapshots = [json.loads(line.source_snapshot_json) for line in sync_lines]
             assert sorted(snapshot["sync_unit_price"] for snapshot in snapshots) == ["33.333333", "77.777777"]

@@ -32,6 +32,7 @@ from app.services.budget_pricing import (
     _match_source,
     _normalize_text,
     _pricing_values,
+    _source_row_context,
     normalize_pricing_unit,
     quota_item_is_healthy,
     strict_active_quota_version,
@@ -83,6 +84,25 @@ def _entry(
     )
 
 
+def test_source_row_context_exposes_quote_header_context_from_snapshot():
+    snapshot_json = (
+        '{"standard_row": {'
+        '"area": "二层", '
+        '"location": "会议室", '
+        '"remark": "夜间施工", '
+        '"raw_fields": {"区域": "二层", "部位": "会议室"}'
+        "}}"
+    )
+
+    context = _source_row_context(snapshot_json)
+
+    assert context["region"] == "二层"
+    assert context["work_area"] == "会议室"
+    assert context["location"] == "会议室"
+    assert context["remark"] == "夜间施工"
+    assert context["raw_fields"] == {"区域": "二层", "部位": "会议室"}
+
+
 def _source(*, name: str, unit: str, quantity: str = "2", valid: bool = True) -> dict:
     return {
         "item_name": name,
@@ -99,6 +119,7 @@ def _source(*, name: str, unit: str, quantity: str = "2", valid: bool = True) ->
 def test_feature_defaults_and_rbac_module_are_fail_closed():
     assert hasattr(settings, "feature_budget_pricing")
     admin = User(role="admin", is_active=True, role_version=1)
+    staff = User(role="user", is_active=True, role_version=1)
     assert can_view_budget_pricing(admin) is True
     assert can_create_budget_pricing(admin) is True
 
@@ -112,6 +133,8 @@ def test_feature_defaults_and_rbac_module_are_fail_closed():
         object.__setattr__(settings, "feature_budget_pricing", True)
         module = next(item for item in get_available_modules(admin) if item["key"] == "budget_pricing")
         assert module["status"] == "available"
+        staff_module = next(item for item in get_available_modules(staff) if item["key"] == "budget_pricing")
+        assert staff_module["status"] == "forbidden"
     finally:
         object.__setattr__(settings, "feature_budget_projects", old_budget)
         object.__setattr__(settings, "feature_budget_pricing", old_pricing)

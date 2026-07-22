@@ -86,10 +86,14 @@ _PROJECT_SCOPED_READ_ROLES = {
 BUDGET_WORKSPACE_ACTIVE = "active"
 BUDGET_WORKSPACE_ARCHIVED = "archived"
 BUDGET_SHEET_ROLE_BILL = "bill"
+BUDGET_SHEET_ROLE_CALCULATION_RULE = "calculation_rule"
+BUDGET_SHEET_ROLE_LOSS_REFERENCE = "loss_reference"
 BUDGET_SHEET_ROLE_MATERIAL_REFERENCE = "material_reference"
 BUDGET_SHEET_ROLE_METADATA = "metadata"
+BUDGET_SHEET_ROLE_OPTIONAL_BACKUP = "optional_backup"
 BUDGET_SHEET_ROLE_SUMMARY_ANALYSIS = "summary_analysis"
 MAX_IMPORT_BYTES = 30 * 1024 * 1024
+BUDGET_MAX_SCAN_ROWS = 30
 SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm"}
 
 _SEQUENCE_LABELS = {
@@ -135,6 +139,7 @@ _BUDGET_HEADER_ALIASES = {
         "\u5de5\u4f5c\u5185\u5bb9",
         "\u6e05\u5355\u540d\u79f0",
         "\u6750\u6599\u540d\u79f0",
+        "\u5206\u90e8\u5206\u9879\u540d\u79f0",
         "\u5de5\u7a0b\u540d\u79f0",
         "\u540d\u79f0",
     },
@@ -142,6 +147,8 @@ _BUDGET_HEADER_ALIASES = {
         "\u89c4\u683c",
         "\u578b\u53f7",
         "\u9879\u76ee\u7279\u5f81",
+        "\u9879\u76ee\u7279\u5f81/\u505a\u6cd5\u8981\u6c42",
+        "\u505a\u6cd5\u8981\u6c42",
         "\u7279\u5f81\u63cf\u8ff0",
         "\u89c4\u683c\u578b\u53f7",
         "\u505a\u6cd5",
@@ -159,6 +166,27 @@ _BUDGET_HEADER_ALIASES = {
     "remark": {"\u5907\u6ce8", "\u8bf4\u660e", "\u9644\u6ce8", "\u65bd\u5de5\u8bf4\u660e"},
 }
 _PRICE_AMOUNT_MARKERS = {
+    "\u5355\u4ef7",
+    "\u7efc\u5408\u5355\u4ef7",
+    "\u5355\u4ef7\u5206\u6790",
+    "\u5408\u4ef7",
+    "\u7efc\u5408\u5408\u4ef7",
+    "\u91d1\u989d",
+    "\u603b\u4ef7",
+    "\u9020\u4ef7",
+    "\u62a5\u4ef7",
+    "\u4eba\u5de5\u8d39",
+    "\u4e3b\u6750\u8d39",
+    "\u8f85\u6750\u8d39",
+    "\u6750\u6599\u8d39",
+    "\u673a\u68b0\u8d39",
+    "\u7ba1\u7406\u8d39",
+    "\u5229\u6da6",
+    "\u7a0e\u91d1",
+    "\u89c4\u8d39",
+    "\u6210\u672c",
+    "\u542b\u7a0e\u4ef7",
+    "\u4e0d\u542b\u7a0e\u4ef7",
     "单价",
     "综合单价",
     "单价分析",
@@ -190,6 +218,32 @@ _QUANTITY_AGGREGATE_MARKERS = (
     "数量小计",
     "数量合计",
     "总数量",
+)
+_SUMMARY_FORMULA_REF_RE = re.compile(
+    r"(?:'(?P<quoted>[^']+)'|(?P<plain>[^'!=+\-*/(),\s]+))!\$?(?P<column>[A-Z]{1,3})\$?(?P<row>\d+)",
+    re.IGNORECASE,
+)
+_SIMPLE_SUM_RANGE_RE = re.compile(
+    r"SUM\(\$?(?P<start_col>[A-Z]{1,3})\$?(?P<start_row>\d+)\s*:\s*"
+    r"\$?(?P<end_col>[A-Z]{1,3})\$?(?P<end_row>\d+)\)",
+    re.IGNORECASE,
+)
+_SAME_SHEET_CELL_REF_RE = re.compile(r"\$?(?P<column>[A-Z]{1,3})\$?(?P<row>\d+)", re.IGNORECASE)
+_SUMMARY_SCOPE_MARKERS = (
+    "\u680b",
+    "\u697c",
+    "\u697c\u5c42",
+    "\u5c42\u6570",
+    "\u6237\u578b",
+    "\u533a\u57df",
+    "\u6237\u6570",
+    "\u5957\u6570",
+    "\u6570\u91cf",
+    "\u9762\u79ef",
+)
+_BUDGET_ROW_ANNOTATION_FIELDS = (
+    "budget_summary_multiplier",
+    "budget_summary_multiplier_sources",
 )
 
 
@@ -696,14 +750,15 @@ def _validate_workbook_limits(content: bytes, filename: str) -> None:
     over_limit: list[dict[str, Any]] = []
     try:
         for sheet in workbook.worksheets:
-            row_count = int(sheet.max_row or 0)
-            column_count = int(sheet.max_column or 0)
+            row_count, column_count = _real_non_empty_sheet_dimensions(sheet)
             if row_count > MAX_ROWS_PER_SHEET or column_count > MAX_COLUMNS_PER_SHEET:
                 over_limit.append(
                     {
                         "sheet_name": sheet.title,
                         "row_count": row_count,
                         "column_count": column_count,
+                        "worksheet_row_count": int(sheet.max_row or 0),
+                        "worksheet_column_count": int(sheet.max_column or 0),
                     }
                 )
     finally:
@@ -713,11 +768,30 @@ def _validate_workbook_limits(content: bytes, filename: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "code": "BUDGET_IMPORT_WORKBOOK_LIMIT_EXCEEDED",
+                "message": "导入的 Excel 工作簿存在超过系统行列上限的 Sheet",
                 "max_rows_per_sheet": MAX_ROWS_PER_SHEET,
                 "max_columns_per_sheet": MAX_COLUMNS_PER_SHEET,
                 "sheets": over_limit,
             },
         )
+
+
+def _real_non_empty_sheet_dimensions(sheet: Any) -> tuple[int, int]:
+    max_row = 0
+    max_column = 0
+    for row_index, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+        row_has_value = False
+        for column_index, value in enumerate(row, start=1):
+            if _clean_text(value) is None:
+                continue
+            row_has_value = True
+            if column_index > max_column:
+                max_column = column_index
+        if row_has_value:
+            max_row = row_index
+        if max_row > MAX_ROWS_PER_SHEET and max_column > MAX_COLUMNS_PER_SHEET:
+            break
+    return max_row, max_column
 
 
 def _mapping_by_sheet(preview: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -771,6 +845,24 @@ def _header_kind(values: list[str]) -> str | None:
     return None
 
 
+def _detect_budget_header_row(sheet: Any, max_column: int) -> int | None:
+    best_row: int | None = None
+    best_score = 0
+    for row_index in range(1, min(int(sheet.max_row or 0), BUDGET_MAX_SCAN_ROWS) + 1):
+        kinds = {
+            _header_kind([_resolved_header_value(sheet, row_index, column)])
+            for column in range(1, max_column + 1)
+        }
+        kinds.discard(None)
+        score = len(kinds & {"item_name", "spec", "quantity", "unit"})
+        if score > best_score:
+            best_score = score
+            best_row = row_index
+        if score >= 4:
+            return row_index
+    return best_row if best_score >= 3 else None
+
+
 def _is_quantity_header(values: list[str]) -> bool:
     return _header_kind(values) == "quantity"
 
@@ -812,6 +904,16 @@ def _infer_sheet_role(sheet_name: str, mapping: dict[str, Any], preview: dict[st
         if str(row.get("source_sheet") or "") == sheet_name
     )[:2000]
     normalized_text = _normalize_label(sheet_text)
+    if any(marker in normalized_name for marker in ("\u8ba1\u7b97\u89c4\u5219", "\u8ba1\u91cf\u89c4\u5219", "\u5de5\u7a0b\u91cf\u8ba1\u7b97\u89c4\u5219")):
+        return BUDGET_SHEET_ROLE_CALCULATION_RULE
+    if any(marker in normalized_name for marker in ("\u5907\u7528\u6e05\u5355", "\u6682\u5217\u6e05\u5355")):
+        return BUDGET_SHEET_ROLE_OPTIONAL_BACKUP
+    if any(marker in normalized_name for marker in ("\u635f\u8017", "\u635f\u8017\u8868")):
+        return BUDGET_SHEET_ROLE_LOSS_REFERENCE
+    if any(marker in normalized_name for marker in ("\u4e3b\u6750\u54c1\u724c", "\u54c1\u724c\u8868", "\u6750\u6599\u54c1\u724c")):
+        return BUDGET_SHEET_ROLE_MATERIAL_REFERENCE
+    if any(marker in normalized_name for marker in ("\u6c47\u603b", "\u6c47\u603b\u8868", "\u62a5\u4ef7\u6c47\u603b")):
+        return BUDGET_SHEET_ROLE_SUMMARY_ANALYSIS
     if any(marker in normalized_name for marker in ("封面", "说明")) or any(
         marker in normalized_text for marker in ("编制说明", "报价说明")
     ):
@@ -835,6 +937,286 @@ def _infer_sheet_role(sheet_name: str, mapping: dict[str, Any], preview: dict[st
     return BUDGET_SHEET_ROLE_BILL
 
 
+def _decimal_from_cell(value: Any) -> Decimal | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = Decimal(str(value).replace(",", "").strip())
+    except (InvalidOperation, ValueError):
+        return None
+    return parsed if parsed.is_finite() and parsed > 0 else None
+
+
+def _summary_multiplier_with_presence(
+    sheet: Any, row_index: int, formula_column: int
+) -> tuple[Decimal, bool]:
+    best: Decimal | None = None
+    for column in range(1, formula_column):
+        value = _decimal_from_cell(sheet.cell(row=row_index, column=column).value)
+        if value is None:
+            continue
+        header_text = "".join(
+            _normalize_label(_resolved_header_value(sheet, header_row, column))
+            for header_row in range(1, min(row_index, 5))
+        )
+        if any(marker in header_text for marker in ("\u6237\u6570", "\u5957\u6570", "\u6570\u91cf", "\u5c42\u6570")):
+            return value, True
+        if best is None and value >= 1:
+            best = value
+    # A generic number may be a sequence, area or subtotal. It remains a
+    # fallback value for legacy callers, but is not sufficient evidence that
+    # this summary row represents a quantity scope.
+    return best or Decimal("1"), False
+
+
+def _summary_multiplier_for_row(sheet: Any, row_index: int, formula_column: int) -> Decimal:
+    return _summary_multiplier_with_presence(sheet, row_index, formula_column)[0]
+
+
+def _summary_scope_for_row(sheet: Any, row_index: int) -> list[dict[str, str]]:
+    """Keep the human-readable building/floor scope alongside the multiplier."""
+
+    scope: list[dict[str, str]] = []
+    for column in range(1, sheet.max_column + 1):
+        value = sheet.cell(row=row_index, column=column).value
+        if value is None or str(value).strip() == "" or str(value).startswith("="):
+            continue
+        header_labels = [
+            _normalize_label(_resolved_header_value(sheet, header_row, column))
+            for header_row in range(1, min(row_index, 5))
+        ]
+        label = next(
+            (
+                candidate
+                for candidate in header_labels
+                if candidate and any(marker in candidate for marker in _SUMMARY_SCOPE_MARKERS)
+            ),
+            "",
+        )
+        if not label:
+            continue
+        scope.append({"label": str(label)[:64], "value": str(value).strip()[:128]})
+    return scope[:8]
+
+
+def _summary_detail_references(
+    workbook: Any,
+    sheet_name: str,
+    coordinate: str,
+    *,
+    seen: set[tuple[str, str]] | None = None,
+) -> set[tuple[str, str, int]]:
+    """Follow same-sheet summary aliases until they reach bill subtotal cells."""
+
+    seen = seen or set()
+    key = (sheet_name, coordinate.upper())
+    if key in seen or sheet_name not in workbook.sheetnames:
+        return set()
+    seen.add(key)
+    sheet = workbook[sheet_name]
+    formula = str(sheet[coordinate].value or "")
+    if not formula.startswith("="):
+        return set()
+
+    references: set[tuple[str, str, int]] = set()
+    for match in _SUMMARY_FORMULA_REF_RE.finditer(formula):
+        ref_sheet = match.group("quoted") or match.group("plain") or ""
+        ref_column = match.group("column").upper()
+        ref_row = int(match.group("row"))
+        if ref_sheet == sheet_name or (
+            ref_sheet in workbook.sheetnames
+            and _infer_sheet_role(ref_sheet, {}, {"rows": []}) == BUDGET_SHEET_ROLE_SUMMARY_ANALYSIS
+        ):
+            references.update(
+                _summary_detail_references(
+                    workbook,
+                    ref_sheet or sheet_name,
+                    f"{ref_column}{ref_row}",
+                    seen=seen,
+                )
+            )
+        elif ref_sheet and _infer_sheet_role(ref_sheet, {}, {"rows": []}) == BUDGET_SHEET_ROLE_BILL:
+            references.add((ref_sheet, ref_column, ref_row))
+
+    # A qualified bill reference such as '明细'!H60 is not a same-sheet H60.
+    unqualified_formula = _SUMMARY_FORMULA_REF_RE.sub("", formula)
+    for match in _SAME_SHEET_CELL_REF_RE.finditer(unqualified_formula):
+        ref_column = match.group("column").upper()
+        ref_row = int(match.group("row"))
+        if f"{ref_column}{ref_row}".upper() == coordinate.upper():
+            continue
+        references.update(
+            _summary_detail_references(
+                workbook,
+                sheet_name,
+                f"{ref_column}{ref_row}",
+                seen=seen,
+            )
+        )
+    return references
+
+
+def _detail_formula_rows(
+    workbook: Any,
+    sheet_name: str,
+    column: str,
+    row_index: int,
+    *,
+    seen: set[tuple[str, str, int]] | None = None,
+) -> list[int]:
+    seen = seen or set()
+    trace_key = (sheet_name, column.upper(), row_index)
+    if trace_key in seen:
+        return []
+    seen.add(trace_key)
+    if sheet_name not in workbook.sheetnames:
+        return [row_index]
+    sheet = workbook[sheet_name]
+    value = sheet[f"{column}{row_index}"].value
+    formula = str(value or "")
+    if not formula.startswith("="):
+        return [row_index]
+    compact = formula.replace(" ", "").lstrip("=")
+    match = _SIMPLE_SUM_RANGE_RE.search(compact)
+    if not match:
+        nested_rows: list[int] = []
+        for ref in _SAME_SHEET_CELL_REF_RE.finditer(compact):
+            ref_column = ref.group("column").upper()
+            ref_row = int(ref.group("row"))
+            if ref_column != column.upper() or ref_row == row_index:
+                continue
+            nested_rows.extend(
+                _detail_formula_rows(workbook, sheet_name, column, ref_row, seen=seen)
+            )
+        return sorted(set(nested_rows)) if nested_rows else [row_index]
+    if match.group("start_col").upper() != column.upper() or match.group("end_col").upper() != column.upper():
+        return [row_index]
+    start = int(match.group("start_row"))
+    end = int(match.group("end_row"))
+    if start <= 0 or end < start:
+        return [row_index]
+    sum_rows = list(range(start, end + 1))
+    nested_rows: list[int] = []
+    for nested_row in sum_rows:
+        nested_rows.extend(
+            _detail_formula_rows(workbook, sheet_name, column, nested_row, seen=seen)
+        )
+    return sorted(set(nested_rows)) if nested_rows else sum_rows
+
+
+def _workbook_summary_multipliers(content: bytes) -> dict[tuple[str, int], dict[str, Any]]:
+    workbook = load_workbook(BytesIO(content), read_only=False, data_only=False)
+    multipliers: dict[tuple[str, int], dict[str, Any]] = {}
+    try:
+        for sheet in workbook.worksheets:
+            if _infer_sheet_role(sheet.title, {}, {"rows": []}) != BUDGET_SHEET_ROLE_SUMMARY_ANALYSIS:
+                continue
+            for row in sheet.iter_rows():
+                formula_cells = [cell for cell in row if str(cell.value or "").startswith("=")]
+                if not formula_cells:
+                    continue
+                row_index = formula_cells[0].row
+                row_multiplier, has_explicit_scope = _summary_multiplier_with_presence(
+                    sheet, row_index, sheet.max_column + 1
+                )
+                # Formula-only subtotal rows would otherwise add a second copy
+                # of their children. A real scope row carries an explicit count,
+                # including the valid value 1 for a public area.
+                if not has_explicit_scope:
+                    continue
+                detail_references: set[tuple[str, str, int]] = set()
+                for cell in formula_cells:
+                    detail_references.update(
+                        _summary_detail_references(workbook, sheet.title, cell.coordinate)
+                    )
+                if not detail_references:
+                    continue
+                scope = _summary_scope_for_row(sheet, row_index)
+                for ref_sheet, ref_column, ref_row in sorted(detail_references):
+                    for detail_row in _detail_formula_rows(workbook, ref_sheet, ref_column, ref_row):
+                        key = (ref_sheet, detail_row)
+                        current = multipliers.setdefault(
+                            key,
+                            {
+                                "multiplier": Decimal("0"),
+                                "sources": [],
+                            },
+                        )
+                        current["multiplier"] += row_multiplier
+                        current["sources"].append(
+                            {
+                                "summary_sheet": sheet.title,
+                                "summary_row": row_index,
+                                "summary_multiplier": str(row_multiplier),
+                                "summary_scope": scope,
+                                "detail_subtotal_cell": f"{ref_sheet}!{ref_column}{ref_row}",
+                            }
+                        )
+    finally:
+        workbook.close()
+    return multipliers
+
+
+def _annotate_summary_multipliers(preview: dict[str, Any], content: bytes) -> dict[str, Any]:
+    multipliers = _workbook_summary_multipliers(content)
+    if not multipliers:
+        return preview
+    annotated = copy.deepcopy(preview)
+    for row in annotated.get("rows") or []:
+        key = (str(row.get("source_sheet") or ""), int(row.get("raw_row_index") or 0))
+        payload = multipliers.get(key)
+        if not payload:
+            continue
+        multiplier = payload.get("multiplier") or Decimal("1")
+        row["budget_summary_multiplier"] = str(multiplier)
+        row["budget_summary_multiplier_sources"] = payload.get("sources") or []
+        if multiplier != Decimal("1"):
+            row["warnings"] = list(
+                dict.fromkeys([*(row.get("warnings") or []), "BUDGET_SUMMARY_MULTIPLIER_APPLIED"])
+            )
+    return annotated
+
+
+_REFERENCE_SHEET_ROLES = {
+    BUDGET_SHEET_ROLE_CALCULATION_RULE,
+    BUDGET_SHEET_ROLE_LOSS_REFERENCE,
+    BUDGET_SHEET_ROLE_MATERIAL_REFERENCE,
+    BUDGET_SHEET_ROLE_METADATA,
+    BUDGET_SHEET_ROLE_OPTIONAL_BACKUP,
+    BUDGET_SHEET_ROLE_SUMMARY_ANALYSIS,
+}
+
+
+def _annotate_reference_sheet_rows(preview: dict[str, Any]) -> dict[str, Any]:
+    mapping_by_sheet = _mapping_by_sheet(preview)
+    annotated = copy.deepcopy(preview)
+    for row in annotated.get("rows") or []:
+        sheet_name = str(row.get("source_sheet") or "")
+        sheet_role = str(
+            row.get("sheet_role")
+            or (mapping_by_sheet.get(sheet_name, {}) or {}).get("sheet_role")
+            or BUDGET_SHEET_ROLE_BILL
+        )
+        if sheet_role not in _REFERENCE_SHEET_ROLES:
+            continue
+        raw_text = _clean_text(row.get("raw_text"))
+        if not raw_text:
+            row["row_type"] = "empty_row"
+            row["item_name"] = ""
+            row["requires_confirmation"] = False
+            row["warnings"] = list(dict.fromkeys([*(row.get("warnings") or []), "BUDGET_REFERENCE_EMPTY_ROW"]))
+            continue
+        row["row_type"] = "reference_row"
+        row["item_name"] = raw_text[:255]
+        row["spec"] = ""
+        row["quantity"] = None
+        row["unit"] = ""
+        row["remark"] = raw_text
+        row["requires_confirmation"] = False
+        row["warnings"] = list(dict.fromkeys([*(row.get("warnings") or []), "BUDGET_REFERENCE_CONTEXT_ROW"]))
+    return annotated
+
+
 def _workbook_column_semantics(
     content: bytes, preview: dict[str, Any]
 ) -> tuple[dict[str, dict[str, Any]], dict[tuple[str, int, str], str]]:
@@ -852,6 +1234,10 @@ def _workbook_column_semantics(
                 header_rows = list(
                     range(int(header_row_index), min(sheet.max_row, int(header_row_index) + 1) + 1)
                 )
+            else:
+                detected_header_row = _detect_budget_header_row(sheet, max_column)
+                if detected_header_row:
+                    header_rows = [detected_header_row]
             headers: dict[int, list[str]] = {}
             meaningful_columns: set[int] = set()
             formulas_by_column: dict[int, list[str]] = {}
@@ -941,8 +1327,25 @@ def _workbook_column_semantics(
                 if key not in locked_reasons:
                     locked_reasons[key] = "FORMULA_COLUMN"
 
+            detected_field_mapping: dict[str, str] = {}
+            used_fields: set[str] = set()
+            for column in sorted(headers):
+                key = get_column_letter(column)
+                kind = _header_kind(headers.get(column, []))
+                if kind is None:
+                    continue
+                preferred_key = get_column_letter(preferred_quantity) if preferred_quantity else None
+                if key in locked_reasons and not (kind == "quantity" and key == preferred_key):
+                    continue
+                if kind in used_fields and kind in _UNIQUE_MAPPING_FIELDS:
+                    continue
+                detected_field_mapping[key] = kind
+                used_fields.add(kind)
+
             semantics[sheet.title] = {
                 "locked_ignore_reasons": locked_reasons,
+                "detected_budget_field_mapping": detected_field_mapping,
+                "detected_budget_header_row_index": header_rows[0] if header_rows else None,
                 "preferred_quantity_column": (
                     get_column_letter(preferred_quantity) if preferred_quantity else None
                 ),
@@ -1027,6 +1430,14 @@ def _apply_workbook_semantics(preview: dict[str, Any], content: bytes) -> dict[s
                 if field == "quantity":
                     field_mapping[column] = "ignore"
             field_mapping[str(preferred)] = "quantity"
+        for column, field in (semantic.get("detected_budget_field_mapping") or {}).items():
+            if column in (semantic.get("locked_ignore_reasons") or {}) and field != "quantity":
+                continue
+            if field in _UNIQUE_MAPPING_FIELDS:
+                for existing_column, existing_field in list(field_mapping.items()):
+                    if existing_column != column and existing_field == field:
+                        field_mapping[existing_column] = "ignore"
+            field_mapping[str(column)] = str(field)
         for column in (semantic.get("locked_ignore_reasons") or {}):
             field_mapping[str(column)] = "ignore"
         requested.append({"sheet_name": sheet_name, "field_mapping": field_mapping})
@@ -1038,6 +1449,7 @@ def _apply_workbook_semantics(preview: dict[str, Any], content: bytes) -> dict[s
         mapping["budget_locked_ignore_columns"] = sorted(
             (semantic.get("locked_ignore_reasons") or {}).keys(), key=column_index_from_string
         )
+        mapping["budget_detected_header_row_index"] = semantic.get("detected_budget_header_row_index")
         mapping["preferred_quantity_column"] = semantic.get("preferred_quantity_column")
         mapping["layer_quantity_columns"] = semantic.get("layer_quantity_columns") or []
         mapping["sheet_role"] = _infer_sheet_role(sheet_name, mapping, rebuilt)
@@ -1045,6 +1457,8 @@ def _apply_workbook_semantics(preview: dict[str, Any], content: bytes) -> dict[s
     for row in rebuilt.get("rows") or []:
         mapping = mapping_by_sheet.get(str(row.get("source_sheet") or ""), {})
         row["sheet_role"] = mapping.get("sheet_role") or BUDGET_SHEET_ROLE_BILL
+    rebuilt = _annotate_summary_multipliers(rebuilt, content)
+    rebuilt = _annotate_reference_sheet_rows(rebuilt)
     return _annotate_formula_provenance(rebuilt, formula_cells)
 
 
@@ -1262,6 +1676,26 @@ def _carry_budget_mapping_metadata(source: dict[str, Any], target: dict[str, Any
             field_mapping[column] = "ignore"
         mapping["field_mapping"] = field_mapping
         mapping["budget_locked_ignore_columns"] = sorted(locked, key=column_index_from_string)
+    return carried
+
+
+def _carry_budget_row_annotations(source: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+    """Keep workbook-derived multiplier annotations across manual remapping."""
+
+    carried = copy.deepcopy(target)
+    annotations: dict[tuple[str, int], dict[str, Any]] = {}
+    for row in source.get("rows") or []:
+        key = (str(row.get("source_sheet") or ""), int(row.get("raw_row_index") or 0))
+        if key[0] and key[1] and any(field in row for field in _BUDGET_ROW_ANNOTATION_FIELDS):
+            annotations[key] = row
+    for row in carried.get("rows") or []:
+        key = (str(row.get("source_sheet") or ""), int(row.get("raw_row_index") or 0))
+        source_row = annotations.get(key)
+        if not source_row:
+            continue
+        for field in _BUDGET_ROW_ANNOTATION_FIELDS:
+            if field in source_row:
+                row[field] = copy.deepcopy(source_row[field])
     return carried
 
 
@@ -1772,6 +2206,7 @@ def apply_import_sheet_mappings(
             },
         )
     current_preview = _json_load(batch.current_preview_json, {})
+    original_preview = _json_load(batch.original_preview_json, {})
     _validate_sheet_mapping_request(current_preview, sheet_mappings)
     normalized_mappings = copy.deepcopy(sheet_mappings)
     for item in normalized_mappings:
@@ -1781,9 +2216,11 @@ def apply_import_sheet_mappings(
         }
     remapped = apply_manual_field_mappings(current_preview, normalized_mappings)
     remapped = _carry_budget_mapping_metadata(current_preview, remapped)
+    remapped = _carry_budget_row_annotations(original_preview, remapped)
     remapped = _annotate_formula_provenance(
         remapped, _formula_provenance_from_preview(current_preview)
     )
+    remapped = _annotate_reference_sheet_rows(remapped)
     remapped = _ensure_budget_mapping_columns(remapped)
     remapped = _annotate_sequence_guards(remapped)
     batch.remap_revision = int(batch.remap_revision or 0) + 1
@@ -2108,6 +2545,14 @@ def serialize_import_batch(
 ) -> dict[str, Any] | None:
     if batch is None:
         return None
+    current_preview = _json_load(batch.current_preview_json, {})
+    reference_row_count = sum(
+        1
+        for row in current_preview.get("rows", [])
+        if isinstance(row, dict)
+        and row.get("sheet_role") in _REFERENCE_SHEET_ROLES
+        and row.get("row_type") == "reference_row"
+    ) if isinstance(current_preview, dict) else 0
     file_object = batch.source_file_object
     source_file = {
         "filename": batch.source_filename,
@@ -2154,6 +2599,7 @@ def serialize_import_batch(
             "standard_item_count": batch.standard_item_count,
             "valid_quantity_count": batch.valid_quantity_count,
             "invalid_quantity_count": batch.invalid_quantity_count,
+            "reference_row_count": reference_row_count,
         },
         "sheet_mappings": [serialize_sheet_mapping(item) for item in batch.sheet_mappings],
         "issues": _json_load(batch.issues_json, []),
@@ -2184,7 +2630,7 @@ def serialize_import_batch(
         },
     }
     if include_preview:
-        data["current_preview"] = _json_load(batch.current_preview_json, {})
+        data["current_preview"] = current_preview
     return data
 
 

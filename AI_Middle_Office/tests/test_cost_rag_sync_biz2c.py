@@ -16,6 +16,7 @@ from app.services.cost_rag_sync import (
     cost_rag_sync_status_summary,
     sync_active_cost_items_to_rag,
 )
+from app.services.enterprise_quota_units import normalize_enterprise_quota_unit
 
 
 PASSWORD = "secret123"
@@ -88,6 +89,15 @@ def _seed_cost_item(db, *, item_name: str, status: str, price: float = 42.5) -> 
     return item
 
 
+def _reset_sync_status_test_state(db, *, active_updated_at: datetime) -> None:
+    db.query(CostRagSyncRun).filter(CostRagSyncRun.source == "cost_items.active").delete(synchronize_session=False)
+    db.query(CostItem).filter(CostItem.status == COST_STATUS_ACTIVE).update(
+        {CostItem.updated_at: active_updated_at},
+        synchronize_session=False,
+    )
+    db.commit()
+
+
 def test_active_cost_items_rag_payload_uses_active_cost_master_only(client):
     suffix = uuid.uuid4().hex[:8]
     active_name = f"BIZ2c active cost master {suffix}"
@@ -108,7 +118,7 @@ def test_active_cost_items_rag_payload_uses_active_cost_master_only(client):
     row = active_rows[0]
     assert row["id"] == f"cost_item_{active_item.id}"
     assert row["unit_price"] == active_item.price
-    assert row["unit"] == "m2"
+    assert row["unit"] == normalize_enterprise_quota_unit("m2")
     assert row["is_draft"] is False
     assert "cost_items.active" in row["notes"]
     assert "client_tax_excluded_price" not in row
@@ -255,10 +265,11 @@ def test_sync_active_cost_items_to_rag_returns_zero_synced_count_on_timeout(monk
 
 def test_cost_rag_sync_status_summary_detects_synced_and_stale_states(client):
     suffix = uuid.uuid4().hex[:8]
-    now = datetime.now(timezone.utc)
+    sync_finished_at = datetime.now(timezone.utc) + timedelta(minutes=10)
     db = SessionLocal()
     try:
         active_item = _seed_cost_item(db, item_name=f"BIZ2c status summary {suffix}", status=COST_STATUS_ACTIVE)
+        _reset_sync_status_test_state(db, active_updated_at=sync_finished_at - timedelta(minutes=30))
         active_count = db.query(CostItem).filter(CostItem.status == COST_STATUS_ACTIVE).count()
         success_run = CostRagSyncRun(
             source="cost_items.active",
@@ -268,15 +279,15 @@ def test_cost_rag_sync_status_summary_detects_synced_and_stale_states(client):
             message="synced",
             rag_service_url="http://127.0.0.1:8001",
             http_status=200,
-            started_at=now + timedelta(seconds=5),
-            finished_at=now + timedelta(seconds=10),
+            started_at=sync_finished_at - timedelta(seconds=5),
+            finished_at=sync_finished_at,
         )
         db.add(success_run)
         db.commit()
 
         synced_summary = cost_rag_sync_status_summary(db)
 
-        active_item.updated_at = now + timedelta(minutes=2)
+        active_item.updated_at = sync_finished_at + timedelta(minutes=2)
         db.add(active_item)
         db.commit()
         stale_summary = cost_rag_sync_status_summary(db)
@@ -295,9 +306,13 @@ def test_cost_rag_sync_status_summary_normalizes_database_local_time(monkeypatch
     db = SessionLocal()
     try:
         active_item = _seed_cost_item(db, item_name=f"BIZ2c status timezone {suffix}", status=COST_STATUS_ACTIVE)
-        active_count = db.query(CostItem).filter(CostItem.status == COST_STATUS_ACTIVE).count()
         db_utc_offset = timedelta(hours=8)
         success_finished_at = datetime.now(timezone.utc) + timedelta(days=2)
+        _reset_sync_status_test_state(
+            db,
+            active_updated_at=(success_finished_at + db_utc_offset - timedelta(hours=1)).replace(tzinfo=None),
+        )
+        active_count = db.query(CostItem).filter(CostItem.status == COST_STATUS_ACTIVE).count()
         success_run = CostRagSyncRun(
             source="cost_items.active",
             status="success",
@@ -340,6 +355,7 @@ def test_cost_rag_sync_status_summary_reports_latest_failed_after_success(client
     db = SessionLocal()
     try:
         _seed_cost_item(db, item_name=f"BIZ2c status failed {suffix}", status=COST_STATUS_ACTIVE)
+        _reset_sync_status_test_state(db, active_updated_at=now - timedelta(hours=1))
         active_count = db.query(CostItem).filter(CostItem.status == COST_STATUS_ACTIVE).count()
         db.add(
             CostRagSyncRun(

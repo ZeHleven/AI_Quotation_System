@@ -1,11 +1,10 @@
 import axios from 'axios'
-
-const TOKEN_KEY = 'ai_token'
+import { clearAuth, getToken } from './authStorage'
 
 const budgetApiClient = axios.create({ baseURL: '/api/v1' })
 
 budgetApiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY)
+  const token = getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -14,8 +13,7 @@ budgetApiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem('app_user_info')
+      clearAuth()
       window.location.href = '/login'
     }
     return Promise.reject(error)
@@ -43,11 +41,13 @@ export const budgetProjectApi = Object.freeze({
   createPricingRun: (projectId, payload) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-runs', payload),
   pricingRunLines: (runId, params) => budgetApiClient.get('/admin/budget-projects/pricing-runs/' + runId + '/lines', { params }),
   pricingLineCandidates: (runId, lineId) => budgetApiClient.get('/admin/budget-projects/pricing-runs/' + runId + '/lines/' + lineId + '/candidates'),
-  currentPricingDraft: (projectId) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/current'),
+  currentPricingDraft: (projectId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/current', { params }),
   savePricingDraft: (projectId, payload) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-draft', payload),
+  updatePricingDraftTotalsConfig: (projectId, payload) => budgetApiClient.patch('/admin/budget-projects/' + projectId + '/pricing-draft/totals-config', payload),
   createPricingDraftQuoteJob: (projectId, payload) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-draft/quote-job', payload),
-  currentPricingDraftQuoteJob: (projectId) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/quote-job/current'),
+  currentPricingDraftQuoteJob: (projectId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/quote-job/current', { params }),
   pricingDraftQuoteJob: (projectId, jobId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/quote-jobs/' + jobId, { params }),
+  cancelPricingDraftQuoteJob: (projectId, jobId) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-draft/quote-jobs/' + jobId + '/cancel'),
   pricingDraftLines: (projectId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/lines', { params }),
   updatePricingDraftLine: (projectId, lineId, payload) => budgetApiClient.patch('/admin/budget-projects/' + projectId + '/pricing-draft/lines/' + lineId, payload),
   estimatePricingDraftLine: (projectId, lineId, payload) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-draft/lines/' + lineId + '/ai-estimate', payload),
@@ -65,12 +65,27 @@ export function budgetResponseItems(response) {
   return data?.items || data?.records || data?.rows || []
 }
 
+function budgetSheetLimitText(sheet) {
+  if (typeof sheet === 'string') return sheet
+  if (!sheet || typeof sheet !== 'object') return ''
+  const name = sheet.sheet_name || sheet.name || sheet.source_sheet || '未命名 Sheet'
+  const rows = sheet.row_count != null ? `${sheet.row_count} 行` : ''
+  const columns = sheet.column_count != null ? `${sheet.column_count} 列` : ''
+  const size = [rows, columns].filter(Boolean).join(' / ')
+  return size ? `${name}（${size}）` : name
+}
+
 export function budgetApiErrorMessage(error, fallback = '请求失败') {
   const detail = error?.response?.data?.detail
   if (typeof detail === 'string') return detail
   if (detail?.message || detail?.code) {
-    const sheets = Array.isArray(detail.sheets) && detail.sheets.length ? `（Sheet：${detail.sheets.join('、')}）` : ''
-    return `${detail.message || detail.code}${sheets}`
+    const sheets = Array.isArray(detail.sheets) && detail.sheets.length
+      ? `（Sheet：${detail.sheets.map(budgetSheetLimitText).filter(Boolean).join('、')}）`
+      : ''
+    const limits = detail.code === 'BUDGET_IMPORT_WORKBOOK_LIMIT_EXCEEDED'
+      ? `；单个 Sheet 上限：${detail.max_rows_per_sheet ?? '-'} 行 / ${detail.max_columns_per_sheet ?? '-'} 列`
+      : ''
+    return `${detail.message || detail.code}${sheets}${limits}`
   }
   return error?.response?.data?.message || fallback
 }

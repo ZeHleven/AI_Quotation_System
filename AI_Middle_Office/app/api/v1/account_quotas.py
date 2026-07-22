@@ -47,6 +47,7 @@ def _http_error(exc: AccountQuotaError | AccountTenancyError) -> HTTPException:
 async def list_account_quotas_endpoint(
     status_filter: Optional[str] = Query(default=None, alias="status"),
     source: Optional[str] = Query(default=None, max_length=32),
+    detail_type: Optional[str] = Query(default=None, max_length=32),
     keyword: Optional[str] = Query(default=None, max_length=255),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -60,6 +61,7 @@ async def list_account_quotas_endpoint(
             current_user,
             status_filter=status_filter,
             source=source,
+            detail_type=detail_type,
             keyword=keyword,
             page=page,
             page_size=page_size,

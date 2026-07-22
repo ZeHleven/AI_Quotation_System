@@ -28,6 +28,7 @@ from app.schemas.budget_pricing import (
     BudgetPricingDraftQuoteJobCreate,
     BudgetPricingDraftLineAiEstimateIn,
     BudgetPricingDraftLinePatch,
+    BudgetPricingDraftTotalsConfigPatch,
     BudgetPricingRunCreate,
 )
 from app.services.budget_pricing import (
@@ -45,11 +46,14 @@ from app.services.budget_pricing_drafts import (
     create_or_rebuild_budget_pricing_draft,
     get_current_budget_pricing_draft,
     patch_budget_pricing_draft_line,
+    refresh_budget_pricing_draft_summary,
     serialize_budget_pricing_draft,
     serialize_budget_pricing_draft_line,
+    update_budget_pricing_draft_totals_config,
 )
 from app.services.budget_pricing_ai_estimates import estimate_budget_pricing_draft_line
 from app.services.budget_pricing_draft_quote_jobs import (
+    cancel_budget_pricing_draft_quote_job,
     create_budget_pricing_draft_quote_job,
     get_budget_pricing_draft_quote_job,
     get_current_budget_pricing_draft_quote_job,
@@ -154,13 +158,21 @@ def _line_keyword_predicate(pattern: str):
 )
 async def get_current_pricing_draft_endpoint(
     project_id: int,
+    pricing_mode: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _ensure_draft_feature_enabled()
     profile = _accessible_profile(db, project_id, current_user)
     try:
-        draft = get_current_budget_pricing_draft(db, profile, current_user)
+        draft = get_current_budget_pricing_draft(
+            db,
+            profile,
+            current_user,
+            pricing_mode=pricing_mode,
+        )
+        if draft is not None:
+            refresh_budget_pricing_draft_summary(db, draft)
     except BudgetPricingError as exc:
         raise _http_error(exc) from exc
     return api_ok(serialize_budget_pricing_draft(draft) if draft else None)
@@ -202,6 +214,42 @@ async def create_pricing_draft_endpoint(
         db.rollback()
         raise
     return api_ok(serialize_budget_pricing_draft(draft), message="计价草稿已保存")
+
+
+@router.patch(
+    "/admin/budget-projects/{project_id}/pricing-draft/totals-config",
+    summary="Update editable draft totals/rate settings",
+)
+async def patch_pricing_draft_totals_config_endpoint(
+    project_id: int,
+    payload: BudgetPricingDraftTotalsConfigPatch,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    try:
+        draft = update_budget_pricing_draft_totals_config(
+            db,
+            profile,
+            current_user,
+            pricing_mode=payload.pricing_mode,
+            expected_revision=payload.expected_revision,
+            config_patch=payload.model_dump(mode="json", exclude={"pricing_mode", "expected_revision", "reason"}, exclude_none=True),
+            reason=payload.reason,
+        )
+        draft_id = draft.id
+        db.commit()
+        db.expire_all()
+        draft = db.query(BudgetProjectPricingDraft).filter(BudgetProjectPricingDraft.id == draft_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(serialize_budget_pricing_draft(draft), message="统计费率已更新")
 
 
 @router.post(
@@ -255,6 +303,7 @@ async def confirm_account_quota_sync_endpoint(
 )
 async def list_pricing_draft_lines_endpoint(
     project_id: int,
+    pricing_mode: Optional[str] = Query(default=None),
     keyword: Optional[str] = None,
     match_status: Optional[str] = None,
     pricing_status: Optional[str] = None,
@@ -266,7 +315,12 @@ async def list_pricing_draft_lines_endpoint(
     _ensure_draft_feature_enabled()
     profile = _accessible_profile(db, project_id, current_user)
     try:
-        draft = get_current_budget_pricing_draft(db, profile, current_user)
+        draft = get_current_budget_pricing_draft(
+            db,
+            profile,
+            current_user,
+            pricing_mode=pricing_mode,
+        )
     except BudgetPricingError as exc:
         raise _http_error(exc) from exc
     if draft is None:
@@ -329,6 +383,7 @@ async def estimate_pricing_draft_line_endpoint(
             db,
             profile,
             current_user,
+            pricing_mode=payload.pricing_mode,
             line_identifier=line_identifier,
             expected_revision=payload.expected_revision,
             expected_line_revision=payload.expected_line_revision,
@@ -393,19 +448,26 @@ async def create_pricing_draft_quote_job_endpoint(
 )
 async def get_current_pricing_draft_quote_job_endpoint(
     project_id: int,
+    pricing_mode: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _ensure_ai_estimate_feature_enabled()
     profile = _accessible_profile(db, project_id, current_user)
     try:
-        draft = get_current_budget_pricing_draft(db, profile, current_user)
+        draft = get_current_budget_pricing_draft(
+            db,
+            profile,
+            current_user,
+            pricing_mode=pricing_mode,
+        )
         if draft is None:
             return api_ok(None)
         job = get_current_budget_pricing_draft_quote_job(
             db,
             account_id=draft.account_id,
             project_id=profile.project_id,
+            draft_id=draft.id,
         )
     except BudgetPricingError as exc:
         raise _http_error(exc) from exc
@@ -433,6 +495,36 @@ async def get_pricing_draft_quote_job_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BUDGET_PRICING_DRAFT_QUOTE_JOB_NOT_FOUND")
     return api_ok(serialize_budget_pricing_draft_quote_job(job, include_lines=include_lines))
 
+@router.post(
+    "/admin/budget-projects/{project_id}/pricing-draft/quote-jobs/{job_identifier}/cancel",
+    summary="Cancel one-click quote draft generation and stop future AI estimates",
+)
+async def cancel_pricing_draft_quote_job_endpoint(
+    project_id: int,
+    job_identifier: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_ai_estimate_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    try:
+        job = get_budget_pricing_draft_quote_job(db, job_identifier)
+        if int(job.project_id) != int(profile.project_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BUDGET_PRICING_DRAFT_QUOTE_JOB_NOT_FOUND")
+        job = cancel_budget_pricing_draft_quote_job(db, job, current_user)
+        job_id = job.id
+        db.commit()
+        db.expire_all()
+        job = get_budget_pricing_draft_quote_job(db, job_id)
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(serialize_budget_pricing_draft_quote_job(job), message="Quote generation cancelled")
+
 
 @router.patch(
     "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}",
@@ -453,10 +545,12 @@ async def patch_pricing_draft_line_endpoint(
             db,
             profile,
             current_user,
+            pricing_mode=payload.pricing_mode,
             line_identifier=line_identifier,
             expected_revision=payload.expected_revision,
             expected_line_revision=payload.expected_line_revision,
             manual_unit_price=payload.manual_unit_price,
+            pricing_breakdown=payload.pricing_breakdown,
             reason=payload.reason,
         )
         draft_id = draft.id

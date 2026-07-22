@@ -363,7 +363,7 @@ def test_liansheng_sheet_roles_and_formal_row_denominator(liansheng_preview_cont
     counts = _batch_counts(rows)
     assert counts["standard_item_count"] == 5
     assert counts["valid_quantity_count"] == 5
-    assert sum(row.sheet_role == BUDGET_SHEET_ROLE_MATERIAL_REFERENCE for row in rows if row.row_type == "data_row") == 3
+    assert sum(row.sheet_role == BUDGET_SHEET_ROLE_MATERIAL_REFERENCE for row in rows if row.row_type == "reference_row") == 5
     assert all(row.sheet_role == BUDGET_SHEET_ROLE_BILL for row in rows if row.is_standard_item)
     assert not any(row.is_standard_item for row in rows if row.sheet_role != BUDGET_SHEET_ROLE_BILL)
 

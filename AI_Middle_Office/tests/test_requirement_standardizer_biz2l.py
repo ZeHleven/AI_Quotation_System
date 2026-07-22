@@ -36,6 +36,10 @@ def _data_rows(result):
     return [row for row in result["rows"] if row["row_type"] == "data_row"]
 
 
+def _reference_rows(result):
+    return [row for row in result["rows"] if row["row_type"] == "reference_row"]
+
+
 def test_standardizer_reads_standard_headers_and_keeps_price_read_only():
     content = _workbook_bytes(
         [
@@ -62,6 +66,54 @@ def test_standardizer_reads_standard_headers_and_keeps_price_read_only():
     assert rows[0]["requires_confirmation"] is True
     assert any(issue["code"] == "PRICE_COLUMN_PRESENT" for issue in result["issues"])
     assert any(row["row_type"] == "summary_row" for row in result["rows"])
+
+
+def test_standardizer_keeps_instruction_and_calculation_rule_sheets_as_reference_rows():
+    content = _workbook_bytes(
+        [["项目名称", "工程量", "单位"], ["墙面抹灰", 12, "㎡"]],
+        sheet_title="装饰部分清单",
+        extra_sheets=[
+            (
+                "编制说明",
+                [
+                    ["编制说明"],
+                    [""],
+                    ["1 投标人应充分考虑材料价格波动"],
+                    ["2 成品保护费用综合考虑"],
+                ],
+            ),
+            (
+                "计算规则",
+                [
+                    ["精装修计算规则"],
+                    ["一、楼地面"],
+                    ["1 按设计图示尺寸以面积计算"],
+                    ["2 扣除门窗洞口超过0.3m2的面积"],
+                ],
+            ),
+        ],
+    )
+
+    result = standardize_requirement_excel_bytes(content, filename="rules.xlsx")
+    refs = _reference_rows(result)
+
+    assert result["summary"]["standard_row_count"] == 1
+    assert [row["item_name"] for row in _data_rows(result)] == ["墙面抹灰"]
+    assert {item["sheet_name"]: item["sheet_role"] for item in result["sheet_mappings"]} == {
+        "装饰部分清单": "bill",
+        "编制说明": "metadata",
+        "计算规则": "calculation_rule",
+    }
+    assert [(row["source_sheet"], row["raw_row_index"], row["item_name"]) for row in refs] == [
+        ("编制说明", 1, "编制说明"),
+        ("编制说明", 3, "1 投标人应充分考虑材料价格波动"),
+        ("编制说明", 4, "2 成品保护费用综合考虑"),
+        ("计算规则", 1, "精装修计算规则"),
+        ("计算规则", 2, "一、楼地面"),
+        ("计算规则", 3, "1 按设计图示尺寸以面积计算"),
+        ("计算规则", 4, "2 扣除门窗洞口超过0.3m2的面积"),
+    ]
+    assert all(row["quantity"] is None and row["requires_confirmation"] is False for row in refs)
 
 
 def test_standardizer_keeps_cover_summary_and_formula_errors_out_of_data_rows():

@@ -48,10 +48,27 @@ from app.services.budget_pricing_drafts import get_current_budget_pricing_draft
 
 _Q6 = Decimal("0.000001")
 _MAX_UNIT_PRICE = Decimal("999999999999.999999")
+_PROCESS_VERBS = ("安装", "拆除", "处理", "砌筑", "铺贴", "铺装", "涂刷", "修复", "施工", "制作", "找平", "开槽", "开孔", "清运", "搬运", "打磨", "焊接")
+_PROCESS_CONTEXT_KEYWORDS = ("人工", "工序", "劳务")
+_PROCESS_METHOD_KEYWORDS = ("抹灰", "铺贴", "粘贴", "挂贴", "干挂", "湿贴", "找平", "凿毛", "贴膜", "开槽", "修复", "回填", "砌筑", "清运", "外运", "保洁", "收口", "保护层")
+_SUBCONTRACT_STRONG_KEYWORDS = ("分包", "外协", "定制", "成品", "半成品")
+_SUBCONTRACT_DELIVERABLE_KEYWORDS = ("玻璃门", "木饰面门", "木饰面", "钢化玻璃", "铝扣板", "门", "窗", "柜", "栏杆", "扶手", "台面", "隔断", "吊顶天棚", "天花吊顶", "造型吊顶")
+_MATERIAL_OBJECT_KEYWORDS = ("配电箱", "接线箱", "脚手架", "桥架", "电线管", "塑料电线管", "水管", "风管", "线管", "电气配线", "电力电缆", "电缆", "灯具", "射灯", "灯带", "条形灯", "吊灯", "荧光灯", "开关", "插座", "控制器", "感应开关", "阀", "水表", "地漏", "坐便器", "蹲便器", "小便器", "马桶", "水槽", "水龙头", "小厨宝", "纸巾架", "纸巾盒")
+_MATERIAL_KEYWORDS = ("涂料", "乳胶漆", "腻子", "美缝剂", "药剂", "陶粒", "龙骨", "石材", "瓷砖", "地砖", "墙纸", "壁纸", "砂浆", "水泥", "胶", "线管", "电线", "阀门", "灯具", "开关", "插座", "阻燃板", "石膏板", "水泥板", "基层板", "板材")
+_MATERIAL_UNITS = {"kg", "公斤", "吨", "t", "张", "块", "根", "卷", "桶", "袋", "支", "瓶"}
 
 
 def _json_dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _json_load(value: str | None) -> Any:
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _decimal_text(value: Any) -> str | None:
@@ -62,6 +79,42 @@ def _decimal_text(value: Any) -> str | None:
     except (InvalidOperation, TypeError, ValueError):
         return None
     return format(parsed, "f")
+
+
+def _decimal_from_text(value: Any) -> Decimal:
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
+    if not parsed.is_finite():
+        return Decimal("0")
+    return parsed
+
+
+def _is_process_text(text: str) -> bool:
+    stripped = text.strip()
+    if any(stripped.startswith(verb) or stripped.endswith(verb) for verb in _PROCESS_VERBS):
+        return True
+    return any(keyword in stripped for keyword in _PROCESS_CONTEXT_KEYWORDS + _PROCESS_METHOD_KEYWORDS)
+
+
+def _has_three_fee_split(labor: Decimal, main_material: Decimal, auxiliary: Decimal) -> bool:
+    return labor > 0 and main_material > 0 and auxiliary > 0
+
+
+def _is_material_text(name: str, text: str, unit: str | None) -> bool:
+    if any(keyword in name for keyword in _MATERIAL_OBJECT_KEYWORDS):
+        return True
+    if _is_process_text(name):
+        return False
+    normalized_unit = str(unit or "").strip().lower()
+    if normalized_unit in _MATERIAL_UNITS:
+        return True
+    if any(token in name for token in _MATERIAL_KEYWORDS):
+        return True
+    return any(token in text for token in _MATERIAL_KEYWORDS) and not any(
+        keyword in name for keyword in _PROCESS_METHOD_KEYWORDS
+    )
 
 
 def _positive_price(value: Any) -> Decimal | None:
@@ -103,8 +156,114 @@ def _sync_price_from_line(line: BudgetProjectPricingDraftLine) -> tuple[Decimal 
     return None, "none"
 
 
+def _pricing_breakdown(line: BudgetProjectPricingDraftLine) -> dict[str, Any]:
+    parsed = _json_load(line.pricing_breakdown_json)
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _detail_type_from_line(line: BudgetProjectPricingDraftLine, breakdown: dict[str, Any]) -> str:
+    subcontract = _decimal_from_text(breakdown.get("subcontract_unit_cost"))
+    labor = _decimal_from_text(breakdown.get("labor_unit_cost"))
+    main_material = _decimal_from_text(breakdown.get("main_material_unit_cost"))
+    auxiliary = _decimal_from_text(breakdown.get("auxiliary_material_unit_cost"))
+    name = str(line.item_name or "")
+    text = f"{name} {line.spec or ''}"
+    has_process_action = _is_process_text(name) or any(keyword in text for keyword in _PROCESS_CONTEXT_KEYWORDS)
+    has_material_cost = main_material > 0 or auxiliary > 0
+
+    if subcontract > 0 or _has_three_fee_split(labor, main_material, auxiliary) or any(token in text for token in _SUBCONTRACT_STRONG_KEYWORDS):
+        return "subcontract"
+    if _is_material_text(name, text, line.unit):
+        return "material"
+    if has_process_action:
+        return "process"
+    if labor > 0 and has_material_cost and any(token in text for token in _SUBCONTRACT_DELIVERABLE_KEYWORDS):
+        return "subcontract"
+    if labor > 0 and any(token in text for token in _SUBCONTRACT_DELIVERABLE_KEYWORDS):
+        return "subcontract"
+    if has_material_cost or _is_material_text(name, text, line.unit):
+        return "material"
+    if any(token in text for token in _SUBCONTRACT_DELIVERABLE_KEYWORDS):
+        return "subcontract"
+    return "process"
+
+
+def _q6(value: Decimal) -> Decimal:
+    return value.quantize(_Q6)
+
+
+def _subcontract_split_ratios(line: BudgetProjectPricingDraftLine) -> tuple[Decimal, Decimal, Decimal]:
+    text = f"{line.item_name or ''} {line.spec or ''}"
+    if "玻璃" in text:
+        return Decimal("0.15"), Decimal("0.78"), Decimal("0.07")
+    if "门" in text or "窗" in text:
+        return Decimal("0.18"), Decimal("0.74"), Decimal("0.08")
+    if "木饰面" in text or "铝扣板" in text:
+        return Decimal("0.20"), Decimal("0.72"), Decimal("0.08")
+    return Decimal("0.25"), Decimal("0.65"), Decimal("0.10")
+
+
+def _calibrated_subcontract_split(
+    line: BudgetProjectPricingDraftLine,
+    unit_price: Decimal,
+    breakdown: dict[str, Any],
+) -> tuple[str, str, str, str]:
+    labor = _decimal_from_text(breakdown.get("labor_unit_cost"))
+    main = _decimal_from_text(breakdown.get("main_material_unit_cost"))
+    auxiliary = _decimal_from_text(breakdown.get("auxiliary_material_unit_cost"))
+    source = "pricing_breakdown"
+    if not _has_three_fee_split(labor, main, auxiliary):
+        labor_ratio, main_ratio, _auxiliary_ratio = _subcontract_split_ratios(line)
+        labor = _q6(unit_price * labor_ratio)
+        main = _q6(unit_price * main_ratio)
+        auxiliary = _q6(unit_price - labor - main)
+        source = "rule_estimate_pending_llm"
+    else:
+        total = labor + main + auxiliary
+        if total > 0 and _q6(total) != unit_price:
+            labor = _q6(labor * unit_price / total)
+            main = _q6(main * unit_price / total)
+            auxiliary = _q6(unit_price - labor - main)
+            source = "pricing_breakdown_calibrated"
+    return _decimal_text(labor) or "0.000000", _decimal_text(main) or "0.000000", _decimal_text(auxiliary) or "0.000000", source
+
+
+def _account_quota_notes_from_line(line: BudgetProjectPricingDraftLine) -> str:
+    breakdown = _pricing_breakdown(line)
+    detail_type = _detail_type_from_line(line, breakdown)
+    sync_price, _source = _sync_price_from_line(line)
+    detail: dict[str, Any] = {
+        "schema": "account_quota_detail_v1",
+        "detail_type": detail_type,
+        "adjustment_factor": "1",
+    }
+    if detail_type == "process":
+        detail["real_content"] = "1"
+    if detail_type == "material":
+        detail["material_type"] = "主材" if _decimal_from_text(breakdown.get("main_material_unit_cost")) > 0 else "辅材"
+        detail["loss_rate"] = breakdown.get("loss_rate") or "0"
+        if line.spec:
+            detail["spec_model"] = line.spec
+    if detail_type == "subcontract":
+        detail["loss_rate"] = breakdown.get("loss_rate") or "0"
+        if sync_price is not None:
+            labor_fee, main_material_fee, auxiliary_material_fee, split_source = _calibrated_subcontract_split(line, sync_price, breakdown)
+        else:
+            labor_fee = main_material_fee = auxiliary_material_fee = "0.000000"
+            split_source = "unavailable"
+        detail["labor_fee"] = labor_fee
+        detail["main_material_fee"] = main_material_fee
+        detail["auxiliary_material_fee"] = auxiliary_material_fee
+        detail["subcontract_breakdown_total"] = _decimal_text(sync_price) if sync_price is not None else "0.000000"
+        detail["subcontract_breakdown_source"] = split_source
+        if line.spec:
+            detail["spec_model"] = line.spec
+    return _json_dump(detail)
+
+
 def _source_snapshot(line: BudgetProjectPricingDraftLine) -> dict[str, Any]:
     sync_price, sync_price_source = _sync_price_from_line(line)
+    breakdown = _pricing_breakdown(line)
     return {
         "draft_line_id": int(line.id),
         "line_uuid": line.line_uuid,
@@ -126,6 +285,8 @@ def _source_snapshot(line: BudgetProjectPricingDraftLine) -> dict[str, Any]:
         "price_source": line.price_source,
         "match_status": line.match_status,
         "pricing_status": line.pricing_status,
+        "pricing_breakdown": breakdown,
+        "detail_type": _detail_type_from_line(line, breakdown),
     }
 
 
@@ -321,7 +482,12 @@ def preview_account_quota_sync(
     payload: BudgetPricingDraftAccountQuotaSyncPreviewIn,
 ) -> dict[str, Any]:
     account = resolve_current_account(db, current_user)
-    draft = get_current_budget_pricing_draft(db, profile, current_user)
+    draft = get_current_budget_pricing_draft(
+        db,
+        profile,
+        current_user,
+        pricing_mode=payload.pricing_mode,
+    )
     if draft is None:
         raise BudgetPricingError("BUDGET_PRICING_DRAFT_NOT_FOUND", status_code=404)
     _ensure_draft_revision(draft, payload.expected_revision)
@@ -397,7 +563,13 @@ def confirm_account_quota_sync(
     payload: BudgetPricingDraftAccountQuotaSyncConfirmIn,
 ) -> dict[str, Any]:
     account = resolve_current_account(db, current_user, for_update=True)
-    draft = get_current_budget_pricing_draft(db, profile, current_user, for_update=True)
+    draft = get_current_budget_pricing_draft(
+        db,
+        profile,
+        current_user,
+        pricing_mode=payload.pricing_mode,
+        for_update=True,
+    )
     if draft is None:
         raise BudgetPricingError("BUDGET_PRICING_DRAFT_NOT_FOUND", status_code=404)
     _ensure_draft_revision(draft, payload.expected_revision)
@@ -494,6 +666,7 @@ def confirm_account_quota_sync(
                     unit=line.unit or "",
                     unit_price=source_price,
                     reason=reason,
+                    notes=_account_quota_notes_from_line(line),
                 )
             except AccountQuotaError as exc:
                 raise BudgetPricingError(exc.code, status_code=exc.status_code, context=exc.context) from exc
@@ -533,6 +706,7 @@ def confirm_account_quota_sync(
                 expected_revision=request.expected_target_revision,
                 unit_price=source_price,
                 reason=reason,
+                notes=_account_quota_notes_from_line(line),
             )
         except AccountQuotaError as exc:
             raise BudgetPricingError(exc.code, status_code=exc.status_code, context=exc.context) from exc

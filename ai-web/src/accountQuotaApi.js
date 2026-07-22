@@ -1,11 +1,10 @@
 import axios from 'axios'
-
-const TOKEN_KEY = 'ai_token'
+import { clearAuth, getToken } from './authStorage'
 
 const accountQuotaApiClient = axios.create({ baseURL: '/api/v1' })
 
 accountQuotaApiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY)
+  const token = getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -14,8 +13,7 @@ accountQuotaApiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem('app_user_info')
+      clearAuth()
       window.location.href = '/login'
     }
     return Promise.reject(error)

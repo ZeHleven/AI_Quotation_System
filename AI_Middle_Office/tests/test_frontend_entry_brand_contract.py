@@ -29,8 +29,8 @@ def test_legacy_business_pages_use_the_same_brand_and_login_entry():
     assert "window.location.replace(loginUrl())" in admin_html
     assert "const loginUrl" in shared_js
     assert "window.location.hash" in shared_js
-    assert "/static/js/shared.js?v=20260710-entry-brand" in quote_html
-    assert "/static/js/shared.js?v=20260710-entry-brand" in admin_html
+    assert "/static/js/shared.js?v=20260719-tab-auth" in quote_html
+    assert "/static/js/shared.js?v=20260719-tab-auth" in admin_html
 
 
 def test_legacy_portal_no_longer_contains_unverified_marketing_metrics():
@@ -55,6 +55,34 @@ def test_vite_login_rejects_unsafe_redirect_targets():
     assert "target.origin !== window.location.origin" in app
     assert "['/login', '/app.html'].includes(target.pathname)" in app
     assert "window.location.replace(landingPath(me))" in app
+
+
+def test_frontend_auth_session_is_tab_scoped_not_local_storage_shared():
+    app = read_frontend("ai-web/src/App.vue")
+    auth_storage = read_frontend("ai-web/src/authStorage.js")
+    budget_api = read_frontend("ai-web/src/budgetProjectApi.js")
+    account_quota_api = read_frontend("ai-web/src/accountQuotaApi.js")
+    shared_js = read_frontend("static/js/shared.js")
+
+    assert "window.sessionStorage" in auth_storage
+    assert "window.localStorage.removeItem(TOKEN_KEY)" in auth_storage
+    assert "setToken(data.access_token)" in app
+    assert "getToken()" in app
+    assert "localStorage.getItem(TOKEN_KEY)" not in app
+    assert "localStorage.setItem(TOKEN_KEY" not in app
+    assert "localStorage.removeItem(TOKEN_KEY" not in app
+
+    for source in (budget_api, account_quota_api):
+        assert "from './authStorage'" in source
+        assert "getToken()" in source
+        assert "clearAuth()" in source
+        assert "localStorage.getItem(TOKEN_KEY)" not in source
+
+    assert "const authStorage = () => window.sessionStorage" in shared_js
+    assert "const getToken = () => authStorage().getItem(TOKEN_KEY) || ''" in shared_js
+    assert "authStorage().setItem(TOKEN_KEY, token)" in shared_js
+    assert "window.localStorage.getItem(TOKEN_KEY)" not in shared_js
+    assert "window.localStorage.setItem(TOKEN_KEY" not in shared_js
 
 
 def test_vite_navigation_is_grouped_by_work_context_without_development_labels():

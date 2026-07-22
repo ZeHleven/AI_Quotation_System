@@ -16,7 +16,7 @@ STANDARDIZATION_VERSION = "biz2l-standard-v0"
 SUPPORTED_REQUIREMENT_EXTENSIONS = {".xlsx", ".xlsm"}
 MAX_SCAN_ROWS = 30
 MAX_ROWS_PER_SHEET = 800
-MAX_COLUMNS_PER_SHEET = 80
+MAX_COLUMNS_PER_SHEET = 300
 EXCEL_ERROR_VALUES = {"#REF!", "#DIV/0!", "#VALUE!", "#NAME?", "#N/A", "#NUM!", "#NULL!"}
 
 
@@ -487,10 +487,67 @@ def _confirmation_required_messages(row: dict[str, Any], errors: list[str]) -> l
     return details
 
 
+def _reference_sheet_role(sheet_name: str) -> str:
+    normalized = _normalize_compact(sheet_name)
+    if any(marker in normalized for marker in ("\u7f16\u5236\u8bf4\u660e", "\u62a5\u4ef7\u8bf4\u660e", "\u8bf4\u660e")):
+        return "metadata"
+    if any(marker in normalized for marker in ("\u8ba1\u7b97\u89c4\u5219", "\u8ba1\u91cf\u89c4\u5219", "\u5de5\u7a0b\u91cf\u8ba1\u7b97\u89c4\u5219")):
+        return "calculation_rule"
+    if any(marker in normalized for marker in ("\u4e3b\u6750\u54c1\u724c", "\u54c1\u724c\u8868", "\u6750\u6599\u54c1\u724c")):
+        return "material_reference"
+    if "\u635f\u8017" in normalized:
+        return "loss_reference"
+    if any(marker in normalized for marker in ("\u5907\u7528\u6e05\u5355", "\u6682\u5217\u6e05\u5355")):
+        return "optional_backup"
+    if any(marker in normalized for marker in ("\u6c47\u603b", "\u6c47\u603b\u8868", "\u62a5\u4ef7\u6c47\u603b")):
+        return "summary_analysis"
+    return ""
+
+
+def _as_reference_context_row(row: dict[str, Any], sheet_role: str) -> dict[str, Any]:
+    converted = {**row, "sheet_role": sheet_role}
+    raw_text = _clean_text(converted.get("raw_text"))
+    if not raw_text:
+        converted.update(
+            {
+                "row_type": "empty_row",
+                "item_name": "",
+                "spec": "",
+                "quantity": None,
+                "unit": "",
+                "remark": "",
+                "requires_confirmation": False,
+            }
+        )
+        return converted
+    converted.update(
+        {
+            "row_type": "reference_row",
+            "item_name": raw_text[:255],
+            "spec": "",
+            "quantity": None,
+            "quantity_source": {},
+            "quantity_candidates": [],
+            "unit": "",
+            "unit_raw": "",
+            "unit_family": "",
+            "remark": raw_text,
+            "location": "",
+            "work_area": "",
+            "field_mapping": {},
+            "normalized_name": "",
+            "requires_confirmation": False,
+            "warnings": _unique([*(converted.get("warnings") or []), "REFERENCE_CONTEXT_ROW"]),
+        }
+    )
+    return converted
+
+
 def _standardize_sheet(sheet, *, multi_sheet: bool) -> dict[str, Any]:
     row_data = _read_sheet_rows(sheet)
     header_context = _detect_header(row_data)
     field_mapping = _field_mapping_for_context(header_context)
+    sheet_role = _reference_sheet_role(sheet.title)
     sheet_issues: list[dict[str, Any]] = []
     output_rows: list[dict[str, Any]] = []
     current_section = ""
@@ -506,6 +563,10 @@ def _standardize_sheet(sheet, *, multi_sheet: bool) -> dict[str, Any]:
             current_section=current_section,
             multi_sheet=multi_sheet,
         )
+        if sheet_role:
+            standardized = _as_reference_context_row(standardized, sheet_role)
+        elif sheet_role == "":
+            standardized["sheet_role"] = "bill"
         if standardized["row_type"] == "section_row":
             current_section = standardized.get("raw_text") or current_section
         if standardized["row_type"] == "data_row":
@@ -520,6 +581,7 @@ def _standardize_sheet(sheet, *, multi_sheet: bool) -> dict[str, Any]:
     return {
         "sheet_mapping": {
             "sheet_name": sheet.title,
+            "sheet_role": sheet_role or "bill",
             "header_row_index": header_context["header_row_index"],
             "field_mapping": field_mapping,
             "columns": _sheet_columns(row_data, header_context),

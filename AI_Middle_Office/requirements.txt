@@ -17,5 +17,6 @@ slowapi
 openpyxl
 pypdf
 pdfplumber
+numpy
 Pillow
 pypdfium2

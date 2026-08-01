@@ -72,6 +72,36 @@ def _restore_capture(flags):
     _set_flag("feature_no_cost_draft_capture", old_capture)
 
 
+def test_confirm_push_rejects_pending_enterprise_quota_v2_review(client):
+    headers = _create_user_headers(client)
+    response = client.post(
+        "/api/v1/confirm_push",
+        headers=headers,
+        json={
+            "project_details": [
+                {
+                    "project_name": "地砖拆除",
+                    "quantity": 10,
+                    "unit": "㎡",
+                    "unit_price": 33.3,
+                    "total_price": 333,
+                    "cost_reference": {"matched": False},
+                    "enterprise_quota_v2_review": {
+                        "engine_version": "budget-pricing-match-v2-shadow",
+                        "decision": "shadow_auto",
+                        "requires_manual_confirmation": True,
+                        "manual_confirmation_status": "pending",
+                        "recommended_candidate_id": 201,
+                    },
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 409
+    assert "企业定额命中结果尚未人工确认" in response.json()["detail"]
+
+
 def test_confirm_push_success_creates_no_cost_draft(client, monkeypatch):
     headers = _create_user_headers(client)
     monkeypatch.setattr("app.api.v1.quote.post_json_via_gateway", _fake_push_success)

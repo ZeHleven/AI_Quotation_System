@@ -1,0 +1,167 @@
+{
+  "schema_version": "tender_evidence_dataset_v1",
+  "cases": [
+    {
+      "case_id": "CASE-DEMO-001",
+      "manifest": {
+        "case_id": "CASE-DEMO-001",
+        "manifest_version": 3,
+        "manifest_hash": "5b1fd62855ea7a9a22619f4c5f41cfe5ccefd62954d838399502957e0c92544f",
+        "documents": [
+          {
+            "document_id": "DOC-NOTICE-V1",
+            "document_key": "tender-notice",
+            "file_name": "招标公告.pdf",
+            "document_type": "tender_notice",
+            "document_version": 1,
+            "sha256": "4f20da6aaa28cb515b73658a723b5a26c99219552183cc42561002764931c79d",
+            "parse_status": "ready",
+            "active": false
+          },
+          {
+            "document_id": "DOC-NOTICE-V2",
+            "document_key": "tender-notice",
+            "file_name": "招标公告澄清01.pdf",
+            "document_type": "tender_notice",
+            "document_version": 2,
+            "sha256": "79c2da93c0195ab1e538127741681731687831aa649a3a2b1c0b42e0f009d52d",
+            "parse_status": "ready",
+            "active": true
+          },
+          {
+            "document_id": "DOC-SPEC-V1",
+            "document_key": "qualification-and-contract",
+            "file_name": "资格与合同条款.docx",
+            "document_type": "tender_specification",
+            "document_version": 1,
+            "sha256": "42598f27c9787bc1c24563a106e4f8a665e24ed873c67f93186f5744857f1d5e",
+            "parse_status": "ready",
+            "active": true
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "evidence_id": "EV-DEMO-001",
+          "block_id": "BLK-NOTICE-V1-001",
+          "document_id": "DOC-NOTICE-V1",
+          "document_key": "tender-notice",
+          "document_version": 1,
+          "block_order": 0,
+          "locator": {
+            "page": 2,
+            "section": "投标截止时间"
+          },
+          "content_hash": "14c308b8c4c3bbf8421c327c99c5f98013b1ee730e6cdc26c4c6f70f9e9582b2",
+          "content": "原招标公告：投标文件递交截止时间为2026年8月12日09:00。",
+          "keywords": ["投标截止时间", "递交", "旧版"]
+        },
+        {
+          "evidence_id": "EV-DEMO-002",
+          "block_id": "BLK-NOTICE-V1-002",
+          "document_id": "DOC-NOTICE-V1",
+          "document_key": "tender-notice",
+          "document_version": 1,
+          "block_order": 1,
+          "locator": {
+            "page": 3,
+            "section": "投标保证金"
+          },
+          "content_hash": "aac420404477c57dfdcf9ff6c61e6820a26066486c24c673e11d70d83324e45e",
+          "content": "原招标公告：投标保证金为人民币20万元，须在截止时间前到账。",
+          "keywords": ["投标保证金", "20万元", "到账"]
+        },
+        {
+          "evidence_id": "EV-DEMO-003",
+          "block_id": "BLK-NOTICE-V2-001",
+          "document_id": "DOC-NOTICE-V2",
+          "document_key": "tender-notice",
+          "document_version": 2,
+          "block_order": 0,
+          "locator": {
+            "page": 1,
+            "section": "澄清事项一"
+          },
+          "content_hash": "822de04228ef2c6bcee2fe13ab27676585d67c634dffc8970f1f072096d75db6",
+          "content": "澄清公告：投标文件递交截止时间调整为2026年8月15日14:00，其余要求不变。",
+          "keywords": ["投标截止时间", "澄清", "最新版", "2026年8月15日"]
+        },
+        {
+          "evidence_id": "EV-DEMO-004",
+          "block_id": "BLK-SPEC-V1-001",
+          "document_id": "DOC-SPEC-V1",
+          "document_key": "qualification-and-contract",
+          "document_version": 1,
+          "block_order": 0,
+          "locator": {
+            "section": "投标人资格要求"
+          },
+          "content_hash": "5ba8dc91db601d7964654b605d898cbfee02bd2b25da14fd94bade39930738e1",
+          "content": "资格要求：投标人须具备建筑装修装饰工程专业承包二级及以上资质，并具有有效安全生产许可证。",
+          "keywords": ["资格", "建筑装修装饰", "二级", "安全生产许可证"]
+        },
+        {
+          "evidence_id": "EV-DEMO-005",
+          "block_id": "BLK-SPEC-V1-002",
+          "document_id": "DOC-SPEC-V1",
+          "document_key": "qualification-and-contract",
+          "document_version": 1,
+          "block_order": 1,
+          "locator": {
+            "section": "合同付款条件"
+          },
+          "content_hash": "e55c7fbb199d603f9f9667e6ba04b42c2a7f5ac5e24b684f6d2ec65be25808f6",
+          "content": "付款条件：合同签订后无预付款，月度审核后支付至已完合格工程量的70%，竣工验收后支付至85%。",
+          "keywords": ["付款条件", "预付款", "70%", "85%"]
+        }
+      ],
+      "version_conflicts": {
+        "tender-notice": [
+          {
+            "topic": "投标截止时间",
+            "description": "澄清公告将截止时间从2026年8月12日09:00调整为2026年8月15日14:00，应采用版本2。",
+            "evidence_ids": ["EV-DEMO-001", "EV-DEMO-003"]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-DEMO-002",
+      "manifest": {
+        "case_id": "CASE-DEMO-002",
+        "manifest_version": 1,
+        "manifest_hash": "7a0dfc365a6ea2b12912a672bb47e58b8f2cc33890b7d3050e6a778d0db90a4f",
+        "documents": [
+          {
+            "document_id": "DOC-PRIVATE-V1",
+            "document_key": "private-budget",
+            "file_name": "内部项目乙控制价.pdf",
+            "document_type": "internal_budget",
+            "document_version": 1,
+            "sha256": "df8e651cc322411b078efbb8ce1e83d551a77b1965fd33cb35b545b0172eb7bf",
+            "parse_status": "ready",
+            "active": true
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "evidence_id": "EV-PRIVATE-001",
+          "block_id": "BLK-PRIVATE-001",
+          "document_id": "DOC-PRIVATE-V1",
+          "document_key": "private-budget",
+          "document_version": 1,
+          "block_order": 0,
+          "locator": {
+            "page": 1,
+            "section": "控制价"
+          },
+          "content_hash": "e5d820286df6c2b45d2c60a94b3758cf9ffd5a5907fdc70fed2b4fa271610b72",
+          "content": "内部项目乙：预算控制价为500万元。本内容不得被CASE-DEMO-001检索。",
+          "keywords": ["控制价", "500万元", "内部项目乙"]
+        }
+      ],
+      "version_conflicts": {}
+    }
+  ]
+}

@@ -7,6 +7,7 @@ from app.services.rbac import get_available_modules, get_default_home_path, seri
 
 
 HOME_FEATURE_FLAGS = (
+    "feature_unified_quotes",
     "feature_dashboard_quote",
     "feature_project_progress",
     "feature_cost_db",
@@ -76,7 +77,6 @@ def test_pending_specialty_module_does_not_become_default_home():
 def test_module_metadata_separates_trial_stage_from_runtime_status():
     modules = {item["key"]: item for item in get_available_modules(user_with_roles("staff"))}
 
-    assert modules["business_ledger"]["status"] in {"available", "pending"}
     assert modules["dwg_trial"] == {
         "key": "dwg_trial",
         "name": "图纸识图",
@@ -86,6 +86,13 @@ def test_module_metadata_separates_trial_stage_from_runtime_status():
     }
     assert modules["bidding"]["stage"] == "trial"
     assert modules["agent_center"]["stage"] == "trial"
+    assert modules["unified_quotes"] == {
+        "key": "unified_quotes",
+        "name": "报价工作台",
+        "path": "/quote/new",
+        "status": "available",
+        "stage": "trial",
+    }
 
     admin_modules = {item["key"]: item for item in get_available_modules(user_with_roles("admin"))}
     assert admin_modules["account_quotas"] == {

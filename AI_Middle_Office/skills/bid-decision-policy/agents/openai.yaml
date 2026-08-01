@@ -1,0 +1,4 @@
+interface:
+  display_name: "报价立项决策标准"
+  short_description: "按照总经办标准评估装饰工程项目是否值得投入资源进入报价立项"
+  default_prompt: "Use $bid-decision-policy to evaluate this tender project and explain the bid/no-bid recommendation."

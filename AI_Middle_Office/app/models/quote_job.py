@@ -36,6 +36,15 @@ class QuoteJob(Base):
     trace_id = Column(String(64), index=True, nullable=True)
     celery_task_id = Column(String(128), nullable=True)
     client_inquiry_id = Column(String(36), ForeignKey("client_inquiries.inquiry_id"), index=True, nullable=True)
+    budget_project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), index=True, nullable=True)
+    budget_pricing_draft_id = Column(
+        Integer,
+        ForeignKey("budget_project_pricing_drafts.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    budget_workspace_source_sha256 = Column(String(64), nullable=True)
+    budget_workspace_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     finished_at = Column(DateTime(timezone=True), nullable=True)
@@ -45,6 +54,11 @@ class QuoteJob(Base):
         back_populates="job",
         cascade="all, delete-orphan",
         order_by="QuoteJobEvent.event_index",
+    )
+    budget_project = relationship("Project", foreign_keys=[budget_project_id])
+    budget_pricing_draft = relationship(
+        "BudgetProjectPricingDraft",
+        foreign_keys=[budget_pricing_draft_id],
     )
 
 

@@ -1,0 +1,59 @@
+{
+  "schema_version": "bid_policy_calibration_dataset_v1",
+  "cases": [
+    {
+      "schema_version": "bid_policy_calibration_case_v1",
+      "case_id": "replace-with-stable-case-id",
+      "assessment_uuid": "00000000-0000-0000-0000-000000000001",
+      "project_uuid": "00000000-0000-0000-0000-000000000002",
+      "source": "synthetic",
+      "dataset_split": "development",
+      "manifest": {
+        "case_id": "00000000-0000-0000-0000-000000000002",
+        "manifest_version": 1,
+        "manifest_hash": "template-manifest-hash",
+        "documents": [
+          {
+            "document_id": "template-document",
+            "file_name": "招标文件.pdf",
+            "document_type": "tender_document",
+            "document_version": 1,
+            "sha256": "template-document-sha256",
+            "parse_status": "ready",
+            "active": true
+          }
+        ]
+      },
+      "assessment": {
+        "project_summary": "请替换为冻结的历史研判快照。",
+        "recommendation": "need_supplement",
+        "project_facts": [],
+        "dimension_reviews": [
+          {
+            "dimension": "project_basics",
+            "status": "unresolved",
+            "summary": "模板样本尚未填写。",
+            "evidence_refs": []
+          }
+        ],
+        "key_findings": [],
+        "missing_materials": [],
+        "conflicts": [],
+        "risks": [],
+        "policy_factors": [],
+        "unresolved_questions": [
+          "请填写11项经营因素及可靠来源。"
+        ],
+        "confidence": 0,
+        "termination_reason": "模板仅用于说明校准数据合同。"
+      },
+      "gold_label": {
+        "expected_decision": "need_supplement",
+        "hard_stop_expected": false,
+        "label_basis": "pre_bid_expert_review",
+        "rationale": "模板缺少经营信息，只能要求补充。",
+        "actual_outcome": null
+      }
+    }
+  ]
+}

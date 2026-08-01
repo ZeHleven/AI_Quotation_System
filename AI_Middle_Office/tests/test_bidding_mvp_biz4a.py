@@ -28,7 +28,13 @@ from app.models.bidding import (
 )
 from app.models.user import User, UserRole
 from app.services.bidding_business_objects import build_business_object_summary, build_tender_business_objects
-from app.services.bidding_parser import analyze_tender_segments, dumps_json, extract_tender_text, loads_json
+from app.services.bidding_parser import (
+    BIDDING_PARSER_VERSION,
+    analyze_tender_segments,
+    dumps_json,
+    extract_tender_text,
+    loads_json,
+)
 from app.services.bidding_tender_analysis import (
     TENDER_ANALYSIS_PREVIEW_VERSION,
     TENDER_ANALYSIS_SCHEMA_VERSION,
@@ -4004,7 +4010,7 @@ def test_bidding_mvp_project_upload_parse_and_review_risk(client):
         assert upload_response.status_code == 200, upload_response.text
         uploaded = upload_response.json()["data"]
         assert uploaded["section_count"] > 0
-        assert uploaded["parser_version"] == "biz4a-rule-v1"
+        assert uploaded["parser_version"] == BIDDING_PARSER_VERSION
 
         parse_response = client.post(
             f"/api/v1/admin/bidding/projects/{project['project_uuid']}/parse",

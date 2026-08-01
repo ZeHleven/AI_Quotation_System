@@ -4,11 +4,13 @@ import asyncio
 import json
 import importlib.util
 from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from openpyxl import load_workbook
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
@@ -32,28 +34,67 @@ from app.models.budget_project import (
     BudgetProjectImportRevision,
     BudgetProjectProfile,
 )
-from app.models.budget_pricing import BudgetProjectPricingRun
+from app.models.budget_pricing import (
+    BudgetProjectPricingRun,
+    BudgetProjectPricingRunDraftSnapshot,
+)
 from app.models.budget_pricing_draft import (
     PRICING_MODE_ACCOUNT_STRICT,
     PRICING_MODE_ENTERPRISE_AI,
     BudgetProjectPricingDraft,
+    BudgetProjectPricingDraftEvent,
     BudgetProjectPricingDraftLine,
     BudgetProjectPricingDraftQuoteJob,
     BudgetProjectPricingDraftQuoteJobLine,
 )
-from app.schemas.budget_pricing import BudgetPricingDraftQuoteJobCreate
-from app.models.enterprise_quota import EnterpriseQuotaItem, EnterpriseQuotaVersion
+from app.models.budget_project_quota import (
+    BudgetProjectQuotaEvent,
+    BudgetProjectQuotaResource,
+    BudgetProjectQuotaSnapshot,
+)
+from app.schemas.budget_pricing import (
+    BudgetPricingDraftQuoteJobCreate,
+    BudgetProjectQuotaEnterpriseSyncIn,
+)
+from app.models.enterprise_quota import (
+    EnterpriseCostResource,
+    EnterpriseQuotaComponent,
+    EnterpriseQuotaItem,
+    EnterpriseQuotaVersion,
+)
 from app.models.project_progress import Project
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services.account_tenancy import AccountTenancyError, resolve_current_account
-from app.services.budget_pricing import BudgetPricingError
+from app.services.budget_pricing import (
+    BudgetPricingError,
+    activate_budget_pricing_run,
+    archive_budget_pricing_run,
+    create_budget_pricing_run,
+)
 from app.services.budget_pricing_drafts import (
+    capture_budget_pricing_run_draft_snapshot,
     create_or_rebuild_budget_pricing_draft,
     get_current_budget_pricing_draft,
     patch_budget_pricing_draft_line,
+    patch_budget_pricing_draft_line_construction_note,
     refresh_budget_pricing_draft_summary,
+    restore_budget_pricing_draft_from_run_snapshot,
     serialize_budget_pricing_draft_line,
     update_budget_pricing_draft_totals_config,
+)
+from app.services.budget_pricing_resource_details import (
+    build_budget_procurement_statistics,
+    build_budget_pricing_resource_details,
+)
+from app.services.budget_pricing_statistics_export import (
+    render_budget_pricing_statistics_export,
+)
+from app.services.budget_project_quotas import (
+    create_project_quota_resource,
+    delete_project_quota_resource,
+    materialize_project_quota,
+    sync_project_quota_to_enterprise,
+    update_project_quota_resource,
 )
 from app.services.budget_pricing_ai_estimates import (
     build_budget_pricing_ai_estimate_input,
@@ -90,6 +131,18 @@ MIGRATION_0060_PATH = (
     / "alembic"
     / "versions"
     / "20260720_0060_add_pricing_draft_breakdown_json.py"
+)
+MIGRATION_0076_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "alembic"
+    / "versions"
+    / "20260731_0076_add_project_quota_resource_workbench.py"
+)
+MIGRATION_0081_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "alembic"
+    / "versions"
+    / "20260801_0081_add_pricing_run_draft_snapshots.py"
 )
 
 
@@ -464,8 +517,176 @@ def test_enterprise_ai_matches_and_keeps_unmatched_price_null(db):
     assert enterprise_lines[0].line_total == Decimal("20.000000")
     assert enterprise_lines[1].base_unit_price is None
     assert enterprise_lines[1].effective_unit_price is None
-    assert enterprise_draft.summary_json.find('"llm_auto_estimation_connected":false') >= 0
+    enterprise_summary = json.loads(enterprise_draft.summary_json)
+    assert enterprise_summary["account_quota_matched_count"] == 0
+    assert enterprise_summary["enterprise_quota_matched_count"] == 1
+    assert enterprise_summary["attention_count"] == 1
+    assert enterprise_summary["llm_auto_estimation_connected"] is False
     assert session.query(BudgetProjectPricingRun).count() == run_count_before
+
+
+def test_pricing_run_activation_restores_full_draft_snapshot_and_archive_updates_pointer(db):
+    session, _ = db
+    user, _, _, profile, batch, revision = _seed_account_project(
+        session,
+        suffix="version-state",
+    )
+    quota, _ = _seed_enterprise_quota(session, user)
+    draft = create_or_rebuild_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_active_quota_version_id=quota.id,
+    )
+    session.flush()
+    draft_lines_before_snapshot = (
+        session.query(BudgetProjectPricingDraftLine)
+        .filter(BudgetProjectPricingDraftLine.draft_id == draft.id)
+        .order_by(BudgetProjectPricingDraftLine.source_sort_order)
+        .all()
+    )
+    first_draft_line, second_draft_line = draft_lines_before_snapshot
+    first_draft_line.manual_unit_price = Decimal("99")
+    first_draft_line.effective_unit_price = Decimal("99")
+    first_draft_line.line_total = Decimal("198")
+    first_draft_line.price_source = "manual"
+    first_draft_line.pricing_breakdown_json = json.dumps(
+        {"composite_unit_price": "99.000000", "remark": "保留施工备注"},
+        ensure_ascii=False,
+    )
+    second_draft_line.ai_estimated_unit_price = Decimal("88")
+    second_draft_line.ai_estimate_snapshot_json = json.dumps(
+        {"provider": "deepseek", "unit_price": "88.000000"},
+        ensure_ascii=False,
+    )
+    second_draft_line.effective_unit_price = Decimal("88")
+    second_draft_line.line_total = Decimal("264")
+    second_draft_line.amount_included = True
+    second_draft_line.pricing_status = "priced"
+    second_draft_line.price_source = "ai_estimate"
+    original_revision = draft.revision
+
+    run = create_budget_pricing_run(
+        session,
+        profile,
+        user,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_quota_version_id=quota.id,
+    )
+    session.flush()
+    snapshot = capture_budget_pricing_run_draft_snapshot(
+        session,
+        profile,
+        user,
+        run,
+    )
+    activate_budget_pricing_run(session, profile, user, run.id)
+    activated_draft = restore_budget_pricing_draft_from_run_snapshot(
+        session,
+        profile,
+        user,
+        run,
+    )
+    session.flush()
+
+    session.refresh(profile)
+    session.refresh(run)
+    assert profile.active_pricing_run_id == run.id
+    assert run.status == "confirmed"
+    assert snapshot.row_count == 2
+    assert session.query(BudgetProjectPricingRunDraftSnapshot).count() == 1
+    assert activated_draft.revision == original_revision + 1
+    activated_lines = (
+        session.query(BudgetProjectPricingDraftLine)
+        .filter(BudgetProjectPricingDraftLine.draft_id == activated_draft.id)
+        .order_by(BudgetProjectPricingDraftLine.source_sort_order)
+        .all()
+    )
+    assert activated_lines[0].effective_unit_price == Decimal("99.000000")
+    assert activated_lines[0].manual_unit_price == Decimal("99.000000")
+    assert json.loads(activated_lines[0].pricing_breakdown_json)["remark"] == "保留施工备注"
+    assert activated_lines[1].ai_estimated_unit_price == Decimal("88.000000")
+    assert json.loads(activated_lines[1].ai_estimate_snapshot_json)["provider"] == "deepseek"
+    assert activated_lines[0].match_evidence_json is not None
+    assert any(
+        event.event_type == "pricing_run_snapshot_activated"
+        for event in activated_draft.events
+    )
+
+    archive_budget_pricing_run(session, profile, user, run.id)
+    session.flush()
+    session.refresh(profile)
+    session.refresh(run)
+    assert profile.active_pricing_run_id is None
+    assert run.status == "superseded"
+
+    activate_budget_pricing_run(session, profile, user, run.id)
+    restored_again = restore_budget_pricing_draft_from_run_snapshot(
+        session,
+        profile,
+        user,
+        run,
+    )
+    session.flush()
+    session.refresh(profile)
+    session.refresh(run)
+    assert profile.active_pricing_run_id == run.id
+    assert run.status == "confirmed"
+    assert restored_again.lines[0].manual_unit_price == Decimal("99.000000")
+
+
+def test_pricing_run_without_full_snapshot_cannot_replace_current_draft(db):
+    session, _ = db
+    user, _, _, profile, batch, revision = _seed_account_project(
+        session,
+        suffix="version-no-snapshot",
+    )
+    quota, _ = _seed_enterprise_quota(session, user)
+    draft = create_or_rebuild_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_active_quota_version_id=quota.id,
+    )
+    first_line = draft.lines[0]
+    first_line.manual_unit_price = Decimal("77")
+    first_line.effective_unit_price = Decimal("77")
+    run = create_budget_pricing_run(
+        session,
+        profile,
+        user,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_quota_version_id=quota.id,
+    )
+    session.flush()
+
+    with pytest.raises(
+        BudgetPricingError,
+        match="BUDGET_PRICING_RUN_DRAFT_SNAPSHOT_REQUIRED",
+    ):
+        restore_budget_pricing_draft_from_run_snapshot(
+            session,
+            profile,
+            user,
+            run,
+        )
+
+    remaining_lines = (
+        session.query(BudgetProjectPricingDraftLine)
+        .filter(BudgetProjectPricingDraftLine.draft_id == draft.id)
+        .order_by(BudgetProjectPricingDraftLine.source_sort_order)
+        .all()
+    )
+    assert len(remaining_lines) == 2
+    assert remaining_lines[0].manual_unit_price == Decimal("77.000000")
 
 
 def test_pricing_draft_uses_budget_summary_multiplier_for_totals_and_manual_prices(db):
@@ -514,6 +735,247 @@ def test_pricing_draft_uses_budget_summary_multiplier_for_totals_and_manual_pric
     assert serialized["effective_calculation_quantity"] == "88.000000"
 
 
+def test_pricing_draft_resource_details_use_enterprise_library_fields_and_quote_quantity(db):
+    session, _ = db
+    user, _, _, profile, batch, revision = _seed_account_project(
+        session,
+        suffix="resource-details",
+    )
+    version, quota_item = _seed_enterprise_quota(session, user)
+    quota_item.work_content = "基层处理、石材铺贴及成品保护"
+    quota_item.specification = "20mm厚"
+    quota_item.brand = "主库指定品牌"
+    resources_and_components = (
+        (
+            EnterpriseCostResource(
+                version_id=version.id,
+                resource_code="RG-001",
+                resource_name="石材铺贴工",
+                resource_type="人工",
+                library_kind="labor",
+                work_content="基层处理、铺贴",
+                calculation_rule="按完成面积计算",
+                unit="工日",
+                default_quantity=0.2,
+                price=10,
+                sort_order=1,
+            ),
+            "labor",
+            0.2,
+            10,
+        ),
+        (
+            EnterpriseCostResource(
+                version_id=version.id,
+                resource_code="CL-001",
+                resource_name="石材",
+                resource_type="主材",
+                library_kind="material",
+                category="石材",
+                specification="20mm",
+                brand="测试品牌",
+                unit="㎡",
+                default_quantity=2,
+                price=3,
+                sort_order=2,
+            ),
+            "main_material",
+            2,
+            3,
+        ),
+        (
+            EnterpriseCostResource(
+                version_id=version.id,
+                resource_code="CL-002",
+                resource_name="水泥砂浆",
+                resource_type="辅材",
+                library_kind="material",
+                category="砂浆",
+                specification="1:3",
+                unit="kg",
+                default_quantity=0.5,
+                price=2,
+                sort_order=3,
+            ),
+            "auxiliary_material",
+            0.5,
+            2,
+        ),
+    )
+    for sort_order, (resource, fee_bucket, content, price) in enumerate(
+        resources_and_components,
+        start=1,
+    ):
+        session.add(resource)
+        session.flush()
+        session.add(
+            EnterpriseQuotaComponent(
+                version_id=version.id,
+                quota_item_id=quota_item.id,
+                resource_id=resource.id,
+                parent_quota_code=quota_item.quota_code,
+                component_type=resource.resource_type,
+                resource_code=resource.resource_code,
+                resource_name=resource.resource_name,
+                unit=resource.unit,
+                quantity=content,
+                unit_price=price,
+                amount=content * price,
+                fee_bucket=fee_bucket,
+                sort_order=sort_order,
+            )
+        )
+    session.commit()
+
+    draft = create_or_rebuild_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_active_quota_version_id=version.id,
+    )
+    session.flush()
+
+    labor = build_budget_pricing_resource_details(session, draft, bucket="labor")
+    main = build_budget_pricing_resource_details(session, draft, bucket="main_material")
+    auxiliary = build_budget_pricing_resource_details(
+        session,
+        draft,
+        bucket="auxiliary_material",
+    )
+
+    assert labor["headers"] == [
+        "编码",
+        "类型",
+        "项目名称",
+        "工作内容",
+        "计算规则",
+        "单位",
+        "数量",
+        "不含税人工单价",
+        "人工总价",
+    ]
+    assert main["headers"] == [
+        "分类",
+        "材料编码",
+        "类型",
+        "材料名称",
+        "规格",
+        "品牌",
+        "单位",
+        "数量",
+        "除税单价",
+        "总价",
+    ]
+    assert labor["rows"][0]["resource_name"] == "石材铺贴工"
+    assert labor["rows"][0]["quantity"] == "0.400000"
+    assert labor["rows"][0]["amount"] == "4.000000"
+    assert labor["total_amount"] == "4.000000"
+    assert main["rows"][0]["category"] == "石材"
+    assert "project_feature_work_content" not in main["rows"][0]
+    assert main["rows"][0]["specification"] == "20mm"
+    assert main["rows"][0]["brand"] == "测试品牌"
+    assert main["rows"][0]["quantity"] == "4.000000"
+    assert main["rows"][0]["amount"] == "12.000000"
+    assert main["total_amount"] == "12.000000"
+    assert auxiliary["rows"][0]["quantity"] == "1.000000"
+    assert auxiliary["total_amount"] == "2.000000"
+    assert all(result["enterprise_resource_row_count"] == 1 for result in (labor, main, auxiliary))
+    assert all(result["derived_row_count"] == 0 for result in (labor, main, auxiliary))
+
+    procurement = build_budget_procurement_statistics(session, draft)
+    assert procurement["material_kind_count"] == 2
+    assert procurement["labor_trade_count"] == 1
+    assert procurement["unresolved_line_count"] == 0
+    assert {row["resource_code"] for row in procurement["material_rows"]} == {
+        "CL-001",
+        "CL-002",
+    }
+    assert {
+        (row["resource_code"], row["quantity"])
+        for row in procurement["material_rows"]
+    } == {
+        ("CL-001", "4.000000"),
+        ("CL-002", "1.000000"),
+    }
+    assert procurement["labor_rows"][0]["resource_code"] == "RG-001"
+    assert procurement["labor_rows"][0]["quantity"] == "0.400000"
+    assert procurement["material_unit_totals"] == [
+        {"unit": "kg", "quantity": "1.000000"},
+        {"unit": "㎡", "quantity": "4.000000"},
+    ]
+    assert procurement["labor_unit_totals"] == [
+        {"unit": "工日", "quantity": "0.400000"},
+    ]
+    assert all(
+        "project_feature_work_content" not in row
+        for row in procurement["material_rows"]
+    )
+
+    export = render_budget_pricing_statistics_export(
+        session,
+        draft,
+        project_name=profile.project.name,
+    )
+    workbook = load_workbook(BytesIO(export.content), read_only=True, data_only=True)
+    assert workbook.sheetnames == ["统计汇总", "主材明细", "辅材明细", "人工明细"]
+    assert export.filename.endswith("_报价统计_R1.xlsx")
+    assert export.content_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    for sheet_name in ("主材明细", "辅材明细"):
+        headers = [cell.value for cell in next(workbook[sheet_name].iter_rows(max_row=1))]
+        assert headers == [
+            "分类",
+            "材料编码",
+            "类型",
+            "材料名称",
+            "规格",
+            "品牌",
+            "单位",
+            "数量",
+            "除税单价",
+            "总价",
+        ]
+        assert "项目特征及工作内容" not in headers
+
+    selected_export = render_budget_pricing_statistics_export(
+        session,
+        draft,
+        project_name=profile.project.name,
+        sections=("labor", "main_material", "labor"),
+    )
+    selected_workbook = load_workbook(
+        BytesIO(selected_export.content),
+        read_only=True,
+        data_only=True,
+    )
+    assert selected_workbook.sheetnames == ["主材明细", "人工明细"]
+    assert selected_export.filename.endswith("_报价统计_R1.xlsx")
+
+    single_export = render_budget_pricing_statistics_export(
+        session,
+        draft,
+        project_name=profile.project.name,
+        sections=("auxiliary_material",),
+    )
+    single_workbook = load_workbook(
+        BytesIO(single_export.content),
+        read_only=True,
+        data_only=True,
+    )
+    assert single_workbook.sheetnames == ["辅材明细"]
+    assert single_export.filename.endswith("_辅材明细_R1.xlsx")
+
+    with pytest.raises(ValueError, match="至少选择一项"):
+        render_budget_pricing_statistics_export(
+            session,
+            draft,
+            project_name=profile.project.name,
+            sections=(),
+        )
+
+
 def test_pricing_draft_http_api_is_account_scoped_and_rejects_account_id(db):
     session, _ = db
     user_a, _, project_a, _, batch_a, revision_a = _seed_account_project(
@@ -550,6 +1012,16 @@ def test_pricing_draft_http_api_is_account_scoped_and_rejects_account_id(db):
             lines = client.get(
                 f"/api/v1/admin/budget-projects/{project_b.id}/pricing-draft/lines"
             )
+            resource_details = client.get(
+                f"/api/v1/admin/budget-projects/{project_b.id}/pricing-draft/resource-details",
+                params={"bucket": "labor"},
+            )
+            statistics_export = client.get(
+                f"/api/v1/admin/budget-projects/{project_b.id}/pricing-draft/statistics-export"
+            )
+            procurement = client.get(
+                f"/api/v1/admin/budget-projects/{project_b.id}/pricing-draft/procurement-statistics"
+            )
             patch = client.patch(
                 f"/api/v1/admin/budget-projects/{project_b.id}/pricing-draft/lines/1",
                 json={
@@ -558,7 +1030,23 @@ def test_pricing_draft_http_api_is_account_scoped_and_rejects_account_id(db):
                     "manual_unit_price": "12.000000",
                 },
             )
-            for response in (current, lines, patch):
+            note_patch = client.patch(
+                f"/api/v1/admin/budget-projects/{project_b.id}/pricing-draft/lines/1/construction-note",
+                json={
+                    "expected_revision": 1,
+                    "expected_line_revision": 1,
+                    "remark": "施工提示",
+                },
+            )
+            for response in (
+                current,
+                lines,
+                resource_details,
+                statistics_export,
+                procurement,
+                patch,
+                note_patch,
+            ):
                 assert response.status_code == 404, response.text
                 assert response.json()["detail"] == "BUDGET_PROJECT_NOT_FOUND"
 
@@ -753,6 +1241,46 @@ def test_modes_keep_separate_drafts_manual_patch_clear_and_optimistic_locks(db):
     assert summary["totals"]["tax_total"] == "3.510000"
     assert summary["totals"]["tax_included_total"] == "42.510000"
 
+    price_before_note = line.effective_unit_price
+    total_before_note = line.line_total
+    price_source_before_note = line.price_source
+    manual_price_before_note = line.manual_unit_price
+    draft_revision_before_note = account_draft.revision
+    line_revision_before_note = line.line_revision
+    account_draft, line = patch_budget_pricing_draft_line_construction_note(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ACCOUNT_STRICT,
+        line_identifier=line.id,
+        expected_revision=account_draft.revision,
+        expected_line_revision=line.line_revision,
+        remark="先做成品保护；垃圾外运另计。",
+        reason="施工提示人工补充",
+    )
+    assert json.loads(line.pricing_breakdown_json)["remark"] == "先做成品保护；垃圾外运另计。"
+    assert line.effective_unit_price == price_before_note
+    assert line.line_total == total_before_note
+    assert line.price_source == price_source_before_note
+    assert line.manual_unit_price == manual_price_before_note
+    assert account_draft.revision == draft_revision_before_note + 1
+    assert line.line_revision == line_revision_before_note + 1
+    note_event = (
+        session.query(BudgetProjectPricingDraftEvent)
+        .filter(
+            BudgetProjectPricingDraftEvent.draft_id == account_draft.id,
+            BudgetProjectPricingDraftEvent.event_type == "construction_note_updated",
+        )
+        .order_by(BudgetProjectPricingDraftEvent.id.desc())
+        .first()
+    )
+    assert note_event is not None
+    assert note_event.actor_id == user.id
+    assert note_event.to_revision == account_draft.revision
+    assert json.loads(note_event.event_json)["line_id"] == line.id
+    assert json.loads(note_event.event_json)["previous_remark"] == "拆分费用试算"
+    assert json.loads(note_event.event_json)["remark"] == "先做成品保护；垃圾外运另计。"
+
     account_draft = update_budget_pricing_draft_totals_config(
         session,
         profile,
@@ -937,6 +1465,16 @@ def test_p2_2c1_ai_estimate_does_not_override_enterprise_base_price(db):
             )
         )
     assert blocked.value.code == "BUDGET_PRICING_AI_ESTIMATE_BASE_PRICE_EXISTS"
+
+
+def test_p2_2c2_quote_job_defaults_are_conservative_for_large_imports():
+    payload = BudgetPricingDraftQuoteJobCreate(
+        source_import_batch_id=1,
+        source_import_revision_id=1,
+    )
+
+    assert payload.ai_concurrency == 1
+    assert payload.ai_batch_size == 3
 
 
 def test_p2_2c2_one_click_quote_job_prices_unmatched_lines_in_background(db, monkeypatch):
@@ -1178,3 +1716,327 @@ def test_pricing_draft_breakdown_migration_declares_json_column():
     assert 'down_revision: Union[str, None] = "20260720_0059"' in text
     assert '"pricing_breakdown_json"' in text
     assert "pricing_breakdown_json" in BudgetProjectPricingDraftLine.__table__.c
+
+
+def _seed_project_quota_components(session, version, quota_item):
+    rows = (
+        ("labor", "RG-101", "安装工", "工日", Decimal("1"), Decimal("2")),
+        ("main_material", "CL-101", "项目主材", "㎡", Decimal("2"), Decimal("4")),
+    )
+    components = []
+    for sort_order, (bucket, code, name, unit, quantity, unit_price) in enumerate(rows, start=1):
+        resource = EnterpriseCostResource(
+            version_id=version.id,
+            resource_code=code,
+            resource_name=name,
+            resource_type=bucket,
+            library_kind="labor" if bucket == "labor" else "material",
+            category="项目测试",
+            work_content="项目工料机专项测试",
+            calculation_rule="按含量计算",
+            unit=unit,
+            default_quantity=float(quantity),
+            price=float(unit_price),
+            computed_price=float(unit_price),
+            sort_order=sort_order,
+        )
+        session.add(resource)
+        session.flush()
+        component = EnterpriseQuotaComponent(
+            version_id=version.id,
+            quota_item_id=quota_item.id,
+            resource_id=resource.id,
+            parent_quota_code=quota_item.quota_code,
+            component_type="人工" if bucket == "labor" else "主材",
+            resource_code=code,
+            resource_name=name,
+            unit=unit,
+            quantity=float(quantity),
+            unit_price=float(unit_price),
+            amount=float(quantity * unit_price),
+            fee_bucket=bucket,
+            formula_library_kind=resource.library_kind,
+            formula_link_status="linked",
+            sort_order=sort_order,
+        )
+        session.add(component)
+        components.append(component)
+    quota_item.labor_fee = 2
+    quota_item.main_material_fee = 8
+    quota_item.auxiliary_material_fee = 0
+    quota_item.machinery_fee = 0
+    quota_item.unit_price = 10
+    session.flush()
+    return components
+
+
+def test_project_quota_resource_crud_recalculates_project_only(db):
+    session, _ = db
+    user, _, _, profile, batch, revision = _seed_account_project(
+        session,
+        suffix="project-quota-crud",
+    )
+    version, quota_item = _seed_enterprise_quota(session, user)
+    enterprise_components = _seed_project_quota_components(session, version, quota_item)
+    session.commit()
+    draft = create_or_rebuild_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_active_quota_version_id=version.id,
+    )
+    session.flush()
+    line = draft.lines[0]
+
+    snapshot = materialize_project_quota(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        line_identifier=line.id,
+    )
+    session.flush()
+    assert snapshot.source_enterprise_quota_item_id == quota_item.id
+    assert len(snapshot.resources) == 2
+    assert snapshot.unit_price == Decimal("10.000000")
+
+    labor = next(resource for resource in snapshot.resources if resource.fee_bucket == "labor")
+    snapshot = update_project_quota_resource(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        resource_identifier=labor.resource_uuid,
+        expected_snapshot_revision=snapshot.revision,
+        expected_resource_revision=labor.revision,
+        payload={"quantity": "1.5", "unit_price": "3"},
+        reason="项目人工含量复核",
+    )
+    session.flush()
+    assert snapshot.labor_fee == Decimal("4.500000")
+    assert snapshot.unit_price == Decimal("12.500000")
+    session.refresh(line)
+    assert line.manual_unit_price == Decimal("12.500000")
+    assert line.effective_unit_price == Decimal("12.500000")
+
+    snapshot = create_project_quota_resource(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=snapshot.revision,
+        payload={
+            "fee_bucket": "machinery",
+            "resource_name": "小型切割机",
+            "component_type": "机械",
+            "unit": "台班",
+            "quantity": "1",
+            "unit_price": "4",
+        },
+        reason="补充机械消耗",
+    )
+    session.flush()
+    assert snapshot.machinery_fee == Decimal("4.000000")
+    assert snapshot.unit_price == Decimal("16.500000")
+
+    main_material = next(
+        resource for resource in snapshot.resources if resource.fee_bucket == "main_material"
+    )
+    snapshot = delete_project_quota_resource(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        resource_identifier=main_material.resource_uuid,
+        expected_snapshot_revision=snapshot.revision,
+        expected_resource_revision=main_material.revision,
+        reason="项目改用甲供材料",
+    )
+    session.flush()
+    assert len(snapshot.resources) == 2
+    assert snapshot.main_material_fee == Decimal("0.000000")
+    assert snapshot.unit_price == Decimal("8.500000")
+    assert session.query(BudgetProjectQuotaEvent).filter_by(snapshot_id=snapshot.id).count() == 4
+
+    # Project edits never mutate the active enterprise master.
+    session.refresh(quota_item)
+    for component in enterprise_components:
+        session.refresh(component)
+    assert quota_item.unit_price == 10
+    assert len(enterprise_components) == 2
+    assert [component.amount for component in enterprise_components] == [2.0, 8.0]
+
+
+def test_project_quota_enterprise_sync_creates_versioned_draft(db):
+    session, _ = db
+    user, _, _, profile, batch, revision = _seed_account_project(
+        session,
+        suffix="project-quota-sync",
+    )
+    version, quota_item = _seed_enterprise_quota(session, user)
+    _seed_project_quota_components(session, version, quota_item)
+    session.commit()
+    draft = create_or_rebuild_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_active_quota_version_id=version.id,
+    )
+    session.flush()
+    line = draft.lines[0]
+    snapshot = materialize_project_quota(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        line_identifier=line.id,
+    )
+    machinery = create_project_quota_resource(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=snapshot.revision,
+        payload={
+            "fee_bucket": "machinery",
+            "resource_name": "同步测试机械",
+            "unit": "台班",
+            "quantity": "1",
+            "unit_price": "5",
+        },
+        reason="项目复核补充机械",
+    )
+
+    result = sync_project_quota_to_enterprise(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=machinery.revision,
+        reason="成本核定后同步项目工料机",
+    )
+    session.flush()
+    target_version_id = result["enterprise_version"]["id"]
+    target_version = session.query(EnterpriseQuotaVersion).filter_by(id=target_version_id).one()
+    target_item = (
+        session.query(EnterpriseQuotaItem)
+        .filter_by(version_id=target_version_id, quota_code=quota_item.quota_code)
+        .one()
+    )
+
+    assert target_version.status == "draft"
+    assert target_version.is_active is False
+    assert result["requires_activation"] is True
+    assert target_item.unit_price == 15.0
+    assert (
+        session.query(EnterpriseQuotaComponent)
+        .filter_by(version_id=target_version_id, quota_item_id=target_item.id)
+        .count()
+        == 3
+    )
+    session.refresh(version)
+    session.refresh(quota_item)
+    assert version.status == "active"
+    assert version.is_active is True
+    assert quota_item.unit_price == 10
+
+
+def test_project_quota_enterprise_sync_requires_cost_approver(db):
+    session, _ = db
+    user, _, project, _, _, _ = _seed_account_project(
+        session,
+        suffix="project-quota-permission",
+    )
+    user.role = "none"
+    session.add(
+        UserRole(
+            user_id=user.id,
+            role="cost_editor",
+            created_by=user.id,
+            note="仅允许编辑项目成本，不允许核定企业定额",
+        )
+    )
+    session.add(
+        UserRole(
+            user_id=user.id,
+            role="project_manager",
+            created_by=user.id,
+            note="允许访问本人预算项目",
+        )
+    )
+    session.commit()
+    session.expire(user, ["role_assignments"])
+
+    old_budget = settings.feature_budget_projects
+    old_pricing = settings.feature_budget_pricing
+    old_drafts = settings.feature_budget_pricing_drafts
+    old_cost_db = settings.feature_cost_db
+    object.__setattr__(settings, "feature_budget_projects", True)
+    object.__setattr__(settings, "feature_budget_pricing", True)
+    object.__setattr__(settings, "feature_budget_pricing_drafts", True)
+    object.__setattr__(settings, "feature_cost_db", True)
+    try:
+        with pytest.raises(HTTPException) as denied:
+            asyncio.run(
+                budget_pricing_api.sync_project_quota_to_enterprise_endpoint(
+                    project.id,
+                    "missing-line",
+                    BudgetProjectQuotaEnterpriseSyncIn(
+                        expected_snapshot_revision=1,
+                        sync_to_enterprise=True,
+                        reason="尝试同步企业定额",
+                    ),
+                    user,
+                    session,
+                )
+            )
+        assert denied.value.status_code == 403
+        assert denied.value.detail["code"] == "ENTERPRISE_QUOTA_SYNC_PERMISSION_DENIED"
+    finally:
+        object.__setattr__(settings, "feature_budget_projects", old_budget)
+        object.__setattr__(settings, "feature_budget_pricing", old_pricing)
+        object.__setattr__(settings, "feature_budget_pricing_drafts", old_drafts)
+        object.__setattr__(settings, "feature_cost_db", old_cost_db)
+
+
+def test_project_quota_migration_and_metadata_contract():
+    text = MIGRATION_0076_PATH.read_text(encoding="utf-8")
+    assert 'revision: str = "20260731_0076"' in text
+    assert 'down_revision: Union[str, None] = "20260730_0075"' in text
+    assert {
+        "budget_project_quota_snapshots",
+        "budget_project_quota_resources",
+        "budget_project_quota_events",
+    }.issubset(Base.metadata.tables)
+    unique_constraints = {
+        constraint.name: tuple(constraint.columns.keys())
+        for constraint in BudgetProjectQuotaSnapshot.__table__.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    }
+    assert unique_constraints["uq_budget_project_quota_snapshots_draft_line"] == (
+        "draft_line_id",
+    )
+    assert "source_enterprise_component_id" in BudgetProjectQuotaResource.__table__.c
+
+
+def test_pricing_version_full_draft_snapshot_migration_contract():
+    text = MIGRATION_0081_PATH.read_text(encoding="utf-8")
+
+    assert 'revision: str = "20260801_0081"' in text
+    assert 'down_revision: Union[str, None] = "20260731_0080"' in text
+    assert "budget_project_pricing_run_draft_snapshots" in text
+    table = Base.metadata.tables["budget_project_pricing_run_draft_snapshots"]
+    assert {
+        "run_id",
+        "account_id",
+        "project_id",
+        "source_draft_revision",
+        "snapshot_sha256",
+        "snapshot_json",
+    }.issubset(table.c.keys())

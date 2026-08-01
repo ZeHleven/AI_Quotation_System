@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import unicodedata
 from datetime import date, datetime
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -238,6 +239,162 @@ def standardize_requirement_excel_bytes(file_content: bytes, *, filename: str | 
         "rows": rows,
         "issues": issues,
     }
+
+
+def standardize_requirement_text(
+    text: str,
+    *,
+    source_name: str = "文字输入",
+) -> dict[str, Any]:
+    """Map conversational or vision-extracted text into standard quote rows.
+
+    This is intentionally conservative: incomplete rows are retained for the
+    existing preview screen instead of being silently discarded.  The preview
+    remains the single human confirmation point.
+    """
+
+    raw_text = _clean_text(text)
+    if not raw_text:
+        raise RequirementStandardizationError("报价需求为空，请输入文字或上传附件")
+
+    rows: list[dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
+    segments = _requirement_text_segments(raw_text)
+    for index, segment in enumerate(segments, start=1):
+        inferred = _infer_from_text(segment)
+        item_name = _clean_text(inferred.get("item_name"))
+        spec = _clean_text(inferred.get("spec"))
+        quantity_raw = _clean_text(inferred.get("quantity_raw"))
+        unit_raw = _clean_text(inferred.get("unit_raw"))
+        quantity, quantity_warnings = _parse_quantity(quantity_raw)
+        unit = _normalize_unit(unit_raw) or unit_raw
+        warnings = list(inferred.get("warnings") or [])
+        warnings.extend(quantity_warnings)
+        if not item_name:
+            warnings.append("MISSING_ITEM_NAME")
+        if quantity is None:
+            warnings.append("MISSING_QUANTITY")
+        if not unit:
+            warnings.append("MISSING_UNIT")
+        warnings = _unique(warnings)
+        confidence = "high" if item_name and quantity is not None and unit else ("medium" if item_name else "low")
+        if confidence == "low":
+            warnings.append("LOW_CONFIDENCE")
+            warnings = _unique(warnings)
+        requires_confirmation = confidence == "low" or any(
+            code in FORCE_CONFIRMATION_WARNINGS for code in warnings
+        )
+        row = {
+            "requirement_row_key": f"text:{index:04d}",
+            "source_sheet": source_name,
+            "raw_row_index": index,
+            "row_type": "data_row",
+            "item_name": item_name or segment,
+            "spec": spec,
+            "quantity": quantity,
+            "quantity_source": {
+                "method": "text_inference",
+                "raw_value": quantity_raw,
+            },
+            "quantity_candidates": [],
+            "unit": unit,
+            "unit_raw": unit_raw,
+            "unit_family": UNIT_FAMILIES.get(unit, ""),
+            "remark": "",
+            "location": "",
+            "work_area": "",
+            "raw_fields": {"文字需求": segment},
+            "raw_cells": [{"column": "A", "value": segment}],
+            "raw_text": segment,
+            "field_mapping": {
+                "item_name": {"method": "text_inference"},
+                "quantity": {"method": "text_inference"},
+                "unit": {"method": "text_inference"},
+            },
+            "normalized_name": _normalize_name(item_name or segment),
+            "confidence": confidence,
+            "warnings": warnings,
+            "requires_confirmation": requires_confirmation,
+            "cost_candidates": [],
+            "auto_mapped": True,
+        }
+        rows.append(row)
+        for code in warnings:
+            issues.append(
+                {
+                    "source_sheet": source_name,
+                    "raw_row_index": index,
+                    "code": code,
+                    "message": WARNING_MESSAGES.get(code, code),
+                }
+            )
+
+    return {
+        "version": f"{STANDARDIZATION_VERSION}-text",
+        "source": {"file_name": source_name, "file_type": "text"},
+        "summary": {
+            "sheet_count": 1,
+            "standard_row_count": len(rows),
+            "requires_confirmation_count": sum(1 for row in rows if row["requires_confirmation"]),
+            "ignored_row_count": 0,
+            "total_output_row_count": len(rows),
+        },
+        "field_mapping": {},
+        "sheet_mappings": [],
+        "rows": rows,
+        "issues": issues,
+    }
+
+
+def standardization_quote_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return auto-mapped data rows in the shape persisted by quote jobs."""
+
+    output: list[dict[str, Any]] = []
+    for index, raw_row in enumerate(result.get("rows") or [], start=1):
+        if not isinstance(raw_row, dict) or raw_row.get("row_type") != "data_row":
+            continue
+        item_name = _clean_text(raw_row.get("item_name"))
+        if not item_name:
+            continue
+        row = dict(raw_row)
+        source_sheet = _clean_text(row.get("source_sheet")) or "需求清单"
+        raw_row_index = int(row.get("raw_row_index") or index)
+        row["requirement_row_key"] = (
+            _clean_text(row.get("requirement_row_key"))
+            or f"{source_sheet}:{raw_row_index}:{index}"
+        )[:128]
+        row["auto_mapped"] = True
+        output.append(row)
+    return output
+
+
+def _requirement_text_segments(text: str) -> list[str]:
+    normalized = unicodedata.normalize("NFKC", text).replace("\r\n", "\n").replace("\r", "\n")
+    normalized = re.sub(r"(?<!\d)(?:\(?\d{1,4}\)?[.、:：]|[一二三四五六七八九十]+[、.])\s*", "\n", normalized)
+    primary = [part.strip(" \t,，。") for part in re.split(r"[\n;；]+", normalized)]
+    segments: list[str] = []
+    for part in primary:
+        if not part:
+            continue
+        matches = list(QUANTITY_UNIT_RE.finditer(part))
+        if len(matches) <= 1:
+            segments.append(part)
+            continue
+        cursor = 0
+        for match_index, match in enumerate(matches[:-1]):
+            next_match = matches[match_index + 1]
+            separator = re.search(r"[，,、]", part[match.end() : next_match.start()])
+            if not separator:
+                continue
+            boundary = match.end() + separator.start()
+            candidate = part[cursor:boundary].strip(" \t,，。")
+            if candidate:
+                segments.append(candidate)
+            cursor = boundary + 1
+        tail = part[cursor:].strip(" \t,，。")
+        if tail:
+            segments.append(tail)
+    return segments or [normalized.strip()]
 
 
 def build_standardization_markdown(result: dict[str, Any]) -> str:

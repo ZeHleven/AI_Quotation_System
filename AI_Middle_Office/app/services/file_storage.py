@@ -91,6 +91,35 @@ def store_file_bytes(
     }
 
 
+def put_object_bytes(
+    *,
+    content: bytes,
+    object_name: str,
+    content_type: Optional[str] = None,
+    bucket: Optional[str] = None,
+) -> dict:
+    """Store bytes at one exact, caller-owned immutable object key."""
+
+    normalized_object_name = (object_name or "").strip().lstrip("/")
+    if not normalized_object_name or ".." in normalized_object_name.split("/"):
+        raise StorageError("object_name is invalid")
+    client = get_storage_client()
+    resolved_bucket = bucket or ensure_bucket(client)
+    client.put_object(
+        resolved_bucket,
+        normalized_object_name,
+        data=BytesIO(content),
+        length=len(content),
+        content_type=content_type or "application/octet-stream",
+    )
+    return {
+        "bucket": resolved_bucket,
+        "object_name": normalized_object_name,
+        "size_bytes": len(content),
+        "content_type": content_type or "application/octet-stream",
+    }
+
+
 def get_object_bytes(object_name: str, bucket: Optional[str] = None) -> bytes:
     client = get_storage_client()
     response = client.get_object(bucket or settings.minio_bucket, object_name)
@@ -99,6 +128,13 @@ def get_object_bytes(object_name: str, bucket: Optional[str] = None) -> bytes:
     finally:
         response.close()
         response.release_conn()
+
+
+def delete_object(object_name: str, bucket: Optional[str] = None) -> None:
+    """Delete one exact object, used only to compensate a failed DB write."""
+
+    client = get_storage_client()
+    client.remove_object(bucket or settings.minio_bucket, object_name)
 
 
 def generate_presigned_get_url(object_name: str, expires_seconds: Optional[int] = None, bucket: Optional[str] = None) -> str:

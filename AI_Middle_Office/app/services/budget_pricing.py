@@ -33,8 +33,11 @@ from app.models.budget_pricing import (
     PRICING_MATCH_AUTO,
     PRICING_MATCH_UNIT_CONFLICT,
     PRICING_MATCH_UNMATCHED,
+    PRICING_RUN_STATUS_CONFIRMED,
+    PRICING_RUN_STATUS_FAILED,
     PRICING_RUN_STATUS_PROCESSING,
     PRICING_RUN_STATUS_READY,
+    PRICING_RUN_STATUS_SUPERSEDED,
     BudgetProjectPricingEvent,
     BudgetProjectPricingMatchCandidate,
     BudgetProjectPricingRun,
@@ -48,7 +51,7 @@ from app.models.enterprise_quota import (
     EnterpriseQuotaVersion,
 )
 from app.models.user import User
-from app.services.rbac import can_create_budget_pricing, can_view_budget_pricing
+from app.services.rbac import can_create_budget_pricing, can_view_budget_pricing, has_any_role
 
 
 MATCHING_ENGINE_VERSION = "budget-pricing-match-v1"
@@ -1111,6 +1114,9 @@ def build_budget_pricing_readiness(
         "capabilities": {
             "can_view_pricing": can_view_budget_pricing(current_user),
             "can_create_pricing_run": eligible and can_create_budget_pricing(current_user),
+            "can_manage_pricing_draft": can_create_budget_pricing(current_user),
+            "can_sync_enterprise_quota": can_create_budget_pricing(current_user)
+            and has_any_role(current_user, {"system_admin", "admin", "cost_approver"}),
         },
     }
 
@@ -1121,6 +1127,164 @@ def get_budget_pricing_run(db: Session, identifier: str | int) -> BudgetProjectP
     run = query.filter(BudgetProjectPricingRun.id == int(text)).first() if text.isdigit() else query.filter(BudgetProjectPricingRun.run_uuid == text).first()
     if run is None:
         raise BudgetPricingError("BUDGET_PRICING_RUN_NOT_FOUND", status_code=404)
+    return run
+
+
+def _locked_project_pricing_run(
+    db: Session,
+    profile: BudgetProjectProfile,
+    identifier: str | int,
+) -> BudgetProjectPricingRun:
+    text = str(identifier).strip()
+    query = db.query(BudgetProjectPricingRun).filter(
+        BudgetProjectPricingRun.project_id == profile.project_id
+    )
+    query = (
+        query.filter(BudgetProjectPricingRun.id == int(text))
+        if text.isdigit()
+        else query.filter(BudgetProjectPricingRun.run_uuid == text)
+    )
+    run = query.with_for_update().one_or_none()
+    if run is None:
+        raise BudgetPricingError("BUDGET_PRICING_RUN_NOT_FOUND", status_code=404)
+    return run
+
+
+def activate_budget_pricing_run(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    identifier: str | int,
+) -> BudgetProjectPricingRun:
+    locked_profile = (
+        db.query(BudgetProjectProfile)
+        .filter(BudgetProjectProfile.id == profile.id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if locked_profile is None or int(locked_profile.project_id) != int(profile.project_id):
+        raise BudgetPricingError("BUDGET_PROJECT_NOT_FOUND", status_code=404)
+    if locked_profile.workspace_status != "active":
+        raise BudgetPricingError("BUDGET_PROJECT_ARCHIVED")
+
+    run = _locked_project_pricing_run(db, locked_profile, identifier)
+    if run.status not in {
+        PRICING_RUN_STATUS_READY,
+        PRICING_RUN_STATUS_CONFIRMED,
+        PRICING_RUN_STATUS_SUPERSEDED,
+    }:
+        raise BudgetPricingError(
+            "BUDGET_PRICING_RUN_NOT_ACTIVATABLE",
+            context={"run_status": run.status},
+        )
+
+    activated_at = db.execute(select(func.now())).scalar_one()
+    previous_run = None
+    if locked_profile.active_pricing_run_id and int(locked_profile.active_pricing_run_id) != int(run.id):
+        previous_run = (
+            db.query(BudgetProjectPricingRun)
+            .filter(
+                BudgetProjectPricingRun.id == locked_profile.active_pricing_run_id,
+                BudgetProjectPricingRun.project_id == locked_profile.project_id,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if previous_run is not None:
+            previous_status = previous_run.status
+            previous_run.status = PRICING_RUN_STATUS_SUPERSEDED
+            previous_run.superseded_by_run_id = run.id
+            previous_run.superseded_by = current_user.id
+            previous_run.superseded_at = activated_at
+            previous_run.events.append(
+                BudgetProjectPricingEvent(
+                    event_uuid=str(uuid4()),
+                    project_id=locked_profile.project_id,
+                    event_type="run_archived_on_activation",
+                    from_status=previous_status,
+                    to_status=PRICING_RUN_STATUS_SUPERSEDED,
+                    actor_id=current_user.id,
+                    event_json=_json_dump({"activated_run_id": run.id}),
+                )
+            )
+
+    previous_status = run.status
+    run.status = PRICING_RUN_STATUS_CONFIRMED
+    run.confirmed_by = current_user.id
+    run.confirmed_at = activated_at
+    run.superseded_by_run_id = None
+    run.superseded_by = None
+    run.superseded_at = None
+    run.events.append(
+        BudgetProjectPricingEvent(
+            event_uuid=str(uuid4()),
+            project_id=locked_profile.project_id,
+            event_type="run_activated",
+            from_status=previous_status,
+            to_status=PRICING_RUN_STATUS_CONFIRMED,
+            actor_id=current_user.id,
+            event_json=_json_dump(
+                {
+                    "previous_active_run_id": previous_run.id if previous_run else None,
+                    "source_import_batch_id": run.source_import_batch_id,
+                    "source_import_revision_id": run.source_import_revision_id,
+                }
+            ),
+        )
+    )
+    locked_profile.active_pricing_run_id = run.id
+    locked_profile.updated_by = current_user.id
+    db.flush()
+    return run
+
+
+def archive_budget_pricing_run(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    identifier: str | int,
+) -> BudgetProjectPricingRun:
+    locked_profile = (
+        db.query(BudgetProjectProfile)
+        .filter(BudgetProjectProfile.id == profile.id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if locked_profile is None or int(locked_profile.project_id) != int(profile.project_id):
+        raise BudgetPricingError("BUDGET_PROJECT_NOT_FOUND", status_code=404)
+    if locked_profile.workspace_status != "active":
+        raise BudgetPricingError("BUDGET_PROJECT_ARCHIVED")
+
+    run = _locked_project_pricing_run(db, locked_profile, identifier)
+    if run.status in {PRICING_RUN_STATUS_PROCESSING, PRICING_RUN_STATUS_FAILED}:
+        raise BudgetPricingError(
+            "BUDGET_PRICING_RUN_NOT_ARCHIVABLE",
+            context={"run_status": run.status},
+        )
+    if run.status == PRICING_RUN_STATUS_SUPERSEDED:
+        return run
+
+    previous_status = run.status
+    archived_at = db.execute(select(func.now())).scalar_one()
+    run.status = PRICING_RUN_STATUS_SUPERSEDED
+    run.superseded_by_run_id = None
+    run.superseded_by = current_user.id
+    run.superseded_at = archived_at
+    if int(locked_profile.active_pricing_run_id or 0) == int(run.id):
+        locked_profile.active_pricing_run_id = None
+        locked_profile.updated_by = current_user.id
+    run.events.append(
+        BudgetProjectPricingEvent(
+            event_uuid=str(uuid4()),
+            project_id=locked_profile.project_id,
+            event_type="run_archived",
+            from_status=previous_status,
+            to_status=PRICING_RUN_STATUS_SUPERSEDED,
+            actor_id=current_user.id,
+            event_json=_json_dump({}),
+        )
+    )
+    db.flush()
     return run
 
 
@@ -1203,6 +1367,19 @@ def serialize_budget_pricing_run(run: BudgetProjectPricingRun) -> dict[str, Any]
         "summary": summary,
         "coverage_percent": summary.get("coverage_percent"),
         "result_sha256": run.result_sha256,
+        "has_draft_snapshot": run.draft_snapshot is not None,
+        "draft_snapshot": (
+            {
+                "id": run.draft_snapshot.id,
+                "snapshot_uuid": run.draft_snapshot.snapshot_uuid,
+                "source_draft_revision": run.draft_snapshot.source_draft_revision,
+                "row_count": run.draft_snapshot.row_count,
+                "snapshot_sha256": run.draft_snapshot.snapshot_sha256,
+                "created_at": _format_dt(run.draft_snapshot.created_at),
+            }
+            if run.draft_snapshot is not None
+            else None
+        ),
         "created_by": run.created_by,
         "created_at": _format_dt(run.created_at),
         "ready_at": _format_dt(run.ready_at),

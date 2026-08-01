@@ -40,6 +40,11 @@ from app.services.quote_job_readability import (
 )
 from app.services.quote_history import project_details
 from app.services.quote_helpers import normalize_quote_request_text, sign_payload
+from app.services.quote_pricing_cascade import build_quote_pricing_cascade_preview
+from app.services.budget_projects import (
+    budget_preview_quote_rows,
+    standardize_budget_workbook_bytes,
+)
 from app.services.quote_review import (
     attach_requirement_integrity_summary,
     build_requirement_rows_quote_message,
@@ -47,6 +52,12 @@ from app.services.quote_review import (
     missing_requirement_rows_for_preview,
     quote_requirement_rows,
     requirement_rows_as_source_rows,
+    save_quote_requirement_rows,
+)
+from app.services.requirement_standardizer import (
+    RequirementStandardizationError,
+    standardization_quote_rows,
+    standardize_requirement_text,
 )
 
 
@@ -98,6 +109,23 @@ def _quote_requirement_batch_retry_count() -> int:
     except (TypeError, ValueError):
         value = 1
     return max(0, min(value, 2))
+
+
+def _standard_rows_request_text(rows: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    for index, row in enumerate(rows, start=1):
+        parts = [
+            f"{index}. {str(row.get('item_name') or '').strip()}",
+            str(row.get("spec") or "").strip(),
+            (
+                f"{row.get('quantity')}{row.get('unit') or ''}"
+                if row.get("quantity") not in (None, "")
+                else str(row.get("unit") or "").strip()
+            ),
+            str(row.get("remark") or "").strip(),
+        ]
+        lines.append("；".join(part for part in parts if part))
+    return "\n".join(lines)
 
 
 def _bind_requirement_rows_to_payload(payload: Any, requirement_rows: list[Any]) -> Any:
@@ -383,10 +411,21 @@ async def _iter_quote_events(
     filename: Optional[str],
     db: Optional[Session] = None,
     requirement_rows: Optional[list[Any]] = None,
+    quote_job_id: Optional[str] = None,
+    current_user: Optional[User] = None,
 ) -> Iterable[Tuple[str, str, Dict[str, Any]]]:
     final_query = message or ""
     excel_source_rows: list[dict[str, Any]] = []
     requirement_rows = requirement_rows or []
+    automatic_standardization: dict[str, Any] | None = None
+    automatic_standard_rows: list[dict[str, Any]] = []
+    automatic_text_source = message or ""
+    unified_cascade_enabled = bool(
+        settings.feature_unified_quotes
+        and db is not None
+        and quote_job_id
+        and current_user is not None
+    )
 
     yield (
         "processing",
@@ -399,26 +438,54 @@ async def _iter_quote_events(
         if is_quote_excel_file(filename, mime_type):
             yield (
                 "processing",
-                f"[Excel Module] 📊 正在解析报价需求单: {filename}...",
+                f"[Excel Module] 📊 正在自动映射报价需求单: {filename}...",
                 {"stage": "excel"},
             )
-            try:
-                parsed_excel = parse_quote_excel_bytes(file_content, filename=filename)
-            except QuoteExcelParseError as exc:
+            if unified_cascade_enabled:
+                try:
+                    automatic_standardization = standardize_budget_workbook_bytes(
+                        file_content,
+                        filename=filename,
+                    )
+                except RequirementStandardizationError as exc:
+                    yield (
+                        "error",
+                        f"❌ [Excel Module] {str(exc)}",
+                        {"stage": "excel"},
+                    )
+                    return
+                automatic_standard_rows = budget_preview_quote_rows(automatic_standardization)
+                excel_source_rows = list(automatic_standard_rows)
+                parsed_text = _standard_rows_request_text(automatic_standard_rows)
+                final_query = (
+                    f"{final_query}\n[从Excel需求单自动映射的标准清单]\n{parsed_text}"
+                ).strip()
                 yield (
-                    "error",
-                    f"❌ [Excel Module] {str(exc)}",
+                    "processing",
+                    (
+                        f"[Excel Module] ✅ 已扫描 {automatic_standardization['summary'].get('sheet_count', 0)} 个 Sheet，"
+                        f"自动生成 {len(automatic_standard_rows)} 行标准清单"
+                    ),
                     {"stage": "excel"},
                 )
-                return
+            else:
+                try:
+                    parsed_excel = parse_quote_excel_bytes(file_content, filename=filename)
+                except QuoteExcelParseError as exc:
+                    yield (
+                        "error",
+                        f"❌ [Excel Module] {str(exc)}",
+                        {"stage": "excel"},
+                    )
+                    return
 
-            excel_source_rows = list(parsed_excel.items)
-            final_query = f"{final_query} [从Excel需求单解析到的内容]: {parsed_excel.text}".replace("\n", "；").replace("\r", "")
-            yield (
-                "processing",
-                f"[Excel Module] ✅ 已解析 {parsed_excel.item_count} 行报价需求，准备进入算价流程",
-                {"stage": "excel"},
-            )
+                excel_source_rows = list(parsed_excel.items)
+                final_query = f"{final_query} [从Excel需求单解析到的内容]: {parsed_excel.text}".replace("\n", "；").replace("\r", "")
+                yield (
+                    "processing",
+                    f"[Excel Module] ✅ 已解析 {parsed_excel.item_count} 行报价需求，准备进入算价流程",
+                    {"stage": "excel"},
+                )
             await asyncio.sleep(0.2)
         elif is_legacy_excel_file(filename, mime_type):
             yield (
@@ -469,10 +536,11 @@ async def _iter_quote_events(
                 )
                 return
 
+            automatic_text_source = extracted_text
             final_query = f"{final_query} [从文件识别到的内容]: {extracted_text}".replace("\n", "；").replace("\r", "")
             yield (
                 "processing",
-                "[Vision Module] ✅ 提取完毕，已成功结构化二维图纸特征！",
+                "[Vision Module] ✅ 提取完毕，准备自动映射为标准清单。",
                 {"stage": "vision"},
             )
             await asyncio.sleep(0.2)
@@ -493,6 +561,97 @@ async def _iter_quote_events(
         return
 
     final_query = normalize_quote_request_text(final_query)
+    if unified_cascade_enabled:
+        if not requirement_rows:
+            if automatic_standardization is None:
+                try:
+                    automatic_standardization = standardize_requirement_text(
+                        automatic_text_source,
+                        source_name="图片识别" if file_content else "文字输入",
+                    )
+                except RequirementStandardizationError as exc:
+                    yield (
+                        "error",
+                        f"❌ [标准清单] {str(exc)}",
+                        {"stage": "standardization"},
+                    )
+                    return
+                automatic_standard_rows = standardization_quote_rows(automatic_standardization)
+
+            if not automatic_standard_rows:
+                yield (
+                    "error",
+                    "❌ [标准清单] 未识别到可报价的施工项目，请补充项目名称、工程量和单位后重试。",
+                    {"stage": "standardization"},
+                )
+                return
+            if db is not None and quote_job_id:
+                requirement_rows = save_quote_requirement_rows(
+                    db,
+                    quote_job_id=quote_job_id,
+                    rows=automatic_standard_rows,
+                )
+        else:
+            automatic_standard_rows = requirement_rows_as_source_rows(requirement_rows)
+            automatic_standardization = {
+                "summary": {
+                    "standard_row_count": len(automatic_standard_rows),
+                    "requires_confirmation_count": 0,
+                    "source": "confirmed_requirement_rows",
+                }
+            }
+
+        standardization_summary = dict((automatic_standardization or {}).get("summary") or {})
+        standardization_summary["standard_row_count"] = len(automatic_standard_rows)
+        confirmation_count = int(standardization_summary.get("requires_confirmation_count") or 0)
+        yield (
+            "processing",
+            (
+                f"[标准清单] ✅ 已自动映射并生成 {len(automatic_standard_rows)} 行标准清单"
+                + (f"，其中 {confirmation_count} 行将在预审中提示核对" if confirmation_count else "")
+            ),
+            {
+                "stage": "standardization",
+                "standard_row_count": len(automatic_standard_rows),
+                "requires_confirmation_count": confirmation_count,
+            },
+        )
+
+        yield (
+            "processing",
+            "[三级报价] 正在逐行执行：账户定额 → 企业定额 → AI估价...",
+            {"stage": "pricing_cascade", "standard_row_count": len(automatic_standard_rows)},
+        )
+        calc_result = await build_quote_pricing_cascade_preview(
+            db,
+            standard_rows=automatic_standard_rows,
+            current_user=current_user,
+            standardization_summary=standardization_summary,
+        )
+        calc_result = _bind_requirement_rows_to_payload(calc_result, requirement_rows)
+        calc_result = attach_requirement_integrity_summary(calc_result, requirement_rows)
+        summary = calc_result.get("pricing_cascade_summary") or {}
+        v2_pending_count = int(summary.get("enterprise_quota_v2_pending_confirmation_count") or 0)
+        enterprise_hit_count = int(summary.get("enterprise_quota_matched_count") or 0) + v2_pending_count
+        pure_ai_count = max(int(summary.get("ai_estimate_count") or 0) - v2_pending_count, 0)
+        yield (
+            "preview",
+            (
+                "[三级报价] ✅ 预审数据已就绪："
+                f"账户定额 {summary.get('account_quota_matched_count', 0)} 行，"
+                f"企业定额命中 {enterprise_hit_count} 行"
+                + (f"（其中 {v2_pending_count} 行待人工确认）" if v2_pending_count else "")
+                + f"，AI估价 {pure_ai_count} 行。"
+            ),
+            {
+                "stage": "completed",
+                "data": calc_result,
+                "source_rows": automatic_standard_rows,
+                "pricing_cascade_applied": True,
+            },
+        )
+        return
+
     if requirement_rows and len(requirement_rows) > _quote_requirement_batch_threshold():
         async for event in _iter_batched_requirement_quote_events(
             username=username,
@@ -526,7 +685,7 @@ async def _iter_quote_events(
         )
     yield (
         "processing",
-        "[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...",
+        "[成本库 & Agent] 🔍 正在匹配企业成本依据并驱动报价专家...",
         {"stage": "n8n"},
     )
 
@@ -694,6 +853,8 @@ async def run_quote_job_async(job_id: str) -> None:
             filename=job.file_name,
             db=db,
             requirement_rows=stored_requirement_rows,
+            quote_job_id=job.job_id,
+            current_user=user,
         ):
             db.refresh(job)
             if job.status in TERMINAL_STATUSES:
@@ -703,8 +864,18 @@ async def run_quote_job_async(job_id: str) -> None:
             if status_name == "preview":
                 extra = dict(extra)
                 source_rows = extra.pop("source_rows", None)
-                extra["data"] = safe_enrich_quote_payload_with_cost_refs(db, extra.get("data"), source_rows=source_rows)
-                extra["data"] = attach_requirement_integrity_summary(extra.get("data"), stored_requirement_rows)
+                pricing_cascade_applied = bool(extra.pop("pricing_cascade_applied", False))
+                active_requirement_rows = quote_requirement_rows(db, job.job_id)
+                if not pricing_cascade_applied:
+                    extra["data"] = safe_enrich_quote_payload_with_cost_refs(
+                        db,
+                        extra.get("data"),
+                        source_rows=source_rows,
+                    )
+                extra["data"] = attach_requirement_integrity_summary(
+                    extra.get("data"),
+                    active_requirement_rows,
+                )
             append_job_event(job, status_name, message, trace_id=job.trace_id, **extra)
 
             if status_name == "preview":

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import posixpath
 import re
 import zipfile
 from dataclasses import dataclass
@@ -10,17 +11,36 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
-from openpyxl import load_workbook
 from pypdf import PdfReader
 
 
-BIDDING_PARSER_VERSION = "biz4a-rule-v1"
+BIDDING_PARSER_VERSION = "biz4a-rule-v5-xlsx-safe-autotype"
 DOCUMENT_STRUCTURE_VERSION = "biz4a-structure-v2"
 MAX_SEGMENT_CHARS = 1200
 MAX_EXTRACTED_TEXT_CHARS = 1_200_000
 WORD_MAIN_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 OLE_COMPOUND_FILE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 ZIP_FILE_SIGNATURES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+SPREADSHEET_MAIN_NS = (
+    "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+)
+OFFICE_REL_NS = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+)
+PACKAGE_REL_NS = (
+    "http://schemas.openxmlformats.org/package/2006/relationships"
+)
+XLSX_MAX_ARCHIVE_ENTRIES = 10_000
+XLSX_MAX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+XLSX_MAX_SHEETS = 100
+XLSX_MAX_NONEMPTY_ROWS_PER_SHEET = 5_000
+XLSX_MAX_COLUMNS = 256
+XLSX_MAX_CELL_CHARS = 800
+XLSX_IDENTITY_ROW_SAMPLE = 12
+XLSX_BLOATED_COLUMN_THRESHOLD = 512
+XLSX_PHASE_PATTERN = re.compile(
+    r"([一二三四五六七八九十百零〇两\d]+)\s*期"
+)
 
 
 class TenderParseError(ValueError):
@@ -805,37 +825,483 @@ def _extract_docx(content: bytes, filename: str) -> tuple[str, list[TenderSegmen
     return _clean_text(text), segments, 0
 
 
-def _extract_xlsx(content: bytes, filename: str) -> tuple[str, list[TenderSegment], int]:
+def _xlsx_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _xlsx_column_number(cell_reference: str) -> int:
+    match = re.match(r"\$?([A-Z]+)", (cell_reference or "").upper())
+    if match is None:
+        return 0
+    value = 0
+    for char in match.group(1):
+        value = value * 26 + ord(char) - 64
+    return value
+
+
+def _xlsx_row_number(cell_reference: str) -> int:
+    match = re.search(r"(\d+)$", cell_reference or "")
+    return int(match.group(1)) if match else 0
+
+
+def _xlsx_dimension_bounds(
+    dimension_reference: str | None,
+) -> tuple[int, int] | None:
+    if not dimension_reference:
+        return None
+    last_reference = dimension_reference.split(":", 1)[-1]
+    column = _xlsx_column_number(last_reference)
+    row = _xlsx_row_number(last_reference)
+    if column <= 0 or row <= 0:
+        return None
+    return row, column
+
+
+def _xlsx_part_path(base_part: str, target: str) -> str:
+    normalized_target = (target or "").replace("\\", "/")
+    if normalized_target.startswith("/"):
+        return normalized_target.lstrip("/")
+    return posixpath.normpath(
+        posixpath.join(posixpath.dirname(base_part), normalized_target)
+    )
+
+
+def _xlsx_node_text(node: ElementTree.Element | None) -> str:
+    if node is None:
+        return ""
+    return "".join(
+        child.text or ""
+        for child in node.iter()
+        if _xlsx_local_name(child.tag) == "t"
+    )
+
+
+def _xlsx_shared_strings(archive: zipfile.ZipFile) -> list[str]:
+    part_name = "xl/sharedStrings.xml"
+    if part_name not in archive.namelist():
+        return []
+    values: list[str] = []
+    try:
+        with archive.open(part_name) as source:
+            for event, element in ElementTree.iterparse(
+                source,
+                events=("end",),
+            ):
+                if _xlsx_local_name(element.tag) != "si":
+                    continue
+                values.append(_clean_text(_xlsx_node_text(element)))
+                element.clear()
+    except ElementTree.ParseError as exc:
+        raise TenderParseError(
+            f"Excel 共享字符串读取失败: {exc}"
+        ) from exc
+    return values
+
+
+def _xlsx_sheet_parts(
+    archive: zipfile.ZipFile,
+) -> list[tuple[str, str]]:
+    try:
+        workbook_root = ElementTree.fromstring(
+            archive.read("xl/workbook.xml")
+        )
+        relationship_root = ElementTree.fromstring(
+            archive.read("xl/_rels/workbook.xml.rels")
+        )
+    except KeyError as exc:
+        raise TenderParseError(
+            "Excel 结构不完整，缺少 workbook.xml 或关系文件"
+        ) from exc
+    except ElementTree.ParseError as exc:
+        raise TenderParseError(
+            f"Excel 工作簿结构读取失败: {exc}"
+        ) from exc
+
+    relationships = {
+        item.attrib.get("Id", ""): item.attrib.get("Target", "")
+        for item in relationship_root.iter()
+        if _xlsx_local_name(item.tag) == "Relationship"
+    }
+    sheets: list[tuple[str, str]] = []
+    relationship_attribute = f"{{{OFFICE_REL_NS}}}id"
+    for item in workbook_root.iter():
+        if _xlsx_local_name(item.tag) != "sheet":
+            continue
+        sheet_name = _clean_text(item.attrib.get("name")) or "未命名Sheet"
+        relationship_id = item.attrib.get(relationship_attribute, "")
+        target = relationships.get(relationship_id, "")
+        if not target:
+            continue
+        sheets.append(
+            (
+                sheet_name,
+                _xlsx_part_path("xl/workbook.xml", target),
+            )
+        )
+    return sheets
+
+
+def _xlsx_cell_value(
+    cell: ElementTree.Element,
+    shared_strings: list[str],
+) -> str:
+    cell_type = cell.attrib.get("t", "")
+    value_node = next(
+        (
+            child
+            for child in cell
+            if _xlsx_local_name(child.tag) == "v"
+        ),
+        None,
+    )
+    inline_node = next(
+        (
+            child
+            for child in cell
+            if _xlsx_local_name(child.tag) == "is"
+        ),
+        None,
+    )
+    raw_value = (
+        value_node.text
+        if value_node is not None and value_node.text is not None
+        else ""
+    )
+    if cell_type == "s":
+        try:
+            index = int(raw_value)
+        except (TypeError, ValueError):
+            return ""
+        if 0 <= index < len(shared_strings):
+            return shared_strings[index]
+        return ""
+    if cell_type == "inlineStr":
+        return _xlsx_node_text(inline_node)
+    if cell_type == "b":
+        return "TRUE" if raw_value == "1" else "FALSE"
+    return raw_value
+
+
+def _xlsx_phase_markers(value: str) -> set[str]:
+    return {
+        _clean_text(match.group(1))
+        for match in XLSX_PHASE_PATTERN.finditer(value or "")
+        if _clean_text(match.group(1))
+    }
+
+
+def _scan_xlsx_sheet(
+    archive: zipfile.ZipFile,
+    *,
+    sheet_name: str,
+    part_name: str,
+    shared_strings: list[str],
+) -> tuple[list[tuple[int, str]], dict[str, Any]]:
+    rows: list[tuple[int, str]] = []
+    declared_dimension: str | None = None
+    physical_row_count = 0
+    meaningful_cell_count = 0
+    ignored_value_cell_count = 0
+    formula_cell_count = 0
+    first_row = 0
+    last_row = 0
+    first_column = 0
+    last_column = 0
+    row_limit_reached = False
+    try:
+        source = archive.open(part_name)
+    except KeyError:
+        return [], {
+            "sheet_name": sheet_name,
+            "status": "skipped",
+            "warning_codes": ["worksheet_part_missing"],
+            "part_name": part_name,
+        }
+
+    try:
+        with source:
+            for event, element in ElementTree.iterparse(
+                source,
+                events=("start", "end"),
+            ):
+                local_name = _xlsx_local_name(element.tag)
+                if event == "start" and local_name == "dimension":
+                    declared_dimension = element.attrib.get("ref")
+                    continue
+                if event != "end" or local_name != "row":
+                    continue
+                physical_row_count += 1
+                row_number = int(
+                    element.attrib.get("r")
+                    or physical_row_count
+                )
+                row_values: list[tuple[int, str]] = []
+                for cell in element:
+                    if _xlsx_local_name(cell.tag) != "c":
+                        continue
+                    if any(
+                        _xlsx_local_name(child.tag) == "f"
+                        for child in cell
+                    ):
+                        formula_cell_count += 1
+                    value = _clean_text(
+                        _xlsx_cell_value(cell, shared_strings)
+                    )
+                    if not value:
+                        continue
+                    column = _xlsx_column_number(
+                        cell.attrib.get("r", "")
+                    )
+                    if column <= 0:
+                        continue
+                    meaningful_cell_count += 1
+                    first_row = (
+                        row_number
+                        if first_row == 0
+                        else min(first_row, row_number)
+                    )
+                    last_row = max(last_row, row_number)
+                    first_column = (
+                        column
+                        if first_column == 0
+                        else min(first_column, column)
+                    )
+                    last_column = max(last_column, column)
+                    if column > XLSX_MAX_COLUMNS:
+                        ignored_value_cell_count += 1
+                        continue
+                    row_values.append(
+                        (column, value[:XLSX_MAX_CELL_CHARS])
+                    )
+
+                if row_values:
+                    row_values.sort(key=lambda item: item[0])
+                    row_text = " | ".join(
+                        value for _, value in row_values
+                    )[:MAX_SEGMENT_CHARS]
+                    rows.append((row_number, row_text))
+                    if (
+                        len(rows)
+                        >= XLSX_MAX_NONEMPTY_ROWS_PER_SHEET
+                    ):
+                        row_limit_reached = True
+                        element.clear()
+                        break
+                element.clear()
+    except ElementTree.ParseError as exc:
+        raise TenderParseError(
+            f"Excel Sheet“{sheet_name}”读取失败: {exc}"
+        ) from exc
+
+    warning_codes: list[str] = []
+    declared_bounds = _xlsx_dimension_bounds(declared_dimension)
+    if declared_bounds is not None:
+        declared_row, declared_column = declared_bounds
+        effective_column = max(last_column, 1)
+        if (
+            declared_column > XLSX_BLOATED_COLUMN_THRESHOLD
+            and declared_column > effective_column * 4
+        ):
+            warning_codes.append("bloated_declared_dimension")
+    if ignored_value_cell_count:
+        warning_codes.append("column_limit_applied")
+    if row_limit_reached:
+        warning_codes.append("row_limit_applied")
+    if not rows:
+        warning_codes.append("no_meaningful_rows")
+
+    effective_range = None
+    if first_row and first_column:
+        effective_range = {
+            "min_row": first_row,
+            "max_row": last_row,
+            "min_column": first_column,
+            "max_column": last_column,
+        }
+    return rows, {
+        "sheet_name": sheet_name,
+        "status": "parsed",
+        "warning_codes": warning_codes,
+        "part_name": part_name,
+        "declared_dimension": declared_dimension,
+        "effective_range": effective_range,
+        "physical_row_count": physical_row_count,
+        "extracted_row_count": len(rows),
+        "meaningful_cell_count": meaningful_cell_count,
+        "formula_cell_count": formula_cell_count,
+        "ignored_value_cell_count": ignored_value_cell_count,
+    }
+
+
+def _extract_xlsx(
+    content: bytes,
+    filename: str,
+) -> tuple[str, list[TenderSegment], int, dict[str, Any]]:
     suffix = Path(filename or "").suffix.lower()
     if suffix == ".xls":
         raise TenderParseError("暂不支持旧版 .xls，请另存为 .xlsx 后上传")
     try:
-        workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
-    except Exception as exc:
+        archive = zipfile.ZipFile(BytesIO(content))
+    except zipfile.BadZipFile as exc:
         raise TenderParseError(f"Excel 读取失败: {exc}") from exc
+
     segments: list[TenderSegment] = []
     lines: list[str] = []
-    for sheet in workbook.worksheets:
-        row_count = 0
-        for row in sheet.iter_rows(values_only=True):
-            values = [str(value).strip() for value in row if value is not None and str(value).strip()]
-            if not values:
-                continue
-            row_count += 1
-            row_text = " | ".join(values)
-            lines.append(f"[{sheet.title} 第{row_count}行] {row_text}")
-            segments.append(
-                _segment_with_structure(
-                    source_file=filename,
-                    source_location=f"{sheet.title} 第{row_count}行",
-                    text=row_text[:MAX_SEGMENT_CHARS],
-                    section_index=row_count,
-                )
+    sheet_diagnostics: list[dict[str, Any]] = []
+    seen_sheet_content: dict[str, str] = {}
+    extracted_character_count = 0
+    text_limit_reached = False
+    source_phase_markers = _xlsx_phase_markers(Path(filename).stem)
+    try:
+        entries = archive.infolist()
+        if len(entries) > XLSX_MAX_ARCHIVE_ENTRIES:
+            raise TenderParseError(
+                "Excel 压缩包条目过多，已拒绝解析"
             )
-            if row_count >= 5000:
+        total_uncompressed_bytes = sum(
+            max(int(item.file_size), 0) for item in entries
+        )
+        if total_uncompressed_bytes > XLSX_MAX_UNCOMPRESSED_BYTES:
+            raise TenderParseError(
+                "Excel 解压后体积超过安全上限，已拒绝解析"
+            )
+        shared_strings = _xlsx_shared_strings(archive)
+        sheet_parts = _xlsx_sheet_parts(archive)
+        for sheet_index, (sheet_name, part_name) in enumerate(
+            sheet_parts,
+            start=1,
+        ):
+            if sheet_index > XLSX_MAX_SHEETS:
+                sheet_diagnostics.append(
+                    {
+                        "sheet_name": sheet_name,
+                        "status": "skipped",
+                        "warning_codes": ["sheet_limit_applied"],
+                    }
+                )
+                continue
+            rows, diagnostic = _scan_xlsx_sheet(
+                archive,
+                sheet_name=sheet_name,
+                part_name=part_name,
+                shared_strings=shared_strings,
+            )
+            sheet_phase_markers = _xlsx_phase_markers(
+                sheet_name
+            )
+            if not sheet_phase_markers:
+                for _, identity_row_text in rows[
+                    :XLSX_IDENTITY_ROW_SAMPLE
+                ]:
+                    sheet_phase_markers = _xlsx_phase_markers(
+                        identity_row_text
+                    )
+                    if sheet_phase_markers:
+                        break
+            content_digest = hashlib.sha256(
+                "\n".join(
+                    f"{row_number}:{row_text}"
+                    for row_number, row_text in rows
+                ).encode("utf-8")
+            ).hexdigest()
+            warning_codes = list(diagnostic["warning_codes"])
+            quarantine_reason: str | None = None
+            if (
+                source_phase_markers
+                and sheet_phase_markers
+                and source_phase_markers.isdisjoint(
+                    sheet_phase_markers
+                )
+            ):
+                quarantine_reason = "project_phase_mismatch"
+            elif rows and content_digest in seen_sheet_content:
+                quarantine_reason = "duplicate_sheet_content"
+
+            if quarantine_reason:
+                diagnostic["status"] = "quarantined"
+                warning_codes.append(quarantine_reason)
+                diagnostic["quarantine_reason"] = (
+                    quarantine_reason
+                )
+            elif rows:
+                seen_sheet_content[content_digest] = sheet_name
+            diagnostic["warning_codes"] = sorted(
+                set(warning_codes)
+            )
+            diagnostic["source_phase_markers"] = sorted(
+                source_phase_markers
+            )
+            diagnostic["sheet_phase_markers"] = sorted(
+                sheet_phase_markers
+            )
+            sheet_diagnostics.append(diagnostic)
+            if quarantine_reason or not rows:
+                continue
+
+            for row_number, row_text in rows:
+                source_location = (
+                    f"{sheet_name} 第{row_number}行"
+                )
+                line = f"[{source_location}] {row_text}"
+                projected_size = (
+                    extracted_character_count + len(line) + 1
+                )
+                if projected_size > MAX_EXTRACTED_TEXT_CHARS:
+                    text_limit_reached = True
+                    break
+                extracted_character_count = projected_size
+                lines.append(line)
+                section_index = len(segments) + 1
+                segments.append(
+                    _segment_with_structure(
+                        source_file=filename,
+                        source_location=source_location,
+                        text=row_text,
+                        section_index=section_index,
+                    )
+                )
+            if text_limit_reached:
                 break
-    workbook.close()
-    return _clean_text("\n".join(lines)), segments, len(workbook.worksheets)
+    finally:
+        archive.close()
+
+    warning_codes = sorted(
+        {
+            code
+            for item in sheet_diagnostics
+            for code in item.get("warning_codes", [])
+        }
+    )
+    diagnostics = {
+        "schema_version": "tender_xlsx_scan_v1",
+        "sheet_count": len(sheet_parts),
+        "parsed_sheet_count": sum(
+            item.get("status") == "parsed"
+            for item in sheet_diagnostics
+        ),
+        "quarantined_sheet_count": sum(
+            item.get("status") == "quarantined"
+            for item in sheet_diagnostics
+        ),
+        "skipped_sheet_count": sum(
+            item.get("status") == "skipped"
+            for item in sheet_diagnostics
+        ),
+        "extracted_segment_count": len(segments),
+        "column_limit": XLSX_MAX_COLUMNS,
+        "row_limit_per_sheet": (
+            XLSX_MAX_NONEMPTY_ROWS_PER_SHEET
+        ),
+        "text_limit_reached": text_limit_reached,
+        "warning_codes": warning_codes,
+        "sheets": sheet_diagnostics,
+    }
+    return (
+        _clean_text("\n".join(lines)),
+        segments,
+        len(sheet_parts),
+        diagnostics,
+    )
 
 
 def extract_tender_text(content: bytes, filename: str | None, content_type: str | None = None) -> dict[str, Any]:
@@ -847,6 +1313,7 @@ def extract_tender_text(content: bytes, filename: str | None, content_type: str 
         raise TenderParseError("文件超过 80MB，BIZ-4a MVP 暂不支持")
 
     normalized_content_type = (content_type or "").lower()
+    parse_diagnostics: dict[str, Any] | None = None
     if suffix == ".pdf":
         text, segments, page_count = _extract_pdf(content, filename)
     elif suffix == ".docx":
@@ -854,7 +1321,12 @@ def extract_tender_text(content: bytes, filename: str | None, content_type: str 
     elif suffix == ".doc":
         raise TenderParseError("暂不支持旧版 Word .doc，请用 Word 另存为 .docx 后上传")
     elif suffix in {".xlsx", ".xlsm", ".xls"}:
-        text, segments, page_count = _extract_xlsx(content, filename)
+        (
+            text,
+            segments,
+            page_count,
+            parse_diagnostics,
+        ) = _extract_xlsx(content, filename)
     elif normalized_content_type == "application/pdf":
         text, segments, page_count = _extract_pdf(content, filename)
     elif suffix in {".txt", ".md", ".csv", ""} or normalized_content_type.startswith("text/"):
@@ -869,7 +1341,7 @@ def extract_tender_text(content: bytes, filename: str | None, content_type: str 
     if len(text) > MAX_EXTRACTED_TEXT_CHARS:
         text = text[:MAX_EXTRACTED_TEXT_CHARS]
     segment_dicts = _apply_document_structure_context_to_dicts([segment.__dict__ for segment in segments])
-    return {
+    result = {
         "filename": filename,
         "parser_version": BIDDING_PARSER_VERSION,
         "text": text,
@@ -878,6 +1350,9 @@ def extract_tender_text(content: bytes, filename: str | None, content_type: str 
         "section_count": len(segment_dicts),
         "sha256": sha256_bytes(content),
     }
+    if parse_diagnostics is not None:
+        result["parse_diagnostics"] = parse_diagnostics
+    return result
 
 
 def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:

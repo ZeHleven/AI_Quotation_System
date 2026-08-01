@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Literal, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import and_, exists, or_
 from sqlalchemy.orm import Session
 
@@ -22,17 +25,25 @@ from app.models.budget_pricing_draft import (
 )
 from app.models.user import User
 from app.schemas.budget_pricing import (
+    BudgetProjectQuotaEnterpriseSyncIn,
+    BudgetProjectQuotaMaterializeIn,
+    BudgetProjectQuotaResourceCreateIn,
+    BudgetProjectQuotaResourceDeleteIn,
+    BudgetProjectQuotaResourceUpdateIn,
     BudgetPricingDraftCreate,
     BudgetPricingDraftAccountQuotaSyncConfirmIn,
     BudgetPricingDraftAccountQuotaSyncPreviewIn,
     BudgetPricingDraftQuoteJobCreate,
     BudgetPricingDraftLineAiEstimateIn,
+    BudgetPricingDraftLineConstructionNotePatch,
     BudgetPricingDraftLinePatch,
     BudgetPricingDraftTotalsConfigPatch,
     BudgetPricingRunCreate,
 )
 from app.services.budget_pricing import (
     BudgetPricingError,
+    activate_budget_pricing_run,
+    archive_budget_pricing_run,
     build_budget_pricing_readiness,
     create_budget_pricing_run,
     get_budget_pricing_line,
@@ -43,15 +54,37 @@ from app.services.budget_pricing import (
     serialize_budget_pricing_run,
 )
 from app.services.budget_pricing_drafts import (
+    capture_budget_pricing_run_draft_snapshot,
     create_or_rebuild_budget_pricing_draft,
     get_current_budget_pricing_draft,
     patch_budget_pricing_draft_line,
+    patch_budget_pricing_draft_line_construction_note,
     refresh_budget_pricing_draft_summary,
+    restore_budget_pricing_draft_from_run_snapshot,
     serialize_budget_pricing_draft,
     serialize_budget_pricing_draft_line,
     update_budget_pricing_draft_totals_config,
 )
 from app.services.budget_pricing_ai_estimates import estimate_budget_pricing_draft_line
+from app.services.budget_pricing_original_export import (
+    prepare_budget_pricing_original_export,
+    render_budget_pricing_original_export,
+)
+from app.services.budget_pricing_resource_details import (
+    build_budget_procurement_statistics,
+    build_budget_pricing_resource_details,
+)
+from app.services.budget_pricing_statistics_export import (
+    render_budget_pricing_statistics_export,
+)
+from app.services.budget_project_quotas import (
+    create_project_quota_resource,
+    delete_project_quota_resource,
+    materialize_project_quota,
+    serialize_project_quota,
+    sync_project_quota_to_enterprise,
+    update_project_quota_resource,
+)
 from app.services.budget_pricing_draft_quote_jobs import (
     cancel_budget_pricing_draft_quote_job,
     create_budget_pricing_draft_quote_job,
@@ -65,7 +98,13 @@ from app.services.account_quota_draft_sync import (
     preview_account_quota_sync,
 )
 from app.services.budget_projects import get_budget_profile
-from app.services.rbac import require_budget_pricing_create, require_budget_pricing_view
+from app.services.file_storage import get_object_bytes
+from app.services.rbac import (
+    can_create_budget_pricing,
+    has_any_role,
+    require_budget_pricing_create,
+    require_budget_pricing_view,
+)
 
 
 router = APIRouter()
@@ -176,6 +215,51 @@ async def get_current_pricing_draft_endpoint(
     except BudgetPricingError as exc:
         raise _http_error(exc) from exc
     return api_ok(serialize_budget_pricing_draft(draft) if draft else None)
+
+
+@router.get(
+    "/admin/budget-projects/{project_id}/pricing-draft/original-format-export",
+    summary="Export the current pricing draft into the original workbook format",
+)
+async def export_original_format_pricing_draft_endpoint(
+    project_id: int,
+    pricing_mode: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    try:
+        source = prepare_budget_pricing_original_export(
+            db,
+            profile,
+            current_user,
+            pricing_mode=pricing_mode,
+        )
+        source_content = await asyncio.to_thread(
+            get_object_bytes,
+            source.source_file.object_name,
+            source.source_file.bucket,
+        )
+        result = render_budget_pricing_original_export(
+            source_content,
+            source,
+            project_name=getattr(profile.project, "name", None) or f"项目{project_id}",
+        )
+    except BudgetPricingError as exc:
+        raise _http_error(exc) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"BUDGET_PRICING_ORIGINAL_EXPORT_FAILED: {exc}",
+        ) from exc
+    return Response(
+        content=result.content,
+        media_type=result.content_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(result.filename)}",
+        },
+    )
 
 
 @router.post(
@@ -362,6 +446,337 @@ async def list_pricing_draft_lines_endpoint(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get(
+    "/admin/budget-projects/{project_id}/pricing-draft/resource-details",
+    summary="List resource details behind one pricing-draft total",
+)
+async def get_pricing_draft_resource_details_endpoint(
+    project_id: int,
+    bucket: Literal["labor", "main_material", "auxiliary_material"] = Query(...),
+    pricing_mode: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    try:
+        draft = get_current_budget_pricing_draft(
+            db,
+            profile,
+            current_user,
+            pricing_mode=pricing_mode,
+        )
+        if draft is None:
+            raise BudgetPricingError("BUDGET_PRICING_DRAFT_NOT_FOUND", status_code=404)
+        result = build_budget_pricing_resource_details(db, draft, bucket=bucket)
+    except BudgetPricingError as exc:
+        raise _http_error(exc) from exc
+    return api_ok(result)
+
+
+@router.get(
+    "/admin/budget-projects/{project_id}/pricing-draft/statistics-export",
+    summary="Export pricing-draft statistics and resource details to Excel",
+)
+async def export_pricing_draft_statistics_endpoint(
+    project_id: int,
+    pricing_mode: Optional[str] = Query(default=None),
+    sections: Optional[str] = Query(
+        default=None,
+        description="Comma-separated export sections: summary, main_material, auxiliary_material, labor",
+    ),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    try:
+        draft = get_current_budget_pricing_draft(
+            db,
+            profile,
+            current_user,
+            pricing_mode=pricing_mode,
+        )
+        if draft is None:
+            raise BudgetPricingError("BUDGET_PRICING_DRAFT_NOT_FOUND", status_code=404)
+        result = render_budget_pricing_statistics_export(
+            db,
+            draft,
+            project_name=getattr(profile.project, "name", None) or f"项目{project_id}",
+            sections=None if sections is None else sections.split(","),
+        )
+    except BudgetPricingError as exc:
+        raise _http_error(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(
+        content=result.content,
+        media_type=result.content_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(result.filename)}",
+        },
+    )
+
+
+def _project_quota_payload(snapshot, current_user: User):
+    return serialize_project_quota(
+        snapshot,
+        can_edit=can_create_budget_pricing(current_user),
+        can_sync_enterprise=has_any_role(
+            current_user,
+            {"system_admin", "admin", "cost_approver"},
+        ),
+    )
+
+
+@router.post(
+    "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/project-quota",
+    summary="Materialize or read the mutable project quota snapshot for one draft line",
+)
+async def materialize_project_quota_endpoint(
+    project_id: int,
+    line_identifier: str,
+    payload: BudgetProjectQuotaMaterializeIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    try:
+        snapshot = materialize_project_quota(
+            db,
+            profile,
+            current_user,
+            pricing_mode=payload.pricing_mode,
+            line_identifier=line_identifier,
+        )
+        snapshot_id = snapshot.id
+        db.commit()
+        db.expire_all()
+        from app.models.budget_project_quota import BudgetProjectQuotaSnapshot
+
+        snapshot = (
+            db.query(BudgetProjectQuotaSnapshot)
+            .filter(BudgetProjectQuotaSnapshot.id == snapshot_id)
+            .one()
+        )
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(_project_quota_payload(snapshot, current_user))
+
+
+@router.post(
+    "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/project-quota/resources",
+    summary="Add a labor/material/machinery row to the project quota",
+)
+async def create_project_quota_resource_endpoint(
+    project_id: int,
+    line_identifier: str,
+    payload: BudgetProjectQuotaResourceCreateIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    data = payload.model_dump(
+        mode="json",
+        exclude={"expected_snapshot_revision", "reason"},
+        exclude_none=True,
+    )
+    try:
+        snapshot = create_project_quota_resource(
+            db,
+            profile,
+            current_user,
+            line_identifier=line_identifier,
+            expected_snapshot_revision=payload.expected_snapshot_revision,
+            payload=data,
+            reason=payload.reason,
+        )
+        snapshot_id = snapshot.id
+        db.commit()
+        db.expire_all()
+        from app.models.budget_project_quota import BudgetProjectQuotaSnapshot
+
+        snapshot = db.query(BudgetProjectQuotaSnapshot).filter_by(id=snapshot_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(_project_quota_payload(snapshot, current_user), message="工料机明细已新增")
+
+
+@router.patch(
+    "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/project-quota/resources/{resource_identifier}",
+    summary="Update every editable field of one project quota resource row",
+)
+async def update_project_quota_resource_endpoint(
+    project_id: int,
+    line_identifier: str,
+    resource_identifier: str,
+    payload: BudgetProjectQuotaResourceUpdateIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    data = payload.model_dump(
+        mode="json",
+        exclude={"expected_snapshot_revision", "expected_resource_revision", "reason"},
+        exclude_unset=True,
+    )
+    try:
+        snapshot = update_project_quota_resource(
+            db,
+            profile,
+            current_user,
+            line_identifier=line_identifier,
+            resource_identifier=resource_identifier,
+            expected_snapshot_revision=payload.expected_snapshot_revision,
+            expected_resource_revision=payload.expected_resource_revision,
+            payload=data,
+            reason=payload.reason,
+        )
+        snapshot_id = snapshot.id
+        db.commit()
+        db.expire_all()
+        from app.models.budget_project_quota import BudgetProjectQuotaSnapshot
+
+        snapshot = db.query(BudgetProjectQuotaSnapshot).filter_by(id=snapshot_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(_project_quota_payload(snapshot, current_user), message="工料机明细已更新，项目定额已重算")
+
+
+@router.delete(
+    "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/project-quota/resources/{resource_identifier}",
+    summary="Delete one project quota resource row",
+)
+async def delete_project_quota_resource_endpoint(
+    project_id: int,
+    line_identifier: str,
+    resource_identifier: str,
+    payload: BudgetProjectQuotaResourceDeleteIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    try:
+        snapshot = delete_project_quota_resource(
+            db,
+            profile,
+            current_user,
+            line_identifier=line_identifier,
+            resource_identifier=resource_identifier,
+            expected_snapshot_revision=payload.expected_snapshot_revision,
+            expected_resource_revision=payload.expected_resource_revision,
+            reason=payload.reason,
+        )
+        snapshot_id = snapshot.id
+        db.commit()
+        db.expire_all()
+        from app.models.budget_project_quota import BudgetProjectQuotaSnapshot
+
+        snapshot = db.query(BudgetProjectQuotaSnapshot).filter_by(id=snapshot_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(_project_quota_payload(snapshot, current_user), message="工料机明细已删除，项目定额已重算")
+
+
+@router.post(
+    "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/project-quota/sync-enterprise",
+    summary="Synchronize the project quota to a versioned enterprise-quota draft",
+)
+async def sync_project_quota_to_enterprise_endpoint(
+    project_id: int,
+    line_identifier: str,
+    payload: BudgetProjectQuotaEnterpriseSyncIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    if not settings.feature_cost_db:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="FEATURE_DISABLED")
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    if not has_any_role(current_user, {"system_admin", "admin", "cost_approver"}):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "ENTERPRISE_QUOTA_SYNC_PERMISSION_DENIED",
+                "message": "无权限同步企业定额，请联系管理员授予成本核定权限",
+            },
+        )
+    try:
+        result = sync_project_quota_to_enterprise(
+            db,
+            profile,
+            current_user,
+            line_identifier=line_identifier,
+            expected_snapshot_revision=payload.expected_snapshot_revision,
+            reason=payload.reason,
+        )
+        snapshot_id = result["snapshot"].id
+        db.commit()
+        db.expire_all()
+        from app.models.budget_project_quota import BudgetProjectQuotaSnapshot
+
+        snapshot = db.query(BudgetProjectQuotaSnapshot).filter_by(id=snapshot_id).one()
+        result["snapshot"] = _project_quota_payload(snapshot, current_user)
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(result, message=result["message"])
+
+
+@router.get(
+    "/admin/budget-projects/{project_id}/pricing-draft/procurement-statistics",
+    summary="Aggregate material procurement quantities and labor trades",
+)
+async def get_pricing_draft_procurement_statistics_endpoint(
+    project_id: int,
+    pricing_mode: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    try:
+        draft = get_current_budget_pricing_draft(
+            db,
+            profile,
+            current_user,
+            pricing_mode=pricing_mode,
+        )
+        if draft is None:
+            raise BudgetPricingError("BUDGET_PRICING_DRAFT_NOT_FOUND", status_code=404)
+        result = build_budget_procurement_statistics(db, draft)
+    except BudgetPricingError as exc:
+        raise _http_error(exc) from exc
+    return api_ok(result)
 
 
 @router.post(
@@ -572,6 +987,55 @@ async def patch_pricing_draft_line_endpoint(
         },
         message="草稿单价已更新",
     )
+
+
+@router.patch(
+    "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/construction-note",
+    summary="Edit one construction note without changing price fields",
+)
+async def patch_pricing_draft_line_construction_note_endpoint(
+    project_id: int,
+    line_identifier: str,
+    payload: BudgetPricingDraftLineConstructionNotePatch,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    try:
+        draft, line = patch_budget_pricing_draft_line_construction_note(
+            db,
+            profile,
+            current_user,
+            pricing_mode=payload.pricing_mode,
+            line_identifier=line_identifier,
+            expected_revision=payload.expected_revision,
+            expected_line_revision=payload.expected_line_revision,
+            remark=payload.remark,
+            reason=payload.reason,
+        )
+        draft_id = draft.id
+        line_id = line.id
+        db.commit()
+        db.expire_all()
+        draft = db.query(BudgetProjectPricingDraft).filter(BudgetProjectPricingDraft.id == draft_id).one()
+        line = db.query(BudgetProjectPricingDraftLine).filter(BudgetProjectPricingDraftLine.id == line_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(
+        {
+            "draft": serialize_budget_pricing_draft(draft),
+            "line": serialize_budget_pricing_draft_line(line),
+        },
+        message="施工提示已更新",
+    )
+
+
 # These static routes must be registered before the project-id routes and the
 # existing budget project /{project_id} route in app.main.
 @router.get(
@@ -724,8 +1188,13 @@ async def list_budget_pricing_runs(
         .limit(page_size)
         .all()
     )
+    items = []
+    for run in runs:
+        item = serialize_budget_pricing_run(run)
+        item["is_active"] = int(profile.active_pricing_run_id or 0) == int(run.id)
+        items.append(item)
     return api_page(
-        [serialize_budget_pricing_run(run) for run in runs],
+        items,
         total=total,
         page=page,
         page_size=page_size,
@@ -766,6 +1235,12 @@ async def create_budget_pricing_run_endpoint(
             expected_quota_version_id=expected_quota_version_id,
             reason=payload.reason,
         )
+        capture_budget_pricing_run_draft_snapshot(
+            db,
+            profile,
+            current_user,
+            run,
+        )
         run_id = run.id
         db.commit()
         db.expire_all()
@@ -777,3 +1252,87 @@ async def create_budget_pricing_run_endpoint(
         db.rollback()
         raise
     return api_ok(serialize_budget_pricing_run(run), message="项目成本计价已生成")
+
+
+@router.post(
+    "/admin/budget-projects/{project_id}/pricing-runs/{run_identifier}/activate",
+    summary="Activate one immutable pricing version and refresh the current quote draft",
+)
+async def activate_budget_pricing_run_endpoint(
+    project_id: int,
+    run_identifier: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    try:
+        run = activate_budget_pricing_run(
+            db,
+            profile,
+            current_user,
+            run_identifier,
+        )
+        draft = restore_budget_pricing_draft_from_run_snapshot(
+            db,
+            profile,
+            current_user,
+            run,
+        )
+        run_id = run.id
+        draft_id = draft.id
+        db.commit()
+        db.expire_all()
+        run = db.query(BudgetProjectPricingRun).filter(BudgetProjectPricingRun.id == run_id).one()
+        draft = db.query(BudgetProjectPricingDraft).filter(BudgetProjectPricingDraft.id == draft_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    run_payload = serialize_budget_pricing_run(run)
+    run_payload["is_active"] = True
+    return api_ok(
+        {
+            "run": run_payload,
+            "draft": serialize_budget_pricing_draft(draft),
+        },
+        message="报价版本已启用，当前报价草稿已更新",
+    )
+
+
+@router.post(
+    "/admin/budget-projects/{project_id}/pricing-runs/{run_identifier}/archive",
+    summary="Archive one immutable pricing version",
+)
+async def archive_budget_pricing_run_endpoint(
+    project_id: int,
+    run_identifier: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    try:
+        run = archive_budget_pricing_run(
+            db,
+            profile,
+            current_user,
+            run_identifier,
+        )
+        run_id = run.id
+        db.commit()
+        db.expire_all()
+        run = db.query(BudgetProjectPricingRun).filter(BudgetProjectPricingRun.id == run_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    run_payload = serialize_budget_pricing_run(run)
+    run_payload["is_active"] = False
+    return api_ok(run_payload, message="报价版本已归档")

@@ -21,33 +21,33 @@ from app.api.v1 import (
     account_quotas,
     agents,
     auth,
+    bid_intake_runtime,
     bidding,
     budget_pricing,
     budget_projects,
-    business_ledger,
     client_inquiries,
     codex_worker,
     cost_items,
-    cost_measurements,
     project_cost_imports,
     dashboard,
     dwg_quantity_trial,
     enterprise_profile,
-    execution_tasks,
+    enterprise_quota_v2,
     files,
     history,
     knowledge_candidates,
     materials,
-    meetings,
     model_gateway,
     ops,
     project_progress,
+    pricing_agent,
     prompt_regression,
     quote,
     quote_feedback,
     quote_jobs,
     rag_eval,
     requirement_standardization,
+    tender_evidence_pipeline,
     users,
 )
 from app.core.database import engine, Base, get_db
@@ -59,25 +59,26 @@ from app.models import quote_cost_evidence as quote_cost_evidence_model  # noqa:
 from app.models import prompt_regression as prompt_regression_model  # noqa: F401 — 触发 Prompt 回归表建表
 from app.models import knowledge_candidate as knowledge_candidate_model  # noqa: F401 — 触发知识候选表建表
 from app.models import client_inquiry as client_inquiry_model  # noqa: F401 — 触发客户咨询表建表
-from app.models import client_inquiry_event as client_inquiry_event_model  # noqa: F401 — 触发商务台账事件表建表
 from app.models import cost_item as cost_item_model  # noqa: F401 — 触发成本库表建表
 from app.models import cost_audit as cost_audit_model  # noqa: F401 — 触发成本库审计表建表
-from app.models import execution_task as execution_task_model  # noqa: F401 — 触发执行任务表建表
-from app.models import meeting as meeting_model  # noqa: F401 — 触发会议纪要与草稿表建表
 from app.models import quote_requirement_row as quote_requirement_row_model  # noqa: F401
 from app.models import quote_preview_draft as quote_preview_draft_model  # noqa: F401
-from app.models import cost_measurement as cost_measurement_model  # noqa: F401
 from app.models import project_cost_import as project_cost_import_model  # noqa: F401
 from app.models import project_progress as project_progress_model  # noqa: F401
+from app.models import pricing_agent as pricing_agent_model  # noqa: F401
 from app.models import budget_project as budget_project_model  # noqa: F401
 from app.models import budget_pricing as budget_pricing_model  # noqa: F401
 from app.models import account as account_model  # noqa: F401
 from app.models import account_quota as account_quota_model  # noqa: F401
 from app.models import budget_pricing_draft as budget_pricing_draft_model  # noqa: F401
 from app.models import agent as agent_model  # noqa: F401
+from app.models import bid_intake_runtime as bid_intake_runtime_model  # noqa: F401
 from app.models import enterprise_quota as enterprise_quota_model  # noqa: F401
 from app.models import enterprise_profile as enterprise_profile_model  # noqa: F401
 from app.models import bidding as bidding_model  # noqa: F401
+from app.models import tender_evidence as tender_evidence_model  # noqa: F401
+from app.models import tender_evidence_index as tender_evidence_index_model  # noqa: F401
+from app.models import tender_parse_pipeline as tender_parse_pipeline_model  # noqa: F401
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -202,13 +203,21 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
 app.include_router(account_quotas.router, prefix="/api/v1", tags=["Account Quotas"])
 app.include_router(bidding.router, prefix="/api/v1", tags=["Bidding"])
+app.include_router(
+    bid_intake_runtime.router,
+    prefix="/api/v1",
+    tags=["Bid Intake Agent Runtime"],
+)
+app.include_router(
+    tender_evidence_pipeline.router,
+    prefix="/api/v1",
+    tags=["Tender Evidence Pipeline"],
+)
 app.include_router(budget_pricing.router, prefix="/api/v1", tags=["Budget Pricing"])
 app.include_router(budget_projects.router, prefix="/api/v1", tags=["Budget Projects"])
 app.include_router(client_inquiries.router, prefix="/api/v1", tags=["Client Inquiries"])
-app.include_router(business_ledger.router, prefix="/api/v1", tags=["Business Ledger"])
 app.include_router(codex_worker.router, prefix="/api/v1", tags=["Codex Worker POC"])
 app.include_router(cost_items.router, prefix="/api/v1", tags=["Cost Items"])
-app.include_router(cost_measurements.router, prefix="/api/v1", tags=["Cost Measurements"])
 app.include_router(project_cost_imports.router, prefix="/api/v1", tags=["Project Cost Imports"])
 app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
@@ -216,8 +225,7 @@ app.include_router(users.router, prefix="/api/v1", tags=["Users"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
 app.include_router(dwg_quantity_trial.router, prefix="/api/v1", tags=["DWG Quantity Trial"])
 app.include_router(enterprise_profile.router, prefix="/api/v1", tags=["Enterprise Profile"])
-app.include_router(execution_tasks.router, prefix="/api/v1", tags=["Execution Tasks"])
-app.include_router(meetings.router, prefix="/api/v1", tags=["Meetings"])
+app.include_router(enterprise_quota_v2.router, prefix="/api/v1", tags=["Enterprise Quota V2"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
 app.include_router(quote_jobs.router, prefix="/api/v1", tags=["Async Quote Jobs"])
 app.include_router(quote_feedback.router, prefix="/api/v1", tags=["Quote Feedback"])
@@ -229,6 +237,7 @@ app.include_router(ops.router, prefix="/api/v1", tags=["Operations"])
 app.include_router(rag_eval.router, prefix="/api/v1", tags=["RAG Eval"])
 app.include_router(requirement_standardization.router, prefix="/api/v1", tags=["Requirement Standardization"])
 app.include_router(project_progress.router, prefix="/api/v1", tags=["Project Progress"])
+app.include_router(pricing_agent.router, prefix="/api/v1", tags=["Pricing Agent"])
 app.include_router(agents.router, prefix="/api/v1", tags=["Agents"])
 
 
@@ -366,8 +375,24 @@ def serve_login():
     return _serve_vite_index()
 
 
+@app.get("/quotes", include_in_schema=False)
+def serve_unified_quotes():
+    if not settings.feature_unified_quotes:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/quotes/new", include_in_schema=False)
+def serve_unified_quote_new():
+    if not settings.feature_unified_quotes:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
 @app.get("/quote/new", include_in_schema=False)
 def serve_quote_new():
+    if settings.feature_unified_quotes:
+        return RedirectResponse("/index.html?entry=new-quote&mode=quick")
     if not settings.feature_vite_frontend:
         return RedirectResponse("/index.html")
     return _serve_vite_index()
@@ -395,22 +420,8 @@ def serve_vite_dashboard():
     return _serve_vite_index()
 
 
-@app.get("/admin/execution", include_in_schema=False)
-def serve_vite_execution():
-    if not settings.feature_vite_frontend:
-        raise HTTPException(status_code=404, detail="Not Found")
-    return _serve_vite_index()
-
-
 @app.get("/admin/business", include_in_schema=False)
 def serve_vite_business():
-    if not settings.feature_vite_frontend:
-        raise HTTPException(status_code=404, detail="Not Found")
-    return _serve_vite_index()
-
-
-@app.get("/admin/business-ledger", include_in_schema=False)
-def serve_vite_business_ledger():
     if not settings.feature_vite_frontend:
         raise HTTPException(status_code=404, detail="Not Found")
     return _serve_vite_index()
@@ -430,9 +441,9 @@ def serve_vite_account_quotas():
     return _serve_vite_index()
 
 
-@app.get("/admin/cost-measurement", include_in_schema=False)
-def serve_vite_cost_measurement():
-    if not settings.feature_vite_frontend:
+@app.get("/admin/pricing-agent", include_in_schema=False)
+def serve_vite_pricing_agent():
+    if not settings.feature_vite_frontend or not settings.feature_pricing_agent:
         raise HTTPException(status_code=404, detail="Not Found")
     return _serve_vite_index()
 
@@ -453,6 +464,13 @@ def serve_vite_dwg_trial():
 
 @app.get("/admin/bidding", include_in_schema=False)
 def serve_vite_bidding():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/bid-intake-agent", include_in_schema=False)
+def serve_vite_bid_intake_agent():
     if not settings.feature_vite_frontend:
         raise HTTPException(status_code=404, detail="Not Found")
     return _serve_vite_index()

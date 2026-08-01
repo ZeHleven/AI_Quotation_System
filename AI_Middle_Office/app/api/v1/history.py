@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -13,7 +13,7 @@ from app.core.database import get_db
 from app.core.logging import get_trace_id
 from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user
-from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
+from app.models.client_inquiry import ClientInquiry
 from app.models.quote_feedback import QuoteFeedback
 from app.models.quote_history import QuoteHistory, QuoteHistoryItem
 from app.models.quote_job import QuoteJob
@@ -210,10 +210,7 @@ def _client_inquiry_map_for_job_ids(db: Session, job_ids: list[str]) -> dict[str
         db.query(QuoteJob.job_id, ClientInquiry)
         .join(
             ClientInquiry,
-            and_(
-                QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id,
-                ClientInquiry.direction == DIRECTION_INBOUND,
-            ),
+            QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id,
         )
         .filter(QuoteJob.job_id.in_(job_ids))
         .all()

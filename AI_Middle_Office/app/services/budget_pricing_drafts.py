@@ -23,6 +23,8 @@ from app.models.budget_pricing import (
     PRICING_LINE_STATUS_QUANTITY_UNRESOLVED,
     PRICING_LINE_STATUS_UNIT_CONFLICT,
     PRICING_MATCH_UNIT_CONFLICT,
+    BudgetProjectPricingRun,
+    BudgetProjectPricingRunDraftSnapshot,
 )
 from app.models.budget_pricing_draft import (
     PRICING_DRAFT_STATUS_ACTIVE,
@@ -560,6 +562,16 @@ def _refresh_summary(db: Session, draft: BudgetProjectPricingDraft) -> dict[str,
         or line.selected_account_quota_item_id is not None
         for line in lines
     )
+    account_quota_matched_count = sum(
+        line.selected_account_quota_item_id is not None
+        or line.price_source == "account_quota"
+        for line in lines
+    )
+    enterprise_quota_matched_count = sum(
+        line.selected_enterprise_quota_item_id is not None
+        or line.price_source == "enterprise_quota"
+        for line in lines
+    )
     priced_count = sum(line.effective_unit_price is not None for line in lines)
     amount_priced_count = sum(bool(line.amount_included) for line in lines)
     pending_count = sum(line.effective_unit_price is None for line in lines)
@@ -567,6 +579,12 @@ def _refresh_summary(db: Session, draft: BudgetProjectPricingDraft) -> dict[str,
     ai_estimate_count = sum(line.ai_estimated_unit_price is not None for line in lines)
     quantity_unresolved_count = sum(
         line.quantity_status != "valid" or Decimal(line.calculation_quantity or 0) <= 0
+        for line in lines
+    )
+    attention_count = sum(
+        line.effective_unit_price is None
+        or line.quantity_status != "valid"
+        or Decimal(line.calculation_quantity or 0) <= 0
         for line in lines
     )
     subtotal = Decimal("0")
@@ -586,12 +604,15 @@ def _refresh_summary(db: Session, draft: BudgetProjectPricingDraft) -> dict[str,
         "row_count": row_count,
         "standard_item_count": row_count,
         "matched_count": matched_count,
+        "account_quota_matched_count": account_quota_matched_count,
+        "enterprise_quota_matched_count": enterprise_quota_matched_count,
         "unit_priced_count": priced_count,
         "amount_priced_count": amount_priced_count,
         "pending_count": pending_count,
         "manual_price_count": manual_price_count,
         "ai_estimate_count": ai_estimate_count,
         "quantity_unresolved_count": quantity_unresolved_count,
+        "attention_count": attention_count,
         "priced_subtotal": _decimal_text(subtotal),
         "total_cost": _decimal_text(subtotal) if complete else None,
         "completeness_status": completeness,
@@ -1112,6 +1133,311 @@ def create_or_rebuild_budget_pricing_draft(
     return draft
 
 
+_RUN_DRAFT_SNAPSHOT_HEADER_FIELDS = (
+    "source_import_batch_id",
+    "source_import_revision_id",
+    "source_import_snapshot_sha256",
+    "source_rows_sha256",
+    "source_snapshot_json",
+    "enterprise_quota_version_id",
+    "enterprise_quota_catalog_sha256",
+    "account_quota_catalog_sha256",
+    "matching_engine_version",
+    "pricing_engine_version",
+    "summary_json",
+)
+
+_RUN_DRAFT_SNAPSHOT_LINE_FIELDS = (
+    "line_uuid",
+    "source_row_key",
+    "source_sheet",
+    "source_raw_row_index",
+    "source_sort_order",
+    "source_row_sha256",
+    "source_row_snapshot_json",
+    "item_name",
+    "spec",
+    "unit",
+    "calculation_quantity",
+    "quantity_status",
+    "match_status",
+    "pricing_status",
+    "candidate_count",
+    "match_score",
+    "match_evidence_json",
+    "selected_enterprise_quota_item_id",
+    "selected_account_quota_item_id",
+    "selected_source_snapshot_json",
+    "base_unit_price",
+    "ai_estimated_unit_price",
+    "ai_estimate_snapshot_json",
+    "manual_unit_price",
+    "effective_unit_price",
+    "pricing_breakdown_json",
+    "line_total",
+    "amount_included",
+    "price_source",
+    "warnings_json",
+    "line_revision",
+)
+
+
+def _budget_pricing_draft_snapshot_payload(
+    db: Session,
+    draft: BudgetProjectPricingDraft,
+) -> dict[str, Any]:
+    lines = (
+        db.query(BudgetProjectPricingDraftLine)
+        .filter(BudgetProjectPricingDraftLine.draft_id == draft.id)
+        .order_by(
+            BudgetProjectPricingDraftLine.source_sort_order,
+            BudgetProjectPricingDraftLine.id,
+        )
+        .all()
+    )
+    return {
+        "schema": "budget-pricing-run-draft-snapshot/v1",
+        "account_id": int(draft.account_id),
+        "project_id": int(draft.project_id),
+        "pricing_mode": draft.pricing_mode,
+        "source_draft_uuid": draft.draft_uuid,
+        "source_draft_revision": int(draft.revision),
+        "header": {
+            field: getattr(draft, field)
+            for field in _RUN_DRAFT_SNAPSHOT_HEADER_FIELDS
+        },
+        "lines": [
+            {
+                field: getattr(line, field)
+                for field in _RUN_DRAFT_SNAPSHOT_LINE_FIELDS
+            }
+            for line in lines
+        ],
+    }
+
+
+def capture_budget_pricing_run_draft_snapshot(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    run: BudgetProjectPricingRun,
+) -> BudgetProjectPricingRunDraftSnapshot:
+    """Freeze the complete current quote draft as the immutable run payload."""
+
+    if int(run.project_id) != int(profile.project_id):
+        raise BudgetPricingError("BUDGET_PRICING_RUN_NOT_FOUND", status_code=404)
+    account, _ = require_budget_project_account(
+        db,
+        project_id=profile.project_id,
+        current_user=current_user,
+        for_update=True,
+    )
+    draft = (
+        _current_draft_query(
+            db,
+            account_id=account.id,
+            project_id=profile.project_id,
+            pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        )
+        .with_for_update()
+        .one_or_none()
+    )
+    if draft is None:
+        raise BudgetPricingError("BUDGET_PRICING_DRAFT_NOT_FOUND", status_code=404)
+    if (
+        int(draft.source_import_batch_id) != int(run.source_import_batch_id)
+        or int(draft.source_import_revision_id) != int(run.source_import_revision_id)
+    ):
+        raise BudgetPricingError(
+            "BUDGET_PRICING_RUN_DRAFT_SOURCE_MISMATCH",
+            context={
+                "run_source_import_batch_id": run.source_import_batch_id,
+                "run_source_import_revision_id": run.source_import_revision_id,
+                "draft_source_import_batch_id": draft.source_import_batch_id,
+                "draft_source_import_revision_id": draft.source_import_revision_id,
+            },
+        )
+    payload = _budget_pricing_draft_snapshot_payload(db, draft)
+    snapshot_sha256 = _sha256(payload)
+    existing = (
+        db.query(BudgetProjectPricingRunDraftSnapshot)
+        .filter(BudgetProjectPricingRunDraftSnapshot.run_id == run.id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if existing is not None:
+        if existing.snapshot_sha256 != snapshot_sha256:
+            raise BudgetPricingError("BUDGET_PRICING_RUN_DRAFT_SNAPSHOT_IMMUTABLE")
+        return existing
+    snapshot = BudgetProjectPricingRunDraftSnapshot(
+        snapshot_uuid=str(uuid4()),
+        run_id=run.id,
+        account_id=account.id,
+        project_id=profile.project_id,
+        source_draft_id=draft.id,
+        source_draft_uuid=draft.draft_uuid,
+        source_draft_revision=int(draft.revision),
+        pricing_mode=draft.pricing_mode,
+        row_count=len(payload["lines"]),
+        snapshot_sha256=snapshot_sha256,
+        snapshot_json=_json_dump(payload),
+        created_by=current_user.id,
+    )
+    db.add(snapshot)
+    db.flush()
+    return snapshot
+
+
+def restore_budget_pricing_draft_from_run_snapshot(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    run: BudgetProjectPricingRun,
+) -> BudgetProjectPricingDraft:
+    """Restore every quote field from the run's immutable full-draft snapshot."""
+
+    if int(run.project_id) != int(profile.project_id):
+        raise BudgetPricingError("BUDGET_PRICING_RUN_NOT_FOUND", status_code=404)
+    account, _ = require_budget_project_account(
+        db,
+        project_id=profile.project_id,
+        current_user=current_user,
+        for_update=True,
+    )
+    locked_profile = _locked_profile(db, profile)
+    snapshot = (
+        db.query(BudgetProjectPricingRunDraftSnapshot)
+        .filter(
+            BudgetProjectPricingRunDraftSnapshot.run_id == run.id,
+            BudgetProjectPricingRunDraftSnapshot.project_id == profile.project_id,
+            BudgetProjectPricingRunDraftSnapshot.account_id == account.id,
+        )
+        .with_for_update()
+        .one_or_none()
+    )
+    if snapshot is None:
+        raise BudgetPricingError(
+            "BUDGET_PRICING_RUN_DRAFT_SNAPSHOT_REQUIRED",
+            status_code=409,
+        )
+    payload = _json_load(snapshot.snapshot_json, {})
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema") != "budget-pricing-run-draft-snapshot/v1"
+        or int(payload.get("account_id") or 0) != int(account.id)
+        or int(payload.get("project_id") or 0) != int(profile.project_id)
+        or payload.get("pricing_mode") != PRICING_MODE_ENTERPRISE_AI
+        or _sha256(payload) != snapshot.snapshot_sha256
+    ):
+        raise BudgetPricingError("BUDGET_PRICING_RUN_DRAFT_SNAPSHOT_INVALID")
+    header = payload.get("header")
+    snapshot_lines = payload.get("lines")
+    if not isinstance(header, dict) or not isinstance(snapshot_lines, list):
+        raise BudgetPricingError("BUDGET_PRICING_RUN_DRAFT_SNAPSHOT_INVALID")
+    if len(snapshot_lines) != int(snapshot.row_count):
+        raise BudgetPricingError("BUDGET_PRICING_RUN_DRAFT_SNAPSHOT_INVALID")
+
+    draft = (
+        _current_draft_query(
+            db,
+            account_id=account.id,
+            project_id=profile.project_id,
+            pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        )
+        .with_for_update()
+        .one_or_none()
+    )
+    previous_revision = int(draft.revision) if draft else None
+    next_revision = (previous_revision or 0) + 1
+    if draft is None:
+        draft = BudgetProjectPricingDraft(
+            draft_uuid=str(uuid4()),
+            account_id=account.id,
+            project_id=locked_profile.project_id,
+            pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+            status=PRICING_DRAFT_STATUS_ACTIVE,
+            revision=next_revision,
+            created_by=current_user.id,
+            updated_by=current_user.id,
+            **{
+                field: header.get(field)
+                for field in _RUN_DRAFT_SNAPSHOT_HEADER_FIELDS
+            },
+        )
+        db.add(draft)
+        db.flush()
+    else:
+        old_lines = (
+            db.query(BudgetProjectPricingDraftLine)
+            .filter(BudgetProjectPricingDraftLine.draft_id == draft.id)
+            .with_for_update()
+            .all()
+        )
+        for old_line in old_lines:
+            db.delete(old_line)
+        db.flush()
+        draft.status = PRICING_DRAFT_STATUS_ACTIVE
+        draft.revision = next_revision
+        for field in _RUN_DRAFT_SNAPSHOT_HEADER_FIELDS:
+            setattr(draft, field, header.get(field))
+        draft.updated_by = current_user.id
+        db.flush()
+
+    for snapshot_line in snapshot_lines:
+        if not isinstance(snapshot_line, dict):
+            raise BudgetPricingError("BUDGET_PRICING_RUN_DRAFT_SNAPSHOT_INVALID")
+        db.add(
+            BudgetProjectPricingDraftLine(
+                draft_id=draft.id,
+                updated_by=current_user.id,
+                **{
+                    field: snapshot_line.get(field)
+                    for field in _RUN_DRAFT_SNAPSHOT_LINE_FIELDS
+                },
+            )
+        )
+
+    snapshot_summary = _json_load(header.get("summary_json"), {})
+    summary = _refresh_summary(db, draft)
+    if isinstance(snapshot_summary, dict):
+        summary = {**snapshot_summary, **summary}
+        draft.summary_json = _json_dump(summary)
+    _append_event(
+        db,
+        draft=draft,
+        current_user=current_user,
+        event_type="pricing_run_snapshot_activated",
+        from_mode=PRICING_MODE_ENTERPRISE_AI,
+        from_revision=previous_revision,
+        event={
+            "pricing_run_id": run.id,
+            "pricing_run_number": run.run_number,
+            "draft_snapshot_id": snapshot.id,
+            "draft_snapshot_sha256": snapshot.snapshot_sha256,
+            "source_draft_revision": snapshot.source_draft_revision,
+            "summary": summary,
+        },
+    )
+    db.flush()
+    return draft
+
+
+def replace_budget_pricing_draft_from_run(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    run: BudgetProjectPricingRun,
+) -> BudgetProjectPricingDraft:
+    """Compatibility alias; activation now requires a complete draft snapshot."""
+
+    return restore_budget_pricing_draft_from_run_snapshot(
+        db,
+        profile,
+        current_user,
+        run,
+    )
+
+
 def get_budget_pricing_draft_line(
     db: Session,
     draft: BudgetProjectPricingDraft,
@@ -1209,6 +1535,79 @@ def patch_budget_pricing_draft_line(
             "manual_unit_price": _decimal_text(line.manual_unit_price),
             "previous_pricing_breakdown": previous_breakdown,
             "pricing_breakdown": normalized_breakdown,
+            "reason": (reason or "").strip()[:2000] or None,
+            "summary": summary,
+        },
+    )
+    db.flush()
+    return draft, line
+
+
+def patch_budget_pricing_draft_line_construction_note(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    *,
+    pricing_mode: str | None = None,
+    line_identifier: str | int,
+    expected_revision: int,
+    expected_line_revision: int,
+    remark: str | None,
+    reason: str | None = None,
+) -> tuple[BudgetProjectPricingDraft, BudgetProjectPricingDraftLine]:
+    """Update construction guidance without changing any price field or source."""
+
+    draft = get_current_budget_pricing_draft(
+        db,
+        profile,
+        current_user,
+        pricing_mode=pricing_mode,
+        for_update=True,
+    )
+    if draft is None:
+        raise BudgetPricingError("BUDGET_PRICING_DRAFT_NOT_FOUND", status_code=404)
+    if int(draft.revision) != int(expected_revision):
+        raise BudgetPricingError(
+            "BUDGET_PRICING_DRAFT_REVISION_CONFLICT",
+            context={"expected_revision": expected_revision, "current_revision": draft.revision},
+        )
+    line = get_budget_pricing_draft_line(db, draft, line_identifier, for_update=True)
+    if int(line.line_revision) != int(expected_line_revision):
+        raise BudgetPricingError(
+            "BUDGET_PRICING_DRAFT_LINE_REVISION_CONFLICT",
+            context={
+                "expected_line_revision": expected_line_revision,
+                "current_line_revision": line.line_revision,
+            },
+        )
+
+    previous_revision = int(draft.revision)
+    previous_breakdown = _json_load(line.pricing_breakdown_json, {})
+    previous_remark = str(previous_breakdown.get("remark") or "").strip() if isinstance(previous_breakdown, dict) else ""
+    next_breakdown = dict(_line_pricing_breakdown(line))
+    normalized_remark = str(remark or "").strip()[:2000]
+    if not normalized_remark:
+        raise BudgetPricingError("BUDGET_PRICING_DRAFT_CONSTRUCTION_NOTE_INVALID", status_code=422)
+    next_breakdown["remark"] = normalized_remark
+    normalized_breakdown = _normalize_pricing_breakdown(next_breakdown)
+    line.pricing_breakdown_json = _json_dump(normalized_breakdown) if normalized_breakdown else None
+    line.line_revision = int(line.line_revision) + 1
+    line.updated_by = current_user.id
+    draft.revision = int(draft.revision) + 1
+    draft.updated_by = current_user.id
+    summary = _refresh_summary(db, draft)
+    _append_event(
+        db,
+        draft=draft,
+        current_user=current_user,
+        event_type="construction_note_updated",
+        from_mode=draft.pricing_mode,
+        from_revision=previous_revision,
+        event={
+            "line_id": line.id,
+            "line_uuid": line.line_uuid,
+            "previous_remark": previous_remark or None,
+            "remark": normalized_remark or None,
             "reason": (reason or "").strip()[:2000] or None,
             "summary": summary,
         },

@@ -9,7 +9,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -17,7 +17,7 @@ from app.core.database import SessionLocal, get_db
 from app.core.logging import get_trace_id
 from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user, require_admin
-from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
+from app.models.client_inquiry import ClientInquiry
 from app.models.file_object import FileObject
 from app.models.quote_cost_evidence import QuoteCostEvidence
 from app.models.quote_feedback import QuoteFeedback
@@ -43,8 +43,13 @@ from app.services.quote_job_numbers import (
 from app.services.quote_job_runner import (
     RETRYABLE_STATUSES,
     TERMINAL_STATUSES,
+    _load_job_file_content,
     append_job_event,
     mark_stale_quote_jobs,
+)
+from app.services.quote_budget_workspace import (
+    QuoteBudgetWorkspaceError,
+    materialize_quote_budget_workspace,
 )
 from app.services.quote_review import (
     build_quote_review_detail,
@@ -135,13 +140,9 @@ def _quote_job_context_maps(
     feedback_by_job_id: dict[str, QuoteFeedback] = {}
 
     if inquiry_ids:
-        # defensive: QuoteJob.client_inquiry_id should only bind inbound inquiries.
         inquiries = (
             db.query(ClientInquiry)
-            .filter(
-                ClientInquiry.inquiry_id.in_(inquiry_ids),
-                ClientInquiry.direction == DIRECTION_INBOUND,
-            )
+            .filter(ClientInquiry.inquiry_id.in_(inquiry_ids))
             .all()
         )
         inquiries_by_id = {inquiry.inquiry_id: inquiry for inquiry in inquiries}
@@ -211,6 +212,10 @@ def _serialize_job(
         "duration_ms": job.duration_ms,
         "failure_stage": job.failure_stage,
         "client_inquiry_id": job.client_inquiry_id,
+        "budget_project_id": job.budget_project_id,
+        "budget_pricing_draft_id": job.budget_pricing_draft_id,
+        "budget_workspace_source_sha256": job.budget_workspace_source_sha256,
+        "budget_workspace_synced_at": _format_dt(job.budget_workspace_synced_at),
         "created_at": _format_dt(job.created_at),
         "updated_at": _format_dt(job.updated_at),
         "finished_at": _format_dt(job.finished_at),
@@ -452,10 +457,7 @@ async def list_quote_jobs(
     if source:
         query = query.outerjoin(
             ClientInquiry,
-            and_(
-                QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id,
-                ClientInquiry.direction == DIRECTION_INBOUND,
-            ),
+            QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id,
         )
         joined_inquiry = True
         query = query.filter(ClientInquiry.source == source.strip())
@@ -466,10 +468,7 @@ async def list_quote_jobs(
             if not joined_inquiry:
                 query = query.outerjoin(
                     ClientInquiry,
-                    and_(
-                        QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id,
-                        ClientInquiry.direction == DIRECTION_INBOUND,
-                    ),
+                    QuoteJob.client_inquiry_id == ClientInquiry.inquiry_id,
                 )
                 joined_inquiry = True
             pattern = f"%{keyword_value}%"
@@ -541,6 +540,59 @@ async def get_quote_job_review_detail(
 ):
     job = _get_accessible_job(job_id, current_user, db, allow_quote_operations=True)
     return api_ok(build_quote_review_detail(db, job))
+
+
+@router.post("/quote/jobs/{job_id}/budget-workspace", summary="将对话报价同步到详细报价工作台")
+async def materialize_quote_job_budget_workspace(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = _get_accessible_job(job_id, current_user, db, allow_quote_operations=True)
+    try:
+        try:
+            file_content = await _load_job_file_content(job, db)
+        except Exception:
+            file_content = None
+            logger.warning(
+                "quote_budget_workspace_source_file_unavailable",
+                extra={"job_id": job.job_id, "event": "quote_budget_workspace_source_file_unavailable"},
+            )
+        data = materialize_quote_budget_workspace(
+            db,
+            job=job,
+            current_user=current_user,
+            file_content=file_content,
+        )
+        append_job_event(
+            job,
+            "budget_workspace_ready",
+            "详细报价工作台已准备完成",
+            trace_id=job.trace_id,
+            stage="budget_workspace_ready",
+            budget_project_id=data["budget_project_id"],
+            budget_pricing_draft_id=data["budget_pricing_draft_id"],
+            synced=data["synced"],
+        )
+        db.commit()
+        db.refresh(job)
+        return api_ok(data)
+    except QuoteBudgetWorkspaceError as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.exception(
+            "quote_budget_workspace_materialize_failed",
+            extra={"job_id": job.job_id, "event": "quote_budget_workspace_materialize_failed"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "QUOTE_BUDGET_WORKSPACE_FAILED"},
+        ) from exc
 
 
 @router.get("/quote/jobs/{job_id}/preview-draft", summary="查询报价预审草稿")
@@ -662,6 +714,7 @@ async def retry_quote_job(
         file_object_id=source_job.file_object_id,
         file_base64=source_job.file_base64,
         client_inquiry_id=source_job.client_inquiry_id,
+        budget_project_id=source_job.budget_project_id,
         trace_id=get_trace_id() or uuid.uuid4().hex,
     )
     apply_job_request_summary(retry_job)

@@ -91,7 +91,7 @@ def test_vite_navigation_is_grouped_by_work_context_without_development_labels()
     for group in ("核心工作台", "业务协同", "数据资产", "智能工具", "系统管理"):
         assert f'<p class="nav-group-label">{group}</p>' in app
     assert "旧版入口" not in app
-    assert "<span>新建报价</span>" in app
+    assert "<span>项目报价</span>" in app
     assert "<span>经营总览</span>" in app
     assert "<span>我的项目任务</span>" in app
     assert '<span class="nav-status-badge">试运行</span>' not in app

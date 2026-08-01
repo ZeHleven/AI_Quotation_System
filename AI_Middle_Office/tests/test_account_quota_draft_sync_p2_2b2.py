@@ -319,7 +319,8 @@ def test_frontend_exposes_account_quota_draft_sync_contract():
     quota_page = (project_root.parent / "ai-web" / "src" / "AccountQuotaLibrary.vue").read_text(encoding="utf-8")
     api_client = (project_root.parent / "ai-web" / "src" / "budgetProjectApi.js").read_text(encoding="utf-8")
 
-    assert "同步到账户定额" in pricing_page
+    assert "同步至账户定额" in pricing_page
+    assert "同步到账户定额" not in pricing_page
     assert "确认同步为账户定额草稿" in pricing_page
     assert "previewAccountQuotaSync" in pricing_page
     assert "confirmAccountQuotaSync" in pricing_page

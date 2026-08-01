@@ -51,7 +51,9 @@ def _admin_user():
 
 
 def test_execution_routes_and_spa_entry_are_not_registered(client):
-    registered_paths = {route.path for route in client.app.routes}
+    registered_paths = {
+        route.path for route in client.app.routes if hasattr(route, "path")
+    }
 
     assert RETIRED_ROUTES.isdisjoint(registered_paths)
     assert client.get("/api/v1/execution-tasks").status_code == 404

@@ -1,0 +1,313 @@
+{
+  "schema_version": "bid_intake_candidate_coverage_fixed_development_execution_v1",
+  "execution_id": "RET-CANDIDATE-COVERAGE-002-FIXED-DEV-EXECUTION-V1",
+  "freeze_id": "RET-CANDIDATE-COVERAGE-002-FIXED-DEV-FREEZE-20260730-V1",
+  "experiment_id": "RET-CANDIDATE-COVERAGE-002",
+  "candidate_id": "RET-EXP-003B",
+  "executed_at": "2026-07-30T16:39:10+08:00",
+  "status": "rejected_by_cross_project_stability_and_retention_gates",
+  "dataset_fingerprint": "c1b1dc434353aee5b8e19aed30be204c43e8385195f5d0fb94afb918bce81c87",
+  "formal_execution_counts": {
+    "quality_comparison": 1,
+    "baseline_pass": 1,
+    "candidate_pass": 1,
+    "agent_run": 0,
+    "rerun_performed": false
+  },
+  "artifacts": {
+    "baseline_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_002_fixed_dev_baseline/20260730_163831_RET-CANDIDATE-COVERAGE-002-FIXED-DEV-BASELINE_report.json",
+      "sha256": "889effe6434051ab1d2a7169ecf0ff7b6f91daf73b4faac671fa576c462e799b"
+    },
+    "baseline_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_002_fixed_dev_baseline/20260730_163831_RET-CANDIDATE-COVERAGE-002-FIXED-DEV-BASELINE_predictions.jsonl",
+      "sha256": "285236837170142c848538890a1818c26037fda2e200cd6caf4d79e6a66627e7"
+    },
+    "candidate_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_002_fixed_dev_candidate/20260730_163910_RET-CANDIDATE-COVERAGE-002-FIXED-DEV-CANDIDATE_report.json",
+      "sha256": "5b9c3b23a4d0384a92d00509a73b992a00e5b403530bcb0e6d6219c28d18b6b5"
+    },
+    "candidate_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_002_fixed_dev_candidate/20260730_163910_RET-CANDIDATE-COVERAGE-002-FIXED-DEV-CANDIDATE_predictions.jsonl",
+      "sha256": "9f42964754067e7c6fd1537b852e2cb4b71b33a3a857a59d877b427e0d3d7996"
+    }
+  },
+  "single_variable": {
+    "name": "candidate_coverage_selection_enabled",
+    "baseline": false,
+    "candidate": true,
+    "all_other_optional_retrieval_enhancements_enabled": false
+  },
+  "baseline_metrics": {
+    "hit_rate_at_5": 0.885714,
+    "mean_recall_at_5": 0.706667,
+    "mean_precision_at_5": 0.28,
+    "mrr": 0.792857,
+    "mean_ndcg_at_5": 0.690369,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "negative_accuracy": 0.0,
+    "candidate_pool_assessment_rate": 1.0,
+    "mean_candidate_pool_recall": 0.871429,
+    "candidate_pool_oracle_complete_rate": 0.771429,
+    "mean_candidate_to_top_k_gold_retention": 0.800476,
+    "total_gold_dropped_from_candidate_pool": 17,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 636.237,
+    "p95_latency_ms": 1487,
+    "error_count": 0
+  },
+  "candidate_metrics": {
+    "hit_rate_at_5": 0.942857,
+    "mean_recall_at_5": 0.76381,
+    "mean_precision_at_5": 0.302857,
+    "mrr": 0.821429,
+    "mean_ndcg_at_5": 0.74986,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "negative_accuracy": 0.0,
+    "candidate_pool_assessment_rate": 1.0,
+    "mean_candidate_pool_recall": 0.871429,
+    "candidate_pool_oracle_complete_rate": 0.771429,
+    "mean_candidate_to_top_k_gold_retention": 0.871905,
+    "total_gold_dropped_from_candidate_pool": 13,
+    "fact_gate_assessment_rate": 0.815789,
+    "fact_gate_alignment_accuracy": 0.677419,
+    "fact_gate_negative_accuracy": 1.0,
+    "fact_gate_false_sufficient_rate": 0.235294,
+    "fact_gate_false_insufficient_rate": 0.428571,
+    "mean_latency_ms": 594.816,
+    "p95_latency_ms": 1345,
+    "error_count": 0
+  },
+  "deltas_vs_baseline": {
+    "hit_rate_at_5": 0.057143,
+    "mean_recall_at_5": 0.057143,
+    "mean_precision_at_5": 0.022857,
+    "mrr": 0.028572,
+    "mean_ndcg_at_5": 0.059491,
+    "mean_candidate_pool_recall": 0.0,
+    "candidate_pool_oracle_complete_rate": 0.0,
+    "mean_candidate_to_top_k_gold_retention": 0.071429,
+    "total_gold_dropped_from_candidate_pool": -4,
+    "routing_exact_rate": 0.0,
+    "query_count_accuracy": 0.0,
+    "topic_recall": 0.0,
+    "negative_accuracy": 0.0,
+    "mean_latency_ms": -41.421,
+    "p95_latency_ms": -142,
+    "search_call_count": 0
+  },
+  "by_project": [
+    {
+      "project_uuid": "d6d9fa60-c00c-4580-afb4-17ef8168c9f9",
+      "project_label": "香港中心",
+      "origin_project": true,
+      "case_count": 10,
+      "baseline_recall_at_5": 0.633333,
+      "candidate_recall_at_5": 0.816667,
+      "recall_delta": 0.183334,
+      "baseline_mrr": 0.575,
+      "candidate_mrr": 0.85,
+      "mrr_delta": 0.275,
+      "baseline_ndcg_at_5": 0.583304,
+      "candidate_ndcg_at_5": 0.815221,
+      "ndcg_delta": 0.231917,
+      "baseline_gold_retention": 0.633333,
+      "candidate_gold_retention": 0.866667,
+      "gold_retention_delta": 0.233334,
+      "baseline_dropped_gold": 5,
+      "candidate_dropped_gold": 2,
+      "project_improved": true
+    },
+    {
+      "project_uuid": "d9382132-e111-4b08-a799-40c4377db0cf",
+      "project_label": "深圳丰隆",
+      "origin_project": true,
+      "case_count": 10,
+      "baseline_recall_at_5": 0.916667,
+      "candidate_recall_at_5": 0.95,
+      "recall_delta": 0.033333,
+      "baseline_mrr": 1.0,
+      "candidate_mrr": 1.0,
+      "mrr_delta": 0.0,
+      "baseline_ndcg_at_5": 0.923679,
+      "candidate_ndcg_at_5": 0.961315,
+      "ndcg_delta": 0.037636,
+      "baseline_gold_retention": 0.966667,
+      "candidate_gold_retention": 1.0,
+      "gold_retention_delta": 0.033333,
+      "baseline_dropped_gold": 1,
+      "candidate_dropped_gold": 0,
+      "project_improved": true
+    },
+    {
+      "project_uuid": "4a495b13-4373-437b-b536-af1975c8cda1",
+      "project_label": "总部基地",
+      "origin_project": false,
+      "case_count": 8,
+      "baseline_recall_at_5": 0.65,
+      "candidate_recall_at_5": 0.65,
+      "recall_delta": 0.0,
+      "baseline_mrr": 0.666667,
+      "candidate_mrr": 0.566667,
+      "mrr_delta": -0.1,
+      "baseline_ndcg_at_5": 0.608063,
+      "candidate_ndcg_at_5": 0.585753,
+      "ndcg_delta": -0.02231,
+      "baseline_gold_retention": 0.65,
+      "candidate_gold_retention": 0.65,
+      "gold_retention_delta": 0.0,
+      "baseline_dropped_gold": 6,
+      "candidate_dropped_gold": 6,
+      "project_improved": false
+    },
+    {
+      "project_uuid": "25091d80-15ab-40b7-ad20-fd9a169d1dc8",
+      "project_label": "陵水",
+      "origin_project": false,
+      "case_count": 10,
+      "baseline_recall_at_5": 0.598333,
+      "candidate_recall_at_5": 0.581667,
+      "recall_delta": -0.016666,
+      "baseline_mrr": 0.866667,
+      "candidate_mrr": 0.741667,
+      "mrr_delta": -0.125,
+      "baseline_ndcg_at_5": 0.605277,
+      "candidate_ndcg_at_5": 0.555096,
+      "ndcg_delta": -0.050181,
+      "baseline_gold_retention": 0.876667,
+      "candidate_gold_retention": 0.86,
+      "gold_retention_delta": -0.016667,
+      "baseline_dropped_gold": 5,
+      "candidate_dropped_gold": 5,
+      "project_improved": false
+    }
+  ],
+  "case_level_diagnostics": {
+    "improvement_case_count": 10,
+    "ranking_regression_case_count": 5,
+    "recall_regression_case_count": 1,
+    "recall_regression_cases": [
+      {
+        "eval_case_id": "RET-GRAPH-DEV-B-Q008",
+        "question_type": "cross_document_missing_fact_and_near_synonym",
+        "baseline_recall_at_5": 1.0,
+        "candidate_recall_at_5": 0.5,
+        "baseline_ndcg_at_5": 0.877215,
+        "candidate_ndcg_at_5": 0.306574,
+        "candidate_pool_contains_all_gold": true,
+        "diagnosis": "The coverage selector promoted generic submission clauses and displaced the contract block that explicitly states the performance-bond return condition."
+      }
+    ],
+    "ranking_regression_case_ids": [
+      "FACT-COVERAGE-DEV-A-Q004",
+      "RET-GRAPH-DEV-B-Q002",
+      "RET-GRAPH-DEV-B-Q003",
+      "RET-GRAPH-DEV-B-Q008",
+      "RET-GRAPH-DEV-B-Q010"
+    ]
+  },
+  "acceptance_evaluation": {
+    "absolute_quality_passed": true,
+    "global_delta_passed": true,
+    "candidate_pool_recall_passed": true,
+    "candidate_to_top_k_retention_passed": false,
+    "cross_project_stability_passed": false,
+    "safety_and_cost_passed": true,
+    "full_development_passed": false,
+    "passed_thresholds": [
+      "candidate_hit_rate_at_5_min",
+      "candidate_mean_recall_at_5_min",
+      "candidate_mrr_min",
+      "candidate_mean_ndcg_at_5_min",
+      "global_recall_delta_min",
+      "improvement_case_count_min",
+      "global_mrr_delta_min",
+      "global_ndcg_at_5_delta_min",
+      "candidate_pool_recall_min",
+      "total_gold_dropped_from_candidate_pool_must_decrease",
+      "per_project_recall_delta_min",
+      "routing_exact_rate_min",
+      "query_count_accuracy_min",
+      "topic_recall_min",
+      "negative_accuracy_delta_min",
+      "search_call_count_delta_max",
+      "p95_latency_delta_ms_max",
+      "execution_error_count_max",
+      "additional_llm_tokens_max"
+    ],
+    "failed_thresholds": [
+      {
+        "name": "recall_regression_case_count_max",
+        "required_max": 0,
+        "actual": 1
+      },
+      {
+        "name": "candidate_to_top_k_gold_retention_delta_min",
+        "required_min": 0.1,
+        "actual": 0.071429
+      },
+      {
+        "name": "improved_project_count_min",
+        "required_min": 3,
+        "actual": 2
+      },
+      {
+        "name": "non_origin_project_improvement_count_min",
+        "required_min": 1,
+        "actual": 0
+      }
+    ]
+  },
+  "reasoning_record": {
+    "problem": "The deterministic coverage selector improves aggregate Top-5 metrics but does not preserve correct evidence reliably across projects.",
+    "evidence": [
+      "Aggregate Recall@5 increased by 5.71 percentage points and dropped Gold decreased from 17 to 13.",
+      "Only the two origin projects, Hong Kong Center and Shenzhen Fenglong, improved at project level.",
+      "Headquarters Base kept the same Recall but lost 10 percentage points of MRR; Lingshui lost Recall, MRR and nDCG.",
+      "RET-GRAPH-DEV-B-Q008 had both Gold blocks in the candidate pool, but the selector promoted two generic submission clauses and removed the direct performance-bond return clause from Top 5.",
+      "The shadow fact gate had a 23.53% false-sufficient rate and 42.86% false-insufficient rate, showing that surface slot coverage is not evidence sufficiency."
+    ],
+    "inference": "The candidate generation layer is already strong enough to expose most Gold evidence, but the selector overweights surface answer signals and can replace high-quality baseline anchors with semantically incomplete clauses. The improvement is origin-project concentrated and is not yet a general selector.",
+    "alternatives_considered": [
+      {
+        "option": "Accept the candidate because global Recall, MRR and nDCG improved",
+        "decision": "rejected",
+        "reason": "This would ignore frozen cross-project and no-recall-regression gates and would hide origin-project concentration."
+      },
+      {
+        "option": "Add project-specific guarantee or submission keywords",
+        "decision": "rejected",
+        "reason": "It would tune to observed Development cases instead of fixing the general evidence-relation problem."
+      },
+      {
+        "option": "Move directly to GraphRAG, Neo4j or long-term memory",
+        "decision": "rejected",
+        "reason": "The missing Gold was already in the same candidate pool; graph storage and cross-session memory do not solve Top-5 selection loss."
+      },
+      {
+        "option": "Design an anchor-preserving coverage selector on the same fixed Development pool",
+        "decision": "selected",
+        "reason": "It directly addresses the observed selection loss without consuming another Holdout."
+      }
+    ],
+    "next_optimization_direction": [
+      "Keep RET-CANDIDATE-COVERAGE-002 rejected and keep the production flag disabled.",
+      "Create RET-CANDIDATE-COVERAGE-003 with one general variable: preserve high-confidence baseline anchors before using fact coverage to fill remaining Top-5 positions.",
+      "Do not treat generic term overlap as answer coverage; require deterministic alignment of target entity, relation or attribute before a coverage candidate may replace an anchor.",
+      "Use the same frozen 38-question Development pool and the same project-level gates; do not run Taifeng, Lancheng or Huizhou.",
+      "Only after the selector passes cross-project stability should context evidence groups be evaluated on top of it.",
+      "Request one new final Holdout only after the whole retrieval architecture is frozen."
+    ]
+  },
+  "production_decision": {
+    "enabled": false,
+    "candidate_accepted": false,
+    "reason": "The candidate failed frozen Top-5 retention, recall-regression and cross-project generalization gates despite improving aggregate metrics.",
+    "old_holdout_or_challenge_rerun": false,
+    "new_project_required_for_next_development_iteration": false
+  }
+}

@@ -1,0 +1,227 @@
+{
+  "schema_version": "bid_intake_graph_holdout_execution_v1",
+  "execution_id": "RET-GRAPH-HOLDOUT-001-EXECUTION-V1",
+  "freeze_id": "RET-GRAPH-HOLDOUT-001-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-HOLDOUT-001",
+  "candidate_id": "RET-GRAPH-EXPAND-003",
+  "executed_at": "2026-07-30T16:10:34+08:00",
+  "status": "rejected_by_holdout_quality_paired_latency_passed",
+  "dataset_fingerprint": "080b68df7cffbcb14efe4b6c82abcba8c07d07cafa6f83ca58d3784e82a9dc1f",
+  "formal_execution_counts": {
+    "quality_comparison": 1,
+    "paired_latency": 1,
+    "agent_run": 0,
+    "rerun_performed": false
+  },
+  "artifacts": {
+    "baseline_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_GRAPH_HOLDOUT_001_baseline/20260730_160435_RET-GRAPH-HOLDOUT-001-BASELINE_report.json",
+      "sha256": "4972f112c60ee754bf028ba76733aaa5d3c43178ef0290bc58dd266572c5808a"
+    },
+    "baseline_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_GRAPH_HOLDOUT_001_baseline/20260730_160435_RET-GRAPH-HOLDOUT-001-BASELINE_predictions.jsonl",
+      "sha256": "53ccaaaf6aa3986c275f9edfd8ecd9948f46e0efd83752b3435bf8ad779ab95c"
+    },
+    "candidate_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_GRAPH_HOLDOUT_001_candidate/20260730_160513_RET-GRAPH-HOLDOUT-001-CANDIDATE_report.json",
+      "sha256": "8700ccc199186a5ad6317efe63fb0c93e6421395bd94914b44eeece0db0d8d95"
+    },
+    "candidate_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_GRAPH_HOLDOUT_001_candidate/20260730_160513_RET-GRAPH-HOLDOUT-001-CANDIDATE_predictions.jsonl",
+      "sha256": "8bff08e10ef1c44980588edd24bd06d757caf152f01e69900098d2e044e50ff3"
+    },
+    "paired_latency_report": {
+      "path": "outputs/bid_intake_paired_latency/private_RET_GRAPH_HOLDOUT_001/20260730_161034_RET-GRAPH-HOLDOUT-001-PAIRED-LATENCY_report.json",
+      "sha256": "ea0992e75bfbf71b6b472cc432ca3c53889ecb98d78c9df97369b58dbb36a1f0"
+    }
+  },
+  "baseline_metrics": {
+    "hit_rate_at_5": 0.9,
+    "mean_recall_at_5": 0.34,
+    "mean_precision_at_5": 0.28,
+    "mrr": 0.491667,
+    "mean_ndcg_at_5": 0.313604,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 1220.3,
+    "p95_latency_ms": 2289,
+    "error_count": 0
+  },
+  "candidate_metrics": {
+    "hit_rate_at_5": 0.9,
+    "mean_recall_at_5": 0.34,
+    "mean_precision_at_5": 0.28,
+    "mrr": 0.486667,
+    "mean_ndcg_at_5": 0.311893,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 1196.6,
+    "p95_latency_ms": 2129,
+    "error_count": 0
+  },
+  "deltas_vs_baseline": {
+    "hit_rate_at_5": 0.0,
+    "mean_recall_at_5": 0.0,
+    "mean_precision_at_5": 0.0,
+    "mrr": -0.005,
+    "mean_ndcg_at_5": -0.001711,
+    "routing_exact_rate": 0.0,
+    "query_count_accuracy": 0.0,
+    "topic_recall": 0.0,
+    "mean_latency_ms": -23.7,
+    "p95_latency_ms": -160
+  },
+  "graph_metrics": {
+    "graph_trigger_expected_count": 6,
+    "graph_no_trigger_expected_count": 4,
+    "graph_triggered_count": 6,
+    "graph_trigger_precision": 1.0,
+    "graph_trigger_recall": 1.0,
+    "single_document_false_trigger_rate": 0.0,
+    "negative_relation_erroneous_expansion_rate": 0.0,
+    "graph_call_count": 6,
+    "seed_count": 0,
+    "expanded_path_count": 0,
+    "expanded_evidence_count": 0,
+    "graph_path_precision": null,
+    "graph_path_precision_status": "not_evaluable_no_paths",
+    "triggered_case_mean_recall_baseline": 0.275,
+    "triggered_case_mean_recall_candidate": 0.275,
+    "triggered_case_mean_recall_delta": 0.0,
+    "triggered_case_improvement_count": 0,
+    "triggered_case_recall_regression_count": 0,
+    "skip_reason_counts": {
+      "no_verifiable_seed": 6,
+      "trigger_contract_not_satisfied": 4
+    },
+    "additional_llm_tokens": 0,
+    "error_count": 0
+  },
+  "paired_latency": {
+    "acceptance_passed": true,
+    "warmup_pair_count": 10,
+    "warmup_excluded": true,
+    "measured_pair_count": 60,
+    "formal_retrieval_call_count": 120,
+    "baseline_mean_ms": 1193.45,
+    "candidate_mean_ms": 1191.883,
+    "baseline_p95_ms": 1654,
+    "candidate_p95_ms": 1772,
+    "paired_delta_mean_ms": -1.567,
+    "paired_delta_median_ms": -9.0,
+    "paired_delta_p95_ms": 157,
+    "paired_delta_p95_ms_max": 500,
+    "margin_to_threshold_ms": 343,
+    "candidate_slower_count": 26,
+    "candidate_faster_count": 34,
+    "baseline_error_count": 0,
+    "candidate_error_count": 0,
+    "trigger_mismatch_count": 0,
+    "graph_trigger_expected_p95_delta_ms": 234,
+    "graph_no_trigger_expected_p95_delta_ms": 113,
+    "graph_path_present_sample_count": 0
+  },
+  "acceptance_evaluation": {
+    "absolute_quality_passed": false,
+    "graph_mechanism_passed": false,
+    "paired_latency_passed": true,
+    "fact_gate_status": "not_evaluable",
+    "full_release_passed": false,
+    "passed_thresholds": [
+      "candidate_hit_rate_at_5_min",
+      "routing_exact_rate_min",
+      "query_count_accuracy_min",
+      "topic_recall_min",
+      "graph_trigger_precision_min",
+      "graph_trigger_recall_min",
+      "single_document_false_trigger_rate_max",
+      "negative_relation_erroneous_expansion_rate_max",
+      "triggered_case_mean_gold_recall_delta_min",
+      "triggered_case_recall_regression_count_max",
+      "global_mrr_delta_min",
+      "global_ndcg_at_5_delta_min",
+      "execution_error_count_max",
+      "additional_llm_tokens_max",
+      "paired_delta_p95_ms_max",
+      "paired_latency_error_and_trigger_checks"
+    ],
+    "failed_thresholds": [
+      {
+        "name": "candidate_mean_recall_at_5_min",
+        "required_min": 0.6,
+        "actual": 0.34
+      },
+      {
+        "name": "candidate_mrr_min",
+        "required_min": 0.75,
+        "actual": 0.486667
+      },
+      {
+        "name": "candidate_mean_ndcg_at_5_min",
+        "required_min": 0.6,
+        "actual": 0.311893
+      },
+      {
+        "name": "expanded_path_count_min",
+        "required_min": 1,
+        "actual": 0
+      },
+      {
+        "name": "triggered_case_improvement_count_min",
+        "required_min": 1,
+        "actual": 0
+      }
+    ],
+    "not_evaluable_thresholds": [
+      "graph_path_precision_min",
+      "fact_gate_alignment_delta_min_if_evaluable",
+      "fact_gate_false_sufficient_rate_delta_max_if_evaluable"
+    ]
+  },
+  "reasoning_record": {
+    "problem": "Development B上有效的两类确定性关系没有在全新Holdout中生成任何可验证图路径，Candidate也没有改善Top5证据覆盖。",
+    "evidence": [
+      "6个正样本全部正确触发，4个负样本全部正确不触发，证明触发边界泛化。",
+      "6次图调用的seed_count和path_count均为0，统一以no_verifiable_seed结束。",
+      "Candidate的Recall@5与Baseline同为34%，且没有任何触发题改善。",
+      "Q001的20条候选池已包含3/4 Gold，但最终Top5只有1/4；Q009候选池包含6/8 Gold，但最终Top5只有2/8。",
+      "Holdout关系主要是语义冲突、连续条款、跨表聚合和缺失映射，不属于Development B已验证的表头父子或显式编号引用。"
+    ],
+    "inference": "当前瓶颈首先位于候选选择与上下文组装，而不是图触发器或召回查询规划。直接根据Holdout新增项目词或关系边会构成过拟合。",
+    "alternatives_considered": [
+      {
+        "option": "依据惠州题目扩充图边和项目关键词",
+        "decision": "rejected",
+        "reason": "违反冻结后的Holdout不得定义新规则原则，且关系类型尚未在独立Development中重复出现。"
+      },
+      {
+        "option": "立即引入Neo4j或长期Memory",
+        "decision": "rejected",
+        "reason": "没有证据表明问题来自图存储规模或跨会话遗忘。"
+      },
+      {
+        "option": "在全新Development C验证候选覆盖选择、轻量重排与上下文证据组",
+        "decision": "selected",
+        "reason": "正确证据已大量进入候选池但未进入Top5，直接对应现有证据。"
+      }
+    ],
+    "next_optimization_direction": [
+      "永久锁定本Holdout，不再用其调整题目、Gold、规则、参数或阈值，也不重跑本候选。",
+      "从未参与本次Holdout的新项目建立Development C诊断集。",
+      "先以单变量验证事实槽位覆盖驱动的候选选择或轻量重排，避免通用干扰项重复占据Top5。",
+      "再验证相邻条款、表格父子和同一事实多块组成的上下文证据组。",
+      "仅对仍未覆盖事实启用受控第二轮检索。",
+      "只有同一种跨文档关系在多个Development项目重复出现并可确定性验证时，才扩充图关系；仍不优先引入Neo4j或长期Memory。"
+    ]
+  },
+  "production_decision": {
+    "enabled": false,
+    "candidate_accepted": false,
+    "reason": "独立Holdout绝对质量门与图机制门未通过；延迟门单独通过不能授权生产。",
+    "old_holdout_or_challenge_rerun": false
+  }
+}

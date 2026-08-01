@@ -1,0 +1,65 @@
+{
+  "schema_version": "bid_intake_graph_candidate_freeze_v1",
+  "freeze_id": "RET-GRAPH-EXPAND-003-DEV-B-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-EXPAND-003",
+  "status": "frozen_prerun",
+  "frozen_at": "2026-07-30T14:43:56+08:00",
+  "dataset": {
+    "path": "evals/bid_intake/retrieval/v1/private_graph_development_b_lingshui_approved_v1.jsonl",
+    "file_sha256": "9df9dca0f95782521cbc99807cddd453e186a183f73f30300ddf25144cdc92f2",
+    "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253",
+    "case_count": 10,
+    "dataset_split_locked": true
+  },
+  "parent_candidate": {
+    "freeze_id": "RET-GRAPH-EXPAND-002-DEV-B-FREEZE-20260730-V1",
+    "freeze_file_sha256": "ea7688570290c028141d02002e25151b7335de2027e7d51e96eb2d3dce84fc6d",
+    "execution_id": "RET-GRAPH-EXPAND-002-DEV-B-CANDIDATE-EXECUTION-V1",
+    "execution_file_sha256": "e20453e261d2207cc055f85057602acfe0aea3bf12a39a29349aef5ecbb1df75",
+    "status": "rejected_partial_mechanism_validated"
+  },
+  "single_variable": {
+    "name": "verified_exact_reference_lookup_expression",
+    "change": "用清单编号加原文代码型限定符做exact召回；无代码限定符时不建立确定性引用边。",
+    "unchanged": [
+      "002的表头父节点首单元格语法",
+      "图触发器",
+      "目标文档角色、首单元格编号与限定符复核",
+      "Top5与每Query候选深度20",
+      "最多1次图调用、1跳、2个种子、4条证据",
+      "首轮Top5锚点和顺序",
+      "其他检索增强开关",
+      "LLM调用预算0"
+    ]
+  },
+  "candidate_acceptance_thresholds": {
+    "graph_trigger_precision_min": 1.0,
+    "graph_trigger_recall_min": 1.0,
+    "single_document_false_trigger_rate_max": 0.0,
+    "negative_relation_erroneous_expansion_rate_max": 0.0,
+    "graph_path_precision_min": 0.8,
+    "triggered_case_mean_gold_recall_delta_min": 0.1,
+    "triggered_case_improvement_count_min": 2,
+    "triggered_case_recall_regression_count_max": 0,
+    "global_mrr_delta_min": -0.02,
+    "global_ndcg_at_5_delta_min": -0.02,
+    "fact_gate_alignment_delta_min": 0.0,
+    "fact_gate_false_sufficient_rate_delta_max": 0.0,
+    "p95_latency_delta_ms_max": 500,
+    "execution_error_count_max": 0,
+    "additional_llm_tokens_max": 0
+  },
+  "prerun_hypothesis": "在002基础上，确定性解析显式清单编号和限定符可新增改善Q005，使至少2道触发题改善且保持路径Precision不低于80%。",
+  "anti_overfitting_guards": {
+    "project_specific_keywords_forbidden": true,
+    "dataset_or_gold_change_forbidden": true,
+    "threshold_change_forbidden": true,
+    "old_holdout_rerun_forbidden": true,
+    "old_challenge_rerun_forbidden": true,
+    "production_enable_from_single_project_forbidden": true
+  },
+  "code_before_change": {
+    "git_head": "ac8f0b6",
+    "mcp_servers/tender_evidence/selective_graph.py": "0999cb9260324e7abe80a6614ef907ee37e322cbb5cef9f092d2d2d6036ae905"
+  }
+}

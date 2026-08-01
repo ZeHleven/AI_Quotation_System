@@ -1,0 +1,127 @@
+{
+  "schema_version": "bid_intake_graph_development_candidate_execution_v1",
+  "execution_id": "RET-GRAPH-EXPAND-003-DEV-B-CANDIDATE-EXECUTION-V1",
+  "freeze_id": "RET-GRAPH-EXPAND-003-DEV-B-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-EXPAND-003",
+  "executed_at": "2026-07-30T14:46:43+08:00",
+  "status": "rejected_by_latency_gate_quality_hypothesis_supported",
+  "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253",
+  "baseline_report_path": "outputs/bid_intake_retrieval_eval/20260730_141155_RET-GRAPH-BASELINE-DEV-B_report.json",
+  "candidate_report_path": "outputs/bid_intake_retrieval_eval/20260730_144643_RET-GRAPH-EXPAND-003-DEV-B_report.json",
+  "candidate_predictions_path": "outputs/bid_intake_retrieval_eval/20260730_144643_RET-GRAPH-EXPAND-003-DEV-B_predictions.jsonl",
+  "single_variable": "verified_exact_reference_lookup_expression",
+  "overall_metrics": {
+    "hit_rate_at_5": 1.0,
+    "mean_recall_at_5": 0.698333,
+    "mean_precision_at_5": 0.462222,
+    "mrr": 0.866667,
+    "mean_ndcg_at_5": 0.626676,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 1158.6,
+    "p95_latency_ms": 1968,
+    "error_count": 0
+  },
+  "deltas_vs_baseline": {
+    "hit_rate_at_5": 0.0,
+    "mean_recall_at_5": 0.1,
+    "mean_precision_at_5": 0.042222,
+    "mrr": 0.0,
+    "mean_ndcg_at_5": 0.021399,
+    "routing_exact_rate": 0.0,
+    "query_count_accuracy": 0.0,
+    "topic_recall": 0.0,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 274.6,
+    "p95_latency_ms": 547
+  },
+  "graph_metrics": {
+    "graph_trigger_precision": 1.0,
+    "graph_trigger_recall": 1.0,
+    "single_document_false_trigger_rate": 0.0,
+    "negative_relation_erroneous_expansion_rate": 0.0,
+    "expanded_path_count": 5,
+    "gold_target_path_count": 5,
+    "graph_path_precision": 1.0,
+    "triggered_case_mean_recall_baseline": 0.494444,
+    "triggered_case_mean_recall_candidate": 0.661111,
+    "triggered_case_mean_recall_delta": 0.166667,
+    "triggered_case_improvement_count": 2,
+    "triggered_case_recall_regression_count": 0,
+    "reference_lookup_count": 1,
+    "resolved_reference_count": 1,
+    "additional_llm_tokens": 0
+  },
+  "per_case_recall": {
+    "RET-GRAPH-DEV-B-Q001": 0.333333,
+    "RET-GRAPH-DEV-B-Q002": 0.5,
+    "RET-GRAPH-DEV-B-Q003": 0.333333,
+    "RET-GRAPH-DEV-B-Q004": 1.0,
+    "RET-GRAPH-DEV-B-Q005": 0.8,
+    "RET-GRAPH-DEV-B-Q006": 1.0,
+    "RET-GRAPH-DEV-B-Q007": 0.666667,
+    "RET-GRAPH-DEV-B-Q008": 1.0,
+    "RET-GRAPH-DEV-B-Q009": 0.75,
+    "RET-GRAPH-DEV-B-Q010": 0.6
+  },
+  "acceptance_evaluation": {
+    "passed": false,
+    "passed_thresholds": [
+      "graph_trigger_precision_min",
+      "graph_trigger_recall_min",
+      "single_document_false_trigger_rate_max",
+      "negative_relation_erroneous_expansion_rate_max",
+      "graph_path_precision_min",
+      "triggered_case_mean_gold_recall_delta_min",
+      "triggered_case_improvement_count_min",
+      "triggered_case_recall_regression_count_max",
+      "global_mrr_delta_min",
+      "global_ndcg_at_5_delta_min",
+      "execution_error_count_max",
+      "additional_llm_tokens_max"
+    ],
+    "failed_thresholds": [
+      {
+        "name": "p95_latency_delta_ms_max",
+        "required_max": 500,
+        "actual": 547,
+        "exceeded_by_ms": 47
+      }
+    ],
+    "not_evaluable_thresholds": [
+      "fact_gate_alignment_delta_min",
+      "fact_gate_false_sufficient_rate_delta_max"
+    ]
+  },
+  "latency_diagnosis": {
+    "formal_result": "failed",
+    "causality_assessment": "inconclusive",
+    "evidence": [
+      "候选相对基线P95增加547ms，按冻结门槛必须失败。",
+      "P95来自Q001的1968ms；Q001没有图种子、图路径或精确引用查询，代码路径与002实质相同。",
+      "同样没有图路径的Q002和Q003分别增加541ms与579ms，显示远程检索服务存在同期波动。",
+      "唯一新增精确引用调用的Q005相对基线增加431ms，低于500ms门槛，且比002同题的1540ms略低至1503ms。",
+      "因此不能把本次P95超限直接归因于精确引用逻辑，也不能忽略事先冻结的延迟门槛。"
+    ],
+    "decision": "不重跑碰运气，不事后修改阈值；先设计成对交错的延迟验证协议，再决定是否需要把精确引用从远程混合检索迁移到本地确定性索引。"
+  },
+  "reasoning_record": {
+    "problem": "002只改善Q004；Q005显式引用没有定位到目标清单行。",
+    "result": "编号加限定符成功把Q005目标清单行作为唯一新增路径，Q005 Recall由60%提升到80%；与Q004合计满足质量门槛。",
+    "quality_conclusion": "精确引用假设获得Development B支持，且没有引入错误路径或Recall退化。",
+    "overall_decision": "由于延迟门失败，003仍不得接受或启用；下一步先改进延迟测量的因果辨识，不直接为单次波动增加数据库或索引复杂度。"
+  },
+  "production_decision": {
+    "enabled": false,
+    "reason": "正式候选未通过全部冻结门槛，且没有独立Holdout。",
+    "old_holdout_or_challenge_rerun": false
+  },
+  "code_snapshot": {
+    "mcp_servers/tender_evidence/selective_graph.py": "c8a2d276689d24e7ba8e9851b8bb314cd06971f392f30e4aa95c3b7fd3a8e0e1",
+    "mcp_servers/tender_evidence/service.py": "fd1b2df579bce78b8892274541110cda32bca9ac62a457bfcadd7098cd950322",
+    "app/agents/bid_intake/retrieval_evaluation.py": "c26c316c44ab10f62d7d22c45167c1ef89938bf7e21cc98735c2bbdb4c948fd2",
+    "tests/test_tender_selective_graph.py": "8ac9845ad1e7ff4fcfc87630d41439d2133acb96e962c8a18b9822385d642946"
+  }
+}

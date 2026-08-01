@@ -1,0 +1,81 @@
+{
+  "schema_version": "bid_intake_controlled_retry_development_freeze_v1",
+  "freeze_id": "RET-CONTROLLED-RETRY-001-DEV-A-FREEZE-V1",
+  "frozen_at": "2026-07-30T02:50:00+00:00",
+  "experiment_id": "RET-CONTROLLED-RETRY-001",
+  "dataset": {
+    "dataset_path": "evals/bid_intake/retrieval/v1/private_fact_coverage_development_approved_v1.jsonl",
+    "dataset_fingerprint": "a253cbe9e3bdad051b3e903077740cbec2c71cadd6cafc8a3a8f6d036ea74886",
+    "case_count": 8,
+    "positive_case_count": 5,
+    "negative_case_count": 3,
+    "reviewed_by": "user-business-review-2026-07-30"
+  },
+  "baseline": {
+    "experiment_id": "RET-STRUCT-CONTEXT-002-DEV-A",
+    "report_path": "outputs/bid_intake_retrieval_eval/ret_struct_context_002_dev_a/20260730_102230_RET-STRUCT-CONTEXT-002-DEV-A_report.json",
+    "hit_rate_at_5_anchor_groups": 1.0,
+    "mean_recall_at_5_anchor_groups": 0.9,
+    "mrr": 0.633333,
+    "mean_ndcg_at_5": 0.632681,
+    "fact_gate_false_sufficient_rate": 0.2,
+    "fact_gate_false_insufficient_rate": 0.333333,
+    "p95_latency_ms": 696
+  },
+  "single_change": {
+    "description": "第一轮结构证据组完成后，仅当事实覆盖为部分成功时，对仍未覆盖且不重复的事实槽执行一次受控补查。",
+    "trigger_policy": "partial_coverage_only",
+    "zero_coverage_retry_allowed": false,
+    "already_sufficient_retry_allowed": false,
+    "max_retry_round_count": 1,
+    "max_retry_query_count": 2,
+    "retry_query_source": "uncovered_coverage_need",
+    "retry_query_routing": "adaptive-retrieval-route/v1",
+    "fallback_only_when_primary_channel_empty": true,
+    "graph_expansion_enabled": false,
+    "memory_enabled": false
+  },
+  "frozen_retrieval_config": {
+    "backend": "database_layered_retrieval",
+    "final_top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "candidate_coverage_selection_enabled": true,
+    "structured_context_groups_enabled": true,
+    "controlled_second_round_enabled": true,
+    "semantic_fact_companion_enabled": false,
+    "atomic_fact_slots_enabled": false,
+    "adjacent_candidate_expansion_enabled": false,
+    "legacy_context_evidence_groups_enabled": false,
+    "analysis_llm_invoked": false,
+    "prediction_excerpts_persisted": false
+  },
+  "code_sha256": {
+    "mcp_servers/tender_evidence/service.py": "8459721A99257928FABD4C28E16B1167DCCC7D88596D417F3B4A0D20B8AD69D6",
+    "scripts/tender_evidence_mcp_server.py": "E830296703EC401161E570908F0BAB7460D740AA34BACB8BA983C646F88183A1",
+    "scripts/bid_intake_retrieval_eval.py": "6B408D19895A2AF5E9EE6DF39584F5242EE84D02BEBFE6E0358ACE9F5A8E1E22",
+    "app/agents/bid_intake/retrieval_evaluation.py": "C6C26D22A72677FFA975A9CAF9D68A08E826CBE145B4BD9839C32E5BE5922A4C"
+  },
+  "predeclared_acceptance": {
+    "mean_recall_at_5_anchor_groups_min": 0.925,
+    "positive_case_improvement_count_min": 1,
+    "positive_case_regression_count_max": 0,
+    "mrr_min": 0.633333,
+    "mean_ndcg_at_5_min": 0.632681,
+    "negative_case_retry_trigger_count_max": 0,
+    "total_retry_query_count_max": 2,
+    "max_retry_query_count_per_case": 2,
+    "fact_gate_negative_accuracy_required": 1.0,
+    "fact_gate_false_sufficient_rate_max": 0.2,
+    "fact_gate_false_insufficient_rate_max": 0.333333,
+    "primary_query_count_accuracy_required": 1.0,
+    "p95_latency_ms_max": 1000,
+    "error_count_max": 0
+  },
+  "decision_policy": {
+    "single_project_success_cannot_enable_production_flag": true,
+    "development_b_from_a_new_project_is_required": true,
+    "old_holdout_and_challenge_must_not_be_rerun": true,
+    "no_project_specific_keyword_may_be_added": true,
+    "retry_cost_and_negative_trigger_must_be_reported": true
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "schema_version": "bid_intake_retrieval_challenge_freeze_v1",
+  "freeze_id": "DATA-CHALLENGE-001-FREEZE-V1",
+  "frozen_at": "2026-07-29T14:10:42.6273566Z",
+  "candidate_experiment_id": "RET-EXP-003B",
+  "challenge": {
+    "dataset_path": "evals/bid_intake/retrieval/v1/private_challenge_approved_v1.jsonl",
+    "dataset_fingerprint": "e804fb9faef665eea41c35c06a6bd3415e7bb15b3a17133c6045d32627e1cc0a",
+    "file_sha256": "4a96d34054afffd90c2536dd1e42a57f4913e84662ff7cc3bdb41e09b54eb627",
+    "case_count": 10,
+    "positive_case_count": 9,
+    "negative_case_count": 1,
+    "reviewed_by": "user-business-review-2026-07-29",
+    "maximum_execution_count": 1
+  },
+  "project_snapshot": {
+    "project_uuid": "d8379af3-e2a8-4186-97c9-6d6794ca4a8f",
+    "manifest_id": 43,
+    "manifest_uuid": "3ff35c87-9baa-5fac-85bc-aa55bc68fe21",
+    "manifest_version": 7,
+    "manifest_hash": "96db3d5d8fe19ee6242cb491beb10c240c8c56da7429b8ccedabd003b7bb629e",
+    "index_job_uuid": "c48a4660-881f-4583-8454-d8b8349be612",
+    "index_schema_version": "tender-hybrid-v1",
+    "index_status": "completed",
+    "indexed_block_count": 3202
+  },
+  "frozen_retrieval_config": {
+    "backend": "database_layered_retrieval",
+    "hybrid_search_enabled": true,
+    "final_top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "candidate_coverage_selection_enabled": true,
+    "semantic_fact_companion_enabled": false,
+    "atomic_fact_slots_enabled": false,
+    "adjacent_candidate_expansion_enabled": false,
+    "context_evidence_groups_enabled": false,
+    "query_planner": "tender-query-plan/v1",
+    "retrieval_router": "adaptive-retrieval-route/v1",
+    "embedding_model": "maidalun1020/bce-embedding-base_v1",
+    "embedding_dimension": 768,
+    "chunk_max_chars": 1200,
+    "chunk_overlap_chars": 0,
+    "fusion": "rrf_candidate_generation_plus_coverage_selection",
+    "reranker": "deterministic_need_coverage",
+    "analysis_llm_invoked": false,
+    "prediction_excerpts_persisted": false
+  },
+  "code_sha256": {
+    "mcp_servers/tender_evidence/query_planner.py": "A099FFFCBFBC3F1501FB308385A517DFB48BE62431EEB5A8549AE537E0D01A5E",
+    "mcp_servers/tender_evidence/retrieval_router.py": "B701467C4EE256E271FDA16E276866045026A221E0151CC6951F0EEF230F46D2",
+    "mcp_servers/tender_evidence/service.py": "50C63D08B5B740199B82B7B5F46CF1BB9D55884B56C93F3F29C5616F43BD96BE",
+    "mcp_servers/tender_evidence/sqlalchemy_repository.py": "F906684FA3BB9DF70DC761F9DDC279DAED3661912D8104585BD86AD805F72CDB",
+    "app/agents/bid_intake/retrieval_evaluation.py": "F8A1030523D62457C586ACBFFECF45B844633C7A1659F1389F72714FFC1D1DDB",
+    "scripts/bid_intake_retrieval_eval.py": "3E6F41B08B7E432BBD1D0EA504AEC7AE4DF70C2AE0FED44B713AE7BCEE424917"
+  },
+  "predeclared_acceptance": {
+    "hit_rate_at_5_min": 0.8,
+    "mean_recall_at_5_min": 0.75,
+    "mrr_min": 0.75,
+    "mean_ndcg_at_5_min": 0.75,
+    "routing_exact_rate_min": 0.9,
+    "query_count_accuracy_min": 0.9,
+    "negative_accuracy_required": 1.0,
+    "p95_latency_ms_max": 2000,
+    "error_count_max": 0
+  },
+  "execution_policy": {
+    "challenge_not_used_for_candidate_selection": true,
+    "challenge_not_used_for_parameter_tuning": true,
+    "no_rerun_after_result": true,
+    "no_rules_may_be_added_from_challenge_failures": true,
+    "future_improvements_require_new_development_projects": true
+  }
+}

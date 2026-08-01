@@ -1,0 +1,66 @@
+{
+  "version": "pricing-agent-v1.1-regression-20260731",
+  "targets": {
+    "exact_accuracy": 1.0,
+    "approximate_recall_at_5": 0.8,
+    "approximate_auto_adoption_count": 0,
+    "unrelated_auto_pricing_count": 0
+  },
+  "cases": [
+    {
+      "case_id": "PA11-EXACT-001",
+      "category": "exact",
+      "source": "archive",
+      "query": {
+        "item_code": "A-001",
+        "item_name": "石膏板吊顶",
+        "specification": "轻钢龙骨双层石膏板",
+        "unit": "㎡"
+      },
+      "expected_name": "石膏板吊顶"
+    },
+    {
+      "case_id": "PA11-NEAR-001",
+      "category": "approximate",
+      "source": "archive",
+      "query": {
+        "item_name": "拆除单扇木质门",
+        "specification": "900*2100，含门套门扇五金拆除及清运",
+        "unit": "套"
+      },
+      "expected_name": "拆除单开实木门"
+    },
+    {
+      "case_id": "PA11-NEAR-002",
+      "category": "approximate",
+      "source": "enterprise",
+      "query": {
+        "item_name": "墙面乳胶漆涂刷",
+        "specification": "墙面基层处理、腻子两遍、一底两面",
+        "unit": "㎡"
+      },
+      "expected_name": "墙面乳胶漆（2遍）"
+    },
+    {
+      "case_id": "PA11-NEG-001",
+      "category": "unrelated",
+      "source": "archive",
+      "query": {
+        "item_name": "安装单扇木质门",
+        "specification": "900*2100，含门套门扇五金安装",
+        "unit": "套"
+      },
+      "forbidden_name_contains": "拆除"
+    },
+    {
+      "case_id": "PA11-NEG-002",
+      "category": "unrelated",
+      "source": "archive",
+      "query": {
+        "item_name": "大型冷库制冷机组调试",
+        "specification": "低温冷库压缩冷凝机组系统调试",
+        "unit": "套"
+      }
+    }
+  ]
+}

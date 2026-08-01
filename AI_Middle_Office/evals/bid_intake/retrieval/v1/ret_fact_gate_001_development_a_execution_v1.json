@@ -1,0 +1,65 @@
+{
+  "schema_version": "bid_intake_fact_gate_development_execution_v1",
+  "execution_id": "RET-FACT-GATE-001-DEV-A-EXECUTION-V1",
+  "freeze_id": "RET-FACT-GATE-001-DEV-A-FREEZE-V1",
+  "executed_at": "2026-07-30T09:53:44+08:00",
+  "execution_count": 1,
+  "dataset_fingerprint": "a253cbe9e3bdad051b3e903077740cbec2c71cadd6cafc8a3a8f6d036ea74886",
+  "report_path": "outputs/bid_intake_retrieval_eval/ret_fact_gate_001_dev_a/20260730_095344_RET-FACT-GATE-001-DEV-A_report.json",
+  "predictions_path": "outputs/bid_intake_retrieval_eval/ret_fact_gate_001_dev_a/20260730_095344_RET-FACT-GATE-001-DEV-A_predictions.jsonl",
+  "metrics": {
+    "case_count": 8,
+    "positive_case_count": 5,
+    "negative_case_count": 3,
+    "hit_rate_at_5": 0.8,
+    "mean_recall_at_5": 0.65,
+    "mrr": 0.566667,
+    "mean_ndcg_at_5": 0.585753,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "raw_negative_accuracy": 0.0,
+    "fact_gate_assessment_rate": 1.0,
+    "fact_gate_alignment_accuracy": 0.625,
+    "fact_gate_negative_accuracy": 1.0,
+    "fact_gate_false_sufficient_rate": 0.333333,
+    "fact_gate_false_insufficient_rate": 0.5,
+    "mean_latency_ms": 384.75,
+    "p95_latency_ms": 982,
+    "error_count": 0
+  },
+  "acceptance_results": {
+    "fact_gate_assessment_rate": "passed",
+    "fact_gate_alignment_accuracy": "failed",
+    "fact_gate_negative_accuracy": "passed",
+    "fact_gate_false_sufficient_rate": "failed",
+    "fact_gate_false_insufficient_rate": "failed",
+    "p95_latency_ms": "passed",
+    "error_count": "passed",
+    "overall": "failed"
+  },
+  "case_diagnosis": {
+    "correct_sufficient": [
+      "FACT-COVERAGE-DEV-A-Q001"
+    ],
+    "correct_insufficient": [
+      "FACT-COVERAGE-DEV-A-Q003",
+      "FACT-COVERAGE-DEV-A-Q006",
+      "FACT-COVERAGE-DEV-A-Q007",
+      "FACT-COVERAGE-DEV-A-Q008"
+    ],
+    "false_sufficient": [
+      "FACT-COVERAGE-DEV-A-Q002",
+      "FACT-COVERAGE-DEV-A-Q004"
+    ],
+    "false_insufficient": [
+      "FACT-COVERAGE-DEV-A-Q005"
+    ]
+  },
+  "decision": {
+    "keep_shadow_observability": true,
+    "enable_enforced_mode": false,
+    "tune_from_this_dataset": false,
+    "rerun_old_holdout_or_challenge": false,
+    "next_experiment": "父子结构检索与上下文证据组"
+  }
+}

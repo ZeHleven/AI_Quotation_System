@@ -1,0 +1,38 @@
+{
+  "schema_version": "bid_intake_retrieval_eval_case_v1",
+  "eval_case_id": "PRIVATE-PROJECT-001-Q001",
+  "case_id": "替换为数据库中的项目UUID",
+  "source": "historical",
+  "dataset_split": "development",
+  "question": "替换为经过脱敏的真实业务问题",
+  "expected_routing": {
+    "query_count": 1,
+    "mode_counts": {
+      "exact": 1
+    },
+    "required_topics": []
+  },
+  "gold_evidence": [
+    {
+      "evidence_id": "替换为人工核验的证据ID",
+      "relevance": 3,
+      "required_text_fragments": [
+        "只记录必要且已脱敏的关键短语"
+      ]
+    }
+  ],
+  "expected_no_result": false,
+  "gold_answer_points": [
+    "人工确认的答案要点"
+  ],
+  "expected_missing_materials": [],
+  "difficulty": "medium",
+  "tags": [
+    "exact"
+  ],
+  "privacy": "private_restricted",
+  "annotation_status": "draft",
+  "annotated_by": "标注人代号",
+  "reviewed_by": null,
+  "annotation_note": "复核通过后改为approved，并填写不同的reviewed_by。"
+}

@@ -1,0 +1,190 @@
+{
+  "schema_version": "bid-intake-internal-pilot-freeze-stage1/v1",
+  "snapshot_id": "BID-INTAKE-INTERNAL-PILOT-STAGE1-BASELINE-20260731-V1",
+  "captured_at": "2026-07-31T15:13:52.8568975+08:00",
+  "status": "stage1_baseline_captured_pending_stage2_database_decision",
+  "authorization_boundary": {
+    "runtime_mutation_performed": false,
+    "service_restart_performed": false,
+    "database_migration_performed": false,
+    "feature_flag_changed": false,
+    "formal_ab_performed": false,
+    "locked_dataset_used": false,
+    "new_project_required": false
+  },
+  "git": {
+    "branch": "codex/github-ci-and-protection",
+    "head": "ac8f0b6ca57664640a0f50816df70d315321d07a",
+    "head_time": "2026-07-22T10:52:22+08:00",
+    "pre_artifact_worktree": {
+      "total": 267,
+      "staged": 0,
+      "modified": 56,
+      "untracked": 201,
+      "deleted": 10
+    },
+    "agent_core_mostly_untracked": true,
+    "shared_integration_files_mixed_with_other_changes": true
+  },
+  "tree_digests": [
+    {
+      "category": "core_runtime",
+      "file_count": 22,
+      "sha256": "78002e672cf4d15e2c6a1f42260cfa977d7ecc2a2ae06d569ac736b4ee5a03a7"
+    },
+    {
+      "category": "mcp_retrieval",
+      "file_count": 14,
+      "sha256": "1dd0c2b0fb5195b55f71eb45ce91f4d838f59dc611e3880d3f24299caa9a61e8"
+    },
+    {
+      "category": "backend_pipeline",
+      "file_count": 20,
+      "sha256": "a012d0a26fff19724b1f113b8abb1af7d06767c31685502b3014d827d940006c"
+    },
+    {
+      "category": "policy_skill",
+      "file_count": 11,
+      "sha256": "805fb392607f5281ab6003167108ea0cd05210b28120692c5ed675c8fbc83e9f"
+    },
+    {
+      "category": "operations",
+      "file_count": 16,
+      "sha256": "651825780e174550f3d0597c80122a3d0e4836217bfe1d486e7eb5ba640c8209"
+    },
+    {
+      "category": "frontend",
+      "file_count": 5,
+      "sha256": "506e27e67dc9b58c07f7d9d2f298c4e1be7be6ddf395c04f09812ff385c9f649"
+    },
+    {
+      "category": "migrations_0063_0072",
+      "file_count": 10,
+      "sha256": "044aab60d92347aa54e14bd4b60c73a9f4cd291f61040199017b32e49a50cfc7"
+    },
+    {
+      "category": "focused_tests",
+      "file_count": 19,
+      "sha256": "2cbb0e9384e203b12f7070e6b28da7457268f63e7df6f0812761d5f2b03937dd"
+    },
+    {
+      "category": "governance_and_evals_pre_stage1_artifacts",
+      "file_count": 112,
+      "sha256": "7984a52d5066a95c7228f4cdf5a1cd36202ed28510d784646c9d548af6178bdb",
+      "self_reference_exclusion": true
+    }
+  ],
+  "configuration": {
+    "task_queue_mode": "celery",
+    "public_access_enabled": false,
+    "public_access_definition_count": 2,
+    "feature_bidding_mvp": true,
+    "bid_intake_agent_runtime_enabled": true,
+    "bid_intake_fact_coverage_mode": "shadow",
+    "tender_evidence_candidate_coverage_selection": false,
+    "tender_evidence_sufficiency_assessment": false,
+    "secrets_captured": false
+  },
+  "runtime": {
+    "main_health": "ready",
+    "database": "ok",
+    "celery_broker": "ok",
+    "celery_worker": "ok",
+    "celery_worker_count": 1,
+    "external_dependencies_probe": "not_probed",
+    "agent_readiness": {
+      "project_uuid": "c96cdbc2-67d8-4a0a-9307-c534c99d6ea8",
+      "project_name": "BIZ-4a smoke tender d2c269f9",
+      "ready_to_start": true,
+      "blockers": [],
+      "online_worker_count": 1,
+      "worker_error_count": 0,
+      "worker_id": "小智:12256",
+      "runtime_version": "bid_intake_runtime_phase5a",
+      "model_id": "deepseek-v4-flash",
+      "fallback_model_configured": false,
+      "checkpoint_backend": "sqlalchemy",
+      "mcp_session_mode": "persistent",
+      "policy_version": "qs_bid_decision_policy_2026_01",
+      "fact_coverage_mode": "shadow",
+      "manifest_version": 1,
+      "manifest_sha256": "7a004bd2cf58f4cf1cad27ba715563bc48a16828c055ee31213e17b8ef94f9ad",
+      "ready_document_count": 1,
+      "search_backend": "hybrid_rrf",
+      "hybrid_ready": true,
+      "index_status": "completed",
+      "mcp_probe": "skipped",
+      "model_probe": "skipped"
+    }
+  },
+  "database_migration": {
+    "current": "20260731_0077",
+    "head": "20260731_0078",
+    "head_file": "alembic/versions/20260731_0078_remove_execution_system.py",
+    "destructive_review_required": true,
+    "restart_before_decision_allowed": false
+  },
+  "policy": {
+    "active_version": "qs_bid_decision_policy_2026_01",
+    "factor_count": 11,
+    "rule_sha256": "acc9a8579630b16b558d133e151cb13c9ca0a701bb774b4c392ef79898c0d3b5",
+    "active_version_file_sha256": "417bdaaa83b51dbfb161705027b0b6dbe5e12ec7bd0c705583349f2c441a7fa7"
+  },
+  "agent_environment": {
+    "python": "3.12.4",
+    "langgraph": "1.2.9",
+    "langchain_core": "1.5.1",
+    "mcp": "1.28.1",
+    "httpx": "0.28.1",
+    "pydantic": "2.13.2",
+    "pyjwt": "2.13.0",
+    "pymysql": "1.1.2",
+    "sqlalchemy": "2.0.49"
+  },
+  "quality_baseline": {
+    "fixed_development_case_count": 38,
+    "positive_case_count": 35,
+    "negative_case_count": 3,
+    "hit_at_5": 0.8857,
+    "recall_at_5": 0.7067,
+    "precision_at_5": 0.28,
+    "mrr": 0.7929,
+    "ndcg_at_5": 0.6904,
+    "negative_accuracy": "0/3",
+    "candidate_coverage_production_enabled": false,
+    "sufficiency_gate_production_enabled": false
+  },
+  "tests": {
+    "stage1_focused": {
+      "passed": 89,
+      "failed": 0,
+      "warnings": 1,
+      "duration_seconds": 5.22,
+      "formal_evaluation": false
+    },
+    "saved_sufficiency_genericity_regression": {
+      "passed": 112,
+      "decision": "engineering_genericity_audit_passed_no_formal_generalization_requested"
+    }
+  },
+  "known_risks": [
+    "agent_core_not_versioned",
+    "shared_integration_files_contain_unrelated_changes",
+    "database_revision_behind_destructive_head",
+    "sufficiency_assessment_disabled",
+    "fact_coverage_shadow_only",
+    "ordinary_negative_accuracy_zero_of_three",
+    "live_mcp_and_model_probes_skipped",
+    "single_agent_worker",
+    "fallback_model_not_configured",
+    "duplicate_public_access_env_definition",
+    "requests_dependency_warning"
+  ],
+  "next_stage": {
+    "name": "stage2_database_migration_risk_review",
+    "requires_user_approval_before_mutation": true,
+    "restart_allowed_before_decision": false,
+    "migration_allowed_before_decision": false,
+    "feature_flag_change_allowed_before_decision": false
+  }
+}

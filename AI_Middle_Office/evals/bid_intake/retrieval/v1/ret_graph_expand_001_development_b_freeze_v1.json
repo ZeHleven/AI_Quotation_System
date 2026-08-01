@@ -1,0 +1,182 @@
+{
+  "schema_version": "bid_intake_graph_development_freeze_v1",
+  "freeze_id": "RET-GRAPH-EXPAND-001-DEV-B-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-EXPAND-001",
+  "status": "frozen_prebaseline",
+  "frozen_at": "2026-07-30T14:08:13+08:00",
+  "frozen_by": "codex-assisted",
+  "business_review": {
+    "status": "approved",
+    "reviewed_by": "user-business-review-2026-07-30",
+    "reviewed_at": "2026-07-30",
+    "scope": "10道题的题意、标准答案要点与业务真实性整组通过"
+  },
+  "dataset": {
+    "path": "evals/bid_intake/retrieval/v1/private_graph_development_b_lingshui_approved_v1.jsonl",
+    "file_sha256": "9df9dca0f95782521cbc99807cddd453e186a183f73f30300ddf25144cdc92f2",
+    "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253",
+    "case_count": 10,
+    "gold_evidence_reference_count": 38,
+    "unique_gold_evidence_count": 31,
+    "annotation_status": "approved",
+    "dataset_split": "development",
+    "dataset_split_locked": true,
+    "privacy": "private_restricted"
+  },
+  "project_snapshot": {
+    "project_code": "RET-GRAPH-EXPAND-001-DEV-B",
+    "project_id": 38,
+    "project_uuid": "25091d80-15ab-40b7-ad20-fd9a169d1dc8",
+    "project_name": "陵水福朋喜来登酒店项目样板间精装修工程",
+    "active_manifest_version": 5,
+    "active_manifest_hash": "c4244d5424976fa661664f60716934368d1aea4228b678b0d394992941c1f841",
+    "active_document_count": 4,
+    "active_evidence_block_count": 947,
+    "document_type_counts": {
+      "tender_document": 1,
+      "bill_of_quantities": 1,
+      "contract": 1,
+      "clarification": 1
+    },
+    "index_job_uuid": "83bfa7f3-3f2c-4104-aaf4-a28d933990b8",
+    "index_status": "completed",
+    "indexed_block_count": 947
+  },
+  "source_snapshot": {
+    "manifest_path": "evals/bid_intake/retrieval/v1/private_graph_development_b_lingshui_source_manifest_v1.json",
+    "manifest_file_sha256": "767828de561d331a8c3b7c503492398fffbc01d44d7e2e33ad54a6b61a407b2d",
+    "review_path": "evals/bid_intake/retrieval/v1/private_graph_development_b_lingshui_review_v1.md",
+    "review_file_sha256": "d810a877e5c96c109e16008854b5608dcff1a412f3a752fc085920eac50a71ac",
+    "original_file_sha256": {
+      "tender_document": "dc46cc3f53e91971195c90fdc5dfbdf76f0135084015a1a2a266d4a8d547ccfb",
+      "bill_of_quantities": "856636e13b3e15eb9674ac2f07756d812ece16f594041100866fbbb095cda817",
+      "contract_legacy_doc": "98e2517f25e05c6409b72e93edeabcb34848218141ee4d0ae588ac32d5fed5fb",
+      "clarification_legacy_xls": "3e7f8e0fa6237946c35e00d644d4bf234a1478fccd2b7cdcf06f221b309a9114"
+    },
+    "converted_file_sha256": {
+      "contract_docx": "53bb81036ac10a4bb040a4a40713ea39876b23ed23add55f758a322829be9d46",
+      "clarification_xlsx": "d30bb7f1fb9c2695fb65397e51cd53f33871765255efae9b0649a9113d62b911"
+    }
+  },
+  "case_distribution": {
+    "cross_document_joint_answer_cases": [
+      "RET-GRAPH-DEV-B-Q001",
+      "RET-GRAPH-DEV-B-Q002",
+      "RET-GRAPH-DEV-B-Q003",
+      "RET-GRAPH-DEV-B-Q004",
+      "RET-GRAPH-DEV-B-Q005",
+      "RET-GRAPH-DEV-B-Q007",
+      "RET-GRAPH-DEV-B-Q008"
+    ],
+    "conflict_cases": [
+      "RET-GRAPH-DEV-B-Q002",
+      "RET-GRAPH-DEV-B-Q004",
+      "RET-GRAPH-DEV-B-Q005"
+    ],
+    "negative_relation_cases": [
+      "RET-GRAPH-DEV-B-Q006",
+      "RET-GRAPH-DEV-B-Q007"
+    ],
+    "single_document_cases": [
+      "RET-GRAPH-DEV-B-Q009",
+      "RET-GRAPH-DEV-B-Q010"
+    ],
+    "graph_trigger_expected": [
+      "RET-GRAPH-DEV-B-Q001",
+      "RET-GRAPH-DEV-B-Q002",
+      "RET-GRAPH-DEV-B-Q003",
+      "RET-GRAPH-DEV-B-Q004",
+      "RET-GRAPH-DEV-B-Q005",
+      "RET-GRAPH-DEV-B-Q008"
+    ],
+    "graph_no_trigger_expected": [
+      "RET-GRAPH-DEV-B-Q006",
+      "RET-GRAPH-DEV-B-Q007",
+      "RET-GRAPH-DEV-B-Q009",
+      "RET-GRAPH-DEV-B-Q010"
+    ]
+  },
+  "trigger_contract": {
+    "all_conditions_required": true,
+    "condition_1": "问题显式提及至少两类资料角色",
+    "condition_2": "问题包含一致、冲突、差异、以哪个为准、对应、覆盖或相互约束等跨来源关系意图",
+    "must_not_trigger_for": [
+      "普通风险题",
+      "单文件事实题",
+      "纯语义问题",
+      "未显式点名两个文档角色的缺失资料题"
+    ],
+    "note": "Q006和Q007保留用户通过的题目文本，但按既定严格触发契约作为负样本；未依据模型结果改题。"
+  },
+  "baseline_contract": {
+    "must_run_after_freeze": true,
+    "backend": "database",
+    "top_k": 5,
+    "candidate_top_k": 20,
+    "include_excerpts": false,
+    "feature_flags": {
+      "semantic_fact_companion": false,
+      "atomic_fact_slots": false,
+      "candidate_coverage_selection": false,
+      "adjacent_candidate_expansion": false,
+      "context_evidence_groups": false,
+      "structured_context_groups": false,
+      "controlled_second_round": false,
+      "graph_expansion": false
+    },
+    "purpose": "只记录当前生产检索能力，不承担候选方案通过判定。"
+  },
+  "candidate_graph_budget": {
+    "max_graph_calls_per_triggered_case": 1,
+    "max_hops": 1,
+    "max_seed_anchors": 2,
+    "max_expanded_evidence": 4,
+    "same_case_required": true,
+    "same_tenant_required": true,
+    "preserve_first_round_top5_anchors": true,
+    "evidence_gate_still_required": true,
+    "llm_generated_persistent_edges_allowed": false,
+    "additional_llm_token_budget": 0
+  },
+  "candidate_acceptance_thresholds": {
+    "graph_trigger_precision_min": 1.0,
+    "graph_trigger_recall_min": 1.0,
+    "single_document_false_trigger_rate_max": 0.0,
+    "negative_relation_erroneous_expansion_rate_max": 0.0,
+    "graph_path_precision_min": 0.8,
+    "triggered_case_mean_gold_recall_delta_min": 0.1,
+    "triggered_case_improvement_count_min": 2,
+    "triggered_case_recall_regression_count_max": 0,
+    "global_mrr_delta_min": -0.02,
+    "global_ndcg_at_5_delta_min": -0.02,
+    "fact_gate_alignment_delta_min": 0.0,
+    "fact_gate_false_sufficient_rate_delta_max": 0.0,
+    "p95_latency_delta_ms_max": 500,
+    "execution_error_count_max": 0,
+    "additional_llm_tokens_max": 0
+  },
+  "code_snapshot": {
+    "git_head": "ac8f0b6",
+    "working_tree_note": "实验相关文件包含未提交改动，以下SHA256为实际运行内容的权威快照。",
+    "files": {
+      "scripts/bid_intake_retrieval_eval.py": "6b408d19895a2af5e9ee6df39584f5242ee84d02bebfe6e0358ace9f5a8e1e22",
+      "mcp_servers/tender_evidence/service.py": "4878e2396b91dd016ffb4120d6a4f155dc9f6339ed7b8eae410c601073a37e93",
+      "mcp_servers/tender_evidence/query_planner.py": "76459d5e2a50a99a0f881b6b395a69aa6d66ea29d87b08708b4273041a86955a",
+      "mcp_servers/tender_evidence/retrieval_router.py": "b701467c4ee256e271fda16e276866045026a221e0151cc6951f0eef230f46d2",
+      "app/agents/bid_intake/retrieval_evaluation.py": "c6c26d22a72677ffa975a9caf9d68a08e826cbe145b4bd9839c32e5be5922a4c",
+      "app/services/tender_file_type_classifier.py": "0b9fc9c6a87d0202547cffb19c222739de7bc5923a8aa0620d2b157129089934",
+      "app/services/bidding_parser.py": "7c65188bf002fc5f1f45f69e912b11ccb66b0e557d54153b24b8875c7f2e6b68",
+      "scripts/register_bid_intake_development_b_lingshui_project.py": "bcddc08d62aaac1a2776273547d3b21589e4170fc8eb97c2f2cd370147df1f2a",
+      "scripts/verify_bid_intake_eval_gold.py": "2fbf997d80d96eb6fd5fae0d7ca0527a0abf3fe180af445b9c8a5f426551c8c0"
+    }
+  },
+  "anti_overfitting_guards": {
+    "old_holdout_rerun_forbidden": true,
+    "old_challenge_rerun_forbidden": true,
+    "project_specific_keywords_forbidden": true,
+    "question_or_gold_change_after_baseline_forbidden": true,
+    "threshold_change_after_baseline_forbidden": true,
+    "single_project_result_cannot_enable_production": true,
+    "allowed_post_freeze_change": "仅修复可证明的数据损坏；必须生成新freeze_id并从头重跑。"
+  }
+}

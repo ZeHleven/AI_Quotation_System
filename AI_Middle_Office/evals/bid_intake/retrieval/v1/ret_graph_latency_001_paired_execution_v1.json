@@ -1,0 +1,120 @@
+{
+  "schema_version": "bid_intake_graph_paired_latency_execution_v1",
+  "execution_id": "RET-GRAPH-LATENCY-001-PAIRED-EXECUTION-V1",
+  "freeze_id": "RET-GRAPH-LATENCY-001-PAIRED-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-LATENCY-001",
+  "executed_at": "2026-07-30T15:03:41+08:00",
+  "status": "passed_development_paired_latency",
+  "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253",
+  "report_path": "outputs/bid_intake_paired_latency/20260730_150341_RET-GRAPH-LATENCY-001_report.json",
+  "report_file_sha256": "05cd33ff80a8655ec2de089dde1c5bef229d776b20fee19423c2b410cac21c7c",
+  "protocol": {
+    "case_count": 10,
+    "warmup_pairs_per_case": 1,
+    "measured_pairs_per_case": 6,
+    "measured_pair_count": 60,
+    "formal_retrieval_call_count": 120,
+    "warmup_retrieval_call_count": 20,
+    "baseline_first_per_case": 3,
+    "candidate_first_per_case": 3,
+    "top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "paired_delta_p95_ms_max": 500,
+    "additional_llm_tokens": 0
+  },
+  "acceptance": {
+    "passed": true,
+    "valid_pair_count": 60,
+    "order_balance_mismatch_count": 0,
+    "warmup_error_count": 0,
+    "baseline_error_count": 0,
+    "candidate_error_count": 0,
+    "trigger_mismatch_count": 0,
+    "paired_delta_p95_ms": 245,
+    "paired_delta_p95_ms_max": 500,
+    "margin_to_threshold_ms": 255
+  },
+  "overall": {
+    "baseline_mean_ms": 902.35,
+    "candidate_mean_ms": 916.2,
+    "baseline_p95_ms": 1201,
+    "candidate_p95_ms": 1463,
+    "paired_delta_mean_ms": 13.85,
+    "paired_delta_median_ms": 0.5,
+    "paired_delta_p75_ms": 41,
+    "paired_delta_p90_ms": 114,
+    "paired_delta_p95_ms": 245,
+    "paired_delta_min_ms": -398,
+    "paired_delta_max_ms": 364,
+    "candidate_slower_count": 30,
+    "candidate_faster_count": 28,
+    "equal_count": 2
+  },
+  "diagnostic_groups": {
+    "graph_trigger_expected": {
+      "sample_count": 36,
+      "paired_delta_median_ms": 28,
+      "paired_delta_p95_ms": 310
+    },
+    "graph_no_trigger_expected": {
+      "sample_count": 24,
+      "paired_delta_median_ms": -2.5,
+      "paired_delta_p95_ms": 42
+    },
+    "candidate_graph_path_present": {
+      "sample_count": 12,
+      "paired_delta_mean_ms": 100.75,
+      "paired_delta_median_ms": 149,
+      "paired_delta_p95_ms": 364
+    },
+    "candidate_graph_path_absent": {
+      "sample_count": 48,
+      "paired_delta_mean_ms": -7.875,
+      "paired_delta_median_ms": -1,
+      "paired_delta_p95_ms": 65
+    },
+    "baseline_first": {
+      "sample_count": 30,
+      "paired_delta_mean_ms": 4.167,
+      "paired_delta_median_ms": -3,
+      "paired_delta_p95_ms": 229
+    },
+    "candidate_first": {
+      "sample_count": 30,
+      "paired_delta_mean_ms": 23.533,
+      "paired_delta_median_ms": 5,
+      "paired_delta_p95_ms": 280
+    }
+  },
+  "causal_diagnosis": {
+    "previous_observation": "003独立运行相对早期Baseline的P95差为547ms，超过门槛47ms。",
+    "new_evidence": [
+      "同一时段、同题交错的60个正式配对中，配对差P95仅245ms。",
+      "候选有28次比Baseline更快、30次更慢、2次相同；整体中位差仅0.5ms。",
+      "不触发图的24个样本P95差为42ms，说明仅执行触发判断的固定成本很小。",
+      "实际产生图路径的12个样本P95差为364ms，仍低于500ms预算。",
+      "Q005的6次精确引用查询配对中位差262.5ms、最大364ms，未证明需要新建本地引用索引。",
+      "AB与BA两组P95分别为229ms和280ms，均通过；顺序没有把超限结果掩盖。"
+    ],
+    "inference": "003早期547ms的跨时段P95差主要受远程RAG负载波动影响，不能归因于选择性图扩展。配对实验支持当前图扩展在Development B上的实际增量延迟满足预算。",
+    "limitations": [
+      "仍只有一个新项目10题，不能证明跨项目性能和质量泛化。",
+      "远程服务未来负载可能变化，生产前仍需运行态监控。",
+      "本实验不评估最终LLM研判质量或事实充分性门。"
+    ]
+  },
+  "decision": {
+    "paired_latency_gate_passed": true,
+    "local_exact_reference_index_required_now": false,
+    "candidate_status": "development_quality_and_paired_latency_supported",
+    "production_flag_enabled": false,
+    "reason_production_stays_off": "缺少独立跨项目Holdout与最终事实门验证。",
+    "next_step": "使用全新项目建立独立Holdout，冻结后只运行一次质量与延迟验收；在此之前不做长期Memory或Neo4j升级。",
+    "old_holdout_or_challenge_rerun": false
+  },
+  "code_snapshot": {
+    "app/agents/bid_intake/paired_latency.py": "ac995ce47abac2ede8dcfed2ff5dc5e0bf3a9221eec89537476ecb584279f9f5",
+    "scripts/bid_intake_paired_latency_eval.py": "38f99a24906e3f431f9f683bb5bf099ab00550b1f9655c9e23fe1baee96f661a",
+    "tests/test_bid_intake_paired_latency.py": "ba434111274222729d4d352811e2e698508abe755e53a90a59bab099c89998f8"
+  }
+}

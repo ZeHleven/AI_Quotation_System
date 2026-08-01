@@ -1,0 +1,115 @@
+{
+  "schema_version": "bid_intake_graph_development_candidate_execution_v1",
+  "execution_id": "RET-GRAPH-EXPAND-002-DEV-B-CANDIDATE-EXECUTION-V1",
+  "freeze_id": "RET-GRAPH-EXPAND-002-DEV-B-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-EXPAND-002",
+  "executed_at": "2026-07-30T14:41:47+08:00",
+  "status": "rejected_partial_mechanism_validated",
+  "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253",
+  "baseline_report_path": "outputs/bid_intake_retrieval_eval/20260730_141155_RET-GRAPH-BASELINE-DEV-B_report.json",
+  "candidate_report_path": "outputs/bid_intake_retrieval_eval/20260730_144147_RET-GRAPH-EXPAND-002-DEV-B_report.json",
+  "candidate_predictions_path": "outputs/bid_intake_retrieval_eval/20260730_144147_RET-GRAPH-EXPAND-002-DEV-B_predictions.jsonl",
+  "single_variable": "verified_table_parent_first_cell_grammar",
+  "overall_metrics": {
+    "hit_rate_at_5": 1.0,
+    "mean_recall_at_5": 0.678333,
+    "mean_precision_at_5": 0.455556,
+    "mrr": 0.866667,
+    "mean_ndcg_at_5": 0.626676,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 985.6,
+    "p95_latency_ms": 1540,
+    "error_count": 0
+  },
+  "deltas_vs_baseline": {
+    "hit_rate_at_5": 0.0,
+    "mean_recall_at_5": 0.08,
+    "mean_precision_at_5": 0.035556,
+    "mrr": 0.0,
+    "mean_ndcg_at_5": 0.021399,
+    "routing_exact_rate": 0.0,
+    "query_count_accuracy": 0.0,
+    "topic_recall": 0.0,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 101.6,
+    "p95_latency_ms": 119
+  },
+  "graph_metrics": {
+    "graph_trigger_precision": 1.0,
+    "graph_trigger_recall": 1.0,
+    "single_document_false_trigger_rate": 0.0,
+    "negative_relation_erroneous_expansion_rate": 0.0,
+    "expanded_path_count": 4,
+    "gold_target_path_count": 4,
+    "graph_path_precision": 1.0,
+    "triggered_case_mean_recall_baseline": 0.494444,
+    "triggered_case_mean_recall_candidate": 0.627778,
+    "triggered_case_mean_recall_delta": 0.133334,
+    "triggered_case_improvement_count": 1,
+    "triggered_case_recall_regression_count": 0,
+    "additional_llm_tokens": 0
+  },
+  "per_case_recall": {
+    "RET-GRAPH-DEV-B-Q001": 0.333333,
+    "RET-GRAPH-DEV-B-Q002": 0.5,
+    "RET-GRAPH-DEV-B-Q003": 0.333333,
+    "RET-GRAPH-DEV-B-Q004": 1.0,
+    "RET-GRAPH-DEV-B-Q005": 0.6,
+    "RET-GRAPH-DEV-B-Q006": 1.0,
+    "RET-GRAPH-DEV-B-Q007": 0.666667,
+    "RET-GRAPH-DEV-B-Q008": 1.0,
+    "RET-GRAPH-DEV-B-Q009": 0.75,
+    "RET-GRAPH-DEV-B-Q010": 0.6
+  },
+  "acceptance_evaluation": {
+    "passed": false,
+    "passed_thresholds": [
+      "graph_trigger_precision_min",
+      "graph_trigger_recall_min",
+      "single_document_false_trigger_rate_max",
+      "negative_relation_erroneous_expansion_rate_max",
+      "graph_path_precision_min",
+      "triggered_case_mean_gold_recall_delta_min",
+      "triggered_case_recall_regression_count_max",
+      "global_mrr_delta_min",
+      "global_ndcg_at_5_delta_min",
+      "p95_latency_delta_ms_max",
+      "execution_error_count_max",
+      "additional_llm_tokens_max"
+    ],
+    "failed_thresholds": [
+      {
+        "name": "triggered_case_improvement_count_min",
+        "required": 2,
+        "actual": 1
+      }
+    ],
+    "not_evaluable_thresholds": [
+      "fact_gate_alignment_delta_min",
+      "fact_gate_false_sufficient_rate_delta_max"
+    ]
+  },
+  "reasoning_record": {
+    "problem": "001的错误表头父节点造成关系噪声和扩展额度浪费。",
+    "evidence": [
+      "Q001与Q005的普通数字开头数据行不再成为结构种子。",
+      "Q004只保留真实清单表头，4条扩展路径全部命中Gold，Recall由20%提升到100%。",
+      "图路径Precision由9.09%提升到100%，触发组平均Recall提升13.33个百分点。",
+      "Q005仍检测到显式清单编号引用，但旧查询方式没有找到目标，证明下一缺口与表头机制相互独立。"
+    ],
+    "inference": "首单元格表头语法是有效且通用的关系精度约束，但它只能解决存在真实表头锚点的问题，不能替代显式引用解析。",
+    "decision": "保留表头收紧代码，但002整体仍因只改善1题而拒绝；下一轮只修改显式引用的查询表达。"
+  },
+  "production_decision": {
+    "enabled": false,
+    "reason": "Development B整体门槛未全部通过，且只有一个新项目。",
+    "old_holdout_or_challenge_rerun": false
+  },
+  "code_snapshot": {
+    "mcp_servers/tender_evidence/selective_graph.py": "0999cb9260324e7abe80a6614ef907ee37e322cbb5cef9f092d2d2d6036ae905",
+    "tests/test_tender_selective_graph.py": "ac317a7f89343a3e4319c86154de133d0a45b6a3c0379116efc5f272ead6b57a"
+  }
+}

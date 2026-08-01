@@ -17,6 +17,7 @@ RUN pip install \
 # 拷贝业务代码和初始数据
 COPY hybrid_searcher.py .
 COPY rag_api_service.py .
+COPY tender_evidence_search.py .
 COPY rag_materials.json .
 COPY seed_milvus.py .
 

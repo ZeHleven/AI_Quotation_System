@@ -9,9 +9,6 @@ on:
       - ".github/workflows/backend-ci.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "AI_Middle_Office/**"
-      - ".github/workflows/backend-ci.yml"
 
 permissions:
   contents: read

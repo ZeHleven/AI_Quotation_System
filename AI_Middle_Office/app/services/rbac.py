@@ -9,7 +9,25 @@ from app.core.config import settings
 from app.models.user import User, UserRole, UserRoleEvent
 
 
-VALID_ROLES = ("system_admin", "admin", "staff", "manager", "viewer")
+VALID_ROLES = (
+    "system_admin",
+    "admin",
+    "quote_operator",
+    "quote_user",
+    "cost_viewer",
+    "cost_editor",
+    "cost_approver",
+    "cost_exporter",
+    "enterprise_profile_viewer",
+    "enterprise_profile_editor",
+    "enterprise_profile_approver",
+    "project_viewer",
+    "project_member",
+    "project_manager",
+    "staff",
+    "manager",
+    "viewer",
+)
 ROLE_ORDER = {role: index for index, role in enumerate(VALID_ROLES)}
 LEGACY_ROLE_MAP = {
     "admin": ["admin"],
@@ -18,6 +36,46 @@ LEGACY_ROLE_MAP = {
     "manager": ["manager"],
     "viewer": ["viewer"],
     "system_admin": ["system_admin", "admin"],
+}
+ROLE_DEFAULT_HOME_RULES = (
+    ({"system_admin", "admin"}, "/admin/dashboard"),
+    ({"quote_operator", "viewer"}, "/admin/dashboard"),
+    ({"manager", "project_manager"}, "/admin/projects"),
+    ({"project_member"}, "/admin/project-tasks/my"),
+    ({"project_viewer"}, "/admin/projects"),
+    ({"cost_viewer", "cost_editor", "cost_approver", "cost_exporter"}, "/admin/cost-db"),
+    (
+        {"enterprise_profile_viewer", "enterprise_profile_editor", "enterprise_profile_approver"},
+        "/admin/enterprise-profile",
+    ),
+    ({"staff", "quote_user"}, "/quote/new"),
+)
+
+BUDGET_PRICING_VIEW_ROLES = {
+    "system_admin",
+    "admin",
+    "cost_viewer",
+    "cost_editor",
+    "cost_approver",
+    "cost_exporter",
+}
+BUDGET_PRICING_CREATE_ROLES = {
+    "system_admin",
+    "admin",
+    "cost_editor",
+    "cost_approver",
+}
+BUDGET_PROJECT_ACCESS_ROLES = {
+    "system_admin",
+    "admin",
+    "staff",
+    "manager",
+    "viewer",
+    "project_viewer",
+    "project_member",
+    "project_manager",
+    "quote_user",
+    "quote_operator",
 }
 
 
@@ -48,6 +106,33 @@ def _roles_with_implications(user: User) -> set[str]:
     roles = set(get_effective_roles(user))
     if "system_admin" in roles:
         roles.add("admin")
+        roles.update({"quote_operator", "quote_user"})
+        roles.update({"cost_viewer", "cost_editor", "cost_approver", "cost_exporter"})
+        roles.update({"enterprise_profile_viewer", "enterprise_profile_editor", "enterprise_profile_approver"})
+    if "admin" in roles:
+        roles.update({"quote_operator", "quote_user"})
+        roles.update({"cost_viewer", "cost_editor", "cost_approver"})
+        roles.update({"enterprise_profile_viewer", "enterprise_profile_editor", "enterprise_profile_approver"})
+    if "staff" in roles:
+        roles.add("quote_user")
+    if "cost_approver" in roles:
+        roles.update({"cost_viewer", "cost_editor"})
+    if "cost_editor" in roles:
+        roles.add("cost_viewer")
+    if "enterprise_profile_approver" in roles:
+        roles.update({"enterprise_profile_viewer", "enterprise_profile_editor"})
+    if "enterprise_profile_editor" in roles:
+        roles.add("enterprise_profile_viewer")
+    if "system_admin" in roles or "admin" in roles:
+        roles.update({"project_viewer", "project_member", "project_manager"})
+    if "manager" in roles:
+        roles.update({"project_viewer", "project_member", "project_manager"})
+    if "staff" in roles:
+        roles.update({"project_viewer", "project_member"})
+    if "project_manager" in roles:
+        roles.update({"project_viewer", "project_member"})
+    if "project_member" in roles:
+        roles.add("project_viewer")
     return roles
 
 
@@ -62,6 +147,24 @@ def has_admin_role(user: User) -> bool:
 
 def has_system_admin_role(user: User) -> bool:
     return "system_admin" in get_effective_roles(user)
+
+
+def can_view_budget_pricing(user: User) -> bool:
+    return has_any_role(user, BUDGET_PRICING_VIEW_ROLES)
+
+
+def can_create_budget_pricing(user: User) -> bool:
+    return has_any_role(user, BUDGET_PRICING_CREATE_ROLES)
+
+
+def require_budget_pricing_view(user: User) -> None:
+    if not can_view_budget_pricing(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
+
+
+def require_budget_pricing_create(user: User) -> None:
+    if not can_create_budget_pricing(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
 
 
 def sync_legacy_role(user: User) -> None:
@@ -86,11 +189,11 @@ def get_available_modules(user: User) -> list[dict]:
     roles = set(_roles_with_implications(user))
     modules: list[dict] = []
 
-    if {"system_admin", "admin", "staff"} & roles:
+    if {"system_admin", "admin", "staff", "quote_user"} & roles:
         modules.append(
             {
                 "key": "legacy_quote",
-                "name": "旧报价工作台",
+                "name": "AI 报价",
                 "path": "/index.html",
                 "status": "available",
             }
@@ -99,16 +202,17 @@ def get_available_modules(user: User) -> list[dict]:
         modules.append(
             {
                 "key": "legacy_knowledge",
-                "name": "旧知识库管理",
+                "name": "兼容管理页",
                 "path": "/admin.html",
                 "status": "available",
+                "stage": "compatibility",
             }
         )
-    if "system_admin" in roles:
+    if {"system_admin", "admin"} & roles:
         modules.append(
             {
                 "key": "permissions",
-                "name": "权限管理",
+                "name": "账号与权限",
                 "path": "/admin/permissions",
                 "status": "available",
             }
@@ -125,27 +229,164 @@ def get_available_modules(user: User) -> list[dict]:
     if {"system_admin", "admin", "staff"} & roles:
         modules.append(
             {
+                "key": "business_ledger",
+                "name": "商务台账",
+                "path": "/admin/business-ledger",
+                "status": "available" if settings.feature_business_ledger else "pending",
+            }
+        )
+    if {"system_admin", "admin", "staff", "manager", "project_viewer", "project_member", "project_manager"} & roles:
+        modules.append(
+            {
+                "key": "project_progress",
+                "name": "项目进度",
+                "path": "/admin/projects",
+                "status": "available" if settings.feature_project_progress else "pending",
+            }
+        )
+    if BUDGET_PROJECT_ACCESS_ROLES & roles:
+        modules.append(
+            {
+                "key": "budget_projects",
+                "name": "\u9884\u7b97\u9879\u76ee",
+                "path": "/admin/budget-projects",
+                "status": "available" if settings.feature_budget_projects else "pending",
+            }
+        )
+    if (BUDGET_PRICING_VIEW_ROLES | BUDGET_PROJECT_ACCESS_ROLES) & roles:
+        budget_pricing_enabled = settings.feature_budget_projects and settings.feature_budget_pricing
+        can_reach_budget_project = bool(BUDGET_PROJECT_ACCESS_ROLES & roles)
+        can_view_pricing = bool(BUDGET_PRICING_VIEW_ROLES & roles)
+        modules.append(
+            {
+                "key": "budget_pricing",
+                "name": "项目成本计价",
+                "path": "/admin/budget-projects",
+                "status": "available"
+                if budget_pricing_enabled and can_reach_budget_project and can_view_pricing
+                else "forbidden"
+                if budget_pricing_enabled and can_reach_budget_project and not can_view_pricing
+                else "pending",
+                "stage": "trial",
+            }
+        )
+    if {"system_admin", "admin"} & roles:
+        modules.append(
+            {
+                "key": "account_quotas",
+                "name": "账户定额库",
+                "path": "/admin/account-quotas",
+                "status": "available" if settings.feature_account_quotas else "pending",
+                "stage": "trial",
+            }
+        )
+    if {"system_admin", "admin", "cost_viewer", "cost_editor", "cost_approver", "cost_exporter"} & roles:
+        modules.append(
+            {
                 "key": "cost_db",
-                "name": "成本数据库",
+                "name": "企业定额主库 / 成本主库",
                 "path": "/admin/cost-db",
                 "status": "available" if settings.feature_cost_db else "pending",
             }
         )
-    if {"system_admin", "admin", "viewer"} & roles:
+    if {"system_admin", "admin", "staff", "quote_user"} & roles:
+        modules.append(
+            {
+                "key": "cost_measurement",
+                "name": "\u6210\u672c\u6d4b\u7b97",
+                "path": "/admin/cost-measurement",
+                "status": "available" if settings.feature_cost_measurement else "pending",
+                "stage": "trial",
+            }
+        )
+        modules.append(
+            {
+                "key": "requirement_standardization",
+                "name": "需求单标准化",
+                "path": "/admin/requirement-standardization",
+                "status": "available" if settings.feature_requirement_standardization else "pending",
+            }
+        )
+    if {"system_admin", "admin", "staff", "quote_user"} & roles:
+        modules.append(
+            {
+                "key": "dwg_trial",
+                "name": "图纸识图",
+                "path": "/admin/dwg-trial",
+                "status": "available",
+                "stage": "trial",
+            }
+        )
+    if {"system_admin", "admin", "staff", "manager", "quote_user", "quote_operator"} & roles:
+        modules.append(
+            {
+                "key": "bidding",
+                "name": "智能投标",
+                "path": "/admin/bidding",
+                "status": "available" if settings.feature_bidding_mvp else "pending",
+                "stage": "trial",
+            }
+        )
+    if {"system_admin", "admin", "enterprise_profile_viewer", "enterprise_profile_editor", "enterprise_profile_approver"} & roles:
+        modules.append(
+            {
+                "key": "enterprise_profile",
+                "name": "企业资料库",
+                "path": "/admin/enterprise-profile",
+                "status": "available" if settings.feature_enterprise_profile else "pending",
+            }
+        )
+    if {"system_admin", "admin", "staff", "quote_user", "quote_operator"} & roles:
+        modules.append(
+            {
+                "key": "agent_center",
+                "name": "AI 助手中心",
+                "path": "/admin/agent-center",
+                "status": "available" if settings.feature_agent_assistants else "pending",
+                "stage": "trial",
+            }
+        )
+    if {"system_admin", "admin", "viewer", "quote_operator"} & roles:
         dashboard_enabled = (
             settings.feature_dashboard_quote
             or settings.feature_dashboard_response
             or settings.feature_dashboard_execution
+            or settings.feature_dashboard_project
+            or settings.feature_dashboard_business_lite
+            or "quote_operator" in roles
         )
         modules.append(
             {
                 "key": "dashboards",
-                "name": "效率与经营驾驶舱",
+                "name": "经营总览",
                 "path": "/admin/dashboard",
                 "status": "available" if dashboard_enabled else "pending",
             }
         )
     return modules
+
+
+def get_default_home_path(user: User) -> str:
+    roles = set(get_effective_roles(user))
+    modules = get_available_modules(user)
+    available_paths = {item["path"] for item in modules if item.get("status") == "available"}
+
+    def path_is_available(path: str) -> bool:
+        if path == "/quote/new":
+            return "/index.html" in available_paths
+        if path == "/admin/project-tasks/my":
+            return "/admin/projects" in available_paths
+        return path in available_paths
+
+    for matching_roles, path in ROLE_DEFAULT_HOME_RULES:
+        if roles & matching_roles and path_is_available(path):
+            return path
+
+    first_available = next(
+        (item for item in modules if item.get("status") == "available"),
+        None,
+    )
+    return first_available["path"] if first_available else "/no-access"
 
 
 def serialize_user_for_rbac(user: User) -> dict:
@@ -162,6 +403,7 @@ def serialize_user_for_rbac(user: User) -> dict:
         "dingtalk_bound": bool(user.dingtalk_user_id),
         "dingtalk_verified_until": None,
         "available_modules": get_available_modules(user),
+        "default_home_path": get_default_home_path(user),
         "last_login_at": None,
         "created_at": None,
     }
@@ -219,6 +461,7 @@ def grant_role(
     operator: User,
     note: str | None,
     request: Request | None = None,
+    commit: bool = True,
 ) -> list[str]:
     role = normalize_role(role)
     note = _require_note(note)
@@ -244,8 +487,14 @@ def grant_role(
         note=note,
         request=request,
     )
-    db.commit()
-    db.refresh(target_user)
+    if commit:
+        db.commit()
+        db.refresh(target_user)
+    else:
+        # Atomic callers (for example user + account provisioning) own the
+        # transaction boundary.  Flush role/event state without exposing a
+        # partially-created user if a later step fails.
+        db.flush()
     return get_effective_roles(target_user)
 
 

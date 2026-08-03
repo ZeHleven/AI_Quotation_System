@@ -5,6 +5,8 @@
 param(
     [int]$RetryIntervalSeconds = 180,
     [int]$MaxMinutes = 60,
+    [string]$HostAddress = "",
+    [switch]$Lan,
     [switch]$SkipMigrations
 )
 
@@ -27,9 +29,32 @@ function Write-WatchdogLog {
     Write-Host $line
 }
 
+function Resolve-BindHost {
+    param(
+        [string]$RequestedHost,
+        [switch]$UseLan
+    )
+    if ($RequestedHost) {
+        if ($UseLan -and $RequestedHost -in @("127.0.0.1", "localhost")) {
+            throw "-Lan cannot be combined with -HostAddress $RequestedHost."
+        }
+        return $RequestedHost
+    }
+    if ($UseLan) { return "0.0.0.0" }
+    return "127.0.0.1"
+}
+
+function Get-ProbeHost {
+    param([string]$BindHost)
+    if ($BindHost -in @("0.0.0.0", "::", "", "localhost")) {
+        return "127.0.0.1"
+    }
+    return $BindHost
+}
+
 function Test-SystemReady {
     try {
-        $response = Invoke-RestMethod -Uri "http://127.0.0.1:9000/health/ready" -TimeoutSec 5
+        $response = Invoke-RestMethod -Uri "http://${ProbeHost}:9000/health/ready" -TimeoutSec 5
         return ($response.status -eq "ready")
     } catch {
         return $false
@@ -42,21 +67,28 @@ if (-not (Test-Path $Launcher)) {
 }
 
 Set-Location $WorkDir
+$HostAddress = Resolve-BindHost -RequestedHost $HostAddress -UseLan:$Lan
+$ProbeHost = Get-ProbeHost -BindHost $HostAddress
 $deadline = (Get-Date).AddMinutes($MaxMinutes)
 $attempt = 0
 
-Write-WatchdogLog "watchdog started, retry_interval=${RetryIntervalSeconds}s, max_minutes=${MaxMinutes}"
+Write-WatchdogLog "watchdog started, retry_interval=${RetryIntervalSeconds}s, max_minutes=${MaxMinutes}, bind=${HostAddress}, probe=${ProbeHost}"
 
 while ((Get-Date) -lt $deadline) {
     $attempt += 1
 
-    if (Test-SystemReady) {
+    if ((Test-SystemReady) -and -not ($Lan -and $HostAddress -eq "0.0.0.0")) {
         Write-WatchdogLog "system already ready; watchdog exits"
         exit 0
+    } elseif ($Lan -and $HostAddress -eq "0.0.0.0") {
+        Write-WatchdogLog "local health is ready, but LAN mode uses wildcard bind; invoking start_all.ps1 to confirm bind mode"
     }
 
     Write-WatchdogLog "attempt ${attempt}: invoking start_all.ps1"
-    $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Launcher, "-NoBrowser")
+    $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Launcher, "-NoBrowser", "-HostAddress", $HostAddress)
+    if ($Lan) {
+        $arguments += "-Lan"
+    }
     if ($SkipMigrations) {
         $arguments += "-SkipMigrations"
     }

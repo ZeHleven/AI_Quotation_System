@@ -184,3 +184,98 @@ def test_confirm_push_writes_readable_history_and_items(client, monkeypatch):
     assert detail["items"][0]["project_name"] == "wall paint"
     assert detail["items"][0]["space"] == "living room"
     assert detail["payload"]["project_details"][1]["project_name"] == "floor tile"
+
+
+def test_resend_history_quote_reuses_saved_details(client, monkeypatch):
+    username, headers = _create_user_headers(client)
+    captured = {}
+
+    db = SessionLocal()
+    try:
+        history = QuoteHistory(
+            username=username,
+            quote_id="quote-resend-1",
+            quote_job_id=None,
+            trace_id="trace-resend",
+            request_text="resend saved quote",
+            display_title="saved quote",
+            project_summary="wall paint; total_items=1",
+            first_project_names="wall paint",
+            confirmed_by=username,
+            pushed_to_dingtalk=True,
+            total_amount=200,
+            item_count=1,
+            payload_json=json.dumps(
+                {
+                    "project_details": [
+                        {
+                            "project_name": "wall paint",
+                            "quantity": 10,
+                            "unit": "sqm",
+                            "unit_price": 20,
+                            "total_price": 200,
+                            "notes": "saved final quote",
+                        }
+                    ],
+                    "excel_base64": "<base64:123>",
+                },
+                ensure_ascii=False,
+            ),
+        )
+        db.add(history)
+        db.flush()
+        history_id = history.id
+        db.commit()
+    finally:
+        db.close()
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": True}
+
+    async def fake_post_json_via_gateway(**kwargs):
+        captured.update(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr("app.api.v1.history.post_json_via_gateway", fake_post_json_via_gateway)
+
+    response = client.post(f"/api/v1/history/{history_id}/resend", headers=headers)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    payload = captured["json_payload"]
+    assert payload["resend"] is True
+    assert payload["resend_from_history_id"] == history_id
+    assert payload["project_details"][0]["project_name"] == "wall paint"
+    assert payload["excel_base64"]
+    assert payload["excel_base64"] != "<base64:123>"
+    assert captured["endpoint_type"] == "quote_push"
+    assert data["history_id"] != history_id
+    assert data["source_history_id"] == history_id
+    assert data["resend_from_history_id"] == history_id
+    assert data["quote_job_id"]
+    assert data["quote_job_number"].startswith("BJ-")
+
+    db = SessionLocal()
+    try:
+        resend_job = db.query(QuoteJob).filter(QuoteJob.job_id == data["quote_job_id"]).one()
+        assert resend_job.status == "succeeded"
+        assert resend_job.stage == "history_resend"
+        assert resend_job.result_total_amount == 200
+        resend_history = db.query(QuoteHistory).filter(QuoteHistory.id == data["history_id"]).one()
+        assert resend_history.quote_job_id == resend_job.job_id
+        resend_payload = json.loads(resend_history.payload_json)
+        assert resend_payload["resend"] is True
+        assert resend_payload["resend_from_history_id"] == history_id
+    finally:
+        db.close()
+
+    jobs_response = client.get(
+        "/api/v1/quote/jobs",
+        params={"keyword": data["quote_job_id"], "page_size": 20},
+        headers=headers,
+    )
+    assert jobs_response.status_code == 200
+    assert any(item["job_id"] == data["quote_job_id"] for item in jobs_response.json()["data"])

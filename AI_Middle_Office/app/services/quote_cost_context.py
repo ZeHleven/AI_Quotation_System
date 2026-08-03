@@ -17,11 +17,12 @@ logger = logging.getLogger(__name__)
 MAX_CONTEXT_ITEMS = 50
 MAX_TEXT_ROWS = 80
 
-QUOTE_ITEM_SPLITTER = re.compile(r"[\n\r；;]+")
+QUOTE_ITEM_SPLITTER = re.compile(r"[\n\r；;、]+")
 QUANTITY_UNIT_PATTERN = re.compile(
-    r"(?P<quantity>\d+(?:\.\d+)?)\s*(?P<unit>m2|m²|㎡|平方米|平方|m3|m³|立方米|立方|m|米|延米|kg|公斤|千克|t|吨|项|个|套|组|块|张)",
+    r"(?P<quantity>\d+(?:\.\d+)?)\s*(?P<unit>m2|m²|㎡|平方米|平方|m3|m³|立方米|立方|米|延米|kg|公斤|千克|t|吨|项|个|套|组|块|张|m(?!m))",
     re.IGNORECASE,
 )
+MILLIMETER_SPEC_PATTERN = re.compile(r"(?P<spec>\d+(?:\.\d+)?)\s*mm\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class QuoteCostContext:
     unmatched_count: int = 0
     active_cost_item_count: int = 0
     references: tuple[dict[str, Any], ...] = ()
+    source_rows: tuple[dict[str, Any], ...] = ()
 
 
 EMPTY_COST_CONTEXT = QuoteCostContext(text="")
@@ -96,10 +98,17 @@ def _infer_row_from_text(segment: str) -> dict[str, Any] | None:
         return None
 
     row: dict[str, Any] = {"project_name": text}
-    match = QUANTITY_UNIT_PATTERN.search(text)
-    if match:
+    matches = list(QUANTITY_UNIT_PATTERN.finditer(text))
+    if matches:
+        match = matches[-1]
         row["quantity"] = match.group("quantity")
         row["unit"] = match.group("unit")
+        name_text = f"{text[:match.start()]} {text[match.end():]}".strip(" \t,;；，、")
+        if name_text:
+            row["project_name"] = name_text
+    spec_matches = list(MILLIMETER_SPEC_PATTERN.finditer(text))
+    if spec_matches:
+        row["spec"] = f"{spec_matches[-1].group('spec')}mm"
     return row
 
 
@@ -136,6 +145,12 @@ def _reference_payload(row: dict[str, Any], reference: dict[str, Any], index: in
         "reference_unit_price": reference.get("reference_price"),
         "reference_price_source": reference.get("reference_price_source"),
         "reference_total": reference_total,
+        "reference_source": reference.get("reference_source"),
+        "source_type": reference.get("source_type"),
+        "enterprise_quota_version_id": reference.get("enterprise_quota_version_id"),
+        "enterprise_quota_version_code": reference.get("enterprise_quota_version_code"),
+        "enterprise_quota_item_id": reference.get("enterprise_quota_item_id"),
+        "quota_code": reference.get("quota_code"),
     }
 
 
@@ -145,7 +160,7 @@ def _format_context_text(references: list[dict[str, Any]], active_count: int, un
 
     lines = [
         "[成本库底价强参考]",
-        "以下条目来自 cost_items.active。若需求项与成本库条目匹配，请优先采用 reference_unit_price 作为 AI 原始报价单价；如确需偏离，请在备注说明原因。",
+        "以下条目来自 active cost reference。若需求项与成本库条目匹配，请优先采用 reference_unit_price 作为 AI 原始报价单价；如确需偏离，请在备注说明原因。",
         f"active 成本条目数: {active_count}; 命中参考数: {len(references)}; 未命中需求数: {unmatched_count}。",
     ]
     for ref in references:
@@ -164,6 +179,10 @@ def _format_context_text(references: list[dict[str, Any]], active_count: int, un
         if ref.get("reference_total") is not None:
             parts.append(f"reference_total: {_money(ref['reference_total'])} 元")
         parts.append(f"cost_item_id: {ref['cost_item_id']}")
+        if ref.get("reference_source"):
+            parts.append(f"reference_source: {ref['reference_source']}")
+        if ref.get("quota_code"):
+            parts.append(f"quota_code: {ref['quota_code']}")
         lines.append("; ".join(parts))
     return "\n".join(lines)
 
@@ -204,6 +223,7 @@ def build_quote_cost_context(
         unmatched_count=unmatched_count,
         active_cost_item_count=len(active_items),
         references=tuple(references),
+        source_rows=tuple(dict(row) for row in rows),
     )
 
 
@@ -217,6 +237,71 @@ def append_quote_cost_context(
     if not context.text:
         return query_text, context
     return f"{query_text}\n\n{context.text}", context
+
+
+def cost_context_references_as_source_rows(context: QuoteCostContext) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    references_by_index: dict[int, dict[str, Any]] = {}
+    for ref in context.references:
+        if not isinstance(ref, dict):
+            continue
+        index = parse_amount(ref.get("index"))
+        if index is not None:
+            references_by_index[int(index)] = ref
+
+    if context.source_rows:
+        for index, source_row in enumerate(context.source_rows, start=1):
+            if not isinstance(source_row, dict):
+                continue
+            row = {
+                "project_name": _row_name(source_row),
+                "spec": _row_spec(source_row),
+                "quantity": _row_quantity(source_row),
+                "unit": _row_unit(source_row),
+                "locked_cost_source": "pre_quote_context",
+            }
+            ref = references_by_index.get(index)
+            if isinstance(ref, dict) and ref.get("cost_item_id"):
+                row.update(
+                    {
+                        "locked_cost_item_id": ref.get("cost_item_id"),
+                        "locked_cost_item_name": ref.get("cost_item_name"),
+                        "locked_cost_item_spec": ref.get("cost_item_spec"),
+                        "locked_cost_reference_price": ref.get("reference_unit_price"),
+                        "locked_cost_match_type": ref.get("match_type"),
+                        "locked_cost_reference_source": ref.get("reference_source"),
+                        "locked_enterprise_quota_item_id": ref.get("enterprise_quota_item_id"),
+                        "locked_enterprise_quota_version_id": ref.get("enterprise_quota_version_id"),
+                        "locked_enterprise_quota_version_code": ref.get("enterprise_quota_version_code"),
+                        "locked_quota_code": ref.get("quota_code"),
+                    }
+                )
+            rows.append(row)
+        return rows
+
+    for ref in context.references:
+        if not isinstance(ref, dict) or not ref.get("cost_item_id"):
+            continue
+        rows.append(
+            {
+                "project_name": ref.get("demand_item"),
+                "spec": ref.get("spec"),
+                "quantity": ref.get("quantity"),
+                "unit": ref.get("unit"),
+                "locked_cost_item_id": ref.get("cost_item_id"),
+                "locked_cost_item_name": ref.get("cost_item_name"),
+                "locked_cost_item_spec": ref.get("cost_item_spec"),
+                "locked_cost_reference_price": ref.get("reference_unit_price"),
+                "locked_cost_match_type": ref.get("match_type"),
+                "locked_cost_reference_source": ref.get("reference_source"),
+                "locked_enterprise_quota_item_id": ref.get("enterprise_quota_item_id"),
+                "locked_enterprise_quota_version_id": ref.get("enterprise_quota_version_id"),
+                "locked_enterprise_quota_version_code": ref.get("enterprise_quota_version_code"),
+                "locked_quota_code": ref.get("quota_code"),
+                "locked_cost_source": "pre_quote_context",
+            }
+        )
+    return rows
 
 
 def safe_append_quote_cost_context(
@@ -262,6 +347,10 @@ def build_cost_context_fallback_quote(context: QuoteCostContext, *, reason: str)
                     "demand_item": ref.get("demand_item"),
                     "match_type": ref.get("match_type"),
                     "cost_item_id": ref.get("cost_item_id"),
+                    "reference_source": ref.get("reference_source"),
+                    "enterprise_quota_item_id": ref.get("enterprise_quota_item_id"),
+                    "enterprise_quota_version_code": ref.get("enterprise_quota_version_code"),
+                    "quota_code": ref.get("quota_code"),
                     "reference_price_source": ref.get("reference_price_source"),
                 },
             }

@@ -4,17 +4,36 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>旗胜智价 · 管理员驾驶舱</title>
+  <link rel="icon" type="image/svg+xml" href="/static/brand-favicon.svg">
   <link rel="stylesheet" href="/static/element-plus.min.css">
   <style>
     :root {
-      --bg:     #F0F5F9;
-      --steel:  #C9D6DF;
-      --slate:  #52616B;
-      --dark:   #1E2022;
+      --bg:     #F5F5F7;
+      --panel:  #FBFBFD;
+      --steel:  #E3E5EA;
+      --slate:  #6E727C;
+      --dark:   #1D1D1F;
+      --strong: #0F1115;
       --white:  #FFFFFF;
-      --green:  #67C23A;
-      --red:    #F56C6C;
-      --orange: #E6A23C;
+      --blue:   #0A84FF;
+      --green:  #1F8F5F;
+      --red:    #C02F2F;
+      --orange: #B86B00;
+      --shadow-soft: 0 18px 42px rgba(15,17,21,0.07);
+      --shadow-card: 0 1px 2px rgba(15,17,21,0.04), 0 12px 28px rgba(15,17,21,0.05);
+      --shadow-focus: 0 0 0 4px rgba(10,132,255,0.13);
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --color-bg: var(--bg);
+      --color-bg-soft: var(--panel);
+      --color-surface: var(--white);
+      --color-surface-muted: #F7F7F9;
+      --color-border: var(--steel);
+      --color-text: var(--dark);
+      --color-text-strong: var(--strong);
+      --color-muted: var(--slate);
+      --color-primary: var(--blue);
+      --color-success: var(--green);
     }
     *, *::before, *::after { box-sizing: border-box; }
     body { margin: 0; padding: 0; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }
@@ -22,35 +41,39 @@
 
     /* ── 顶部导航 ── */
     .sys-header {
-      height: 52px; padding: 0 24px; flex-shrink: 0;
+      height: 64px; padding: 0 26px; flex-shrink: 0;
       display: flex; justify-content: space-between; align-items: center;
-      background: var(--dark); color: var(--white);
+      background: rgba(255,255,255,0.86); color: var(--strong);
+      border-bottom: 1px solid var(--steel);
+      backdrop-filter: saturate(180%) blur(18px);
+      box-shadow: 0 1px 0 rgba(15,17,21,0.02);
     }
-    .sys-logo { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+    .sys-logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 760; }
     .sys-logo-mark {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 22px; height: 22px; border-radius: 3px;
-      background: var(--slate); font-size: 11px; font-weight: 800; color: var(--white);
+      width: 34px; height: 34px; border-radius: 8px;
+      background: #111111; font-size: 12px; font-weight: 800; color: var(--white);
+      box-shadow: 0 10px 24px rgba(17,17,17,0.18);
     }
-    .sys-nav a { color: var(--steel); font-size: 13px; text-decoration: none; transition: color 0.15s; }
-    .sys-nav a:hover { color: var(--white); }
+    .sys-nav a { color: var(--slate); font-size: 13px; font-weight: 650; text-decoration: none; transition: color 0.15s; }
+    .sys-nav a:hover { color: var(--strong); }
 
     /* ── 优化3：顶部状态摘要条 ── */
     .status-bar {
       height: 38px; padding: 0 20px 0 80px; flex-shrink: 0;
       display: flex; align-items: center; gap: 20px;
-      background: #2a2d30; border-top: 1px solid rgba(201,214,223,0.12);
-      font-size: 12px; color: var(--steel);
+      background: var(--panel); border-bottom: 1px solid var(--steel);
+      font-size: 12px; color: var(--slate);
     }
     .status-bar-item { display: flex; align-items: center; gap: 6px; }
-    .status-sep { color: rgba(201,214,223,0.2); user-select: none; }
+    .status-sep { color: var(--steel); user-select: none; }
     .status-label { opacity: 0.6; }
 
     /* ── 优化1：侧边导航栏 ── */
     .page-body { display: flex; flex: 1; overflow: hidden; }
     .side-nav {
       width: 60px; flex-shrink: 0;
-      background: var(--dark);
+      background: var(--white); border-right: 1px solid var(--steel);
       display: flex; flex-direction: column; align-items: center;
       padding: 10px 0; gap: 2px; overflow-y: auto;
     }
@@ -58,11 +81,11 @@
       width: 48px; height: 52px;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       border-radius: 8px; cursor: pointer; gap: 3px;
-      color: var(--steel); font-size: 10px; text-align: center;
+      color: var(--slate); font-size: 10px; text-align: center;
       transition: all 0.15s; user-select: none;
     }
-    .side-nav-item:hover { background: rgba(201,214,223,0.1); color: var(--white); }
-    .side-nav-item.active { background: var(--slate); color: var(--white); }
+    .side-nav-item:hover { background: #F7F7F9; color: var(--strong); }
+    .side-nav-item.active { background: #EEF6FF; color: var(--blue); }
     .nav-icon { font-size: 17px; line-height: 1; }
 
     /* ── 主内容区 ── */
@@ -83,7 +106,7 @@
     .panel-actions { display: flex; gap: 8px; align-items: center; }
 
     /* ── 优化2：卡片圆角统一 ── */
-    .box-card { margin-bottom: 20px; border-radius: 8px !important; box-shadow: 0 2px 12px rgba(30,32,34,0.07) !important; border: 1px solid var(--steel) !important; }
+    .box-card { margin-bottom: 20px; border-radius: var(--radius-lg) !important; box-shadow: var(--shadow-card) !important; border: 1px solid var(--steel) !important; }
 
     .el-table .draft-row { background: #fff8f0 !important; }
     .material-detail-grid {
@@ -159,11 +182,11 @@
     <!-- 顶部导航 -->
     <header class="sys-header">
       <div class="sys-logo">
-        <span class="sys-logo-mark">筑</span>
+        <span class="sys-logo-mark">QS</span>
         旗胜智价 · 管理员驾驶舱
       </div>
       <div class="sys-nav">
-        <a href="/app.html">← 返回门户</a>
+        <a href="/admin/dashboard">← 新管理工作台</a>
       </div>
     </header>
 
@@ -222,6 +245,13 @@
                 <el-tag v-if="opsAlerts.length" type="danger" size="small" effect="dark">{{ opsAlerts.length }} 条告警</el-tag>
               </div>
               <div class="panel-actions">
+                <el-button
+                  size="small"
+                  type="warning"
+                  :loading="opsAckLoading"
+                  @click="acknowledgeCurrentOpsLogs"
+                  plain
+                >标记当前异常已读</el-button>
                 <el-button size="small" :loading="opsLoading" @click="fetchOpsDashboard(true)" plain>刷新</el-button>
               </div>
             </div>
@@ -266,10 +296,11 @@
                   {{ opsJobs.stuck_count || 0 }} 个卡住
                 </el-tag>
               </div>
-              <el-descriptions :column="3" border size="small" style="margin-bottom:10px;">
+              <el-descriptions :column="4" border size="small" style="margin-bottom:10px;">
                 <el-descriptions-item label="活跃任务">{{ opsJobs.active_count || 0 }}</el-descriptions-item>
                 <el-descriptions-item label="阈值">{{ opsJobs.stuck_minutes || 30 }} 分钟</el-descriptions-item>
                 <el-descriptions-item label="异常日志">{{ opsLogs.total_matches || 0 }}</el-descriptions-item>
+                <el-descriptions-item label="未读当前异常">{{ opsLogs.current_event_count || 0 }}</el-descriptions-item>
               </el-descriptions>
               <el-table :data="opsStuckJobs" border size="small" height="220" empty-text="暂无卡住任务">
                 <el-table-column prop="updated_at" label="最后更新" width="145"></el-table-column>
@@ -286,6 +317,13 @@
                 <span style="font-size:12px; color:#909399;">{{ opsLogs.log_dir || 'logs' }}</span>
               </div>
               <el-table :data="opsLogItems" border size="small" height="270" empty-text="最近未发现异常日志">
+                <el-table-column label="状态" width="82">
+                  <template #default="scope">
+                    <el-tag :type="opsLogStatusType(scope.row)" size="small" effect="plain">
+                      {{ opsLogStatusLabel(scope.row) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="modified_at" label="文件时间" width="145"></el-table-column>
                 <el-table-column prop="file" label="日志文件" width="180" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="line" label="行" width="70" align="right"></el-table-column>
@@ -408,6 +446,9 @@
               layout="total, prev, pager, next" @current-change="fetchJobs" small />
           </div>
           <el-table :data="jobData" border stripe style="width:100%" v-loading="jobLoading">
+            <el-table-column label="任务号" width="165" show-overflow-tooltip>
+              <template #default="scope">{{ displayJobNumber(scope.row) }}</template>
+            </el-table-column>
             <el-table-column prop="created_at" label="创建时间" width="160"></el-table-column>
             <el-table-column prop="username" label="用户" width="120"></el-table-column>
             <el-table-column prop="status" label="状态" width="100" align="center">
@@ -479,7 +520,7 @@
               <div class="tile-status">绝对总价偏差</div>
             </div>
             <div class="ops-service-tile">
-              <div class="tile-head"><span class="tile-name">修正字段 / RAG</span></div>
+              <div class="tile-head"><span class="tile-name">修正字段 / 成本参考</span></div>
               <div class="tile-latency">{{ feedbackSummary.correction_count || 0 }} / {{ feedbackSummary.rag_trace_count || 0 }}</div>
               <div class="tile-status">字段级修正 / 召回记录</div>
             </div>
@@ -504,7 +545,7 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="correction_count" label="修正" width="70" align="right"></el-table-column>
-                <el-table-column prop="rag_trace_count" label="RAG" width="70" align="right"></el-table-column>
+                <el-table-column prop="rag_trace_count" label="成本参考" width="90" align="right"></el-table-column>
                 <el-table-column prop="project_summary" label="项目摘要" min-width="170" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="change_summary" label="修改摘要" min-width="190" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="dify_prompt_version" label="Prompt" width="120" show-overflow-tooltip></el-table-column>
@@ -529,8 +570,8 @@
                     <el-table-column prop="count" label="次数" width="70" align="right"></el-table-column>
                   </el-table>
                 </el-tab-pane>
-                <el-tab-pane label="RAG 召回">
-                  <el-table :data="feedbackSummary.top_rag_materials || []" border size="small" height="220" empty-text="暂无 RAG trace">
+                <el-tab-pane label="成本参考匹配">
+                  <el-table :data="feedbackSummary.top_rag_materials || []" border size="small" height="220" empty-text="暂无成本参考记录">
                     <el-table-column prop="item_name" label="知识条目" min-width="160" show-overflow-tooltip></el-table-column>
                     <el-table-column prop="count" label="次数" width="70" align="right"></el-table-column>
                   </el-table>
@@ -572,7 +613,7 @@
             </div>
           </template>
           <el-alert
-            title="知识候选审核暂不再写入旧 materials。请将有效候选转入成本数据库 draft 后再核定 active。"
+            title="知识候选需先转入成本数据库，核定启用后才会用于后续报价。"
             type="warning"
             show-icon
             :closable="false"
@@ -600,7 +641,7 @@
             <el-table-column prop="created_at" label="生成时间" width="155"></el-table-column>
             <el-table-column label="操作" width="200" align="center" fixed="right">
               <template #default="scope">
-                <el-tooltip content="旧 materials 写入链路已退役，请在成本数据库中创建或更新 draft 条目" placement="top">
+                <el-tooltip content="请在成本数据库中创建或更新待核定条目" placement="top">
                   <el-button size="small" type="success" plain disabled>批准</el-button>
                 </el-tooltip>
                 <el-button size="small" type="danger" plain :disabled="scope.row.status !== 'pending'" @click="openRejectDialog(scope.row)">拒绝</el-button>
@@ -660,7 +701,7 @@
               </div>
             </template>
             <el-alert
-              title="核心施工物料基准单价库、旧 Milvus 一键热更新和旧知识库回滚已下线。正式报价检索请使用“成本数据库”的 active 条目，并通过“同步 active 到 RAG”更新 Milvus。"
+              title="原知识库管理功能已调整。正式报价请使用成本数据库中的已启用条目，更新后会用于后续报价。"
               type="warning"
               show-icon
               :closable="false"
@@ -686,21 +727,21 @@
                 <div style="margin-top:16px; text-align:center;">
                   <el-button class="milvus-btn" size="large" :loading="syncing" @click="syncToMilvus" style="width:100%;">
                     <el-icon style="margin-right:5px;"><UploadCloud /></el-icon>
-                    一键热更新至 Milvus
+                    更新成本参考
                   </el-button>
                   <div style="font-size:12px; color:#909399; margin-top:8px;">将下方表格确定的价格灌入底层算力库</div>
                 </div>
 
                 <!-- RAG 评测结果 -->
                 <div v-if="ragEvalResult" style="margin-top:16px; border-top:1px solid #ebeef5; padding-top:12px;">
-                  <div style="font-size:13px; font-weight:600; margin-bottom:8px; color:var(--dark);">RAG 检索质量评测</div>
+                  <div style="font-size:13px; font-weight:600; margin-bottom:8px; color:var(--dark);">成本参考匹配质量</div>
                   <div v-if="ragEvalResult.status === 'running'" style="text-align:center; color:#909399; padding:8px 0;">
                     <el-icon class="is-loading" style="margin-right:4px;"><Loading /></el-icon>评测进行中…
                   </div>
                   <div v-else-if="ragEvalResult.status === 'completed'">
                     <el-alert
                       v-if="!ragEvalResult.quality_ok"
-                      title="RAG 质量下滑，建议检查知识库"
+                      title="成本参考匹配质量下降，建议检查成本库"
                       type="warning" show-icon :closable="false"
                       style="margin-bottom:8px; font-size:12px;"
                     ></el-alert>
@@ -794,7 +835,7 @@
                   <div class="panel-header">
                     <div class="panel-title">
                       <span class="panel-accent"></span>
-                      <span>核心施工物料基准单价库 (RAG 源数据)</span>
+                      <span>施工材料基准单价库</span>
                     </div>
                     <div class="panel-actions">
                       <el-upload action="#" :auto-upload="false" :show-file-list="false" accept=".csv" :on-change="handleImportCSV">
@@ -899,8 +940,8 @@
         <div v-if="feedbackDetail">
           <el-descriptions :column="3" border size="small" style="margin-bottom:16px;">
             <el-descriptions-item label="反馈 ID">{{ feedbackDetail.id }}</el-descriptions-item>
-            <el-descriptions-item label="Job ID">{{ feedbackDetail.quote_job_id || '—' }}</el-descriptions-item>
-            <el-descriptions-item label="Trace ID">{{ feedbackDetail.trace_id || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="任务号">{{ displayJobNumber(feedbackDetail) }}</el-descriptions-item>
+            <el-descriptions-item label="处理编号">{{ feedbackDetail.trace_id || '—' }}</el-descriptions-item>
             <el-descriptions-item label="用户">{{ feedbackDetail.username }}</el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag :type="feedbackStatusType(feedbackDetail.status)" size="small">{{ feedbackDetail.status }}</el-tag>
@@ -942,8 +983,8 @@
                 <el-table-column prop="reason_text" label="原因" min-width="140" show-overflow-tooltip></el-table-column>
               </el-table>
             </el-tab-pane>
-            <el-tab-pane label="RAG Trace">
-              <el-table :data="feedbackDetail.rag_traces || []" border size="small" height="300" empty-text="暂无 RAG trace">
+            <el-tab-pane label="成本参考记录">
+              <el-table :data="feedbackDetail.rag_traces || []" border size="small" height="300" empty-text="暂无成本参考记录">
                 <el-table-column prop="rank" label="Rank" width="70" align="right"></el-table-column>
                 <el-table-column prop="project_name" label="报价项目" width="150" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="material_id" label="Material ID" width="120" show-overflow-tooltip></el-table-column>
@@ -974,8 +1015,9 @@
       <div v-loading="jobDetailLoading" style="min-height:200px;">
         <div v-if="jobDetail">
           <el-descriptions :column="3" border size="small" style="margin-bottom:16px;">
-            <el-descriptions-item label="Job ID" :span="2">{{ jobDetail.job_id }}</el-descriptions-item>
-            <el-descriptions-item label="Trace ID">{{ jobDetail.trace_id || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="任务号" :span="2">{{ displayJobNumber(jobDetail) }}</el-descriptions-item>
+            <el-descriptions-item label="处理编号">{{ jobDetail.trace_id || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="内部ID" :span="3">{{ jobDetail.job_id }}</el-descriptions-item>
             <el-descriptions-item label="用户">{{ jobDetail.username }}</el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag :type="statusTagType(jobDetail.status)" size="small">{{ jobDetail.status }}</el-tag>
@@ -1072,7 +1114,7 @@
           <div v-if="approveResult.snapshot" class="readable-muted" style="margin-bottom:8px;">
             快照变更：+{{ approveResult.snapshot.added_count || 0 }} / ~{{ approveResult.snapshot.updated_count || 0 }} / -{{ approveResult.snapshot.deleted_count || 0 }}
           </div>
-          <el-tag :type="approveResult.sync_status === 'success' ? 'success' : 'warning'" size="small">RAG 同步: {{ approveResult.sync_status }}</el-tag>
+          <el-tag :type="approveResult.sync_status === 'success' ? 'success' : 'warning'" size="small">成本参考更新: {{ approveResult.sync_status }}</el-tag>
           <span v-if="approveResult.sync_error" style="font-size:12px; color:#F56C6C; margin-left:8px;">{{ approveResult.sync_error }}</span>
         </div>
       </div>
@@ -1138,7 +1180,7 @@
   <script src="/static/element-plus.full.min.js"></script>
   <script src="/static/element-plus-icons.iife.min.js"></script>
   <script src="/static/axios.min.js"></script>
-  <script src="/static/js/shared.js"></script>
+  <script src="/static/js/shared.js?v=20260719-tab-auth"></script>
   <script src="/static/js/admin/ops.js"></script>
   <script src="/static/js/admin/model_gateway.js"></script>
   <script src="/static/js/admin/files.js"></script>
@@ -1167,7 +1209,9 @@
       apiData,
       apiMessage,
       apiErrorMessage,
+      getToken,
       clearAuth,
+      loginUrl,
       authHeaders: buildAuthHeaders,
       installAxiosUnauthorizedHandler
     } = window.AIMO;
@@ -1192,7 +1236,7 @@
           redirectingToLogin = true;
           clearAuth();
           ElMessage.warning(message);
-          setTimeout(() => { window.location.href = '/'; }, 600);
+          window.location.replace(loginUrl());
         };
 
         installAxiosUnauthorizedHandler(axios, redirectToLogin);
@@ -1220,6 +1264,7 @@
         const {
           opsDashboard,
           opsLoading,
+          opsAckLoading,
           opsServices,
           opsAlerts,
           opsJobs,
@@ -1227,7 +1272,10 @@
           opsStuckJobs,
           opsLogItems,
           fetchOpsDashboard,
+          acknowledgeCurrentOpsLogs,
           opsOverallType,
+          opsLogStatusLabel,
+          opsLogStatusType,
           startOpsPolling,
           stopOpsPolling
         } = opsModule;
@@ -1429,6 +1477,10 @@
         };
 
         onMounted(() => {
+          if (!getToken()) {
+            redirectToLogin('请先通过统一入口登录');
+            return;
+          }
           startOpsPolling();
           fetchRagEvalResult();
           fetchData();
@@ -1449,8 +1501,8 @@
 
         return {
           navItems, activeSection, scrollToSection,
-          opsDashboard, opsLoading, opsServices, opsAlerts, opsJobs, opsLogs, opsStuckJobs, opsLogItems,
-          fetchOpsDashboard, opsOverallType,
+          opsDashboard, opsLoading, opsAckLoading, opsServices, opsAlerts, opsJobs, opsLogs, opsStuckJobs, opsLogItems,
+          fetchOpsDashboard, acknowledgeCurrentOpsLogs, opsOverallType, opsLogStatusLabel, opsLogStatusType,
           tableData, loading, saving, syncing, lastSyncTime, tableRowClassName,
           handleAdd, handleDelete, handleImportCSV, saveData, syncToMilvus,
           userData, userLoading, fetchUsers, updateQuota,

@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 from openpyxl import load_workbook
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.cost_item import (
@@ -24,9 +24,22 @@ from app.models.cost_item import (
     CostItemHistory,
     PRICE_TYPE_COMBINED,
     PRICE_TYPE_VALUES,
+    CostRagSyncRun,
 )
+from app.models.quote_cost_evidence import QuoteCostEvidence
+from app.models.quote_job import QuoteJob
 from app.models.user import User
-from app.services.rbac import has_admin_role, has_any_role
+from app.services.cost_duplicate_guard import (
+    DUPLICATE_CONFLICT_CODE,
+    active_duplicate_conflicts,
+    active_duplicate_conflicts_for_item,
+)
+from app.services.enterprise_quota_cost_reference import (
+    active_enterprise_quota_version,
+    search_active_enterprise_quota_cost_references,
+)
+from app.services.quote_job_numbers import quote_job_number
+from app.services.rbac import has_any_role
 
 
 IMPORT_BATCH_TTL = timedelta(minutes=30)
@@ -82,12 +95,35 @@ class ImportBatch:
     result: dict[str, Any] | None = None
 
 
+FULL_COST_DB_VIEW_ROLES = {"system_admin", "admin", "cost_viewer", "cost_editor", "cost_approver", "cost_exporter"}
+FULL_COST_DB_EDIT_ROLES = {"system_admin", "admin", "cost_editor", "cost_approver"}
+FULL_COST_DB_APPROVE_ROLES = {"system_admin", "admin", "cost_approver"}
+FULL_COST_DB_EXPORT_ROLES = {"system_admin", "admin", "cost_exporter"}
+QUOTE_COST_REFERENCE_ROLES = FULL_COST_DB_VIEW_ROLES | {"staff"}
+
+
 def can_access_cost_db(user: User) -> bool:
-    return has_any_role(user, {"system_admin", "admin", "staff"})
+    return has_any_role(user, FULL_COST_DB_VIEW_ROLES)
+
+
+def can_edit_cost_db(user: User) -> bool:
+    return has_any_role(user, FULL_COST_DB_EDIT_ROLES)
+
+
+def can_approve_cost_db(user: User) -> bool:
+    return has_any_role(user, FULL_COST_DB_APPROVE_ROLES)
+
+
+def can_export_cost_db(user: User) -> bool:
+    return has_any_role(user, FULL_COST_DB_EXPORT_ROLES)
+
+
+def can_access_quote_cost_reference(user: User) -> bool:
+    return has_any_role(user, QUOTE_COST_REFERENCE_ROLES)
 
 
 def can_manage_cost_db(user: User) -> bool:
-    return has_admin_role(user)
+    return can_edit_cost_db(user)
 
 
 def require_cost_db_access(user: User) -> None:
@@ -96,7 +132,26 @@ def require_cost_db_access(user: User) -> None:
 
 
 def require_cost_db_manager(user: User) -> None:
-    if not can_manage_cost_db(user):
+    require_cost_db_editor(user)
+
+
+def require_cost_db_editor(user: User) -> None:
+    if not can_edit_cost_db(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
+
+
+def require_cost_db_approver(user: User) -> None:
+    if not can_approve_cost_db(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
+
+
+def require_cost_db_exporter(user: User) -> None:
+    if not can_export_cost_db(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
+
+
+def require_quote_cost_reference_access(user: User) -> None:
+    if not can_access_quote_cost_reference(user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
 
 
@@ -307,6 +362,20 @@ def _history_snapshot(history: CostItemHistory) -> dict[str, Any]:
     }
 
 
+def _usernames_for_ids(db: Session, user_ids: set[int | None]) -> dict[int, str]:
+    ids = {int(user_id) for user_id in user_ids if user_id}
+    if not ids:
+        return {}
+    rows = db.query(User.id, User.username).filter(User.id.in_(ids)).all()
+    return {int(user_id): username for user_id, username in rows}
+
+
+def _history_snapshot_with_user(history: CostItemHistory, usernames: dict[int, str]) -> dict[str, Any]:
+    data = _history_snapshot(history)
+    data["changed_by_username"] = usernames.get(history.changed_by or 0)
+    return data
+
+
 def serialize_cost_item(item: CostItem, *, include_history: bool = False) -> dict[str, Any]:
     data = {
         "id": item.id,
@@ -339,6 +408,406 @@ def serialize_cost_item(item: CostItem, *, include_history: bool = False) -> dic
     if include_history:
         data["history"] = [_history_snapshot(history) for history in sorted(item.history, key=lambda row: row.id)]
     return data
+
+
+def _quote_cost_reference_meta(item: Any) -> dict[str, Any]:
+    reference_source = getattr(item, "reference_source", "cost_items.active")
+    evidence_url = getattr(item, "evidence_url", None)
+    if not evidence_url:
+        if reference_source == "enterprise_quota.active":
+            evidence_url = (
+                f"/admin/enterprise-quota?version_id={getattr(item, 'enterprise_quota_version_id', '')}"
+                f"&quota_item_id={getattr(item, 'enterprise_quota_item_id', getattr(item, 'id', ''))}"
+            )
+        else:
+            evidence_url = f"/admin/cost-db?cost_item_id={getattr(item, 'id', '')}"
+    return {
+        "reference_source": reference_source,
+        "source_type": getattr(item, "source_type", "cost_item"),
+        "reference_price_source": getattr(item, "reference_price_source", None),
+        "enterprise_quota_version_id": getattr(item, "enterprise_quota_version_id", None),
+        "enterprise_quota_version_code": getattr(item, "enterprise_quota_version_code", None),
+        "enterprise_quota_version_name": getattr(item, "enterprise_quota_version_name", None),
+        "enterprise_quota_item_id": getattr(item, "enterprise_quota_item_id", None),
+        "quota_code": getattr(item, "quota_code", None),
+        "section_code": getattr(item, "section_code", None),
+        "section_name": getattr(item, "section_name", None),
+        "work_content": getattr(item, "work_content", None),
+        "evidence_url": evidence_url,
+        "cost_item_url": evidence_url,
+    }
+
+
+def serialize_quote_cost_candidate(item: CostItem, *, include_full_cost: bool = False) -> dict[str, Any]:
+    if include_full_cost:
+        data = serialize_cost_item(item)
+        data.update(_quote_cost_reference_meta(item))
+        return data
+    data = {
+        "id": item.id,
+        "category": item.category,
+        "subcategory": item.subcategory,
+        "item_name": item.item_name,
+        "spec": item.spec,
+        "unit": item.unit,
+        "price": item.price,
+        "price_type": item.price_type,
+        "status": item.status,
+        "updated_at": _format_dt(item.updated_at),
+        "restricted": True,
+    }
+    data.update(_quote_cost_reference_meta(item))
+    return data
+
+
+def _duplicate_conflict_detail(item: CostItem, conflicts: list[dict[str, Any]]) -> dict[str, Any]:
+    message = conflicts[0]["message"] if conflicts else "已存在冲突的 active 成本项"
+    return {
+        "code": DUPLICATE_CONFLICT_CODE,
+        "message": message,
+        "item": serialize_cost_item(item),
+        "matches": [conflict["existing_item"] for conflict in conflicts],
+        "conflicts": conflicts,
+    }
+
+
+def _latest_successful_rag_sync_run(db: Session) -> CostRagSyncRun | None:
+    return (
+        db.query(CostRagSyncRun)
+        .filter(CostRagSyncRun.status == "success")
+        .order_by(CostRagSyncRun.finished_at.desc(), CostRagSyncRun.started_at.desc(), CostRagSyncRun.id.desc())
+        .first()
+    )
+
+
+def _serialize_lineage_rag_run(run: CostRagSyncRun | None) -> dict[str, Any] | None:
+    if not run:
+        return None
+    return {
+        "id": run.id,
+        "status": run.status,
+        "requested_count": int(run.requested_count or 0),
+        "synced_count": int(run.synced_count or 0),
+        "started_at": _format_dt(run.started_at),
+        "finished_at": _format_dt(run.finished_at),
+        "triggered_by_username": run.triggered_by_username,
+    }
+
+
+def _parse_cost_notes_metadata(notes: str | None) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    for raw_line in (notes or "").splitlines():
+        line = raw_line.strip()
+        if not line or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if key and value and value != "-":
+            metadata[key] = value
+    return metadata
+
+
+def _quote_job_number_map(db: Session, job_ids: list[str | None]) -> dict[str, str]:
+    values = list({job_id for job_id in job_ids if job_id})
+    if not values:
+        return {}
+    return {
+        job.job_id: number
+        for job in db.query(QuoteJob).filter(QuoteJob.job_id.in_(values)).all()
+        if (number := quote_job_number(job))
+    }
+
+
+def _source_origin(
+    item: CostItem,
+    usernames: dict[int, str],
+    quote_job_numbers: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    metadata = _parse_cost_notes_metadata(item.notes)
+    quote_job_id = metadata.get("quote_job_id")
+    return {
+        "source": item.source,
+        "created_by": item.created_by,
+        "created_by_username": usernames.get(item.created_by or 0),
+        "created_at": _format_dt(item.created_at),
+        "quote_job_id": quote_job_id,
+        "quote_job_number": (quote_job_numbers or {}).get(quote_job_id or ""),
+        "quote_history_id": _parse_int(metadata.get("quote_history_id")),
+        "line_no": _parse_int(metadata.get("line_no")),
+        "requirement_row_key": metadata.get("requirement_row_key"),
+        "source_sheet": metadata.get("source_sheet"),
+        "raw_row_index": _parse_int(metadata.get("raw_row_index")),
+        "confirmed_unit_price": _parse_float(metadata.get("confirmed_unit_price")),
+        "confirmed_total_price": _parse_float(metadata.get("confirmed_total_price")),
+        "draft_price_source": metadata.get("draft_price_source"),
+        "manual_price_action": metadata.get("manual_price_action"),
+        "final_price_source": metadata.get("final_price_source"),
+        "price_confirmation_label": metadata.get("price_confirmation_label"),
+        "cost_item_source": metadata.get("cost_item_source"),
+        "notice": metadata.get("notice"),
+    }
+
+
+def _parse_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _lineage_destination(item: CostItem, quote_usage_count: int, latest_rag_run: CostRagSyncRun | None) -> dict[str, Any]:
+    participates_in_quote = item.status == COST_STATUS_ACTIVE
+    in_rag_scope = item.status == COST_STATUS_ACTIVE
+    if item.status == COST_STATUS_DRAFT:
+        status_text = "待成本部审核，不参与报价匹配、底价兜底或 RAG 同步"
+    elif item.status == COST_STATUS_ACTIVE:
+        status_text = "已启用，参与后续报价匹配、底价兜底，并可同步到 RAG"
+    else:
+        status_text = "已归档冻结，不参与后续报价匹配、底价兜底或 RAG 同步"
+    return {
+        "status": item.status,
+        "status_text": status_text,
+        "participates_in_quote": participates_in_quote,
+        "in_rag_sync_scope": in_rag_scope,
+        "quote_usage_count": quote_usage_count,
+        "latest_successful_rag_sync": _serialize_lineage_rag_run(latest_rag_run) if in_rag_scope else None,
+        "rag_sync_note": "当前仅按 active 范围推断是否进入同步；尚未记录单条同步明细",
+    }
+
+
+def _quote_usage_stats(db: Session, item_ids: list[int]) -> dict[int, dict[str, Any]]:
+    if not item_ids:
+        return {}
+    counts = {
+        int(cost_item_id): int(count or 0)
+        for cost_item_id, count in (
+            db.query(QuoteCostEvidence.cost_item_id, func.count(QuoteCostEvidence.id))
+            .filter(QuoteCostEvidence.cost_item_id.in_(item_ids))
+            .group_by(QuoteCostEvidence.cost_item_id)
+            .all()
+        )
+        if cost_item_id
+    }
+    latest_rows = (
+        db.query(QuoteCostEvidence)
+        .filter(QuoteCostEvidence.cost_item_id.in_(item_ids))
+        .order_by(QuoteCostEvidence.cost_item_id.asc(), QuoteCostEvidence.created_at.desc(), QuoteCostEvidence.id.desc())
+        .all()
+    )
+    latest_by_item: dict[int, QuoteCostEvidence] = {}
+    for row in latest_rows:
+        if row.cost_item_id and row.cost_item_id not in latest_by_item:
+            latest_by_item[int(row.cost_item_id)] = row
+    quote_job_numbers = _quote_job_number_map(db, [row.quote_job_id for row in latest_by_item.values()])
+    return {
+        item_id: {
+            "quote_usage_count": counts.get(item_id, 0),
+            "latest_quote_used_at": _format_dt(latest_by_item[item_id].created_at) if item_id in latest_by_item else None,
+            "latest_quote_job_id": latest_by_item[item_id].quote_job_id if item_id in latest_by_item else None,
+            "latest_quote_job_number": quote_job_numbers.get(latest_by_item[item_id].quote_job_id) if item_id in latest_by_item else None,
+            "latest_quote_history_id": latest_by_item[item_id].quote_history_id if item_id in latest_by_item else None,
+        }
+        for item_id in item_ids
+    }
+
+
+def _lineage_item(
+    item: CostItem,
+    *,
+    usernames: dict[int, str],
+    usage: dict[str, Any] | None = None,
+    latest_rag_run: CostRagSyncRun | None = None,
+    quote_job_numbers: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    usage = usage or {}
+    quote_usage_count = int(usage.get("quote_usage_count") or 0)
+    data = serialize_cost_item(item)
+    data["origin"] = _source_origin(item, usernames, quote_job_numbers)
+    data["destination"] = _lineage_destination(item, quote_usage_count, latest_rag_run)
+    data["quote_usage"] = {
+        "count": quote_usage_count,
+        "latest_used_at": usage.get("latest_quote_used_at"),
+        "latest_quote_job_id": usage.get("latest_quote_job_id"),
+        "latest_quote_job_number": usage.get("latest_quote_job_number"),
+        "latest_quote_history_id": usage.get("latest_quote_history_id"),
+    }
+    return data
+
+
+def cost_item_lineage_summary(db: Session, user: User) -> dict[str, Any]:
+    require_cost_db_access(user)
+    status_counts = {status_value: 0 for status_value in COST_STATUS_VALUES}
+    for status_value, count in db.query(CostItem.status, func.count(CostItem.id)).group_by(CostItem.status).all():
+        status_counts[status_value] = int(count or 0)
+
+    source_counts = {source_value: 0 for source_value in COST_SOURCE_VALUES}
+    for source_value, count in db.query(CostItem.source, func.count(CostItem.id)).group_by(CostItem.source).all():
+        source_counts[source_value] = int(count or 0)
+
+    used_item_ids_query = db.query(QuoteCostEvidence.cost_item_id).filter(QuoteCostEvidence.cost_item_id.isnot(None)).distinct()
+    quote_used_count = used_item_ids_query.count()
+    active_quote_used_count = (
+        db.query(func.count(func.distinct(CostItem.id)))
+        .join(QuoteCostEvidence, QuoteCostEvidence.cost_item_id == CostItem.id)
+        .filter(CostItem.status == COST_STATUS_ACTIVE)
+        .scalar()
+        or 0
+    )
+    latest_rag_run = _latest_successful_rag_sync_run(db)
+    return {
+        "total": sum(status_counts.values()),
+        "by_status": status_counts,
+        "by_source": source_counts,
+        "ai_suggested_draft_count": (
+            db.query(func.count(CostItem.id))
+            .filter(CostItem.source == "ai_suggested", CostItem.status == COST_STATUS_DRAFT)
+            .scalar()
+            or 0
+        ),
+        "quote_used_count": int(quote_used_count or 0),
+        "active_quote_used_count": int(active_quote_used_count or 0),
+        "active_rag_scope_count": status_counts.get(COST_STATUS_ACTIVE, 0),
+        "latest_successful_rag_sync": _serialize_lineage_rag_run(latest_rag_run),
+    }
+
+
+def list_cost_item_lineage(
+    db: Session,
+    user: User,
+    *,
+    statuses: list[str] | None = None,
+    source: str | None = None,
+    keyword: str | None = None,
+    has_quote_usage: bool | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[dict[str, Any]], int]:
+    require_cost_db_access(user)
+    query = db.query(CostItem)
+    if statuses:
+        invalid = [status_value for status_value in statuses if status_value not in COST_STATUS_VALUES]
+        if invalid:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="INVALID_STATUS")
+        query = query.filter(CostItem.status.in_(statuses))
+    if source:
+        query = query.filter(CostItem.source == normalize_source(source))
+    keyword_text = clean_text(keyword, 128)
+    if keyword_text:
+        pattern = f"%{keyword_text}%"
+        query = query.filter(
+            or_(
+                CostItem.item_name.like(pattern),
+                CostItem.spec.like(pattern),
+                CostItem.category.like(pattern),
+                CostItem.subcategory.like(pattern),
+                CostItem.notes.like(pattern),
+            )
+        )
+    used_ids = db.query(QuoteCostEvidence.cost_item_id).filter(QuoteCostEvidence.cost_item_id.isnot(None)).distinct()
+    if has_quote_usage is True:
+        query = query.filter(CostItem.id.in_(used_ids))
+    elif has_quote_usage is False:
+        query = query.filter(~CostItem.id.in_(used_ids))
+
+    total = query.count()
+    items = (
+        query.order_by(CostItem.updated_at.desc(), CostItem.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    item_ids = [int(item.id) for item in items]
+    usage_by_item = _quote_usage_stats(db, item_ids)
+    usernames = _usernames_for_ids(db, {item.created_by for item in items})
+    latest_rag_run = _latest_successful_rag_sync_run(db)
+    origin_job_ids = [_parse_cost_notes_metadata(item.notes).get("quote_job_id") for item in items]
+    usage_job_ids = [usage.get("latest_quote_job_id") for usage in usage_by_item.values()]
+    quote_job_numbers = _quote_job_number_map(db, origin_job_ids + usage_job_ids)
+    return [
+        _lineage_item(
+            item,
+            usernames=usernames,
+            usage=usage_by_item.get(int(item.id)),
+            latest_rag_run=latest_rag_run,
+            quote_job_numbers=quote_job_numbers,
+        )
+        for item in items
+    ], total
+
+
+def get_cost_item_lineage(db: Session, user: User, item_id: int) -> dict[str, Any]:
+    require_cost_db_access(user)
+    item = _get_item(db, item_id)
+    evidence_rows = (
+        db.query(QuoteCostEvidence)
+        .filter(QuoteCostEvidence.cost_item_id == item.id)
+        .order_by(QuoteCostEvidence.created_at.desc(), QuoteCostEvidence.id.desc())
+        .limit(50)
+        .all()
+    )
+    user_ids = {item.created_by}
+    user_ids.update(history.changed_by for history in item.history)
+    usernames = _usernames_for_ids(db, user_ids)
+    usage_by_item = _quote_usage_stats(db, [int(item.id)])
+    origin_job_ids = [_parse_cost_notes_metadata(item.notes).get("quote_job_id")]
+    usage_job_ids = [usage.get("latest_quote_job_id") for usage in usage_by_item.values()]
+    evidence_job_ids = [row.quote_job_id for row in evidence_rows]
+    quote_job_numbers = _quote_job_number_map(db, origin_job_ids + usage_job_ids + evidence_job_ids)
+    data = _lineage_item(
+        item,
+        usernames=usernames,
+        usage=usage_by_item.get(int(item.id)),
+        latest_rag_run=_latest_successful_rag_sync_run(db),
+        quote_job_numbers=quote_job_numbers,
+    )
+    data["history"] = [
+        _history_snapshot_with_user(history, usernames)
+        for history in sorted(item.history, key=lambda row: row.id)
+    ]
+    data["status_history"] = [event for event in data["history"] if event.get("change_type") == CHANGE_TYPE_STATUS]
+    data["price_history"] = [event for event in data["history"] if event.get("change_type") == CHANGE_TYPE_PRICE]
+    data["quote_usages"] = [_serialize_lineage_quote_usage(row, quote_job_numbers) for row in evidence_rows]
+    return data
+
+
+def _serialize_lineage_quote_usage(
+    row: QuoteCostEvidence,
+    quote_job_numbers: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "quote_id": row.quote_id,
+        "quote_job_id": row.quote_job_id,
+        "quote_job_number": (quote_job_numbers or {}).get(row.quote_job_id or ""),
+        "quote_history_id": row.quote_history_id,
+        "username": row.username,
+        "status": row.status,
+        "item_index": row.item_index,
+        "project_name": row.project_name,
+        "quantity": row.quantity,
+        "unit": row.unit,
+        "reference_price": row.reference_price,
+        "reference_total": row.reference_total,
+        "final_unit_price": row.final_unit_price,
+        "final_total_price": row.final_total_price,
+        "price_delta": row.price_delta,
+        "price_delta_rate": row.price_delta_rate,
+        "fallback_applied": row.fallback_applied,
+        "created_at": _format_dt(row.created_at),
+        "confirmed_at": _format_dt(row.confirmed_at),
+    }
 
 
 def _write_price_history(db: Session, item: CostItem, user: User, old_values: dict[str, Any], reason: str | None) -> None:
@@ -402,7 +871,7 @@ def _get_item(db: Session, item_id: int) -> CostItem:
 
 
 def create_cost_item(db: Session, user: User, payload: Mapping[str, Any] | Any) -> CostItem:
-    require_cost_db_manager(user)
+    require_cost_db_editor(user)
     data = _normalize_item_payload(_payload_dict(payload))
     item = CostItem(**data, status=COST_STATUS_DRAFT, created_by=user.id)
     db.add(item)
@@ -410,19 +879,16 @@ def create_cost_item(db: Session, user: User, payload: Mapping[str, Any] | Any) 
     return item
 
 
-def list_cost_items(
+def _cost_items_query(
     db: Session,
-    user: User,
     *,
     category: str | None = None,
     subcategory: str | None = None,
     statuses: list[str] | None = None,
     price_type: str | None = None,
+    source: str | None = None,
     keyword: str | None = None,
-    page: int = 1,
-    page_size: int = 20,
-) -> tuple[list[CostItem], int]:
-    require_cost_db_access(user)
+):
     query = db.query(CostItem)
     category_text = clean_text(category, 128)
     if category_text:
@@ -438,6 +904,8 @@ def list_cost_items(
         query = query.filter(CostItem.status.in_(statuses))
     if price_type:
         query = query.filter(CostItem.price_type == normalize_price_type(price_type))
+    if source:
+        query = query.filter(CostItem.source == normalize_source(source))
     keyword_text = clean_text(keyword, 128)
     if keyword_text:
         pattern = f"%{keyword_text}%"
@@ -450,6 +918,95 @@ def list_cost_items(
                 CostItem.notes.like(pattern),
             )
         )
+    return query
+
+
+def list_cost_items(
+    db: Session,
+    user: User,
+    *,
+    category: str | None = None,
+    subcategory: str | None = None,
+    statuses: list[str] | None = None,
+    price_type: str | None = None,
+    source: str | None = None,
+    keyword: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[CostItem], int]:
+    require_cost_db_access(user)
+    query = _cost_items_query(
+        db,
+        category=category,
+        subcategory=subcategory,
+        statuses=statuses,
+        price_type=price_type,
+        source=source,
+        keyword=keyword,
+    )
+    total = query.count()
+    items = query.order_by(CostItem.updated_at.desc(), CostItem.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return items, total
+
+
+def export_cost_items(
+    db: Session,
+    user: User,
+    *,
+    category: str | None = None,
+    subcategory: str | None = None,
+    statuses: list[str] | None = None,
+    price_type: str | None = None,
+    source: str | None = None,
+    keyword: str | None = None,
+    limit: int = 5000,
+) -> tuple[list[CostItem], int]:
+    require_cost_db_exporter(user)
+    query = _cost_items_query(
+        db,
+        category=category,
+        subcategory=subcategory,
+        statuses=statuses,
+        price_type=price_type,
+        source=source,
+        keyword=keyword,
+    )
+    total = query.count()
+    items = query.order_by(CostItem.updated_at.desc(), CostItem.id.desc()).limit(limit).all()
+    return items, total
+
+
+def list_quote_cost_candidates(
+    db: Session,
+    user: User,
+    *,
+    keyword: str | None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[CostItem], int]:
+    require_quote_cost_reference_access(user)
+    keyword_text = clean_text(keyword, 128)
+    if not keyword_text:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="KEYWORD_REQUIRED")
+    if len(keyword_text) < 2:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="KEYWORD_TOO_SHORT")
+    if active_enterprise_quota_version(db) is not None:
+        return search_active_enterprise_quota_cost_references(
+            db,
+            keyword_text,
+            page=page,
+            page_size=page_size,
+        )
+    query = db.query(CostItem).filter(CostItem.status == COST_STATUS_ACTIVE)
+    pattern = f"%{keyword_text}%"
+    query = query.filter(
+        or_(
+            CostItem.item_name.like(pattern),
+            CostItem.spec.like(pattern),
+            CostItem.category.like(pattern),
+            CostItem.subcategory.like(pattern),
+        )
+    )
     total = query.count()
     items = query.order_by(CostItem.updated_at.desc(), CostItem.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
     return items, total
@@ -461,8 +1018,11 @@ def get_cost_item(db: Session, user: User, item_id: int) -> CostItem:
 
 
 def update_cost_item(db: Session, user: User, item_id: int, payload: Mapping[str, Any] | Any) -> CostItem:
-    require_cost_db_manager(user)
     item = _get_item(db, item_id)
+    if item.status == COST_STATUS_ACTIVE:
+        require_cost_db_approver(user)
+    else:
+        require_cost_db_editor(user)
     if item.status == COST_STATUS_ARCHIVED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="STATE_CONFLICT")
 
@@ -478,6 +1038,13 @@ def update_cost_item(db: Session, user: User, item_id: int, payload: Mapping[str
     if "price" not in data and any(field in data for field in PRICE_FIELDS if field != "price"):
         candidate["price"] = None
     normalized = _normalize_item_payload(candidate)
+    if item.status == COST_STATUS_ACTIVE:
+        duplicate_candidate = dict(candidate)
+        duplicate_candidate.update(normalized)
+        duplicate_candidate["id"] = item.id
+        conflicts = active_duplicate_conflicts(db, duplicate_candidate, exclude_item_id=item.id)
+        if conflicts:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_duplicate_conflict_detail(item, conflicts))
     for field, value in normalized.items():
         setattr(item, field, value)
     db.flush()
@@ -485,17 +1052,23 @@ def update_cost_item(db: Session, user: User, item_id: int, payload: Mapping[str
     return item
 
 
-def activate_cost_item(db: Session, user: User, item_id: int) -> CostItem:
-    require_cost_db_manager(user)
+def activate_cost_item(db: Session, user: User, item_id: int, *, reason: str | None = None) -> CostItem:
+    require_cost_db_approver(user)
     item = _get_item(db, item_id)
     if item.status == COST_STATUS_ACTIVE:
         return item
     if item.status == COST_STATUS_ARCHIVED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="STATE_CONFLICT")
+    cleaned_reason = clean_text(reason, 2000)
+    if not cleaned_reason:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="REASON_REQUIRED")
+    conflicts = active_duplicate_conflicts_for_item(db, item)
+    if conflicts:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_duplicate_conflict_detail(item, conflicts))
     old_status = item.status
     item.status = COST_STATUS_ACTIVE
     db.flush()
-    _write_status_history(db, item, user, old_status, "activated")
+    _write_status_history(db, item, user, old_status, cleaned_reason)
     return item
 
 
@@ -506,7 +1079,7 @@ def bulk_update_cost_item_status(
     target_status: str,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    require_cost_db_manager(user)
+    require_cost_db_approver(user)
     seen: set[int] = set()
     normalized_ids: list[int] = []
     for item_id in item_ids:
@@ -518,11 +1091,11 @@ def bulk_update_cost_item_status(
         normalized_ids.append(item_id)
     if not normalized_ids:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ITEM_IDS_REQUIRED")
-    if target_status not in {COST_STATUS_ACTIVE, COST_STATUS_DRAFT}:
+    if target_status not in {COST_STATUS_ACTIVE, COST_STATUS_DRAFT, COST_STATUS_ARCHIVED}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="INVALID_TARGET_STATUS")
 
     cleaned_reason = clean_text(reason, 2000)
-    if target_status == COST_STATUS_DRAFT and not cleaned_reason:
+    if target_status in {COST_STATUS_ACTIVE, COST_STATUS_DRAFT, COST_STATUS_ARCHIVED} and not cleaned_reason:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="REASON_REQUIRED")
 
     items = db.query(CostItem).filter(CostItem.id.in_(normalized_ids)).all()
@@ -537,17 +1110,28 @@ def bulk_update_cost_item_status(
         if item is None:
             not_found.append(item_id)
             continue
-        if item.status == COST_STATUS_ARCHIVED:
-            conflicts.append({"id": item.id, "status": item.status, "reason": "archived_locked"})
-            continue
         if item.status == target_status:
             skipped.append({"id": item.id, "status": item.status, "reason": f"already_{target_status}"})
             continue
+        if item.status == COST_STATUS_ARCHIVED:
+            conflicts.append({"id": item.id, "status": item.status, "reason": "archived_locked"})
+            continue
+        if target_status == COST_STATUS_ACTIVE:
+            duplicate_conflicts = active_duplicate_conflicts_for_item(db, item)
+            if duplicate_conflicts:
+                conflicts.append(
+                    {
+                        "id": item.id,
+                        "status": item.status,
+                        "reason": "duplicate_active_conflict",
+                        "duplicate_conflict": _duplicate_conflict_detail(item, duplicate_conflicts),
+                    }
+                )
+                continue
 
         old_status = item.status
         item.status = target_status
-        change_reason = cleaned_reason or ("bulk activated" if target_status == COST_STATUS_ACTIVE else "bulk restored to draft")
-        _write_status_history(db, item, user, old_status, change_reason)
+        _write_status_history(db, item, user, old_status, cleaned_reason)
         changed_ids.append(item.id)
 
     db.flush()
@@ -566,7 +1150,7 @@ def bulk_update_cost_item_status(
 
 
 def withdraw_cost_item_activation(db: Session, user: User, item_id: int, reason: str | None = None) -> CostItem:
-    require_cost_db_manager(user)
+    require_cost_db_approver(user)
     item = _get_item(db, item_id)
     if item.status == COST_STATUS_DRAFT:
         return item
@@ -583,7 +1167,7 @@ def withdraw_cost_item_activation(db: Session, user: User, item_id: int, reason:
 
 
 def archive_cost_item(db: Session, user: User, item_id: int, reason: str | None = None) -> CostItem:
-    require_cost_db_manager(user)
+    require_cost_db_approver(user)
     item = _get_item(db, item_id)
     if item.status == COST_STATUS_ARCHIVED:
         return item
@@ -712,7 +1296,7 @@ def parse_cost_workbook(content: bytes) -> tuple[list[dict[str, Any]], list[dict
 
 
 def build_import_preview(db: Session, user: User, content: bytes) -> ImportBatch:
-    require_cost_db_manager(user)
+    require_cost_db_editor(user)
     _cleanup_import_batches()
     items, skipped_rows = parse_cost_workbook(content)
     duplicate_warnings: list[dict[str, Any]] = []
@@ -773,7 +1357,7 @@ def import_preview_response(batch: ImportBatch) -> dict[str, Any]:
 
 
 def confirm_import_batch(db: Session, user: User, batch_id: str) -> dict[str, Any]:
-    require_cost_db_manager(user)
+    require_cost_db_editor(user)
     batch = _get_import_batch(batch_id)
     if batch.confirmed and batch.result is not None:
         return batch.result

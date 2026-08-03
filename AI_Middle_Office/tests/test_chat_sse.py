@@ -175,10 +175,10 @@ def test_chat_sse_parses_excel_quote_sheet_before_gateway(client, monkeypatch):
         )
 
     async def fail_vision_call(*args, **kwargs):
-        raise AssertionError("Excel quote sheets should not be sent to GLM-4V")
+        raise AssertionError("Excel quote sheets should not be sent to vision model")
 
     monkeypatch.setattr("app.api.v1.quote.post_json_via_gateway", fake_post_json_via_gateway)
-    monkeypatch.setattr("app.api.v1.quote.call_glm_vision_extract", fail_vision_call)
+    monkeypatch.setattr("app.api.v1.quote.call_quote_vision_extract", fail_vision_call)
 
     response = client.post(
         "/api/v1/chat",

@@ -18,8 +18,12 @@ from app.models.file_object import FileObject
 from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.file_storage import get_object_bytes
-from app.services.model_gateway import call_glm_vision_extract, post_json_via_gateway
-from app.services.quote_cost_context import build_cost_context_fallback_quote, safe_append_quote_cost_context
+from app.services.model_gateway import call_quote_vision_extract, post_json_via_gateway, quote_vision_model_label
+from app.services.quote_cost_context import (
+    build_cost_context_fallback_quote,
+    cost_context_references_as_source_rows,
+    safe_append_quote_cost_context,
+)
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
 from app.services.quote_excel_parser import (
     QuoteExcelParseError,
@@ -34,7 +38,16 @@ from app.services.quote_job_readability import (
     apply_job_result_summary,
     create_job_event_from_payload,
 )
+from app.services.quote_history import project_details
 from app.services.quote_helpers import normalize_quote_request_text, sign_payload
+from app.services.quote_review import (
+    attach_requirement_integrity_summary,
+    build_requirement_rows_quote_message,
+    merge_requirement_preview_rows,
+    missing_requirement_rows_for_preview,
+    quote_requirement_rows,
+    requirement_rows_as_source_rows,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +62,58 @@ def _utcnow() -> datetime:
 
 def _elapsed_ms(started_at: float) -> int:
     return max(1, int(round((time.perf_counter() - started_at) * 1000)))
+
+
+def _quote_n8n_timeout_seconds() -> int:
+    return max(1, int(getattr(settings, "quote_n8n_timeout_seconds", 180) or 180))
+
+
+def _quote_job_heartbeat_interval_seconds() -> float:
+    try:
+        interval = float(getattr(settings, "quote_job_heartbeat_interval_seconds", 15.0) or 0)
+    except (TypeError, ValueError):
+        interval = 15.0
+    return max(0.0, interval)
+
+
+def _quote_requirement_batch_size() -> int:
+    try:
+        value = int(getattr(settings, "quote_requirement_batch_size", 20) or 20)
+    except (TypeError, ValueError):
+        value = 20
+    return max(1, min(value, 50))
+
+
+def _quote_requirement_batch_threshold() -> int:
+    try:
+        value = int(getattr(settings, "quote_requirement_batch_threshold", 30) or 30)
+    except (TypeError, ValueError):
+        value = 30
+    return max(1, value)
+
+
+def _quote_requirement_batch_retry_count() -> int:
+    try:
+        value = int(getattr(settings, "quote_requirement_batch_retry_count", 1) or 0)
+    except (TypeError, ValueError):
+        value = 1
+    return max(0, min(value, 2))
+
+
+def _bind_requirement_rows_to_payload(payload: Any, requirement_rows: list[Any]) -> Any:
+    if not requirement_rows or not isinstance(payload, dict):
+        return payload
+    preview_rows = project_details(payload)
+    merged_rows, merge_summary = merge_requirement_preview_rows(requirement_rows, preview_rows)
+    return {
+        **payload,
+        "project_details": merged_rows,
+        "requirement_merge_summary": merge_summary,
+    }
+
+
+def _chunk_requirement_rows(rows: list[Any], size: int) -> list[list[Any]]:
+    return [rows[index : index + size] for index in range(0, len(rows), size)]
 
 
 def _apply_runtime_duration(job: QuoteJob, started_at: float) -> None:
@@ -133,6 +198,182 @@ async def _load_job_file_content(job: QuoteJob, db) -> Optional[bytes]:
     return None
 
 
+async def _iter_batched_requirement_quote_events(
+    *,
+    username: str,
+    base_query: str,
+    db: Optional[Session],
+    requirement_rows: list[Any],
+) -> Iterable[Tuple[str, str, Dict[str, Any]]]:
+    batch_size = _quote_requirement_batch_size()
+    retry_count = _quote_requirement_batch_retry_count()
+    batches = _chunk_requirement_rows(requirement_rows, batch_size)
+    full_source_rows = requirement_rows_as_source_rows(requirement_rows)
+    all_preview_rows: list[dict[str, Any]] = []
+    batch_reports: list[dict[str, Any]] = []
+
+    yield (
+        "processing",
+        f"[Requirement Batch] 确认清单共 {len(requirement_rows)} 行，已切分为 {len(batches)} 批逐批报价。",
+        {
+            "stage": "requirement_batch",
+            "requirement_row_count": len(requirement_rows),
+            "batch_size": batch_size,
+            "batch_count": len(batches),
+        },
+    )
+
+    for batch_index, batch_rows in enumerate(batches, start=1):
+        pending_rows = list(batch_rows)
+        attempt = 0
+        while pending_rows and attempt <= retry_count:
+            is_retry = attempt > 0
+            attempt_label = "补报" if is_retry else "报价"
+            batch_query = build_requirement_rows_quote_message(base_query, pending_rows)
+            batch_source_rows = requirement_rows_as_source_rows(pending_rows)
+            batch_query, cost_context = safe_append_quote_cost_context(db, batch_query, source_rows=batch_source_rows)
+            if cost_context.matched_count:
+                logger.info(
+                    "quote_requirement_batch_cost_context_attached",
+                    extra={
+                        "username": username,
+                        "event": "quote_requirement_batch_cost_context_attached",
+                        "batch_index": batch_index,
+                        "attempt": attempt + 1,
+                        "matched_count": cost_context.matched_count,
+                    },
+                )
+
+            yield (
+                "processing",
+                f"[Requirement Batch] 第 {batch_index}/{len(batches)} 批{attempt_label}中，本次 {len(pending_rows)} 行。",
+                {
+                    "stage": "requirement_batch",
+                    "batch_index": batch_index,
+                    "batch_count": len(batches),
+                    "attempt": attempt + 1,
+                    "row_count": len(pending_rows),
+                    "retry": is_retry,
+                },
+            )
+
+            payload = {"text": {"content": batch_query}, "conversationId": str(uuid.uuid4())}
+            request_started_at = time.perf_counter()
+            heartbeat_interval = _quote_job_heartbeat_interval_seconds()
+            request_task = asyncio.create_task(
+                post_json_via_gateway(
+                    provider="n8n",
+                    model="dify-deepseek",
+                    endpoint_type="quote_calc",
+                    url=settings.n8n_webhook_url_calc,
+                    json_payload=payload,
+                    headers=sign_payload(payload),
+                    timeout=_quote_n8n_timeout_seconds(),
+                    username=username,
+                )
+            )
+
+            response: httpx.Response | None = None
+            error_detail = ""
+            try:
+                if heartbeat_interval <= 0:
+                    response = await request_task
+                else:
+                    while True:
+                        done, _ = await asyncio.wait({request_task}, timeout=heartbeat_interval)
+                        if request_task in done:
+                            response = request_task.result()
+                            break
+                        elapsed_seconds = max(1, int(round(time.perf_counter() - request_started_at)))
+                        yield (
+                            "processing",
+                            f"[Requirement Batch] 第 {batch_index}/{len(batches)} 批仍在处理，已等待约 {elapsed_seconds} 秒。",
+                            {
+                                "stage": "requirement_batch",
+                                "heartbeat": True,
+                                "elapsed_seconds": elapsed_seconds,
+                                "batch_index": batch_index,
+                                "batch_count": len(batches),
+                            },
+                        )
+            except httpx.TimeoutException as exc:
+                logger.exception(
+                    "quote_requirement_batch_timeout",
+                    extra={"username": username, "event": "quote_requirement_batch_timeout", "batch_index": batch_index},
+                )
+                error_detail = str(exc) or "timeout"
+            except Exception as exc:
+                logger.exception(
+                    "quote_requirement_batch_failed",
+                    extra={"username": username, "event": "quote_requirement_batch_failed", "batch_index": batch_index},
+                )
+                error_detail = str(exc) or "request_failed"
+
+            batch_preview_rows: list[dict[str, Any]] = []
+            parse_status = "ok"
+            if response is None:
+                parse_status = "request_failed"
+            elif response.status_code != 200:
+                parse_status = "http_failed"
+                try:
+                    error_detail = response.json().get("message", f"HTTP {response.status_code}")
+                except Exception:
+                    error_detail = f"HTTP {response.status_code}"
+            else:
+                try:
+                    calc_result = response.json()
+                    batch_preview_rows = project_details(calc_result)
+                except Exception:
+                    parse_status = "parse_failed"
+                    error_detail = (response.text or "").strip()[:300] or "empty_response"
+
+            all_preview_rows.extend(batch_preview_rows)
+            missing_rows = missing_requirement_rows_for_preview(pending_rows, batch_preview_rows)
+            batch_reports.append(
+                {
+                    "batch_index": batch_index,
+                    "attempt": attempt + 1,
+                    "status": parse_status,
+                    "requested_count": len(pending_rows),
+                    "returned_count": len(batch_preview_rows),
+                    "missing_count": len(missing_rows),
+                    "error": error_detail,
+                }
+            )
+            pending_rows = missing_rows
+            attempt += 1
+
+        if pending_rows:
+            yield (
+                "processing",
+                f"[Requirement Batch] 第 {batch_index}/{len(batches)} 批仍有 {len(pending_rows)} 行未返回，稍后生成需人工补价的占位行。",
+                {
+                    "stage": "requirement_batch",
+                    "batch_index": batch_index,
+                    "batch_count": len(batches),
+                    "missing_count": len(pending_rows),
+                },
+            )
+
+    merged_rows, merge_summary = merge_requirement_preview_rows(requirement_rows, all_preview_rows)
+    calc_result = {
+        "project_details": merged_rows,
+        "requirement_batch_summary": {
+            **merge_summary,
+            "batch_size": batch_size,
+            "batch_count": len(batches),
+            "retry_count": retry_count,
+            "batch_reports": batch_reports,
+        },
+    }
+    calc_result = attach_requirement_integrity_summary(calc_result, requirement_rows)
+    yield (
+        "preview",
+        "[Requirement Batch] 确认清单分批报价已完成，已按原确认行顺序合并预审单。",
+        {"stage": "completed", "data": calc_result, "source_rows": full_source_rows},
+    )
+
+
 async def _iter_quote_events(
     *,
     username: str,
@@ -141,9 +382,11 @@ async def _iter_quote_events(
     mime_type: Optional[str],
     filename: Optional[str],
     db: Optional[Session] = None,
+    requirement_rows: Optional[list[Any]] = None,
 ) -> Iterable[Tuple[str, str, Dict[str, Any]]]:
     final_query = message or ""
     excel_source_rows: list[dict[str, Any]] = []
+    requirement_rows = requirement_rows or []
 
     yield (
         "processing",
@@ -192,15 +435,16 @@ async def _iter_quote_events(
             )
             return
         else:
+            vision_model = quote_vision_model_label()
             yield (
                 "processing",
-                f"[Vision Module] 📸 正在驱动 GLM-4V 多模态大模型扫描附件: {filename}...",
+                f"[Vision Module] 📸 正在驱动 {vision_model} 多模态大模型扫描附件: {filename}...",
                 {"stage": "vision"},
             )
 
             base64_data = base64.b64encode(file_content).decode("utf-8")
             try:
-                extracted_text = await call_glm_vision_extract(
+                extracted_text = await call_quote_vision_extract(
                     base64_data,
                     mime_type or "",
                     username=username,
@@ -212,7 +456,7 @@ async def _iter_quote_events(
                 )
                 yield (
                     "error",
-                    f"❌ [Vision Module] GLM-4V 调用失败: {str(glm_err)}",
+                    f"❌ [Vision Module] {vision_model} 调用失败: {str(glm_err)}",
                     {"stage": "vision"},
                 )
                 return
@@ -220,7 +464,7 @@ async def _iter_quote_events(
             if not extracted_text:
                 yield (
                     "error",
-                    "❌ [Vision Module] GLM-4V 返回空内容，请重试",
+                    f"❌ [Vision Module] {vision_model} 返回空内容，请重试",
                     {"stage": "vision"},
                 )
                 return
@@ -249,7 +493,27 @@ async def _iter_quote_events(
         return
 
     final_query = normalize_quote_request_text(final_query)
+    if requirement_rows and len(requirement_rows) > _quote_requirement_batch_threshold():
+        async for event in _iter_batched_requirement_quote_events(
+            username=username,
+            base_query=final_query,
+            db=db,
+            requirement_rows=requirement_rows,
+        ):
+            yield event
+        return
+
+    if requirement_rows:
+        final_query = build_requirement_rows_quote_message(final_query, requirement_rows)
+        if not excel_source_rows:
+            excel_source_rows = requirement_rows_as_source_rows(requirement_rows)
+        yield (
+            "processing",
+            f"[Requirement Guard] 已锁定 {len(requirement_rows)} 行确认清单，要求 AI 按行逐条返回预审报价。",
+            {"stage": "requirement_guard", "requirement_row_count": len(requirement_rows)},
+        )
     final_query, cost_context = safe_append_quote_cost_context(db, final_query, source_rows=excel_source_rows)
+    cost_priority_source_rows = excel_source_rows or cost_context_references_as_source_rows(cost_context)
     if cost_context.matched_count:
         logger.info(
             "quote_job_cost_context_attached",
@@ -267,17 +531,35 @@ async def _iter_quote_events(
     )
 
     payload = {"text": {"content": final_query}, "conversationId": str(uuid.uuid4())}
-    try:
-        response = await post_json_via_gateway(
+    request_started_at = time.perf_counter()
+    heartbeat_interval = _quote_job_heartbeat_interval_seconds()
+    request_task = asyncio.create_task(
+        post_json_via_gateway(
             provider="n8n",
             model="dify-deepseek",
             endpoint_type="quote_calc",
             url=settings.n8n_webhook_url_calc,
             json_payload=payload,
             headers=sign_payload(payload),
-            timeout=180,
+            timeout=_quote_n8n_timeout_seconds(),
             username=username,
         )
+    )
+    try:
+        if heartbeat_interval <= 0:
+            response = await request_task
+        else:
+            while True:
+                done, _ = await asyncio.wait({request_task}, timeout=heartbeat_interval)
+                if request_task in done:
+                    response = request_task.result()
+                    break
+                elapsed_seconds = max(1, int(round(time.perf_counter() - request_started_at)))
+                yield (
+                    "processing",
+                    f"[n8n Workflow] AI 报价仍在处理中，已等待约 {elapsed_seconds} 秒，请保持页面打开。",
+                    {"stage": "n8n", "heartbeat": True, "elapsed_seconds": elapsed_seconds},
+                )
     except httpx.TimeoutException:
         logger.exception("quote_request_timeout", extra={"username": username, "event": "quote_request_timeout"})
         yield (
@@ -310,19 +592,21 @@ async def _iter_quote_events(
         fallback_result = None
         if not (response.text or "").strip():
             fallback_result = build_cost_context_fallback_quote(cost_context, reason="n8n_empty_response")
-        if fallback_result:
-            logger.warning(
-                "n8n_empty_response_cost_context_fallback",
-                extra={
-                    "username": username,
+            if fallback_result:
+                logger.warning(
+                    "n8n_empty_response_cost_context_fallback",
+                    extra={
+                        "username": username,
                     "event": "n8n_empty_response_cost_context_fallback",
-                    "matched_count": cost_context.matched_count,
-                },
-            )
-            yield (
-                "preview",
-                "[Cost DB] N8N 返回空响应，已用成本库 active 底价生成预审报价，请人工复核。",
-                {"stage": "completed", "data": fallback_result, "source_rows": excel_source_rows},
+                        "matched_count": cost_context.matched_count,
+                    },
+                )
+                fallback_result = _bind_requirement_rows_to_payload(fallback_result, requirement_rows)
+                fallback_result = attach_requirement_integrity_summary(fallback_result, requirement_rows)
+                yield (
+                    "preview",
+                    "[Cost DB] N8N 返回空响应，已用成本库 active 底价生成预审报价，请人工复核。",
+                {"stage": "completed", "data": fallback_result, "source_rows": cost_priority_source_rows},
             )
             return
         logger.exception(
@@ -338,11 +622,13 @@ async def _iter_quote_events(
         )
         return
 
+    calc_result = _bind_requirement_rows_to_payload(calc_result, requirement_rows)
+    calc_result = attach_requirement_integrity_summary(calc_result, requirement_rows)
     logger.info("quote_request_finished", extra={"username": username, "event": "quote_request_finished"})
     yield (
         "preview",
         "[n8n Workflow] ✅ AI 预审数据已就绪，请人工复核！",
-        {"stage": "completed", "data": calc_result, "source_rows": excel_source_rows},
+        {"stage": "completed", "data": calc_result, "source_rows": cost_priority_source_rows},
     )
 
 
@@ -398,6 +684,8 @@ async def run_quote_job_async(job_id: str) -> None:
             db.commit()
             return
 
+        stored_requirement_rows = quote_requirement_rows(db, job.job_id)
+
         async for status_name, message, extra in _iter_quote_events(
             username=job.username,
             message=job.message or "",
@@ -405,6 +693,7 @@ async def run_quote_job_async(job_id: str) -> None:
             mime_type=job.file_mime_type,
             filename=job.file_name,
             db=db,
+            requirement_rows=stored_requirement_rows,
         ):
             db.refresh(job)
             if job.status in TERMINAL_STATUSES:
@@ -415,6 +704,7 @@ async def run_quote_job_async(job_id: str) -> None:
                 extra = dict(extra)
                 source_rows = extra.pop("source_rows", None)
                 extra["data"] = safe_enrich_quote_payload_with_cost_refs(db, extra.get("data"), source_rows=source_rows)
+                extra["data"] = attach_requirement_integrity_summary(extra.get("data"), stored_requirement_rows)
             append_job_event(job, status_name, message, trace_id=job.trace_id, **extra)
 
             if status_name == "preview":
@@ -425,6 +715,7 @@ async def run_quote_job_async(job_id: str) -> None:
                 apply_job_result_summary(job, result_payload)
                 _apply_runtime_duration(job, run_started_at)
                 user.quota -= 1
+                db.commit()
                 safe_record_ai_preview(
                     db,
                     username=job.username,
@@ -446,6 +737,7 @@ async def run_quote_job_async(job_id: str) -> None:
     except Exception as exc:
         logger.exception("quote_job_crashed", extra={"job_id": job_id, "event": "quote_job_crashed"})
         try:
+            db.rollback()
             job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).first()
             if job:
                 job.status = "failed"

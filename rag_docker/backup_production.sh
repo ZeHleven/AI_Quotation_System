@@ -66,6 +66,11 @@ backup_mysql() {
   local mysql_host="${MYSQL_HOST:-127.0.0.1}"
   local mysql_port="${MYSQL_PORT:-3306}"
   local db_args="--all-databases"
+  local tablespace_args=""
+
+  if [ "${MYSQLDUMP_NO_TABLESPACES:-true}" != "false" ]; then
+    tablespace_args="--no-tablespaces"
+  fi
 
   if [ -n "$mysql_database" ]; then
     db_args="--databases $mysql_database"
@@ -78,7 +83,7 @@ backup_mysql() {
     fi
     log "Backing up MySQL through container $mysql_container"
     docker exec -e MYSQL_PWD="$mysql_password" "$mysql_container" sh -c \
-      "mysqldump -u\"$mysql_user\" --single-transaction --routines --triggers --events $db_args" \
+      "mysqldump -u\"$mysql_user\" --single-transaction --routines --triggers --events $tablespace_args $db_args" \
       > "$DEST/mysql.sql"
     return
   fi
@@ -93,6 +98,7 @@ backup_mysql() {
       --routines \
       --triggers \
       --events \
+      $tablespace_args \
       $db_args > "$DEST/mysql.sql"
     return
   fi

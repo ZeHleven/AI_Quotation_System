@@ -1,8 +1,10 @@
 import base64
 import logging
+import re
 from io import BytesIO
 
 import openpyxl
+from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 
@@ -21,6 +23,21 @@ def _cjk_len(s: str) -> int:
     return width
 
 
+def _parse_amount(value) -> float:
+    if value in (None, ""):
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).replace(",", "")
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not match:
+        return 0.0
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return 0.0
+
+
 def build_excel_base64(project_details: list) -> str:
     """用 openpyxl 生成自适应列宽的 Excel，返回 base64 字符串"""
     try:
@@ -31,9 +48,20 @@ def build_excel_base64(project_details: list) -> str:
         ws = wb.active
         ws.title = "报价单"
         ws.append(headers)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
 
+        total_amount = 0.0
         for item in project_details:
             ws.append([item.get(f, "") for f in field_map])
+            total_amount += _parse_amount(item.get("total_price"))
+
+        total_row = ws.max_row + 1
+        ws.append(["总合计报价金额", "", round(total_amount, 2), ""])
+        for cell in ws[total_row]:
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="FFF2CC")
+        ws.cell(row=total_row, column=3).number_format = '#,##0.00'
 
         for col_idx in range(1, len(headers) + 1):
             col_letter = get_column_letter(col_idx)

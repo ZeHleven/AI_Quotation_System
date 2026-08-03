@@ -1,0 +1,322 @@
+{
+  "version": "biz2x-gbt50854-2024-standard-v0",
+  "standard": {
+    "code": "GBT50854-2024",
+    "name": "房屋建筑与装饰工程工程量计算标准",
+    "source_file_hint": "（总）GBT50854-2024  房屋建筑与装饰工程工程量计算标准.pdf",
+    "source_text_status": "pdf_image_only_pending_ocr",
+    "scope_note": "首版用于 BIZ-2x 图纸识别工程量清单最小可用标准库。当前 PDF 无可抽取文本层，条目均为待 OCR/人工校对草稿，不得作为 active 标准直接生成最终清单。",
+    "strict_rules": [
+      "项目特征必须按标准库 feature_fields 字段口径生成。",
+      "工程量必须按标准库 quantity_rule 计算规则生成；无法计算时必须标记待人工确认。",
+      "AI 只允许提供图纸证据和候选，不允许自由编写项目特征或猜测工程量。"
+    ]
+  },
+  "items": [
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-FLOOR-TILE",
+      "item_name": "块料楼地面",
+      "chapter_name": "楼地面装饰工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "面层材料品种、规格、颜色", "required": true},
+        {"name": "结合层材料种类及厚度", "required": false},
+        {"name": "找平层材料种类及厚度", "required": false},
+        {"name": "防护材料种类", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["㎡", "m2", "平方米"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示尺寸以面积计算。",
+        "formula_type": "area",
+        "required_evidence": ["地面范围边界", "尺寸或面积标注", "楼地面做法"]
+      },
+      "drawing_evidence_requirements": ["平面图房间边界", "楼地面材料/做法表", "尺寸标注"],
+      "keywords": ["地砖", "防滑砖", "块料楼地面", "地面砖", "瓷砖地面"],
+      "exclusion_keywords": ["墙面砖", "踢脚线"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-FLOOR-WOOD",
+      "item_name": "木地板",
+      "chapter_name": "楼地面装饰工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "面层材料品种、规格", "required": true},
+        {"name": "龙骨材料种类、规格、间距", "required": false},
+        {"name": "基层材料种类", "required": false},
+        {"name": "防潮层做法", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["㎡", "m2", "平方米"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示尺寸以面积计算。",
+        "formula_type": "area",
+        "required_evidence": ["地面范围边界", "尺寸或面积标注", "木地板做法"]
+      },
+      "drawing_evidence_requirements": ["平面图房间边界", "材料表", "构造做法表"],
+      "keywords": ["木地板", "复合木地板", "实木地板", "地板"],
+      "exclusion_keywords": ["木门", "木饰面"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-WALL-TILE",
+      "item_name": "块料墙面",
+      "chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "墙体类型", "required": false},
+        {"name": "面层材料品种、规格、颜色", "required": true},
+        {"name": "粘结层材料种类", "required": false},
+        {"name": "嵌缝材料种类", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["㎡", "m2", "平方米"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示墙面面积计算，并按标准扣减/不扣减规则处理洞口和附墙构件。",
+        "formula_type": "vertical_area",
+        "required_evidence": ["墙面长度", "墙面高度", "门窗洞口", "墙面做法"]
+      },
+      "drawing_evidence_requirements": ["平面图墙体范围", "立面图高度", "墙面材料/做法表", "门窗洞口"],
+      "keywords": ["墙砖", "墙面砖", "块料墙面", "瓷砖墙面", "墙面瓷砖"],
+      "exclusion_keywords": ["地面砖", "楼地面"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-WALL-PAINT",
+      "item_name": "墙面喷刷涂料",
+      "chapter_name": "油漆、涂料、裱糊工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "基层类型", "required": false},
+        {"name": "腻子种类及遍数", "required": false},
+        {"name": "涂料品种及遍数", "required": true},
+        {"name": "颜色", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["㎡", "m2", "平方米"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示尺寸以面积计算，并按标准扣减/展开规则处理。",
+        "formula_type": "vertical_area",
+        "required_evidence": ["墙面长度", "墙面高度", "洞口", "涂料做法"]
+      },
+      "drawing_evidence_requirements": ["设计说明", "立面图", "房间墙面范围", "涂料做法表"],
+      "keywords": ["乳胶漆", "墙面漆", "墙面涂料", "喷刷涂料", "腻子"],
+      "exclusion_keywords": ["天棚乳胶漆", "顶面乳胶漆"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-CEILING-SUSPENDED",
+      "item_name": "吊顶天棚",
+      "chapter_name": "天棚工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "吊顶形式", "required": false},
+        {"name": "龙骨材料种类、规格、中距", "required": true},
+        {"name": "基层材料种类、规格", "required": false},
+        {"name": "面层材料品种、规格", "required": true},
+        {"name": "嵌缝、防护材料种类", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["㎡", "m2", "平方米"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示尺寸以水平投影面积或展开面积计算，具体按标准对应项目规则确认。",
+        "formula_type": "ceiling_area",
+        "required_evidence": ["吊顶范围", "标高/剖面", "吊顶做法", "灯槽/跌级边界"]
+      },
+      "drawing_evidence_requirements": ["天棚平面图", "大样图", "构造做法表", "标高标注"],
+      "keywords": ["吊顶", "天棚", "石膏板吊顶", "矿棉板吊顶", "铝扣板吊顶"],
+      "exclusion_keywords": ["墙面石膏板", "隔墙"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-CEILING-PAINT",
+      "item_name": "天棚喷刷涂料",
+      "chapter_name": "油漆、涂料、裱糊工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "基层类型", "required": false},
+        {"name": "腻子种类及遍数", "required": false},
+        {"name": "涂料品种及遍数", "required": true},
+        {"name": "颜色", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["㎡", "m2", "平方米"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示尺寸以面积计算。",
+        "formula_type": "ceiling_area",
+        "required_evidence": ["天棚范围", "房间面积", "涂料做法"]
+      },
+      "drawing_evidence_requirements": ["天棚平面图", "设计说明", "涂料做法表"],
+      "keywords": ["天棚乳胶漆", "顶面乳胶漆", "天棚涂料", "顶棚涂料"],
+      "exclusion_keywords": ["墙面乳胶漆", "吊顶板"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-DOOR-WOOD",
+      "item_name": "木质门",
+      "chapter_name": "门窗工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "门代号及洞口尺寸", "required": false},
+        {"name": "门框、扇材料品种", "required": true},
+        {"name": "五金材料品种、规格", "required": false},
+        {"name": "玻璃品种、厚度", "required": false},
+        {"name": "油漆品种、刷漆遍数", "required": false}
+      ],
+      "unit_options": ["樘"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示数量计算。",
+        "formula_type": "count",
+        "required_evidence": ["门窗表", "平面图门编号", "门大样"]
+      },
+      "drawing_evidence_requirements": ["门窗表", "平面图", "门大样"],
+      "keywords": ["木门", "成品木门", "复合木门", "套装门"],
+      "exclusion_keywords": ["木地板", "木饰面"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-DOOR-METAL-GLASS",
+      "item_name": "金属门、玻璃门",
+      "chapter_name": "门窗工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "门代号及洞口尺寸", "required": false},
+        {"name": "框、扇材料品种", "required": true},
+        {"name": "玻璃品种、厚度", "required": false},
+        {"name": "五金材料品种、规格", "required": false},
+        {"name": "开启方式", "required": false}
+      ],
+      "unit_options": ["樘", "㎡", "m2"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按标准项目对应单位，以设计图示数量或面积计算。",
+        "formula_type": "count_or_area",
+        "required_evidence": ["门窗表", "洞口尺寸", "门大样"]
+      },
+      "drawing_evidence_requirements": ["门窗表", "平面图", "门大样"],
+      "keywords": ["玻璃门", "铝合金门", "不锈钢门", "金属门"],
+      "exclusion_keywords": ["窗", "幕墙"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-SKIRTING",
+      "item_name": "踢脚线",
+      "chapter_name": "楼地面装饰工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "踢脚线材料品种、规格", "required": true},
+        {"name": "高度", "required": false},
+        {"name": "基层材料种类", "required": false},
+        {"name": "粘结层材料种类", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["m", "米"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示长度计算。",
+        "formula_type": "length",
+        "required_evidence": ["房间周长", "门洞扣减规则", "踢脚线做法"]
+      },
+      "drawing_evidence_requirements": ["平面图房间边界", "踢脚线做法", "门洞位置"],
+      "keywords": ["踢脚线", "踢脚板", "地脚线"],
+      "exclusion_keywords": ["腰线", "收口条"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-PARTITION",
+      "item_name": "隔断",
+      "chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "隔断材料品种、规格", "required": true},
+        {"name": "骨架材料品种、规格", "required": false},
+        {"name": "面层材料品种、规格", "required": false},
+        {"name": "玻璃品种、厚度", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["㎡", "m2", "平方米"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示尺寸以面积计算。",
+        "formula_type": "vertical_area",
+        "required_evidence": ["隔断长度", "隔断高度", "隔断做法"]
+      },
+      "drawing_evidence_requirements": ["平面图", "立面图", "隔断大样", "材料表"],
+      "keywords": ["隔断", "玻璃隔断", "轻钢龙骨隔墙", "石膏板隔墙"],
+      "exclusion_keywords": ["幕墙"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-CURTAIN-BOX-LIGHT-TROUGH",
+      "item_name": "窗帘盒、灯槽",
+      "chapter_name": "其他装饰工程",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "材料品种、规格", "required": true},
+        {"name": "基层或骨架材料种类", "required": false},
+        {"name": "做法尺寸", "required": false},
+        {"name": "油漆或饰面做法", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["m", "米"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 原文校对：候选口径为按设计图示长度计算。",
+        "formula_type": "length",
+        "required_evidence": ["窗帘盒/灯槽位置", "设计长度", "节点做法"]
+      },
+      "drawing_evidence_requirements": ["天棚平面图", "节点大样", "尺寸标注"],
+      "keywords": ["窗帘盒", "灯槽", "反光灯槽"],
+      "exclusion_keywords": ["灯具", "窗帘"],
+      "source_note": "草稿字段来自常见清单口径，需以标准 PDF OCR/人工校对为准。"
+    },
+    {
+      "item_code": "BIZ2X-DRAFT-DECOR-DEMOLITION",
+      "item_name": "拆除项目",
+      "chapter_name": "拆除或修缮相关项目",
+      "status": "draft_needs_standard_verification",
+      "verification_status": "pending_pdf_ocr_or_manual_review",
+      "feature_fields": [
+        {"name": "拆除对象", "required": true},
+        {"name": "拆除材质或构造", "required": false},
+        {"name": "厚度、规格或尺寸", "required": false},
+        {"name": "清运要求", "required": false},
+        {"name": "部位", "required": false}
+      ],
+      "unit_options": ["㎡", "m2", "m", "米", "项", "樘", "个"],
+      "quantity_rule": {
+        "rule_status": "candidate_needs_standard_verification",
+        "rule_text": "待按 GB/T 50854-2024 或适用修缮/拆除计量规则校对：候选口径按拆除对象对应面积、长度、数量或项计算。",
+        "formula_type": "mixed_by_object",
+        "required_evidence": ["拆除范围", "原有构造", "尺寸/数量标注"]
+      },
+      "drawing_evidence_requirements": ["拆除平面图", "设计说明", "现场清单", "图纸标注"],
+      "keywords": ["拆除", "凿除", "铲除", "清除", "原有"],
+      "exclusion_keywords": [],
+      "source_note": "拆除项目可能涉及修缮或地方规则，必须人工确认适用标准后才能 active。"
+    }
+  ],
+  "out_of_scope_policy": {
+    "note": "给排水、电气等专业图纸可能出现在样例 DWG 中，但不属于本标准库首版覆盖范围。识别到相关内容时应标记为 non_gbt50854_scope，并要求人工选择其他标准或排除。",
+    "keywords": ["配电", "照明", "插座", "给水", "排水", "管道", "灯具", "开关"]
+  }
+}

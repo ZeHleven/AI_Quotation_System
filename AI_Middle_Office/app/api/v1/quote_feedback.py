@@ -17,6 +17,7 @@ from app.models.user import User
 from app.schemas.quote_feedback import QuoteFeedbackRejectRequest
 from app.services.quote_cost_evidence import serialize_cost_evidence
 from app.services.quote_feedback import record_rejected_quote
+from app.services.quote_job_numbers import quote_job_number
 from app.services.rbac import has_admin_role
 
 
@@ -131,6 +132,7 @@ def _feedback_row(
 
 
 def _feedback_detail(db: Session, feedback: QuoteFeedback) -> dict:
+    job = db.query(QuoteJob).filter(QuoteJob.job_id == feedback.quote_job_id).first() if feedback.quote_job_id else None
     corrections = (
         db.query(QuoteCorrection)
         .filter(QuoteCorrection.feedback_id == feedback.id)
@@ -155,6 +157,7 @@ def _feedback_detail(db: Session, feedback: QuoteFeedback) -> dict:
         {feedback.id: len(rag_traces)},
         {feedback.id: len(cost_evidence)},
     )
+    data["quote_job_number"] = quote_job_number(job)
     data.update(
         {
             "correction_summary": _load_json(feedback.correction_summary_json),

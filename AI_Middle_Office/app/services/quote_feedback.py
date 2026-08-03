@@ -738,4 +738,5 @@ def safe_record_ai_preview(db: Session, **kwargs: Any) -> None:
     try:
         record_ai_preview(db, **kwargs)
     except Exception:
+        db.rollback()
         logger.exception("quote_feedback_preview_record_failed", extra={"event": "quote_feedback_preview_record_failed"})

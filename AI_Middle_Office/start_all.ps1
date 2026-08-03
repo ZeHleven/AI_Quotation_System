@@ -5,12 +5,16 @@
 param(
     [string]$CentosHost = "",
     [int]$AppPort = 9000,
+    [string]$HostAddress = "",
     [int]$RemoteTimeoutSeconds = 180,
     [int]$LocalTimeoutSeconds = 120,
+    [int]$ReadyStabilitySeconds = 8,
+    [switch]$Lan,
     [switch]$NoBrowser,
     [switch]$SkipRemoteWait,
     [switch]$SkipCelery,
-    [switch]$SkipMigrations
+    [switch]$SkipMigrations,
+    [switch]$Restart
 )
 
 $ErrorActionPreference = "Stop"
@@ -100,6 +104,94 @@ function Test-TcpPort {
     }
 }
 
+function Resolve-BindHost {
+    param(
+        [string]$RequestedHost,
+        [switch]$UseLan
+    )
+
+    if ($RequestedHost) {
+        if ($UseLan -and $RequestedHost -in @("127.0.0.1", "localhost")) {
+            throw "-Lan cannot be combined with -HostAddress $RequestedHost. Use -Lan alone, -HostAddress 0.0.0.0, or a real LAN IPv4 address."
+        }
+        return $RequestedHost
+    }
+    if ($UseLan) {
+        return "0.0.0.0"
+    }
+    return "127.0.0.1"
+}
+
+function Get-ProbeHost {
+    param([string]$BindHost)
+    if ($BindHost -in @("0.0.0.0", "::", "", "localhost")) {
+        return "127.0.0.1"
+    }
+    return $BindHost
+}
+
+function Get-LanIpAddresses {
+    $addresses = @()
+    try {
+        $addresses = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+            Where-Object {
+                $_.IPAddress -and
+                $_.IPAddress -ne "127.0.0.1" -and
+                -not $_.IPAddress.StartsWith("169.254.") -and
+                $_.PrefixOrigin -ne "WellKnown"
+            } |
+            Sort-Object -Property InterfaceAlias, IPAddress |
+            Select-Object -ExpandProperty IPAddress -Unique
+    } catch {
+        try {
+            $addresses = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) |
+                Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
+                ForEach-Object { $_.IPAddressToString } |
+                Where-Object { $_ -ne "127.0.0.1" -and -not $_.StartsWith("169.254.") } |
+                Select-Object -Unique
+        } catch {
+            $addresses = @()
+        }
+    }
+    return @($addresses)
+}
+
+function Get-AccessUrlLines {
+    $lines = @("Local URL: http://127.0.0.1:$AppPort/")
+    if ($HostAddress -eq "0.0.0.0" -or $Lan) {
+        $lanIps = @(Get-LanIpAddresses)
+        if ($lanIps.Count -eq 0) {
+            $lines += "LAN URL:   no non-loopback IPv4 address detected"
+        } else {
+            foreach ($ip in $lanIps) {
+                $lines += "LAN URL:   http://$($ip):$AppPort/"
+            }
+        }
+    } elseif ($HostAddress -notin @("127.0.0.1", "localhost")) {
+        $lines += "LAN URL:   http://$($HostAddress):$AppPort/"
+    }
+    return $lines
+}
+
+function Write-AccessInfoFile {
+    $path = Join-Path $LogDir "current_access_urls.txt"
+    $lines = @(
+        "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
+        "Mode: $StartupMode",
+        "Bind: $HostAddress",
+        "Health: http://${ProbeHost}:$AppPort/health/ready"
+    )
+    $lines += Get-AccessUrlLines
+    Set-Content -Path $path -Value $lines -Encoding UTF8
+    Write-Host " Access info: $path"
+}
+
+function Test-CommandUsesRequestedBindHost {
+    param([string]$CommandLine)
+    if (-not $CommandLine) { return $false }
+    return ($CommandLine -like "*--host $HostAddress*")
+}
+
 function Wait-TcpPort {
     param(
         [string]$Name,
@@ -121,7 +213,7 @@ function Wait-TcpPort {
 
 function Wait-FastApiReady {
     param([int]$TimeoutSeconds)
-    $url = "http://127.0.0.1:$AppPort/health/ready"
+    $url = "http://${ProbeHost}:$AppPort/health/ready"
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastStatus = $null
     while ((Get-Date) -lt $deadline) {
@@ -129,8 +221,20 @@ function Wait-FastApiReady {
             $response = Invoke-RestMethod -Uri $url -TimeoutSec 5
             $lastStatus = $response.status
             if ($response.status -eq "ready") {
-                Write-Host "[OK] FastAPI ready: $url" -ForegroundColor Green
-                return $response
+                if ($ReadyStabilitySeconds -gt 0) {
+                    Write-Host "[WAIT] FastAPI ready once; confirming stability for ${ReadyStabilitySeconds}s..." -ForegroundColor Yellow
+                    Start-Sleep -Seconds $ReadyStabilitySeconds
+                    $confirm = Invoke-RestMethod -Uri $url -TimeoutSec 5
+                    $lastStatus = $confirm.status
+                    if ($confirm.status -eq "ready") {
+                        Write-Host "[OK] FastAPI ready: $url" -ForegroundColor Green
+                        return $confirm
+                    }
+                    Write-Host "[WAIT] FastAPI health changed to $($confirm.status)" -ForegroundColor Yellow
+                } else {
+                    Write-Host "[OK] FastAPI ready: $url" -ForegroundColor Green
+                    return $response
+                }
             }
             Write-Host "[WAIT] FastAPI health is $($response.status)" -ForegroundColor Yellow
         } catch {
@@ -144,10 +248,7 @@ function Wait-FastApiReady {
 function Start-FastApi {
     param([string]$PythonPath)
 
-    if (Test-TcpPort -TargetHost "127.0.0.1" -Port $AppPort -TimeoutMs 500) {
-        Write-Host "[OK] FastAPI port $AppPort is already listening" -ForegroundColor Green
-        return
-    }
+    $portAlreadyListening = Test-TcpPort -TargetHost $ProbeHost -Port $AppPort -TimeoutMs 500
 
     $pidFile = Join-Path $LogDir "fastapi.pid"
     if (Test-Path $pidFile) {
@@ -156,8 +257,20 @@ function Start-FastApi {
         if ([int]::TryParse($oldPidText, [ref]$oldPid)) {
             $oldProcess = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
             if ($oldProcess) {
+                if ($Restart) {
+                    Write-Host "[RESTART] Stopping FastAPI pid from pid file: $oldPid" -ForegroundColor Yellow
+                    Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 2
+                    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+                    $oldProcess = $null
+                }
+            }
+            if ($oldProcess) {
                 $oldCommand = (Get-CimInstance Win32_Process -Filter "ProcessId=$oldPid" -ErrorAction SilentlyContinue).CommandLine
                 if ($oldCommand -and $oldCommand -like "*uvicorn*" -and $oldCommand -like "*app.main:app*") {
+                    if ($StartupMode -eq "lan-trial" -and -not (Test-CommandUsesRequestedBindHost -CommandLine $oldCommand)) {
+                        throw "FastAPI is already running with a different bind host. Run start_all.ps1 -Lan -Restart to switch into LAN trial mode."
+                    }
                     Write-Host "[OK] FastAPI already appears to be running with pid: $oldPid" -ForegroundColor Green
                     return
                 }
@@ -166,9 +279,21 @@ function Start-FastApi {
         Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
     }
 
+    if ($portAlreadyListening -and -not $Restart) {
+        if ($StartupMode -eq "lan-trial") {
+            throw "FastAPI port $AppPort is already listening. Run start_all.ps1 -Lan -Restart to switch into LAN trial mode."
+        }
+        Write-Host "[OK] FastAPI port $AppPort is already listening" -ForegroundColor Green
+        return
+    }
+
+    if (Test-TcpPort -TargetHost $ProbeHost -Port $AppPort -TimeoutMs 500) {
+        throw "FastAPI port $AppPort is still listening after restart cleanup. Stop the old process first, then run start_all.ps1 again."
+    }
+
     $outLog = Join-Path $LogDir ("fastapi_{0}.out.log" -f (Get-Date -Format "yyyyMMdd"))
     $errLog = Join-Path $LogDir ("fastapi_{0}.err.log" -f (Get-Date -Format "yyyyMMdd"))
-    $args = @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$AppPort")
+    $args = @("-m", "uvicorn", "app.main:app", "--host", $HostAddress, "--port", "$AppPort")
     $process = Start-Process `
         -FilePath $PythonPath `
         -ArgumentList $args `
@@ -190,9 +315,13 @@ function Start-Celery {
     if (-not (Test-Path $launcher)) {
         throw "Celery launcher not found: $launcher"
     }
+    $celeryArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $launcher)
+    if ($Restart) {
+        $celeryArgs += "-Restart"
+    }
     Start-Process `
         -FilePath "powershell.exe" `
-        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $launcher) `
+        -ArgumentList $celeryArgs `
         -WorkingDirectory $WorkDir `
         -WindowStyle Hidden | Out-Null
     Write-Host "[START] Celery worker launcher invoked" -ForegroundColor Cyan
@@ -235,6 +364,13 @@ if (-not $CentosHost) {
     }
 }
 
+$HostAddress = Resolve-BindHost -RequestedHost $HostAddress -UseLan:$Lan
+$ProbeHost = Get-ProbeHost -BindHost $HostAddress
+$StartupMode = "local-dev"
+if ($HostAddress -eq "0.0.0.0" -or $HostAddress -notin @("127.0.0.1", "localhost")) {
+    $StartupMode = "lan-trial"
+}
+
 $PythonPath = Find-Python
 Import-DotEnvToProcess
 $minioEnabled = (Get-DotEnvValue -Name "MINIO_ENABLED" -Default "false").ToLowerInvariant()
@@ -244,6 +380,8 @@ Write-Host " AI Middle Office startup"
 Write-Host " WorkDir: $WorkDir"
 Write-Host " Python:  $PythonPath"
 Write-Host " CentOS:  $CentosHost"
+Write-Host " Mode:    $StartupMode"
+Write-Host " Bind:    $HostAddress"
 Write-Host "========================================" -ForegroundColor Cyan
 
 if (-not $SkipRemoteWait) {
@@ -268,11 +406,17 @@ $ready = Wait-FastApiReady -TimeoutSeconds $LocalTimeoutSeconds
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host " System is ready"
-Write-Host " URL: http://localhost:$AppPort/"
+foreach ($line in (Get-AccessUrlLines)) {
+    Write-Host " $line"
+}
+Write-AccessInfoFile
 Write-Host " Queue: $($ready.task_queue.mode) / ok=$($ready.task_queue.ok)"
 Write-Host " Logs: $LogDir"
+if ($StartupMode -eq "lan-trial") {
+    Write-Host " Firewall: ensure Windows allows inbound TCP $AppPort on the current private LAN before other PCs connect."
+}
 Write-Host "========================================" -ForegroundColor Green
 
 if (-not $NoBrowser) {
-    Start-Process "http://localhost:$AppPort/"
+    Start-Process "http://${ProbeHost}:$AppPort/"
 }

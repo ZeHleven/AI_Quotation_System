@@ -15,38 +15,53 @@
     return body.detail || body.message || (error && error.message) || fallback;
   };
 
-  const getToken = () => window.localStorage.getItem(TOKEN_KEY) || '';
+  const authStorage = () => window.sessionStorage;
+  const cleanupSharedAuthStorage = () => {
+    window.localStorage.removeItem(TOKEN_KEY);
+    window.localStorage.removeItem(USER_INFO_KEY);
+  };
+
+  const getToken = () => authStorage().getItem(TOKEN_KEY) || '';
   const setToken = (token) => {
+    cleanupSharedAuthStorage();
     if (token) {
-      window.localStorage.setItem(TOKEN_KEY, token);
+      authStorage().setItem(TOKEN_KEY, token);
     } else {
-      window.localStorage.removeItem(TOKEN_KEY);
+      authStorage().removeItem(TOKEN_KEY);
     }
   };
 
   const getUserInfo = () => {
-    const raw = window.localStorage.getItem(USER_INFO_KEY);
+    const raw = authStorage().getItem(USER_INFO_KEY);
     if (!raw) return null;
     try {
       return JSON.parse(raw);
     } catch {
-      window.localStorage.removeItem(USER_INFO_KEY);
+      authStorage().removeItem(USER_INFO_KEY);
       return null;
     }
   };
 
   const setUserInfo = (userInfo) => {
+    cleanupSharedAuthStorage();
     if (userInfo) {
-      window.localStorage.setItem(USER_INFO_KEY, JSON.stringify(userInfo));
+      authStorage().setItem(USER_INFO_KEY, JSON.stringify(userInfo));
     } else {
-      window.localStorage.removeItem(USER_INFO_KEY);
+      authStorage().removeItem(USER_INFO_KEY);
     }
   };
 
   const clearAuth = () => {
-    window.localStorage.removeItem(TOKEN_KEY);
-    window.localStorage.removeItem(USER_INFO_KEY);
+    authStorage().removeItem(TOKEN_KEY);
+    authStorage().removeItem(USER_INFO_KEY);
+    cleanupSharedAuthStorage();
   };
+
+  const currentPath = () =>
+    `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+  const loginUrl = (target = currentPath()) =>
+    `/login?redirect=${encodeURIComponent(target || '/')}`;
 
   const authHeaders = (onMissing) => {
     const token = getToken();
@@ -81,6 +96,8 @@
     getUserInfo,
     setUserInfo,
     clearAuth,
+    currentPath,
+    loginUrl,
     authHeaders,
     installAxiosUnauthorizedHandler,
   };

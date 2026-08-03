@@ -18,11 +18,21 @@ from app.core.rate_limit import limiter
 settings.apply_proxy_env()
 
 from app.api.v1 import (
+    account_quotas,
+    agents,
     auth,
+    bidding,
+    budget_pricing,
+    budget_projects,
     business_ledger,
     client_inquiries,
+    codex_worker,
     cost_items,
+    cost_measurements,
+    project_cost_imports,
     dashboard,
+    dwg_quantity_trial,
+    enterprise_profile,
     execution_tasks,
     files,
     history,
@@ -31,11 +41,13 @@ from app.api.v1 import (
     meetings,
     model_gateway,
     ops,
+    project_progress,
     prompt_regression,
     quote,
     quote_feedback,
     quote_jobs,
     rag_eval,
+    requirement_standardization,
     users,
 )
 from app.core.database import engine, Base, get_db
@@ -49,11 +61,27 @@ from app.models import knowledge_candidate as knowledge_candidate_model  # noqa:
 from app.models import client_inquiry as client_inquiry_model  # noqa: F401 — 触发客户咨询表建表
 from app.models import client_inquiry_event as client_inquiry_event_model  # noqa: F401 — 触发商务台账事件表建表
 from app.models import cost_item as cost_item_model  # noqa: F401 — 触发成本库表建表
+from app.models import cost_audit as cost_audit_model  # noqa: F401 — 触发成本库审计表建表
 from app.models import execution_task as execution_task_model  # noqa: F401 — 触发执行任务表建表
 from app.models import meeting as meeting_model  # noqa: F401 — 触发会议纪要与草稿表建表
+from app.models import quote_requirement_row as quote_requirement_row_model  # noqa: F401
+from app.models import quote_preview_draft as quote_preview_draft_model  # noqa: F401
+from app.models import cost_measurement as cost_measurement_model  # noqa: F401
+from app.models import project_cost_import as project_cost_import_model  # noqa: F401
+from app.models import project_progress as project_progress_model  # noqa: F401
+from app.models import budget_project as budget_project_model  # noqa: F401
+from app.models import budget_pricing as budget_pricing_model  # noqa: F401
+from app.models import account as account_model  # noqa: F401
+from app.models import account_quota as account_quota_model  # noqa: F401
+from app.models import budget_pricing_draft as budget_pricing_draft_model  # noqa: F401
+from app.models import agent as agent_model  # noqa: F401
+from app.models import enterprise_quota as enterprise_quota_model  # noqa: F401
+from app.models import enterprise_profile as enterprise_profile_model  # noqa: F401
+from app.models import bidding as bidding_model  # noqa: F401
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
+from app.services.agent_daily_scheduler import quote_review_daily_scheduler_loop
 
 
 configure_logging()
@@ -144,15 +172,19 @@ async def _alert_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(_run_startup_database_tasks)
-    task = asyncio.create_task(_alert_loop())
+    tasks = [asyncio.create_task(_alert_loop())]
+    if settings.feature_agent_assistants and settings.feature_agent_daily_review:
+        tasks.append(asyncio.create_task(quote_review_daily_scheduler_loop()))
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
@@ -168,13 +200,22 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
+app.include_router(account_quotas.router, prefix="/api/v1", tags=["Account Quotas"])
+app.include_router(bidding.router, prefix="/api/v1", tags=["Bidding"])
+app.include_router(budget_pricing.router, prefix="/api/v1", tags=["Budget Pricing"])
+app.include_router(budget_projects.router, prefix="/api/v1", tags=["Budget Projects"])
 app.include_router(client_inquiries.router, prefix="/api/v1", tags=["Client Inquiries"])
 app.include_router(business_ledger.router, prefix="/api/v1", tags=["Business Ledger"])
+app.include_router(codex_worker.router, prefix="/api/v1", tags=["Codex Worker POC"])
 app.include_router(cost_items.router, prefix="/api/v1", tags=["Cost Items"])
+app.include_router(cost_measurements.router, prefix="/api/v1", tags=["Cost Measurements"])
+app.include_router(project_cost_imports.router, prefix="/api/v1", tags=["Project Cost Imports"])
 app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
 app.include_router(users.router, prefix="/api/v1", tags=["Users"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
+app.include_router(dwg_quantity_trial.router, prefix="/api/v1", tags=["DWG Quantity Trial"])
+app.include_router(enterprise_profile.router, prefix="/api/v1", tags=["Enterprise Profile"])
 app.include_router(execution_tasks.router, prefix="/api/v1", tags=["Execution Tasks"])
 app.include_router(meetings.router, prefix="/api/v1", tags=["Meetings"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
@@ -186,6 +227,9 @@ app.include_router(model_gateway.router, prefix="/api/v1", tags=["Model Gateway"
 app.include_router(files.router, prefix="/api/v1", tags=["File Storage"])
 app.include_router(ops.router, prefix="/api/v1", tags=["Operations"])
 app.include_router(rag_eval.router, prefix="/api/v1", tags=["RAG Eval"])
+app.include_router(requirement_standardization.router, prefix="/api/v1", tags=["Requirement Standardization"])
+app.include_router(project_progress.router, prefix="/api/v1", tags=["Project Progress"])
+app.include_router(agents.router, prefix="/api/v1", tags=["Agents"])
 
 
 @app.middleware("http")
@@ -224,6 +268,19 @@ def health_live():
     return {"status": "ok", "service": settings.app_name, "version": settings.app_version}
 
 
+def _ready_service_view(service: dict) -> dict:
+    item = {
+        "key": service.get("key"),
+        "name": service.get("name"),
+        "ok": bool(service.get("ok")),
+        "status": service.get("status"),
+        "latency_ms": service.get("latency_ms"),
+    }
+    if service.get("detail"):
+        item["detail"] = str(service.get("detail"))[:240]
+    return item
+
+
 @app.get("/health/ready", include_in_schema=False)
 def health_ready():
     result = {
@@ -231,6 +288,11 @@ def health_ready():
         "database": "unknown",
         "rag_service_url": settings.rag_service_url,
         "task_queue_mode": settings.task_queue_mode,
+        "external_dependencies": {
+            "enabled": settings.ready_check_external_services,
+            "overall_status": "not_probed",
+            "services": [],
+        },
     }
     try:
         with engine.connect() as conn:
@@ -244,6 +306,18 @@ def health_ready():
     result["task_queue"] = queue_status
     if not queue_status.get("ok"):
         result["status"] = "degraded"
+    if settings.ready_check_external_services:
+        from app.services.ops_monitor import collect_external_dependency_statuses
+
+        external_services = [_ready_service_view(service) for service in collect_external_dependency_statuses()]
+        external_ok = all(service["ok"] for service in external_services)
+        result["external_dependencies"] = {
+            "enabled": True,
+            "overall_status": "ok" if external_ok else "degraded",
+            "services": external_services,
+        }
+        if not external_ok:
+            result["status"] = "degraded"
     return result
 
 # 前端 HTML 文件所在目录（Clear_test/）
@@ -267,6 +341,8 @@ def serve_root():
 
 @app.get("/app.html", include_in_schema=False)
 def serve_app():
+    if settings.feature_vite_frontend and os.path.isfile(os.path.join(_VITE_DIST_DIR, "index.html")):
+        return RedirectResponse("/login")
     return FileResponse(os.path.join(_FRONTEND_DIR, "app.html"))
 
 @app.get("/index.html", include_in_schema=False)
@@ -287,6 +363,18 @@ def _serve_vite_index():
 
 @app.get("/login", include_in_schema=False)
 def serve_login():
+    return _serve_vite_index()
+
+
+@app.get("/quote/new", include_in_schema=False)
+def serve_quote_new():
+    if not settings.feature_vite_frontend:
+        return RedirectResponse("/index.html")
+    return _serve_vite_index()
+
+
+@app.get("/no-access", include_in_schema=False)
+def serve_no_access():
     return _serve_vite_index()
 
 
@@ -330,6 +418,90 @@ def serve_vite_business_ledger():
 
 @app.get("/admin/cost-db", include_in_schema=False)
 def serve_vite_cost_db():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/account-quotas", include_in_schema=False)
+def serve_vite_account_quotas():
+    if not settings.feature_vite_frontend or not settings.feature_account_quotas:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/cost-measurement", include_in_schema=False)
+def serve_vite_cost_measurement():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/requirement-standardization", include_in_schema=False)
+def serve_vite_requirement_standardization():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/dwg-trial", include_in_schema=False)
+def serve_vite_dwg_trial():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/bidding", include_in_schema=False)
+def serve_vite_bidding():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/enterprise-profile", include_in_schema=False)
+def serve_vite_enterprise_profile():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/agent-center", include_in_schema=False)
+def serve_vite_agent_center():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/projects", include_in_schema=False)
+def serve_vite_projects():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/budget-projects", include_in_schema=False)
+def serve_vite_budget_projects():
+    if not settings.feature_vite_frontend or not settings.feature_budget_projects:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/budget-projects/{project_id}", include_in_schema=False)
+def serve_vite_budget_project_detail(project_id: int):
+    if not settings.feature_vite_frontend or not settings.feature_budget_projects:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/projects/{project_id}", include_in_schema=False)
+def serve_vite_project_detail(project_id: int):
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/project-tasks/my", include_in_schema=False)
+def serve_vite_project_my_tasks():
     if not settings.feature_vite_frontend:
         raise HTTPException(status_code=404, detail="Not Found")
     return _serve_vite_index()

@@ -5,10 +5,12 @@ __pycache__/
 *.pyd
 .Python
 .pytest_cache/
+AI_Middle_Office/.pytest_tmp*/
 
 # Environment & secrets
 .env
 *.env
+.codex_ssh/
 
 # Database
 *.db
@@ -25,6 +27,21 @@ AI_Middle_Office/tests/materials_audit/
 AI_Middle_Office/tests/.test_rag_materials.json
 rag_eval_*.json
 rag_eval_reports/
+AI_Middle_Office/biz2k_reports/
+AI_Middle_Office/biz2l_reports/
+outputs/
+output/
+artifacts/
+AI_Middle_Office/output/
+tmp/
+
+# BIZ-2x local PDF takeoff artifacts and non-source resources
+AI_Middle_Office/data/exports/
+AI_Middle_Office/runtime/
+eval/
+reports/trial_readiness/
+tools/
+AI识图练习图纸/
 
 # Local backup artifacts
 backups/

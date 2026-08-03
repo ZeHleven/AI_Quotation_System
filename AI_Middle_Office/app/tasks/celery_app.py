@@ -20,4 +20,10 @@ else:
         task_time_limit=settings.quote_task_time_limit_seconds,
         worker_prefetch_multiplier=1,
         task_acks_late=True,
+        task_acks_on_failure_or_timeout=True,
+        broker_connection_retry_on_startup=True,
+        broker_transport_options={
+            "visibility_timeout": max(300, settings.quote_task_time_limit_seconds + 60),
+        },
+        result_expires=24 * 60 * 60,
     )

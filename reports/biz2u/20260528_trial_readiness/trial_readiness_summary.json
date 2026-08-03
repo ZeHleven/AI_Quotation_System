@@ -1,0 +1,43 @@
+{
+  "stage": "BIZ-2u-2",
+  "name": "小范围内网试运行启动前登记与检查包",
+  "generated_at": "2026-05-28",
+  "status": "ready_with_known_risks_pending_start_confirmation",
+  "formal_trial_started": false,
+  "public_access_required": false,
+  "public_access_expected": "PUBLIC_ACCESS_ENABLED=false",
+  "source": {
+    "handoff_csv": "reports/biz2t/20260528_current/cost_governance_high_risk_handoff.csv",
+    "review_json": "reports/biz2t/20260528_current/high_risk_handoff_review.json",
+    "review_recommendation": "ready_with_known_risks"
+  },
+  "known_risks": {
+    "count": 5,
+    "decision_counts": {
+      "accepted_risk": 5
+    },
+    "trial_blocker_count": 0,
+    "need_rag_sync_count": 0,
+    "cost_item_ids": [203, 204, 206, 207, 208],
+    "register_path": "reports/biz2u/20260528_trial_readiness/known_risk_register.csv"
+  },
+  "readiness_checks": {
+    "known_risk_register": "ready",
+    "trial_templates": "ready",
+    "people_and_roles": "manual_confirmation_required",
+    "environment_health": "startup_day_confirmation_required",
+    "alembic_current": "startup_day_confirmation_required",
+    "rag_sync_status": "startup_day_confirmation_required"
+  },
+  "boundaries": {
+    "database_write": false,
+    "service_start": false,
+    "rag_sync_triggered": false,
+    "quote_rule_change": false,
+    "price_policy_change": false,
+    "n8n_or_dify_change": false,
+    "cost_item_auto_change": false,
+    "alembic_required": false
+  },
+  "next_step": "由负责人单独确认是否进入 BIZ-2u-3 小范围内网试运行启动记录。"
+}

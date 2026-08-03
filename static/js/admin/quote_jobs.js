@@ -49,6 +49,11 @@
       return `${minutes}m ${restSeconds}s`;
     };
 
+    const displayJobNumber = (row) => {
+      if (!row) return '\u2014';
+      return row.job_number || row.quote_job_number || row.job_id || row.quote_job_id || '\u2014';
+    };
+
     const fetchJobs = async (page = 1) => {
       jobPage.value = page;
       jobLoading.value = true;
@@ -69,7 +74,7 @@
 
     const cancelJob = async (row) => {
       try {
-        await ElMessageBox.confirm(`确定取消任务 ${row.job_id} 吗？`, '取消任务', { type: 'warning' });
+        await ElMessageBox.confirm(`确定取消任务 ${displayJobNumber(row)} 吗？`, '取消任务', { type: 'warning' });
         await axios.post(`${coreApiBaseUrl}/quote/jobs/${row.job_id}/cancel`, {}, { headers: authHeaders() });
         ElMessage.success('任务已取消');
         fetchJobs(jobPage.value);
@@ -147,6 +152,7 @@
       openJobDetail,
       formatJson,
       formatDuration,
+      displayJobNumber,
       statusTagType,
     };
   }

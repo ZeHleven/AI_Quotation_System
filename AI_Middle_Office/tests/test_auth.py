@@ -1,14 +1,26 @@
 import uuid
 
+from app.core.config import settings
+
+
+def _set_flag(name: str, value):
+    old_value = getattr(settings, name)
+    object.__setattr__(settings, name, value)
+    return old_value
+
 
 def test_register_login_and_me(client):
     username = f"test_user_{uuid.uuid4().hex[:10]}"
     password = "secret123"
 
-    register_response = client.post(
-        "/api/v1/auth/register",
-        json={"username": username, "password": password},
-    )
+    old_flag = _set_flag("allow_self_registration", True)
+    try:
+        register_response = client.post(
+            "/api/v1/auth/register",
+            json={"username": username, "password": password},
+        )
+    finally:
+        _set_flag("allow_self_registration", old_flag)
     assert register_response.status_code == 200
 
     login_response = client.post(
@@ -26,6 +38,20 @@ def test_register_login_and_me(client):
     assert me_response.json()["username"] == username
     assert me_response.json()["role"] == "user"
     assert me_response.json()["quota"] == 5
+
+
+def test_register_disabled_by_default(client):
+    old_flag = _set_flag("allow_self_registration", False)
+    try:
+        response = client.post(
+            "/api/v1/auth/register",
+            json={"username": f"disabled_{uuid.uuid4().hex[:10]}", "password": "secret123"},
+        )
+    finally:
+        _set_flag("allow_self_registration", old_flag)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "SELF_REGISTRATION_DISABLED"
 
 
 def test_login_rejects_wrong_password(client):

@@ -6,15 +6,30 @@ param(
     [int]   $MysqlPort       = 5455,
     [string]$MysqlContainer  = "ragflow-mysql-1",
     [string]$MysqlUser       = "ai_app",
-    [string]$MysqlPassword   = "<687655596>",
+    [string]$MysqlPassword   = "",
     [string]$MysqlDatabase   = "ai_quotation",
-    [int]   $RetainDays      = 7
+    [int]   $RetainDays      = 7,
+    [switch]$LegacyDirectBackup
 )
 
 $ErrorActionPreference = "Stop"
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $dest      = Join-Path $BackupRoot $timestamp
 $scriptDir = $PSScriptRoot
+
+if (-not $LegacyDirectBackup) {
+    Write-Warning "backup_all.ps1 is a legacy direct Windows backup helper."
+    Write-Warning "For trial and production-like backups, use run_centos_backup.ps1 instead."
+    Write-Warning "Re-run with -LegacyDirectBackup only for emergency legacy direct backups."
+    exit 2
+}
+
+if (-not $MysqlPassword) {
+    $MysqlPassword = [Environment]::GetEnvironmentVariable("MIDDLE_OFFICE_MYSQL_PASSWORD", "Process")
+}
+if (-not $MysqlPassword) {
+    throw "MysqlPassword is required. Pass -MysqlPassword or set MIDDLE_OFFICE_MYSQL_PASSWORD for this process."
+}
 
 function Write-Log {
     param([string]$Msg)

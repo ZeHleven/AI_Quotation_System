@@ -1,0 +1,4141 @@
+{
+  "ok": true,
+  "phase": "BIZ-2x-R1-1-sample-answer-project-lexicon",
+  "generated_at": "2026-06-15 02:38:39",
+  "source": {
+    "manual_answer_row_count": 127,
+    "policy": "answer_driven_regression_lexicon_for_dwg_project_recognition",
+    "manual_xlsx": "C:\\Users\\12521\\Documents\\Codex\\2026-04-25\\ai-pycharm\\Clear_test\\AI识图练习图纸\\AI识图练习图纸\\信达公司职工食堂装修改造工程量清单.xlsx",
+    "sheet_summaries": [
+      {
+        "sheet_name": "封面",
+        "max_row": 7,
+        "max_column": 1,
+        "header_found": false,
+        "header_row": "",
+        "parsed_row_count": 0
+      },
+      {
+        "sheet_name": "报价说明",
+        "max_row": 14,
+        "max_column": 1,
+        "header_found": false,
+        "header_row": "",
+        "parsed_row_count": 0
+      },
+      {
+        "sheet_name": "汇总表",
+        "max_row": 9,
+        "max_column": 4,
+        "header_found": false,
+        "header_row": "",
+        "parsed_row_count": 0
+      },
+      {
+        "sheet_name": "装修工程量清单",
+        "max_row": 96,
+        "max_column": 11,
+        "header_found": true,
+        "header_row": 2,
+        "parsed_row_count": 80
+      },
+      {
+        "sheet_name": "机电工程量清单",
+        "max_row": 56,
+        "max_column": 14,
+        "header_found": true,
+        "header_row": 2,
+        "parsed_row_count": 47
+      }
+    ],
+    "standard_file": "C:\\Users\\12521\\Documents\\Codex\\2026-04-25\\ai-pycharm\\Clear_test\\AI_Middle_Office\\data\\standards\\gbtn50854_2024_word_active_20260610_024610.json"
+  },
+  "summary": {
+    "manual_answer_row_count": 127,
+    "lexicon_entry_count": 99,
+    "category_counts": {
+      "demolition": 17,
+      "wall": 17,
+      "other": 12,
+      "floor": 10,
+      "lighting_electrical": 10,
+      "ceiling": 9,
+      "sanitary": 6,
+      "waterproof": 5,
+      "door_window": 5,
+      "linear_finish": 4,
+      "measure": 2,
+      "masonry_backfill": 1,
+      "baseboard": 1
+    },
+    "standard_scope_counts": {
+      "gbt50854_candidate": 46,
+      "supplemental_or_other_specialty": 35,
+      "supplemental_or_scope_pending": 18
+    },
+    "gbt_candidate_count": 46,
+    "supplemental_or_pending_count": 53
+  },
+  "entries": [
+    {
+      "entry_id": "BIZ2xLEX-0001",
+      "source_row_no": 7,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "拆除不锈钢玻璃门",
+      "manual_feature": "1、拆除不锈钢地弹门，220*2400mm；\n2、包括门套、门扇及五金拆除及清运等一切工作内容",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "拆除不锈钢玻璃门"
+      ],
+      "weak_terms": [
+        "拆除不锈钢玻璃门",
+        "拆除不锈钢地弹门",
+        "220*2400mm",
+        "包括门套",
+        "门扇及五金拆除及清运等一切工作内容",
+        "拆除",
+        "不锈钢玻璃门",
+        "不锈钢玻璃门拆除"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0002",
+      "source_row_no": 8,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "拆除单开实木门",
+      "manual_feature": "1、拆除实木门，900*2100mm；\n2、包括门套、门扇及五金拆除清运等工作",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "拆除单开实木门"
+      ],
+      "weak_terms": [
+        "拆除单开实木门",
+        "拆除实木门",
+        "900*2100mm",
+        "包括门套",
+        "门扇及五金拆除清运等工作",
+        "拆除",
+        "单开实木门",
+        "单开实木门拆除"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0003",
+      "source_row_no": 9,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "拆除双开实木门",
+      "manual_feature": "1、拆除实木门，1800*2650mm；\n2、包括门套、门扇及五金拆除清运等工作",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "拆除双开实木门"
+      ],
+      "weak_terms": [
+        "拆除双开实木门",
+        "拆除实木门",
+        "1800*2650mm",
+        "包括门套",
+        "门扇及五金拆除清运等工作",
+        "拆除",
+        "双开实木门",
+        "双开实木门拆除"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0004",
+      "source_row_no": 10,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "拆除铝合金门",
+      "manual_feature": "1、拆除铝合金门，900*2100mm；\n2、包括门框、门扇及五金拆除清运等工作",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "拆除铝合金门"
+      ],
+      "weak_terms": [
+        "拆除铝合金门",
+        "900*2100mm",
+        "包括门框",
+        "门扇及五金拆除清运等工作",
+        "拆除",
+        "铝合金门",
+        "铝合金门拆除"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0005",
+      "source_row_no": 11,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "地砖拆除",
+      "manual_feature": "1、地砖及粘接层、垫层拆除及清运等工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "地砖拆除"
+      ],
+      "weak_terms": [
+        "地砖拆除",
+        "地砖及粘接层",
+        "垫层拆除及清运等工作",
+        "拆除",
+        "地砖"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0006",
+      "source_row_no": 12,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "木地板拆除",
+      "manual_feature": "1、木地板及龙骨、找平层拆除及清运等工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "木地板拆除"
+      ],
+      "weak_terms": [
+        "木地板拆除",
+        "木地板及龙骨",
+        "找平层拆除及清运等工作",
+        "拆除",
+        "木地板"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0007",
+      "source_row_no": 13,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "矿棉板天花拆除",
+      "manual_feature": "1、600*600矿棉板天花拆除及清运等工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "矿棉板天花拆除"
+      ],
+      "weak_terms": [
+        "矿棉板天花拆除",
+        "600*600矿棉板天花拆除及清运等工作",
+        "拆除",
+        "矿棉板天花"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0008",
+      "source_row_no": 14,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "条形扣板天花拆除",
+      "manual_feature": "1、条形铝扣板天花拆除及清运等工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "条形扣板天花拆除"
+      ],
+      "weak_terms": [
+        "条形扣板天花拆除",
+        "条形铝扣板天花拆除及清运等工作",
+        "拆除",
+        "条形扣板天花"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0009",
+      "source_row_no": 15,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "石膏板天花拆除",
+      "manual_feature": "1、吊顶石膏板天花拆除及清运等工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "石膏板天花拆除"
+      ],
+      "weak_terms": [
+        "石膏板天花拆除",
+        "吊顶石膏板天花拆除及清运等工作",
+        "拆除",
+        "石膏板天花"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0010",
+      "source_row_no": 16,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "台阶拆除",
+      "manual_feature": "1、砖砌台阶拆除及清运等工作",
+      "manual_unit": "m³",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "台阶拆除"
+      ],
+      "weak_terms": [
+        "台阶拆除",
+        "砖砌台阶拆除及清运等工作",
+        "拆除",
+        "台阶"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0011",
+      "source_row_no": 17,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "售卖窗口拆除",
+      "manual_feature": "1、不锈钢售卖窗口拆除及清运等工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "售卖窗口拆除"
+      ],
+      "weak_terms": [
+        "售卖窗口拆除",
+        "不锈钢售卖窗口拆除及清运等工作",
+        "拆除",
+        "售卖窗口"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0012",
+      "source_row_no": 18,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "隔墙拆除",
+      "manual_feature": "1、砖砌隔墙拆除及清运等工作",
+      "manual_unit": "m³",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "隔墙拆除"
+      ],
+      "weak_terms": [
+        "隔墙拆除",
+        "砖砌隔墙拆除及清运等工作",
+        "拆除",
+        "隔墙"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0013",
+      "source_row_no": 19,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙砖拆除",
+      "manual_feature": "1、墙面瓷砖拆除及清运等工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "墙砖拆除"
+      ],
+      "weak_terms": [
+        "墙砖拆除",
+        "墙面瓷砖拆除及清运等工作",
+        "拆除",
+        "墙砖"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0014",
+      "source_row_no": 20,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙面装饰层拆除",
+      "manual_feature": "1、墙纸、造型隔条等拆除及清运等工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "墙面装饰层拆除"
+      ],
+      "weak_terms": [
+        "墙面装饰层拆除",
+        "墙纸",
+        "造型隔条等拆除及清运等工作",
+        "拆除",
+        "墙面装饰层"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0015",
+      "source_row_no": 21,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "洗手台拆除",
+      "manual_feature": "1、洗手台拆除及清运等工作",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "洗手台拆除"
+      ],
+      "weak_terms": [
+        "洗手台拆除",
+        "洗手台拆除及清运等工作",
+        "拆除",
+        "洗手台"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0016",
+      "source_row_no": 22,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "马桶拆除",
+      "manual_feature": "1、马桶拆除及清运等工作",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "马桶拆除"
+      ],
+      "weak_terms": [
+        "马桶拆除",
+        "马桶拆除及清运等工作",
+        "拆除",
+        "马桶"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0017",
+      "source_row_no": 23,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "管线拆除",
+      "manual_feature": "1、拆除天花吊顶内管线、保留原消防喷淋支管等工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "demolition",
+      "category_label": "拆除类",
+      "material_codes": [],
+      "strong_terms": [
+        "管线拆除"
+      ],
+      "weak_terms": [
+        "管线拆除",
+        "拆除天花吊顶内管线",
+        "保留原消防喷淋支管等工作",
+        "拆除",
+        "管线"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 90
+    },
+    {
+      "entry_id": "BIZ2xLEX-0018",
+      "source_row_no": 26,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "零星砌筑",
+      "manual_feature": "1、过厅砖砌地台，抬高240mm",
+      "manual_unit": "m³",
+      "manual_quantity": "",
+      "category": "masonry_backfill",
+      "category_label": "砌筑回填类",
+      "material_codes": [],
+      "strong_terms": [
+        "零星砌筑"
+      ],
+      "weak_terms": [
+        "零星砌筑",
+        "过厅砖砌地台",
+        "抬高240mm"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010401008",
+      "standard_item_name": "零星砌砖",
+      "standard_chapter_name": "GB/T 50854-2024 表格 24",
+      "standard_unit_options": [
+        "m³",
+        "m3",
+        "立方米"
+      ],
+      "standard_feature_fields": [
+        "零星砌砖名称、部位",
+        "砖品种、规格、强度等级",
+        "砂浆强度等级"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以体积计算",
+      "mapping_reason": "样例零星砌筑按砌体类候选",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0019",
+      "source_row_no": 27,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "石材门槛石地面ST-02",
+      "manual_feature": "1、界面剂一道，50厚CL7.5轻集料混凝土垫层\n2、20厚1:3细石水泥砂浆找平层\n3、20厚水泥砂浆结合层\n4、20厚深咖大理石ST-02",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [
+        "ST-02"
+      ],
+      "strong_terms": [
+        "石材门槛石地面ST-02",
+        "石材门槛石地面",
+        "ST-02"
+      ],
+      "weak_terms": [
+        "石材门槛石地面",
+        "界面剂一道",
+        "50厚CL7.5轻集料混凝土垫层",
+        "20厚1",
+        "3细石水泥砂浆找平层",
+        "20厚水泥砂浆结合层",
+        "20厚深咖大理石ST",
+        "02",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "石材地面",
+        "瓷砖地面"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011102001",
+      "standard_item_name": "石材楼地面",
+      "standard_chapter_name": "块料面层",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层厚度、材料种类及强度等级",
+        "结合层厚度、材料种类及强度等级",
+        "面层材料品种、规格",
+        "勾缝材料种类",
+        "防护层材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算。门 | 洞、空圈、暖气包槽、壁龛的开口部分并入相应的工程量内",
+      "mapping_reason": "样例地面石材/门槛石按石材楼地面或石材零星项目候选",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0020",
+      "source_row_no": 28,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "石材地面ST-01",
+      "manual_feature": "1、界面剂一道，25厚CL7.5轻集料混凝土垫层\n2、35厚C20细石混凝土浆找平层\n3、20厚1:3水泥砂浆找平层\n4、20厚1:3水泥砂浆结合层\n5、20厚维纳斯大理石ST-01\n6、石材拉槽处理",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [
+        "ST-01"
+      ],
+      "strong_terms": [
+        "石材地面ST-01",
+        "石材地面",
+        "ST-01"
+      ],
+      "weak_terms": [
+        "石材地面",
+        "界面剂一道",
+        "25厚CL7.5轻集料混凝土垫层",
+        "35厚C20细石混凝土浆找平层",
+        "20厚1",
+        "3水泥砂浆找平层",
+        "3水泥砂浆结合层",
+        "20厚维纳斯大理石ST",
+        "01",
+        "石材拉槽处理",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "瓷砖地面"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011102001",
+      "standard_item_name": "石材楼地面",
+      "standard_chapter_name": "块料面层",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层厚度、材料种类及强度等级",
+        "结合层厚度、材料种类及强度等级",
+        "面层材料品种、规格",
+        "勾缝材料种类",
+        "防护层材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算。门 | 洞、空圈、暖气包槽、壁龛的开口部分并入相应的工程量内",
+      "mapping_reason": "样例地面石材/门槛石按石材楼地面或石材零星项目候选",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0021",
+      "source_row_no": 29,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "石材地面ST-02",
+      "manual_feature": "1、界面剂一道，25厚CL7.5轻集料混凝土垫层\n2、35厚C20细石混凝土浆找平层\n3、20厚1:3水泥砂浆找平层\n4、20厚1:3水泥砂浆结合层\n5、20厚深咖大理石ST-02",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [
+        "ST-02"
+      ],
+      "strong_terms": [
+        "石材地面ST-02",
+        "石材地面",
+        "ST-02"
+      ],
+      "weak_terms": [
+        "石材地面",
+        "界面剂一道",
+        "25厚CL7.5轻集料混凝土垫层",
+        "35厚C20细石混凝土浆找平层",
+        "20厚1",
+        "3水泥砂浆找平层",
+        "3水泥砂浆结合层",
+        "20厚深咖大理石ST",
+        "02",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "瓷砖地面"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011102001",
+      "standard_item_name": "石材楼地面",
+      "standard_chapter_name": "块料面层",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层厚度、材料种类及强度等级",
+        "结合层厚度、材料种类及强度等级",
+        "面层材料品种、规格",
+        "勾缝材料种类",
+        "防护层材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算。门 | 洞、空圈、暖气包槽、壁龛的开口部分并入相应的工程量内",
+      "mapping_reason": "样例地面石材/门槛石按石材楼地面或石材零星项目候选",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0022",
+      "source_row_no": 30,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "瓷砖地面CT-01",
+      "manual_feature": "1、界面剂一道，50厚CL7.5轻集料混凝土垫层\n2、20厚1:3细石水泥砂浆找平层\n3、20厚水泥砂浆结合层\n4、精品灰色地砖750x1500",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [
+        "CT-01"
+      ],
+      "strong_terms": [
+        "瓷砖地面CT-01",
+        "瓷砖地面",
+        "CT-01"
+      ],
+      "weak_terms": [
+        "瓷砖地面",
+        "界面剂一道",
+        "50厚CL7.5轻集料混凝土垫层",
+        "20厚1",
+        "3细石水泥砂浆找平层",
+        "20厚水泥砂浆结合层",
+        "精品灰色地砖750x1500",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "石材地面"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011102003",
+      "standard_item_name": "块料楼地面",
+      "standard_chapter_name": "块料面层",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层厚度、材料种类及强度等级",
+        "结合层厚度、材料种类及强度等级",
+        "面层材料品种、规格",
+        "勾缝材料种类",
+        "防护层材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算。门 | 洞、空圈、暖气包槽、壁龛的开口部分并入相应的工程量内",
+      "mapping_reason": "样例瓷砖/地砖/美缝地面按块料楼地面候选",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0023",
+      "source_row_no": 31,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "瓷砖地面CT-02",
+      "manual_feature": "1、界面剂一道，50厚CL7.5轻集料混凝土垫层\n2、20厚1:3细石水泥砂浆找平层\n3、20厚水泥砂浆结合层\n4、灰色地砖600x1200",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [
+        "CT-02"
+      ],
+      "strong_terms": [
+        "瓷砖地面CT-02",
+        "瓷砖地面",
+        "CT-02"
+      ],
+      "weak_terms": [
+        "瓷砖地面",
+        "界面剂一道",
+        "50厚CL7.5轻集料混凝土垫层",
+        "20厚1",
+        "3细石水泥砂浆找平层",
+        "20厚水泥砂浆结合层",
+        "灰色地砖600x1200",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "石材地面"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011102003",
+      "standard_item_name": "块料楼地面",
+      "standard_chapter_name": "块料面层",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层厚度、材料种类及强度等级",
+        "结合层厚度、材料种类及强度等级",
+        "面层材料品种、规格",
+        "勾缝材料种类",
+        "防护层材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算。门 | 洞、空圈、暖气包槽、壁龛的开口部分并入相应的工程量内",
+      "mapping_reason": "样例瓷砖/地砖/美缝地面按块料楼地面候选",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0024",
+      "source_row_no": 32,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "瓷砖地面CT-03",
+      "manual_feature": "1、界面剂一道，25厚CL7.5轻集料混凝土垫层\n2、35厚C20细石混凝土浆找平层\n3、20厚1:3水泥砂浆找平层\n4、20厚1:3水泥砂浆结合层\n5、300x300吸水砖",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [
+        "CT-03"
+      ],
+      "strong_terms": [
+        "瓷砖地面CT-03",
+        "瓷砖地面",
+        "CT-03"
+      ],
+      "weak_terms": [
+        "瓷砖地面",
+        "界面剂一道",
+        "25厚CL7.5轻集料混凝土垫层",
+        "35厚C20细石混凝土浆找平层",
+        "20厚1",
+        "3水泥砂浆找平层",
+        "3水泥砂浆结合层",
+        "300x300吸水砖",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "石材地面"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011102003",
+      "standard_item_name": "块料楼地面",
+      "standard_chapter_name": "块料面层",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层厚度、材料种类及强度等级",
+        "结合层厚度、材料种类及强度等级",
+        "面层材料品种、规格",
+        "勾缝材料种类",
+        "防护层材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算。门 | 洞、空圈、暖气包槽、壁龛的开口部分并入相应的工程量内",
+      "mapping_reason": "样例瓷砖/地砖/美缝地面按块料楼地面候选",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0025",
+      "source_row_no": 33,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "瓷砖地面CT-04",
+      "manual_feature": "1、界面剂一道，25厚CL7.5轻集料混凝土垫层\n2、35厚C20细石混凝土浆找平层\n3、20厚1:3水泥砂浆找平层\n4、20厚1:3水泥砂浆结合层\n5、600X600灰色地砖",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [
+        "CT-04"
+      ],
+      "strong_terms": [
+        "瓷砖地面CT-04",
+        "瓷砖地面",
+        "CT-04"
+      ],
+      "weak_terms": [
+        "瓷砖地面",
+        "界面剂一道",
+        "25厚CL7.5轻集料混凝土垫层",
+        "35厚C20细石混凝土浆找平层",
+        "20厚1",
+        "3水泥砂浆找平层",
+        "3水泥砂浆结合层",
+        "600X600灰色地砖",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "石材地面"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011102003",
+      "standard_item_name": "块料楼地面",
+      "standard_chapter_name": "块料面层",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层厚度、材料种类及强度等级",
+        "结合层厚度、材料种类及强度等级",
+        "面层材料品种、规格",
+        "勾缝材料种类",
+        "防护层材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算。门 | 洞、空圈、暖气包槽、壁龛的开口部分并入相应的工程量内",
+      "mapping_reason": "样例瓷砖/地砖/美缝地面按块料楼地面候选",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0026",
+      "source_row_no": 34,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙地面防水处理",
+      "manual_feature": "1、1.5厚聚氨酯涂膜防水三遍",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "waterproof",
+      "category_label": "防水防潮类",
+      "material_codes": [],
+      "strong_terms": [
+        "墙地面防水处理"
+      ],
+      "weak_terms": [
+        "墙地面防水处理",
+        "1.5厚聚氨酯涂膜防水三遍"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010903002",
+      "standard_item_name": "墙面涂膜 | 防水",
+      "standard_chapter_name": "GB/T 50854-2024 表格 80",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "防水膜品种",
+        "涂膜厚度、遍数",
+        "增强材料种类"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算",
+      "mapping_reason": "样例墙面防水按墙面涂膜防水候选",
+      "recognition_priority": 82
+    },
+    {
+      "entry_id": "BIZ2xLEX-0027",
+      "source_row_no": 35,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "防水保护层",
+      "manual_feature": "1、10厚水泥砂浆防水保护层",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "waterproof",
+      "category_label": "防水防潮类",
+      "material_codes": [],
+      "strong_terms": [
+        "防水保护层"
+      ],
+      "weak_terms": [
+        "防水保护层",
+        "10厚水泥砂浆防水保护层"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010904002",
+      "standard_item_name": "楼(地) 面涂膜防水",
+      "standard_chapter_name": "GB/T 50854-2024 表格 81",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "防水膜品种",
+        "涂膜厚度、遍数",
+        "增强材料种类",
+        "上翻高度"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸 | 以主墙间净面积计 | 算，扣除凸出地面的 | 构筑物、设备基础及 | 单个面积>0.3m² | 的柱、垛、烟囱和孔 | 洞等所占面积 | 楼(地)面防水上 | 翻高度 ≤ 3 0 0 mm | 时，工程量并入楼 | 地面防水工程量内",
+      "mapping_reason": "样例地面防水按楼地面涂膜防水候选",
+      "recognition_priority": 82
+    },
+    {
+      "entry_id": "BIZ2xLEX-0028",
+      "source_row_no": 36,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "人造石挡水条",
+      "manual_feature": "1、60宽人造石挡水条",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "linear_finish",
+      "category_label": "线性收口类",
+      "material_codes": [],
+      "strong_terms": [
+        "人造石挡水条"
+      ],
+      "weak_terms": [
+        "人造石挡水条",
+        "60宽人造石挡水条"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 76
+    },
+    {
+      "entry_id": "BIZ2xLEX-0029",
+      "source_row_no": 37,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "瓷砖美缝",
+      "manual_feature": "1、地面瓷砖美缝处理",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [],
+      "strong_terms": [
+        "瓷砖美缝"
+      ],
+      "weak_terms": [
+        "瓷砖美缝",
+        "地面瓷砖美缝处理",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "石材地面",
+        "瓷砖地面"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011102003",
+      "standard_item_name": "块料楼地面",
+      "standard_chapter_name": "块料面层",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层厚度、材料种类及强度等级",
+        "结合层厚度、材料种类及强度等级",
+        "面层材料品种、规格",
+        "勾缝材料种类",
+        "防护层材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算。门 | 洞、空圈、暖气包槽、壁龛的开口部分并入相应的工程量内",
+      "mapping_reason": "样例瓷砖/地砖/美缝地面按块料楼地面候选",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0030",
+      "source_row_no": 40,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "轻钢龙骨防水石膏板平级吊顶",
+      "manual_feature": "1、区域：卫生间、过厅\n2、U型50系列轻钢天棚龙骨 一级;\n3、双层9.5mm防水石膏板,自攻螺丝固定，满足规范要求;",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "ceiling",
+      "category_label": "吊顶/天棚类",
+      "material_codes": [],
+      "strong_terms": [
+        "轻钢龙骨防水石膏板平级吊顶"
+      ],
+      "weak_terms": [
+        "轻钢龙骨防水石膏板平级吊顶",
+        "区域",
+        "卫生间",
+        "过厅",
+        "U型50系列轻钢天棚龙骨",
+        "一级",
+        "双层9.5mm防水石膏板,自攻螺丝固定",
+        "满足规范要求",
+        "吊顶",
+        "天花",
+        "天棚",
+        "灯槽",
+        "石膏板吊顶",
+        "铝扣板吊顶"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011302001",
+      "standard_item_name": "平面吊顶 | 天棚",
+      "standard_chapter_name": "天棚工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "吊顶形式、吊杆规格、高度",
+        "龙骨材料种类、规格、中距",
+        "基层材料种类、规格",
+        "面板材料品种、规格",
+        "压条材料种类、规格",
+        "嵌缝材料种类",
+        "防护材料种类"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸 | 以水平投影面积计 | 算。扣除与天棚相 | 连的窗帘盒所占的 | 面积；不扣除检查 | 口、附墙烟囱、柱垛 | 和管道以及单个面 | 积≤0.3m²的独立 | 柱、孔洞所占面积",
+      "mapping_reason": "样例普通吊顶/天花按平面吊顶天棚候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0031",
+      "source_row_no": 41,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "轻钢龙骨防水石膏板造型吊顶",
+      "manual_feature": "1、区域：包厢\n2、U型50系列轻钢天棚龙骨 跌级;\n3、造型处为15厚阻燃板基层，双层9.5mm防水石膏板,自攻螺丝固定，满足规范要求;",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "ceiling",
+      "category_label": "吊顶/天棚类",
+      "material_codes": [],
+      "strong_terms": [
+        "轻钢龙骨防水石膏板造型吊顶"
+      ],
+      "weak_terms": [
+        "轻钢龙骨防水石膏板造型吊顶",
+        "区域",
+        "包厢",
+        "U型50系列轻钢天棚龙骨",
+        "跌级",
+        "造型处为15厚阻燃板基层",
+        "双层9.5mm防水石膏板,自攻螺丝固定",
+        "满足规范要求",
+        "吊顶",
+        "天花",
+        "天棚",
+        "灯槽",
+        "石膏板吊顶",
+        "铝扣板吊顶"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011302003",
+      "standard_item_name": "艺术造型 | 吊顶天棚",
+      "standard_chapter_name": "天棚工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "吊顶部位",
+        "吊顶形式、吊杆规格、高度",
+        "龙骨材料种类、规格、中距",
+        "基层材料种类、规格",
+        "面板材料品种、规格",
+        "压条材料种类、规格",
+        "嵌缝材料种类",
+        "防护材料种类"
+      ],
+      "standard_quantity_rule_text": "算。天棚面中的灯 | 槽及跌级天棚面积 | 不展开计算。扣除 | 与天棚相连的窗帘 | 盒所占的面积；不扣 | 除检查口、附墙烟 | 囱、柱垛和管道以及 | 单个面积≤0.3m² | 的独立柱、孔洞所 | 占面积",
+      "mapping_reason": "样例造型吊顶/灯槽按艺术造型吊顶天棚候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0032",
+      "source_row_no": 44,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "木饰面天花吊顶",
+      "manual_feature": "1、区域：开放式餐厅\n2、U型50系列轻钢天棚龙骨 跌级;\n3、15厚阻燃板基层；\n4、成品木饰面WD-01",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "ceiling",
+      "category_label": "吊顶/天棚类",
+      "material_codes": [
+        "WD-01"
+      ],
+      "strong_terms": [
+        "木饰面天花吊顶",
+        "WD-01"
+      ],
+      "weak_terms": [
+        "木饰面天花吊顶",
+        "区域",
+        "开放式餐厅",
+        "U型50系列轻钢天棚龙骨",
+        "跌级",
+        "15厚阻燃板基层",
+        "成品木饰面WD",
+        "01",
+        "吊顶",
+        "天花",
+        "天棚",
+        "灯槽",
+        "石膏板吊顶",
+        "铝扣板吊顶"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011302001",
+      "standard_item_name": "平面吊顶 | 天棚",
+      "standard_chapter_name": "天棚工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "吊顶形式、吊杆规格、高度",
+        "龙骨材料种类、规格、中距",
+        "基层材料种类、规格",
+        "面板材料品种、规格",
+        "压条材料种类、规格",
+        "嵌缝材料种类",
+        "防护材料种类"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸 | 以水平投影面积计 | 算。扣除与天棚相 | 连的窗帘盒所占的 | 面积；不扣除检查 | 口、附墙烟囱、柱垛 | 和管道以及单个面 | 积≤0.3m²的独立 | 柱、孔洞所占面积",
+      "mapping_reason": "样例普通吊顶/天花按平面吊顶天棚候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0033",
+      "source_row_no": 45,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "铝扣板吊顶",
+      "manual_feature": "1、区域：厨房\n2、专用镀锌轻钢龙骨，主龙骨间距800以内；\n3、600*600铝扣板安装",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "ceiling",
+      "category_label": "吊顶/天棚类",
+      "material_codes": [],
+      "strong_terms": [
+        "铝扣板吊顶"
+      ],
+      "weak_terms": [
+        "铝扣板吊顶",
+        "区域",
+        "厨房",
+        "专用镀锌轻钢龙骨",
+        "主龙骨间距800以内",
+        "600*600铝扣板安装",
+        "吊顶",
+        "天花",
+        "天棚",
+        "灯槽",
+        "石膏板吊顶"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011302001",
+      "standard_item_name": "平面吊顶 | 天棚",
+      "standard_chapter_name": "天棚工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "吊顶形式、吊杆规格、高度",
+        "龙骨材料种类、规格、中距",
+        "基层材料种类、规格",
+        "面板材料品种、规格",
+        "压条材料种类、规格",
+        "嵌缝材料种类",
+        "防护材料种类"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸 | 以水平投影面积计 | 算。扣除与天棚相 | 连的窗帘盒所占的 | 面积；不扣除检查 | 口、附墙烟囱、柱垛 | 和管道以及单个面 | 积≤0.3m²的独立 | 柱、孔洞所占面积",
+      "mapping_reason": "样例普通吊顶/天花按平面吊顶天棚候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0034",
+      "source_row_no": 46,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "灯槽",
+      "manual_feature": "1、尺寸：100*50mm，卫生间\n2、15厚阻燃板基层，防腐、防蛀处理，面贴单层9.5mm石膏板；",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "ceiling",
+      "category_label": "吊顶/天棚类",
+      "material_codes": [],
+      "strong_terms": [
+        "灯槽"
+      ],
+      "weak_terms": [
+        "灯槽",
+        "尺寸",
+        "100*50mm",
+        "卫生间",
+        "15厚阻燃板基层",
+        "防腐",
+        "防蛀处理",
+        "面贴单层9.5mm石膏板",
+        "吊顶",
+        "天花",
+        "天棚",
+        "石膏板吊顶",
+        "铝扣板吊顶"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011302003",
+      "standard_item_name": "艺术造型 | 吊顶天棚",
+      "standard_chapter_name": "天棚工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "吊顶部位",
+        "吊顶形式、吊杆规格、高度",
+        "龙骨材料种类、规格、中距",
+        "基层材料种类、规格",
+        "面板材料品种、规格",
+        "压条材料种类、规格",
+        "嵌缝材料种类",
+        "防护材料种类"
+      ],
+      "standard_quantity_rule_text": "算。天棚面中的灯 | 槽及跌级天棚面积 | 不展开计算。扣除 | 与天棚相连的窗帘 | 盒所占的面积；不扣 | 除检查口、附墙烟 | 囱、柱垛和管道以及 | 单个面积≤0.3m² | 的独立柱、孔洞所 | 占面积",
+      "mapping_reason": "样例造型吊顶/灯槽按艺术造型吊顶天棚候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0035",
+      "source_row_no": 48,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "圆形灯槽",
+      "manual_feature": "1、尺寸：圆形100*50mm，卡座\n2、15厚阻燃板基层，防腐、防蛀处理，面贴单层9.5mm石膏板；",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "ceiling",
+      "category_label": "吊顶/天棚类",
+      "material_codes": [],
+      "strong_terms": [
+        "圆形灯槽"
+      ],
+      "weak_terms": [
+        "圆形灯槽",
+        "尺寸",
+        "圆形100*50mm",
+        "卡座",
+        "15厚阻燃板基层",
+        "防腐",
+        "防蛀处理",
+        "面贴单层9.5mm石膏板",
+        "吊顶",
+        "天花",
+        "天棚",
+        "灯槽",
+        "石膏板吊顶",
+        "铝扣板吊顶"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011302003",
+      "standard_item_name": "艺术造型 | 吊顶天棚",
+      "standard_chapter_name": "天棚工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "吊顶部位",
+        "吊顶形式、吊杆规格、高度",
+        "龙骨材料种类、规格、中距",
+        "基层材料种类、规格",
+        "面板材料品种、规格",
+        "压条材料种类、规格",
+        "嵌缝材料种类",
+        "防护材料种类"
+      ],
+      "standard_quantity_rule_text": "算。天棚面中的灯 | 槽及跌级天棚面积 | 不展开计算。扣除 | 与天棚相连的窗帘 | 盒所占的面积；不扣 | 除检查口、附墙烟 | 囱、柱垛和管道以及 | 单个面积≤0.3m² | 的独立柱、孔洞所 | 占面积",
+      "mapping_reason": "样例造型吊顶/灯槽按艺术造型吊顶天棚候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0036",
+      "source_row_no": 49,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "窗帘盒",
+      "manual_feature": "1、尺寸：200mm宽\n2、15厚阻燃板基层，防腐、防蛀处理，面贴单层9.5mm石膏板；",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "linear_finish",
+      "category_label": "线性收口类",
+      "material_codes": [],
+      "strong_terms": [
+        "窗帘盒"
+      ],
+      "weak_terms": [
+        "窗帘盒",
+        "尺寸",
+        "200mm宽",
+        "15厚阻燃板基层",
+        "防腐",
+        "防蛀处理",
+        "面贴单层9.5mm石膏板"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010810001",
+      "standard_item_name": "窗帘",
+      "standard_chapter_name": "门窗工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "窗帘材质",
+        "窗帘层数",
+        "带幔要求",
+        "其他工艺要求"
+      ],
+      "standard_quantity_rule_text": "按设计窗帘覆盖面积计算",
+      "mapping_reason": "样例窗帘盒按窗帘盒候选",
+      "recognition_priority": 76
+    },
+    {
+      "entry_id": "BIZ2xLEX-0037",
+      "source_row_no": 50,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "白色防潮无机涂料",
+      "manual_feature": "1、基层处理、贴绷带及点防锈漆；\n2、防水腻子，面油白色防潮无机涂料三遍；",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "waterproof",
+      "category_label": "防水防潮类",
+      "material_codes": [],
+      "strong_terms": [
+        "白色防潮无机涂料"
+      ],
+      "weak_terms": [
+        "白色防潮无机涂料",
+        "基层处理",
+        "贴绷带及点防锈漆",
+        "防水腻子",
+        "面油白色防潮无机涂料三遍"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010904002",
+      "standard_item_name": "楼(地) 面涂膜防水",
+      "standard_chapter_name": "GB/T 50854-2024 表格 81",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "防水膜品种",
+        "涂膜厚度、遍数",
+        "增强材料种类",
+        "上翻高度"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸 | 以主墙间净面积计 | 算，扣除凸出地面的 | 构筑物、设备基础及 | 单个面积>0.3m² | 的柱、垛、烟囱和孔 | 洞等所占面积 | 楼(地)面防水上 | 翻高度 ≤ 3 0 0 mm | 时，工程量并入楼 | 地面防水工程量内",
+      "mapping_reason": "样例地面防水按楼地面涂膜防水候选",
+      "recognition_priority": 82
+    },
+    {
+      "entry_id": "BIZ2xLEX-0038",
+      "source_row_no": 51,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "黑色防潮无机涂料",
+      "manual_feature": "1、基层处理、贴绷带及点防锈漆；\n2、防水腻子，面油黑色防潮无机涂料三遍；",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "waterproof",
+      "category_label": "防水防潮类",
+      "material_codes": [],
+      "strong_terms": [
+        "黑色防潮无机涂料"
+      ],
+      "weak_terms": [
+        "黑色防潮无机涂料",
+        "基层处理",
+        "贴绷带及点防锈漆",
+        "防水腻子",
+        "面油黑色防潮无机涂料三遍"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010904002",
+      "standard_item_name": "楼(地) 面涂膜防水",
+      "standard_chapter_name": "GB/T 50854-2024 表格 81",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "防水膜品种",
+        "涂膜厚度、遍数",
+        "增强材料种类",
+        "上翻高度"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸 | 以主墙间净面积计 | 算，扣除凸出地面的 | 构筑物、设备基础及 | 单个面积>0.3m² | 的柱、垛、烟囱和孔 | 洞等所占面积 | 楼(地)面防水上 | 翻高度 ≤ 3 0 0 mm | 时，工程量并入楼 | 地面防水工程量内",
+      "mapping_reason": "样例地面防水按楼地面涂膜防水候选",
+      "recognition_priority": 82
+    },
+    {
+      "entry_id": "BIZ2xLEX-0039",
+      "source_row_no": 54,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "砖砌隔墙",
+      "manual_feature": "1、100mm宽\n2、新建蒸压加气砼砌块墙",
+      "manual_unit": "m³",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [],
+      "strong_terms": [
+        "砖砌隔墙"
+      ],
+      "weak_terms": [
+        "砖砌隔墙",
+        "100mm宽",
+        "新建蒸压加气砼砌块墙",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011207003",
+      "standard_item_name": "成品隔断",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "隔断材料品种、规格",
+        "配件品种、规格",
+        "固定方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示框外围尺寸以面积计算",
+      "mapping_reason": "样例隔墙/隔断按隔断类标准候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0040",
+      "source_row_no": 55,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙面抹灰",
+      "manual_feature": "1、20厚1:2.5水泥砂浆抹灰找平;1.清理、修补、湿润基层表面、堵墙眼、调运砂浆、清扫落地灰。",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [],
+      "strong_terms": [
+        "墙面抹灰"
+      ],
+      "weak_terms": [
+        "墙面抹灰",
+        "20厚1",
+        "2.5水泥砂浆抹灰找平",
+        "1.清理",
+        "修补",
+        "湿润基层表面",
+        "堵墙眼",
+        "调运砂浆",
+        "清扫落地灰",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0041",
+      "source_row_no": 56,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "陶粒回填",
+      "manual_feature": "1、隔墙陶粒回填",
+      "manual_unit": "m³",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [],
+      "strong_terms": [
+        "陶粒回填"
+      ],
+      "weak_terms": [
+        "陶粒回填",
+        "隔墙陶粒回填",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011207003",
+      "standard_item_name": "成品隔断",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "隔断材料品种、规格",
+        "配件品种、规格",
+        "固定方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示框外围尺寸以面积计算",
+      "mapping_reason": "样例隔墙/隔断按隔断类标准候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0042",
+      "source_row_no": 57,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙面瓷砖湿贴CT-04",
+      "manual_feature": "1、瓷砖配套专用粘结剂粘贴，\n2、600*1200白色墙面砖",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [
+        "CT-04"
+      ],
+      "strong_terms": [
+        "墙面瓷砖湿贴CT-04",
+        "墙面瓷砖湿贴",
+        "CT-04"
+      ],
+      "weak_terms": [
+        "墙面瓷砖湿贴",
+        "瓷砖配套专用粘结剂粘贴",
+        "600*1200白色墙面砖",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011203003",
+      "standard_item_name": "块料墙、柱面",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "基层类型、部位",
+        "安装方式",
+        "骨架材料种类、规格",
+        "面层材料品种、规格",
+        "缝宽、勾缝材料种类",
+        "防护材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示镶贴后表面积计算",
+      "mapping_reason": "样例墙砖/瓷砖墙面按块料墙、柱面候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0043",
+      "source_row_no": 58,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙面瓷砖CT-04",
+      "manual_feature": "1、40*60mm扁通钢结构；\n2、12厚细木工板基层\n3、600*1200白色墙面砖",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [
+        "CT-04"
+      ],
+      "strong_terms": [
+        "墙面瓷砖CT-04",
+        "墙面瓷砖",
+        "CT-04"
+      ],
+      "weak_terms": [
+        "墙面瓷砖",
+        "40*60mm扁通钢结构",
+        "12厚细木工板基层",
+        "600*1200白色墙面砖",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011203003",
+      "standard_item_name": "块料墙、柱面",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "基层类型、部位",
+        "安装方式",
+        "骨架材料种类、规格",
+        "面层材料品种、规格",
+        "缝宽、勾缝材料种类",
+        "防护材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示镶贴后表面积计算",
+      "mapping_reason": "样例墙砖/瓷砖墙面按块料墙、柱面候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0044",
+      "source_row_no": 59,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙面瓷砖湿贴CT-05",
+      "manual_feature": "1、瓷砖配套专用粘结剂粘贴，\n2、400*800白色墙面砖",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [
+        "CT-05"
+      ],
+      "strong_terms": [
+        "墙面瓷砖湿贴CT-05",
+        "墙面瓷砖湿贴",
+        "CT-05"
+      ],
+      "weak_terms": [
+        "墙面瓷砖湿贴",
+        "瓷砖配套专用粘结剂粘贴",
+        "400*800白色墙面砖",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011203003",
+      "standard_item_name": "块料墙、柱面",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "基层类型、部位",
+        "安装方式",
+        "骨架材料种类、规格",
+        "面层材料品种、规格",
+        "缝宽、勾缝材料种类",
+        "防护材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示镶贴后表面积计算",
+      "mapping_reason": "样例墙砖/瓷砖墙面按块料墙、柱面候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0045",
+      "source_row_no": 60,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "人造石墙面ST-03",
+      "manual_feature": "1、石材配套专用粘结剂粘贴，\n2、卫生间20MM人造石墙面ST-03",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [
+        "ST-03"
+      ],
+      "strong_terms": [
+        "人造石墙面ST-03",
+        "人造石墙面",
+        "ST-03"
+      ],
+      "weak_terms": [
+        "人造石墙面",
+        "石材配套专用粘结剂粘贴",
+        "卫生间20MM人造石墙面ST",
+        "03",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011203001",
+      "standard_item_name": "石材墙、柱面",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "基层类型、部位",
+        "安装方式",
+        "骨架材料种类、规格",
+        "面层材料品种、规格",
+        "缝宽、勾缝材料种类",
+        "防护材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示镶贴后表面积计算",
+      "mapping_reason": "样例石材/人造石墙面按石材墙、柱面候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0046",
+      "source_row_no": 61,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙面石材湿贴",
+      "manual_feature": "1、石材配套专用粘结剂粘贴，\n2、黑色金刚石150*600mm",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [],
+      "strong_terms": [
+        "墙面石材湿贴"
+      ],
+      "weak_terms": [
+        "墙面石材湿贴",
+        "石材配套专用粘结剂粘贴",
+        "黑色金刚石150*600mm",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011203001",
+      "standard_item_name": "石材墙、柱面",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "基层类型、部位",
+        "安装方式",
+        "骨架材料种类、规格",
+        "面层材料品种、规格",
+        "缝宽、勾缝材料种类",
+        "防护材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示镶贴后表面积计算",
+      "mapping_reason": "样例石材/人造石墙面按石材墙、柱面候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0047",
+      "source_row_no": 62,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "玻璃隔墙",
+      "manual_feature": "1、吊顶骨架及不锈钢U型槽固定\n2、10mm钢化磨砂玻璃，完成图纸内容一切工作",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "ceiling",
+      "category_label": "吊顶/天棚类",
+      "material_codes": [],
+      "strong_terms": [
+        "玻璃隔墙"
+      ],
+      "weak_terms": [
+        "玻璃隔墙",
+        "吊顶骨架及不锈钢U型槽固定",
+        "10mm钢化磨砂玻璃",
+        "完成图纸内容一切工作",
+        "吊顶",
+        "天花",
+        "天棚",
+        "灯槽",
+        "石膏板吊顶",
+        "铝扣板吊顶"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011302001",
+      "standard_item_name": "平面吊顶 | 天棚",
+      "standard_chapter_name": "天棚工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "吊顶形式、吊杆规格、高度",
+        "龙骨材料种类、规格、中距",
+        "基层材料种类、规格",
+        "面板材料品种、规格",
+        "压条材料种类、规格",
+        "嵌缝材料种类",
+        "防护材料种类"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸 | 以水平投影面积计 | 算。扣除与天棚相 | 连的窗帘盒所占的 | 面积；不扣除检查 | 口、附墙烟囱、柱垛 | 和管道以及单个面 | 积≤0.3m²的独立 | 柱、孔洞所占面积",
+      "mapping_reason": "样例普通吊顶/天花按平面吊顶天棚候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0048",
+      "source_row_no": 63,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "木饰面包柱",
+      "manual_feature": "1、双层木方龙骨骨架，15厘阻燃板基层，做好防腐、防火、防虫处理；\n2、成品木饰面WD-01",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [
+        "WD-01"
+      ],
+      "strong_terms": [
+        "木饰面包柱",
+        "WD-01"
+      ],
+      "weak_terms": [
+        "木饰面包柱",
+        "双层木方龙骨骨架",
+        "15厘阻燃板基层",
+        "做好防腐",
+        "防火",
+        "防虫处理",
+        "成品木饰面WD",
+        "01",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0049",
+      "source_row_no": 64,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "瓷砖包柱",
+      "manual_feature": "1、双层木方龙骨骨架，15厘阻燃板基层，做好防腐、防火、防虫处理；\n2、600*1200白色墙面砖",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [],
+      "strong_terms": [
+        "瓷砖包柱"
+      ],
+      "weak_terms": [
+        "瓷砖包柱",
+        "双层木方龙骨骨架",
+        "15厘阻燃板基层",
+        "做好防腐",
+        "防火",
+        "防虫处理",
+        "600*1200白色墙面砖",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011203003",
+      "standard_item_name": "块料墙、柱面",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "基层类型、部位",
+        "安装方式",
+        "骨架材料种类、规格",
+        "面层材料品种、规格",
+        "缝宽、勾缝材料种类",
+        "防护材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示镶贴后表面积计算",
+      "mapping_reason": "样例墙砖/瓷砖墙面按块料墙、柱面候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0050",
+      "source_row_no": 65,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "圆形不锈钢隔断",
+      "manual_feature": "1、阻燃夹板基层；\n2、圆形玫瑰金不锈钢造型隔断MT-02",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [
+        "MT-02"
+      ],
+      "strong_terms": [
+        "圆形不锈钢隔断",
+        "MT-02"
+      ],
+      "weak_terms": [
+        "圆形不锈钢隔断",
+        "阻燃夹板基层",
+        "圆形玫瑰金不锈钢造型隔断MT",
+        "02",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011207003",
+      "standard_item_name": "成品隔断",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "隔断材料品种、规格",
+        "配件品种、规格",
+        "固定方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示框外围尺寸以面积计算",
+      "mapping_reason": "样例隔墙/隔断按隔断类标准候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0051",
+      "source_row_no": 66,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "人造石窗台石PM-01",
+      "manual_feature": "1、专用粘结剂粘贴，\n2、白色人造石",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "linear_finish",
+      "category_label": "线性收口类",
+      "material_codes": [
+        "PM-01"
+      ],
+      "strong_terms": [
+        "人造石窗台石PM-01",
+        "人造石窗台石",
+        "PM-01"
+      ],
+      "weak_terms": [
+        "人造石窗台石",
+        "专用粘结剂粘贴",
+        "白色人造石"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010809001",
+      "standard_item_name": "窗台板",
+      "standard_chapter_name": "门窗工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层材质",
+        "粘结层材质、 | 厚度",
+        "窗台板材质、规格"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以展开面积计算",
+      "mapping_reason": "样例窗台石/窗台板按窗台板候选",
+      "recognition_priority": 76
+    },
+    {
+      "entry_id": "BIZ2xLEX-0052",
+      "source_row_no": 67,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "生态板墙面",
+      "manual_feature": "1、15厚阻燃板基层\n2、成品生态长城板",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [],
+      "strong_terms": [
+        "生态板墙面"
+      ],
+      "weak_terms": [
+        "生态板墙面",
+        "15厚阻燃板基层",
+        "成品生态长城板",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0053",
+      "source_row_no": 68,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "隔断底座（卡座区）",
+      "manual_feature": "1、钢通结构+15厚阻燃夹板基层\n2、古堡灰大理石ST-1底座,1470*240*200mm；",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [
+        "ST-1"
+      ],
+      "strong_terms": [
+        "隔断底座（卡座区）",
+        "ST-1"
+      ],
+      "weak_terms": [
+        "隔断底座",
+        "卡座区",
+        "钢通结构+15厚阻燃夹板基层",
+        "古堡灰大理石ST",
+        "1底座,1470*240*200mm",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011207003",
+      "standard_item_name": "成品隔断",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "隔断材料品种、规格",
+        "配件品种、规格",
+        "固定方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示框外围尺寸以面积计算",
+      "mapping_reason": "样例隔墙/隔断按隔断类标准候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0054",
+      "source_row_no": 69,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "钢化玻璃造型柱（卡座区）",
+      "manual_feature": "1、10mm钢化玻璃造型柱，200*200*2366mm，4套",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "钢化玻璃造型柱（卡座区）"
+      ],
+      "weak_terms": [
+        "钢化玻璃造型柱",
+        "卡座区",
+        "10mm钢化玻璃造型柱",
+        "200*200*2366mm",
+        "4套"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0055",
+      "source_row_no": 70,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙布墙面",
+      "manual_feature": "1、基层处理，批腻子；\n2、墙布专用粘结胶\n3、素色墙布LE-02",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [
+        "LE-02"
+      ],
+      "strong_terms": [
+        "墙布墙面",
+        "LE-02"
+      ],
+      "weak_terms": [
+        "墙布墙面",
+        "基层处理",
+        "批腻子",
+        "墙布专用粘结胶",
+        "素色墙布LE",
+        "02",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011405001",
+      "standard_item_name": "墙纸裱糊",
+      "standard_chapter_name": "油漆、涂料、裱糊工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "基层类型",
+        "腻子种类",
+        "刮腻子遍数",
+        "粘结材料种类",
+        "防护材料种类",
+        "面层材料品种、规格"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算",
+      "mapping_reason": "样例墙布/硬包按裱糊类候选，需 R2 复核",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0056",
+      "source_row_no": 71,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "硬包墙面",
+      "manual_feature": "1、木方+15厚阻燃板基层\n2、布艺硬包LE-02",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [
+        "LE-02"
+      ],
+      "strong_terms": [
+        "硬包墙面",
+        "LE-02"
+      ],
+      "weak_terms": [
+        "硬包墙面",
+        "木方+15厚阻燃板基层",
+        "布艺硬包LE",
+        "02",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011405001",
+      "standard_item_name": "墙纸裱糊",
+      "standard_chapter_name": "油漆、涂料、裱糊工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "基层类型",
+        "腻子种类",
+        "刮腻子遍数",
+        "粘结材料种类",
+        "防护材料种类",
+        "面层材料品种、规格"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算",
+      "mapping_reason": "样例墙布/硬包按裱糊类候选，需 R2 复核",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0057",
+      "source_row_no": 72,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "金属线条",
+      "manual_feature": "1、60mm宽黑色拉丝不锈钢线条MT-01",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "linear_finish",
+      "category_label": "线性收口类",
+      "material_codes": [
+        "MT-01"
+      ],
+      "strong_terms": [
+        "金属线条",
+        "MT-01"
+      ],
+      "weak_terms": [
+        "金属线条",
+        "60mm宽黑色拉丝不锈钢线条MT",
+        "01"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 76
+    },
+    {
+      "entry_id": "BIZ2xLEX-0058",
+      "source_row_no": 74,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "白色无机涂料",
+      "manual_feature": "1、基层处理、贴绷带及点防锈漆；\n2、防水腻子，面油白色无机涂料三遍；",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "waterproof",
+      "category_label": "防水防潮类",
+      "material_codes": [],
+      "strong_terms": [
+        "白色无机涂料"
+      ],
+      "weak_terms": [
+        "白色无机涂料",
+        "基层处理",
+        "贴绷带及点防锈漆",
+        "防水腻子",
+        "面油白色无机涂料三遍"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010904002",
+      "standard_item_name": "楼(地) 面涂膜防水",
+      "standard_chapter_name": "GB/T 50854-2024 表格 81",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "防水膜品种",
+        "涂膜厚度、遍数",
+        "增强材料种类",
+        "上翻高度"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸 | 以主墙间净面积计 | 算，扣除凸出地面的 | 构筑物、设备基础及 | 单个面积>0.3m² | 的柱、垛、烟囱和孔 | 洞等所占面积 | 楼(地)面防水上 | 翻高度 ≤ 3 0 0 mm | 时，工程量并入楼 | 地面防水工程量内",
+      "mapping_reason": "样例地面防水按楼地面涂膜防水候选",
+      "recognition_priority": 82
+    },
+    {
+      "entry_id": "BIZ2xLEX-0059",
+      "source_row_no": 75,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙面灯槽",
+      "manual_feature": "1、60mm宽，15厚阻燃板基层\n2、黑色拉丝不锈钢饰面",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "ceiling",
+      "category_label": "吊顶/天棚类",
+      "material_codes": [],
+      "strong_terms": [
+        "墙面灯槽"
+      ],
+      "weak_terms": [
+        "墙面灯槽",
+        "60mm宽",
+        "15厚阻燃板基层",
+        "黑色拉丝不锈钢饰面",
+        "吊顶",
+        "天花",
+        "天棚",
+        "灯槽",
+        "石膏板吊顶",
+        "铝扣板吊顶"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011302003",
+      "standard_item_name": "艺术造型 | 吊顶天棚",
+      "standard_chapter_name": "天棚工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "吊顶部位",
+        "吊顶形式、吊杆规格、高度",
+        "龙骨材料种类、规格、中距",
+        "基层材料种类、规格",
+        "面板材料品种、规格",
+        "压条材料种类、规格",
+        "嵌缝材料种类",
+        "防护材料种类"
+      ],
+      "standard_quantity_rule_text": "算。天棚面中的灯 | 槽及跌级天棚面积 | 不展开计算。扣除 | 与天棚相连的窗帘 | 盒所占的面积；不扣 | 除检查口、附墙烟 | 囱、柱垛和管道以及 | 单个面积≤0.3m² | 的独立柱、孔洞所 | 占面积",
+      "mapping_reason": "样例造型吊顶/灯槽按艺术造型吊顶天棚候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0060",
+      "source_row_no": 76,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "定制成品装饰隔断",
+      "manual_feature": "1、820*2450mm\n2、木方+15厚阻燃板基层\n3、木饰面底座，黑色拉丝不锈钢方通造型隔断",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [],
+      "strong_terms": [
+        "定制成品装饰隔断"
+      ],
+      "weak_terms": [
+        "定制成品装饰隔断",
+        "820*2450mm",
+        "木方+15厚阻燃板基层",
+        "木饰面底座",
+        "黑色拉丝不锈钢方通造型隔断",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011207003",
+      "standard_item_name": "成品隔断",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "隔断材料品种、规格",
+        "配件品种、规格",
+        "固定方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示框外围尺寸以面积计算",
+      "mapping_reason": "样例隔墙/隔断按隔断类标准候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0061",
+      "source_row_no": 77,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "售卖窗口",
+      "manual_feature": "1、2998*1560mm\n2、钢通骨架+15厘阻燃夹板基层；\n3、80*60不锈钢钢通、10mm钢化防火玻璃；\n4、白色人造石台面PM-01",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "door_window",
+      "category_label": "门窗/门套类",
+      "material_codes": [
+        "PM-01"
+      ],
+      "strong_terms": [
+        "售卖窗口",
+        "PM-01"
+      ],
+      "weak_terms": [
+        "售卖窗口",
+        "2998*1560mm",
+        "钢通骨架+15厘阻燃夹板基层",
+        "80*60不锈钢钢通",
+        "10mm钢化防火玻璃",
+        "白色人造石台面PM",
+        "01"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010802001",
+      "standard_item_name": "金属 | (塑钢)门",
+      "standard_chapter_name": "门窗工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "门洞口尺寸",
+        "门类型",
+        "开启方式",
+        "框、扇材质",
+        "玻璃品种、厚度",
+        "五金种类、规格",
+        "其他工艺要求"
+      ],
+      "standard_quantity_rule_text": "按设计图示洞口尺寸以面积计算",
+      "mapping_reason": "样例金属/玻璃门按门类候选，需 R2 复核成品门口径",
+      "recognition_priority": 72
+    },
+    {
+      "entry_id": "BIZ2xLEX-0062",
+      "source_row_no": 78,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "不锈钢踢脚线",
+      "manual_feature": "1、50mm高\n2、黑色拉丝不锈钢踢脚线MT-01",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "baseboard",
+      "category_label": "踢脚线类",
+      "material_codes": [
+        "MT-01"
+      ],
+      "strong_terms": [
+        "不锈钢踢脚线",
+        "MT-01"
+      ],
+      "weak_terms": [
+        "不锈钢踢脚线",
+        "50mm高",
+        "黑色拉丝不锈钢踢脚线MT",
+        "01"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011105006",
+      "standard_item_name": "金属踢脚线",
+      "standard_chapter_name": "踢脚线",
+      "standard_unit_options": [
+        "m",
+        "米"
+      ],
+      "standard_feature_fields": [
+        "踢脚线高度",
+        "基层材料种类、规格",
+        "面层材料品种、规格"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以长度计算",
+      "mapping_reason": "样例踢脚线按踢脚线类标准候选",
+      "recognition_priority": 78
+    },
+    {
+      "entry_id": "BIZ2xLEX-0063",
+      "source_row_no": 79,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "淋浴隔断",
+      "manual_feature": "1、6+6双钢化夹丝玻璃\n2、包括门夹及拉手",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "wall",
+      "category_label": "墙面/隔断类",
+      "material_codes": [],
+      "strong_terms": [
+        "淋浴隔断"
+      ],
+      "weak_terms": [
+        "淋浴隔断",
+        "6+6双钢化夹丝玻璃",
+        "包括门夹及拉手",
+        "墙面",
+        "墙砖",
+        "隔墙",
+        "隔断",
+        "墙面石材",
+        "墙面瓷砖"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011207003",
+      "standard_item_name": "成品隔断",
+      "standard_chapter_name": "墙、柱面装饰与隔断、幕墙工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "隔断材料品种、规格",
+        "配件品种、规格",
+        "固定方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示框外围尺寸以面积计算",
+      "mapping_reason": "样例隔墙/隔断按隔断类标准候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0064",
+      "source_row_no": 80,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "清境墙面MR-02",
+      "manual_feature": "1、木方+15厚阻燃板基层，暗藏灯槽\n2、6mm清镜MR-02饰面，黑色拉丝不锈钢包边MT-02",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "ceiling",
+      "category_label": "吊顶/天棚类",
+      "material_codes": [
+        "MR-02",
+        "MT-02"
+      ],
+      "strong_terms": [
+        "清境墙面MR-02",
+        "清境墙面",
+        "MR-02",
+        "MT-02"
+      ],
+      "weak_terms": [
+        "清境墙面",
+        "木方+15厚阻燃板基层",
+        "暗藏灯槽",
+        "6mm清镜MR",
+        "02饰面",
+        "黑色拉丝不锈钢包边MT",
+        "02",
+        "吊顶",
+        "天花",
+        "天棚",
+        "灯槽",
+        "石膏板吊顶",
+        "铝扣板吊顶"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011302003",
+      "standard_item_name": "艺术造型 | 吊顶天棚",
+      "standard_chapter_name": "天棚工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "吊顶部位",
+        "吊顶形式、吊杆规格、高度",
+        "龙骨材料种类、规格、中距",
+        "基层材料种类、规格",
+        "面板材料品种、规格",
+        "压条材料种类、规格",
+        "嵌缝材料种类",
+        "防护材料种类"
+      ],
+      "standard_quantity_rule_text": "算。天棚面中的灯 | 槽及跌级天棚面积 | 不展开计算。扣除 | 与天棚相连的窗帘 | 盒所占的面积；不扣 | 除检查口、附墙烟 | 囱、柱垛和管道以及 | 单个面积≤0.3m² | 的独立柱、孔洞所 | 占面积",
+      "mapping_reason": "样例造型吊顶/灯槽按艺术造型吊顶天棚候选",
+      "recognition_priority": 84
+    },
+    {
+      "entry_id": "BIZ2xLEX-0065",
+      "source_row_no": 81,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "洗手台",
+      "manual_feature": "1、尺寸：1500*500*700mm\n2、方钢管结构基层\n3、木饰面WD-01，深啡大理石台面ST-02",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "sanitary",
+      "category_label": "洁具给排水类",
+      "material_codes": [
+        "WD-01",
+        "ST-02"
+      ],
+      "strong_terms": [
+        "洗手台",
+        "WD-01",
+        "ST-02"
+      ],
+      "weak_terms": [
+        "洗手台",
+        "尺寸",
+        "1500*500*700mm",
+        "方钢管结构基层",
+        "木饰面WD",
+        "01",
+        "深啡大理石台面ST",
+        "02",
+        "洁具",
+        "台盆",
+        "马桶",
+        "龙头",
+        "地漏"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 68
+    },
+    {
+      "entry_id": "BIZ2xLEX-0066",
+      "source_row_no": 82,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "不锈钢门套MT-01",
+      "manual_feature": "1、15厚阻燃板基层\n2、黑色拉丝不锈钢门套MT-01",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "door_window",
+      "category_label": "门窗/门套类",
+      "material_codes": [
+        "MT-01"
+      ],
+      "strong_terms": [
+        "不锈钢门套MT-01",
+        "不锈钢门套",
+        "MT-01"
+      ],
+      "weak_terms": [
+        "不锈钢门套",
+        "15厚阻燃板基层",
+        "黑色拉丝不锈钢门套MT",
+        "01"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010802001",
+      "standard_item_name": "金属 | (塑钢)门",
+      "standard_chapter_name": "门窗工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "门洞口尺寸",
+        "门类型",
+        "开启方式",
+        "框、扇材质",
+        "玻璃品种、厚度",
+        "五金种类、规格",
+        "其他工艺要求"
+      ],
+      "standard_quantity_rule_text": "按设计图示洞口尺寸以面积计算",
+      "mapping_reason": "样例金属/玻璃门按门类候选，需 R2 复核成品门口径",
+      "recognition_priority": 72
+    },
+    {
+      "entry_id": "BIZ2xLEX-0067",
+      "source_row_no": 83,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "成品不锈钢双开玻璃门",
+      "manual_feature": "1、尺寸：1780*2620mm，双开\n2、15厘阻燃夹板基层，黑色拉丝不锈钢门套\n3、成品铝合金玻璃门扇，12厘钢化玻璃；\n4、包括地弹簧、拉手等一切五金及完成图纸一切工作内容",
+      "manual_unit": "樘",
+      "manual_quantity": "",
+      "category": "door_window",
+      "category_label": "门窗/门套类",
+      "material_codes": [],
+      "strong_terms": [
+        "成品不锈钢双开玻璃门"
+      ],
+      "weak_terms": [
+        "成品不锈钢双开玻璃门",
+        "尺寸",
+        "1780*2620mm",
+        "双开",
+        "15厘阻燃夹板基层",
+        "黑色拉丝不锈钢门套",
+        "成品铝合金玻璃门扇",
+        "12厘钢化玻璃",
+        "包括地弹簧",
+        "拉手等一切五金及完成图纸一切工作内容"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010802001",
+      "standard_item_name": "金属 | (塑钢)门",
+      "standard_chapter_name": "门窗工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "门洞口尺寸",
+        "门类型",
+        "开启方式",
+        "框、扇材质",
+        "玻璃品种、厚度",
+        "五金种类、规格",
+        "其他工艺要求"
+      ],
+      "standard_quantity_rule_text": "按设计图示洞口尺寸以面积计算",
+      "mapping_reason": "样例金属/玻璃门按门类候选，需 R2 复核成品门口径",
+      "recognition_priority": 72
+    },
+    {
+      "entry_id": "BIZ2xLEX-0068",
+      "source_row_no": 85,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "成品实木双开门",
+      "manual_feature": "1、尺寸：1600*2250mm，双开\n2、15厘阻燃夹板基层，木饰面门套\n3、成品定制木饰面门；\n4、包括合页、把手等一切五金及完成图纸一切工作内容",
+      "manual_unit": "樘",
+      "manual_quantity": "",
+      "category": "door_window",
+      "category_label": "门窗/门套类",
+      "material_codes": [],
+      "strong_terms": [
+        "成品实木双开门"
+      ],
+      "weak_terms": [
+        "成品实木双开门",
+        "尺寸",
+        "1600*2250mm",
+        "双开",
+        "15厘阻燃夹板基层",
+        "木饰面门套",
+        "成品定制木饰面门",
+        "包括合页",
+        "把手等一切五金及完成图纸一切工作内容"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010801001",
+      "standard_item_name": "木质门",
+      "standard_chapter_name": "门窗工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "门洞口尺寸",
+        "门类型",
+        "开启方式",
+        "框、扇木材材质",
+        "玻璃品种、厚度",
+        "五金种类、规格",
+        "其他工艺要求"
+      ],
+      "standard_quantity_rule_text": "按设计图示洞口尺寸以面积计算",
+      "mapping_reason": "样例实木门按木质门候选，需 R2 复核成品门口径",
+      "recognition_priority": 72
+    },
+    {
+      "entry_id": "BIZ2xLEX-0069",
+      "source_row_no": 86,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "成品实木单开门",
+      "manual_feature": "1、尺寸：1000*2620mm，单开\n2、15厘阻燃夹板基层，木饰面门套\n3、成品定制木饰面门；\n4、包括合页、把手等一切五金及完成图纸一切工作内容",
+      "manual_unit": "樘",
+      "manual_quantity": "",
+      "category": "door_window",
+      "category_label": "门窗/门套类",
+      "material_codes": [],
+      "strong_terms": [
+        "成品实木单开门"
+      ],
+      "weak_terms": [
+        "成品实木单开门",
+        "尺寸",
+        "1000*2620mm",
+        "单开",
+        "15厘阻燃夹板基层",
+        "木饰面门套",
+        "成品定制木饰面门",
+        "包括合页",
+        "把手等一切五金及完成图纸一切工作内容"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "010801001",
+      "standard_item_name": "木质门",
+      "standard_chapter_name": "门窗工程",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "门洞口尺寸",
+        "门类型",
+        "开启方式",
+        "框、扇木材材质",
+        "玻璃品种、厚度",
+        "五金种类、规格",
+        "其他工艺要求"
+      ],
+      "standard_quantity_rule_text": "按设计图示洞口尺寸以面积计算",
+      "mapping_reason": "样例实木门按木质门候选，需 R2 复核成品门口径",
+      "recognition_priority": 72
+    },
+    {
+      "entry_id": "BIZ2xLEX-0070",
+      "source_row_no": 89,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙面瓷砖美缝",
+      "manual_feature": "1、墙面瓷砖美缝",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [],
+      "strong_terms": [
+        "墙面瓷砖美缝"
+      ],
+      "weak_terms": [
+        "墙面瓷砖美缝",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "石材地面",
+        "瓷砖地面"
+      ],
+      "standard_scope": "gbt50854_candidate",
+      "standard_item_code": "011102003",
+      "standard_item_name": "块料楼地面",
+      "standard_chapter_name": "块料面层",
+      "standard_unit_options": [
+        "m²",
+        "㎡",
+        "m2",
+        "平方米"
+      ],
+      "standard_feature_fields": [
+        "找平层厚度、材料种类及强度等级",
+        "结合层厚度、材料种类及强度等级",
+        "面层材料品种、规格",
+        "勾缝材料种类",
+        "防护层材料种类",
+        "面层处理方式"
+      ],
+      "standard_quantity_rule_text": "按设计图示尺寸以面积计算。门 | 洞、空圈、暖气包槽、壁龛的开口部分并入相应的工程量内",
+      "mapping_reason": "样例瓷砖/地砖/美缝地面按块料楼地面候选",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0071",
+      "source_row_no": 92,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "开荒精保洁",
+      "manual_feature": "开荒精保洁",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "measure",
+      "category_label": "措施/保洁运输类",
+      "material_codes": [],
+      "strong_terms": [
+        "开荒精保洁"
+      ],
+      "weak_terms": [
+        "开荒精保洁"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 58
+    },
+    {
+      "entry_id": "BIZ2xLEX-0072",
+      "source_row_no": 93,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "墙地面成品保护",
+      "manual_feature": "墙地面成品保护",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "floor",
+      "category_label": "地面类",
+      "material_codes": [],
+      "strong_terms": [
+        "墙地面成品保护"
+      ],
+      "weak_terms": [
+        "墙地面成品保护",
+        "地面",
+        "地砖",
+        "楼地面",
+        "门槛石",
+        "石材地面",
+        "瓷砖地面"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 86
+    },
+    {
+      "entry_id": "BIZ2xLEX-0073",
+      "source_row_no": 94,
+      "source_sheet_name": "装修工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "材料二次运输",
+      "manual_feature": "材料二次运输",
+      "manual_unit": "㎡",
+      "manual_quantity": "",
+      "category": "measure",
+      "category_label": "措施/保洁运输类",
+      "material_codes": [],
+      "strong_terms": [
+        "材料二次运输"
+      ],
+      "weak_terms": [
+        "材料二次运输"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 58
+    },
+    {
+      "entry_id": "BIZ2xLEX-0074",
+      "source_row_no": 6,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "配电箱AL",
+      "manual_feature": "1、成套配电箱20KW，暗装；\n2、包括箱体及元器件，包括完成图纸一切内容",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [],
+      "strong_terms": [
+        "配电箱AL"
+      ],
+      "weak_terms": [
+        "配电箱AL",
+        "成套配电箱20KW",
+        "暗装",
+        "包括箱体及元器件",
+        "包括完成图纸一切内容"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0075",
+      "source_row_no": 7,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "配电箱AL-CF",
+      "manual_feature": "1、成套配电箱50KW，暗装；\n2、包括箱体及元器件，包括完成图纸一切内容",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [],
+      "strong_terms": [
+        "配电箱AL-CF"
+      ],
+      "weak_terms": [
+        "配电箱AL",
+        "CF",
+        "成套配电箱50KW",
+        "暗装",
+        "包括箱体及元器件",
+        "包括完成图纸一切内容"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0076",
+      "source_row_no": 8,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "电缆敷设",
+      "manual_feature": "1、型号：WDZC-YJY-5*10",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [
+        "YJY-5"
+      ],
+      "strong_terms": [
+        "电缆敷设",
+        "YJY-5"
+      ],
+      "weak_terms": [
+        "电缆敷设",
+        "型号",
+        "WDZC",
+        "YJY",
+        "5*10"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0077",
+      "source_row_no": 9,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "电缆敷设",
+      "manual_feature": "1、型号：WDZC-YJY-4*35+1*16",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [
+        "YJY-4"
+      ],
+      "strong_terms": [
+        "电缆敷设",
+        "YJY-4"
+      ],
+      "weak_terms": [
+        "电缆敷设",
+        "型号",
+        "WDZC",
+        "YJY",
+        "4*35+1*16"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0078",
+      "source_row_no": 10,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "电气配管",
+      "manual_feature": "1、镀锌钢管 SC40",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [],
+      "strong_terms": [
+        "电气配管"
+      ],
+      "weak_terms": [
+        "电气配管",
+        "镀锌钢管",
+        "SC40"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0079",
+      "source_row_no": 15,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "电气配线",
+      "manual_feature": "1、配线形式:管内穿线\n2、导线型号、材质、规格:WDZC-BYJ-2.5",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [
+        "BYJ-2"
+      ],
+      "strong_terms": [
+        "电气配线",
+        "BYJ-2"
+      ],
+      "weak_terms": [
+        "电气配线",
+        "配线形式",
+        "管内穿线",
+        "导线型号",
+        "材质",
+        "规格",
+        "WDZC",
+        "BYJ",
+        "2.5"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0080",
+      "source_row_no": 16,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "电气配线",
+      "manual_feature": "1、配线形式:管内穿线\n2、导线型号、材质、规格:WDZC-BYJ-4",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [
+        "BYJ-4"
+      ],
+      "strong_terms": [
+        "电气配线",
+        "BYJ-4"
+      ],
+      "weak_terms": [
+        "电气配线",
+        "配线形式",
+        "管内穿线",
+        "导线型号",
+        "材质",
+        "规格",
+        "WDZC",
+        "BYJ"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0081",
+      "source_row_no": 17,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "电气配线",
+      "manual_feature": "1、配线形式:管内穿线\n2、导线型号、材质、规格:WDZC-BYJ-6",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [
+        "BYJ-6"
+      ],
+      "strong_terms": [
+        "电气配线",
+        "BYJ-6"
+      ],
+      "weak_terms": [
+        "电气配线",
+        "配线形式",
+        "管内穿线",
+        "导线型号",
+        "材质",
+        "规格",
+        "WDZC",
+        "BYJ"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0082",
+      "source_row_no": 18,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "插座安装",
+      "manual_feature": "1、名称、型号:三孔保护性插座，空调/热水器\n2、型号:16A",
+      "manual_unit": "个",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [],
+      "strong_terms": [
+        "插座安装"
+      ],
+      "weak_terms": [
+        "插座安装",
+        "名称",
+        "型号",
+        "三孔保护性插座",
+        "空调",
+        "热水器",
+        "16A"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0083",
+      "source_row_no": 23,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "开关安装",
+      "manual_feature": "1、名称、型号:三联单控开关\n2、型号:86型10A",
+      "manual_unit": "个",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [],
+      "strong_terms": [
+        "开关安装"
+      ],
+      "weak_terms": [
+        "开关安装",
+        "名称",
+        "型号",
+        "三联单控开关",
+        "86型10A"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0084",
+      "source_row_no": 26,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "灯具安装",
+      "manual_feature": "1、名称：LED 单眼格栅灯\n2、规格、型号：7W/24度光束/3000K色温",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [],
+      "strong_terms": [
+        "灯具安装"
+      ],
+      "weak_terms": [
+        "灯具安装",
+        "名称",
+        "LED",
+        "单眼格栅灯",
+        "规格",
+        "型号",
+        "7W",
+        "24度光束",
+        "3000K色温"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0085",
+      "source_row_no": 32,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "灯具安装",
+      "manual_feature": "1、名称：LED 灯带\n2、规格、型号：7.2W/m/DC24V/3000K色温,每5米配36W/24V电源驱动器一个",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "lighting_electrical",
+      "category_label": "灯具电气类",
+      "material_codes": [],
+      "strong_terms": [
+        "灯具安装"
+      ],
+      "weak_terms": [
+        "灯具安装",
+        "名称",
+        "LED",
+        "灯带",
+        "规格",
+        "型号",
+        "7.2W",
+        "DC24V",
+        "3000K色温,每5米配36W",
+        "24V电源驱动器一个"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 66
+    },
+    {
+      "entry_id": "BIZ2xLEX-0086",
+      "source_row_no": 34,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "排气扇安装",
+      "manual_feature": "1、名称、型号:排气扇\n2、型号:",
+      "manual_unit": "个",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "排气扇安装"
+      ],
+      "weak_terms": [
+        "排气扇安装",
+        "名称",
+        "型号",
+        "排气扇"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0087",
+      "source_row_no": 35,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "电热水器供货及安装",
+      "manual_feature": "1、名称、型号:电热水器\n2、型号:",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "电热水器供货及安装"
+      ],
+      "weak_terms": [
+        "电热水器供货及安装",
+        "名称",
+        "型号",
+        "电热水器"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0088",
+      "source_row_no": 38,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "给水管",
+      "manual_feature": "1、材质：SUS304 薄壁不锈钢管\n2、规格、型号：DN40",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "给水管"
+      ],
+      "weak_terms": [
+        "给水管",
+        "材质",
+        "SUS304",
+        "薄壁不锈钢管",
+        "规格",
+        "型号",
+        "DN40"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0089",
+      "source_row_no": 41,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "排水管",
+      "manual_feature": "1、材质：柔性铸铁管\n2、规格、型号：De110",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "排水管"
+      ],
+      "weak_terms": [
+        "排水管",
+        "材质",
+        "柔性铸铁管",
+        "规格",
+        "型号",
+        "De110"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0090",
+      "source_row_no": 43,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "管道保温",
+      "manual_feature": "1、25厚阻燃B1级泡沫橡塑保温",
+      "manual_unit": "m",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "管道保温"
+      ],
+      "weak_terms": [
+        "管道保温",
+        "25厚阻燃B1级泡沫橡塑保温"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0091",
+      "source_row_no": 44,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "阀门供货及安装",
+      "manual_feature": "1、类型:截止阀 DN40\n2、材质:铜质",
+      "manual_unit": "个",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "阀门供货及安装"
+      ],
+      "weak_terms": [
+        "阀门供货及安装",
+        "类型",
+        "截止阀",
+        "DN40",
+        "材质",
+        "铜质"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0092",
+      "source_row_no": 46,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "水表供货及安装",
+      "manual_feature": "1、类型:水表 DN40\n2、材质:铜质",
+      "manual_unit": "个",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "水表供货及安装"
+      ],
+      "weak_terms": [
+        "水表供货及安装",
+        "类型",
+        "水表",
+        "DN40",
+        "材质",
+        "铜质"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0093",
+      "source_row_no": 48,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "地漏供货及安装",
+      "manual_feature": "1、类型:地漏\n2、材质:不锈钢",
+      "manual_unit": "个",
+      "manual_quantity": "",
+      "category": "sanitary",
+      "category_label": "洁具给排水类",
+      "material_codes": [],
+      "strong_terms": [
+        "地漏供货及安装"
+      ],
+      "weak_terms": [
+        "地漏供货及安装",
+        "类型",
+        "地漏",
+        "材质",
+        "不锈钢",
+        "洁具",
+        "台盆",
+        "马桶",
+        "龙头"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 68
+    },
+    {
+      "entry_id": "BIZ2xLEX-0094",
+      "source_row_no": 49,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "厕纸架供货及安装",
+      "manual_feature": "1、厕纸架供货及安装",
+      "manual_unit": "个",
+      "manual_quantity": "",
+      "category": "sanitary",
+      "category_label": "洁具给排水类",
+      "material_codes": [],
+      "strong_terms": [
+        "厕纸架供货及安装"
+      ],
+      "weak_terms": [
+        "厕纸架供货及安装",
+        "洁具",
+        "台盆",
+        "马桶",
+        "龙头",
+        "地漏"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 68
+    },
+    {
+      "entry_id": "BIZ2xLEX-0095",
+      "source_row_no": 50,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "梳妆镜供货及安装",
+      "manual_feature": "1、梳妆镜供货及安装",
+      "manual_unit": "个",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "梳妆镜供货及安装"
+      ],
+      "weak_terms": [
+        "梳妆镜供货及安装"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0096",
+      "source_row_no": 51,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "马桶供货及安装",
+      "manual_feature": "1、马桶供货及安装",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "sanitary",
+      "category_label": "洁具给排水类",
+      "material_codes": [],
+      "strong_terms": [
+        "马桶供货及安装"
+      ],
+      "weak_terms": [
+        "马桶供货及安装",
+        "洁具",
+        "台盆",
+        "马桶",
+        "龙头",
+        "地漏"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 68
+    },
+    {
+      "entry_id": "BIZ2xLEX-0097",
+      "source_row_no": 52,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "淋浴花洒供货及安装",
+      "manual_feature": "1、淋浴花洒供货及安装",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "other",
+      "category_label": "其它待确认类",
+      "material_codes": [],
+      "strong_terms": [
+        "淋浴花洒供货及安装"
+      ],
+      "weak_terms": [
+        "淋浴花洒供货及安装"
+      ],
+      "standard_scope": "supplemental_or_scope_pending",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 50
+    },
+    {
+      "entry_id": "BIZ2xLEX-0098",
+      "source_row_no": 53,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "台盆供货及安装",
+      "manual_feature": "1、台盆供货及安装",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "sanitary",
+      "category_label": "洁具给排水类",
+      "material_codes": [],
+      "strong_terms": [
+        "台盆供货及安装"
+      ],
+      "weak_terms": [
+        "台盆供货及安装",
+        "洁具",
+        "台盆",
+        "马桶",
+        "龙头",
+        "地漏"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 68
+    },
+    {
+      "entry_id": "BIZ2xLEX-0099",
+      "source_row_no": 54,
+      "source_sheet_name": "机电工程量清单",
+      "source_item_code": "",
+      "manual_item_name": "冷热水龙头供货及安装",
+      "manual_feature": "1、水龙头供货及安装",
+      "manual_unit": "套",
+      "manual_quantity": "",
+      "category": "sanitary",
+      "category_label": "洁具给排水类",
+      "material_codes": [],
+      "strong_terms": [
+        "冷热水龙头供货及安装"
+      ],
+      "weak_terms": [
+        "冷热水龙头供货及安装",
+        "水龙头供货及安装",
+        "洁具",
+        "台盆",
+        "马桶",
+        "龙头",
+        "地漏"
+      ],
+      "standard_scope": "supplemental_or_other_specialty",
+      "standard_item_code": "",
+      "standard_item_name": "",
+      "standard_chapter_name": "",
+      "standard_unit_options": [],
+      "standard_feature_fields": [],
+      "standard_quantity_rule_text": "",
+      "mapping_reason": "",
+      "recognition_priority": 68
+    }
+  ],
+  "notes": [
+    "本词库来自样例人工四字段清单，用于 R1 项目识别覆盖增强。",
+    "有标准项目编码的词条可进入 GB/T 字段口径候选；无标准编码的词条只作为补充/待映射候选，不直接生成最终工程量。",
+    "工程量仍必须在 CAD 区域/构件绑定后按标准库工程量规则计算。"
+  ]
+}

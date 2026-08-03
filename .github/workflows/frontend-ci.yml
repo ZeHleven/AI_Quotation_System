@@ -9,9 +9,6 @@ on:
       - ".github/workflows/frontend-ci.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "ai-web/**"
-      - ".github/workflows/frontend-ci.yml"
 
 permissions:
   contents: read

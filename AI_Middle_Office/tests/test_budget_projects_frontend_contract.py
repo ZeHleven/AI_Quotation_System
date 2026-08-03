@@ -11,7 +11,7 @@ def _source(name: str) -> str:
 def test_budget_project_component_uses_current_backend_contract():
     source = _source("BudgetProjects.vue")
 
-    assert "selectedImport.remap_revision" in source
+    assert "selectedImport.value?.remap_revision" in source
     assert "row?.capabilities" in source
     for capability in ("can_edit", "can_archive", "can_upload", "can_remap", "can_activate_import"):
         assert capability in source
@@ -33,6 +33,22 @@ def test_budget_module_entry_is_hidden_when_feature_is_not_available():
     assert "budgetProjectsModule.value?.status === 'available'" in source
     assert "budgetProjectsFeatureAvailable.value && canViewBudgetProjectsByRole.value" in source
     assert ':feature-available="budgetProjectsFeatureAvailable"' in source
+
+
+def test_project_detail_hides_summary_import_and_standardization_panels():
+    source = _source("BudgetProjects.vue")
+    detail_template = source.split("<div v-else>", 1)[1].split("<el-dialog", 1)[0]
+
+    for heading in ("导入甲方清单", "导入批次", "Sheet 表头映射", "标准清单"):
+        assert f"<strong>{heading}</strong>" not in detail_template
+    for hidden_summary in (
+        "当前为成本计价准备模式",
+        "企业定额部分计价已启用",
+        'class="budget-metrics"',
+        "<span>项目状态</span>",
+        "<span>当前 Sheet</span>",
+    ):
+        assert hidden_summary not in detail_template
 
 
 def test_import_confirmation_and_activation_contract_is_visible_and_wired():
@@ -61,12 +77,12 @@ def test_remap_uses_optimistic_revision_and_nested_batch_capabilities():
     assert "budgetProjectApi.activeImport(activeProjectId)" in source
 
 
-def test_price_columns_and_layer_quantities_are_locked_and_quantity_is_unique():
+def test_hidden_mapping_workflow_keeps_price_layer_and_unique_quantity_guards():
     source = _source("BudgetProjects.vue")
 
-    assert "价格/金额列已锁定忽略" in source
-    assert "分层工程量列已锁定忽略" in source
-    assert "每个 Sheet 只允许一个合计工程量列" in source
+    assert "isLockedPriceColumn" in source
+    assert "isLockedLayerQuantityColumn" in source
+    assert "isLockedIgnoreColumn" in source
     assert "mappingChanged" in source
     assert "filters = reactive({ keyword: '', status: 'active' })" in source
 

@@ -19,6 +19,8 @@ from app.services.budget_projects import (
     _mapping_by_sheet,
     _sanitize_automatic_quantity_mappings,
     _standard_row_model,
+    budget_preview_quote_rows,
+    standardize_budget_workbook_bytes,
 )
 from app.services.requirement_standardizer import standardize_requirement_excel_bytes
 
@@ -408,6 +410,33 @@ def test_liansheng_total_quantity_wins_and_explicit_spec_keeps_full_name(lianshe
     assert missing_unit.quantity_status == "valid"
     assert missing_unit.unit is None
     assert "MISSING_UNIT" in json.loads(missing_unit.warnings_json)
+
+
+def test_liansheng_chat_quote_rows_reuse_budget_quantity_semantics():
+    content = _liansheng_like_workbook()
+    preview = standardize_budget_workbook_bytes(
+        content,
+        filename="联昇缩小回归样本.xlsx",
+    )
+    rows = budget_preview_quote_rows(preview)
+
+    assert len(rows) == 5
+    assert {row["source_sheet"] for row in rows} == {"装饰清单", "机电清单", "措施费"}
+    assert not any(row["source_sheet"] == "主材表" for row in rows)
+    assert all(row["quantity"] is not None for row in rows)
+
+    formal = {
+        (row["source_sheet"], row["raw_row_index"]): row
+        for row in rows
+    }
+    assert formal[("装饰清单", 4)]["quantity"] == 64.02
+    assert formal[("装饰清单", 5)]["quantity"] == 1890.32
+    assert formal[("机电清单", 4)]["quantity"] == 296.9
+    assert formal[("机电清单", 5)]["quantity"] == 42.0
+    assert formal[("措施费", 5)]["quantity"] == 7213.0
+    assert formal[("装饰清单", 4)]["quantity_source"]["budget"]["column"] == "K"
+    assert formal[("机电清单", 4)]["quantity_source"]["budget"]["column"] == "J"
+    assert formal[("措施费", 5)]["quantity_source"]["budget"]["column"] == "E"
 
 
 def test_liansheng_locked_columns_and_broken_formula_evidence(liansheng_preview_contract):

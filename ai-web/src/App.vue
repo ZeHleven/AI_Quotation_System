@@ -76,16 +76,25 @@
           >
             <p class="nav-group-label">核心工作台</p>
             <button
+              v-if="canUseUnifiedQuotes"
+              :class="['nav-item', { active: ['unifiedQuotes', 'unifiedQuoteNew'].includes(routeName) }]"
+              type="button"
+              @click="navigate('/quotes')"
+            >
+              <el-icon><Document /></el-icon>
+              <span>项目报价</span>
+            </button>
+            <button
               v-if="canOpenLegacyQuote"
               :class="['nav-item', { active: routeName === 'quoteNew' }]"
               type="button"
-              @click="navigate('/quote/new')"
+              @click="openQuickQuote('quick')"
             >
-              <el-icon><Document /></el-icon>
-              <span>新建报价</span>
+              <el-icon><Tickets /></el-icon>
+              <span>对话报价</span>
             </button>
             <button
-              v-if="canViewBudgetProjects"
+              v-if="!canUseUnifiedQuotes && canViewBudgetProjects"
               :class="['nav-item', { active: ['budgetProjects', 'budgetProjectDetail'].includes(routeName) }]"
               type="button"
               @click="navigate('/admin/budget-projects')"
@@ -123,27 +132,9 @@
           </div>
           <div
             class="nav-group"
-            v-if="canViewBusinessLedger || canViewExecution || canViewBidding"
+            v-if="canViewBidding"
           >
             <p class="nav-group-label">业务协同</p>
-            <button
-              v-if="canViewBusinessLedger"
-              :class="['nav-item', { active: routeName === 'businessLedger' }]"
-              type="button"
-              @click="navigate('/admin/business-ledger')"
-            >
-              <el-icon><Tickets /></el-icon>
-              <span>商务台账</span>
-            </button>
-            <button
-              v-if="canViewExecution"
-              :class="['nav-item', { active: routeName === 'execution' }]"
-              type="button"
-              @click="navigate('/admin/execution')"
-            >
-              <el-icon><Clock /></el-icon>
-              <span>执行任务</span>
-            </button>
             <button
               v-if="canViewBidding"
               :class="['nav-item', { active: routeName === 'bidding' }]"
@@ -156,7 +147,7 @@
           </div>
           <div
             class="nav-group"
-            v-if="canViewRequirementStandardization || canViewCostMeasurement || canViewCostDb || canViewAccountQuotas || canViewEnterpriseProfile"
+            v-if="canViewRequirementStandardization || canViewCostDb || canViewAccountQuotas || canViewEnterpriseProfile"
           >
             <p class="nav-group-label">数据资产</p>
             <button
@@ -167,15 +158,6 @@
             >
               <el-icon><Tickets /></el-icon>
               <span>需求单标准化</span>
-            </button>
-            <button
-              v-if="canViewCostMeasurement"
-              :class="['nav-item', { active: routeName === 'costMeasurement' }]"
-              type="button"
-              @click="navigate('/admin/cost-measurement')"
-            >
-              <el-icon><DataAnalysis /></el-icon>
-              <span>&#25104;&#26412;&#27979;&#31639;</span>
             </button>
             <button
               v-if="canViewCostDb"
@@ -205,8 +187,26 @@
               <span>企业资料库</span>
             </button>
           </div>
-          <div class="nav-group" v-if="canViewDwgTrial || canViewAgentCenter">
+          <div class="nav-group" v-if="canViewDwgTrial || canViewAgentCenter || canViewBidding || canViewPricingAgent">
             <p class="nav-group-label">智能工具</p>
+            <button
+              v-if="canViewPricingAgent"
+              :class="['nav-item', { active: routeName === 'pricingAgent' }]"
+              type="button"
+              @click="navigate('/admin/pricing-agent')"
+            >
+              <el-icon><DataAnalysis /></el-icon>
+              <span>智能组价实验室</span>
+            </button>
+            <button
+              v-if="canViewBidding"
+              :class="['nav-item', { active: routeName === 'bidIntakeAgent' }]"
+              type="button"
+              @click="navigate('/admin/bid-intake-agent')"
+            >
+              <el-icon><DocumentChecked /></el-icon>
+              <span>报价资料研判 Agent</span>
+            </button>
             <button
               v-if="canViewDwgTrial"
               :class="['nav-item', { active: routeName === 'dwgTrial' }]"
@@ -226,8 +226,17 @@
               <span>智能助手</span>
             </button>
           </div>
-          <div class="nav-group" v-if="canAccessPermissions || canOpenLegacyAdmin">
+          <div class="nav-group" v-if="canAccessPermissions || canOpenLegacyAdmin || canManageBidIntakePolicy">
             <p class="nav-group-label">系统管理</p>
+            <button
+              v-if="canManageBidIntakePolicy"
+              :class="['nav-item', { active: routeName === 'bidIntakePolicy' }]"
+              type="button"
+              @click="navigate('/admin/bid-intake-agent?view=policy')"
+            >
+              <el-icon><DocumentChecked /></el-icon>
+              <span>研判标准管理</span>
+            </button>
             <button
               v-if="canAccessPermissions"
               :class="['nav-item', { active: routeName === 'permissions' }]"
@@ -1190,6 +1199,131 @@
           </template>
         </template>
 
+        <PricingAgentLab v-else-if="routeName === 'pricingAgent'" />
+
+        <template v-else-if="routeName === 'bidIntakeAgent'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">Bid Intake Agent</p>
+              <h2>报价资料研判 Agent</h2>
+              <p class="page-intro">协助总经办快速判断项目是否值得参与，并整理需要继续向甲方索取的资料。</p>
+            </div>
+            <div class="heading-actions">
+              <el-button :icon="Refresh" plain :loading="bidIntakeAgentLoading" @click="loadBidIntakeAgentProjects">
+                刷新项目
+              </el-button>
+              <el-button type="primary" plain @click="navigate('/admin/bidding')">
+                管理投标项目
+              </el-button>
+            </div>
+          </div>
+
+          <section class="dashboard-section">
+            <div class="section-title">
+              <el-icon><DocumentChecked /></el-icon>
+              <span>当前研判项目</span>
+              <small>Agent按项目读取招标资料和证据，研判记录不会跨项目混用</small>
+            </div>
+            <div class="bid-intake-agent-selector">
+              <el-select
+                v-model="bidIntakeAgentProjectUuid"
+                filterable
+                :loading="bidIntakeAgentLoading"
+                placeholder="请选择投标项目"
+                no-data-text="暂无可研判的投标项目"
+              >
+                <el-option
+                  v-for="project in bidIntakeAgentProjects"
+                  :key="project.project_uuid"
+                  :label="project.project_name"
+                  :value="project.project_uuid"
+                >
+                  <span>{{ project.project_name }}</span>
+                  <small>{{ project.tenderer_name || project.project_location || '未补充招标单位' }}</small>
+                </el-option>
+              </el-select>
+              <span v-if="selectedBidIntakeAgentProject" class="bid-intake-agent-project-meta">
+                {{ biddingStatusLabel(selectedBidIntakeAgentProject.status) }}
+                · {{ selectedBidIntakeAgentProject.project_location || '未填写地点' }}
+              </span>
+            </div>
+          </section>
+
+          <BidIntakeWorkbench
+            v-if="bidIntakeAgentProjectUuid"
+            :project-uuid="bidIntakeAgentProjectUuid"
+            :project="selectedBidIntakeAgentProject"
+            :active="routeName === 'bidIntakeAgent'"
+          />
+          <el-empty
+            v-else
+            description="暂无可研判项目，请先到“智能投标”上传招标文件并创建项目"
+          >
+            <el-button type="primary" @click="navigate('/admin/bidding')">前往智能投标</el-button>
+          </el-empty>
+        </template>
+
+        <template v-else-if="routeName === 'bidIntakePolicy'">
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">Decision Policy</p>
+              <h2>研判标准管理</h2>
+              <p class="page-intro">面向管理员维护历史金标、校准数据集和候选立项标准，不影响总经办日常研判界面。</p>
+            </div>
+            <div class="heading-actions">
+              <el-button :icon="Refresh" plain :loading="bidIntakeAgentLoading" @click="loadBidIntakeAgentProjects">
+                刷新项目
+              </el-button>
+              <el-button type="primary" plain @click="navigate('/admin/bid-intake-agent')">
+                返回项目研判
+              </el-button>
+            </div>
+          </div>
+
+          <section class="dashboard-section">
+            <div class="section-title">
+              <el-icon><DocumentChecked /></el-icon>
+              <span>校准样本项目</span>
+              <small>选择项目后查看历史研判，并维护该项目的总经办金标</small>
+            </div>
+            <div class="bid-intake-agent-selector">
+              <el-select
+                v-model="bidIntakeAgentProjectUuid"
+                filterable
+                :loading="bidIntakeAgentLoading"
+                placeholder="请选择校准样本项目"
+                no-data-text="暂无可用项目"
+              >
+                <el-option
+                  v-for="project in bidIntakeAgentProjects"
+                  :key="project.project_uuid"
+                  :label="project.project_name"
+                  :value="project.project_uuid"
+                >
+                  <span>{{ project.project_name }}</span>
+                  <small>{{ project.tenderer_name || project.project_location || '未补充招标单位' }}</small>
+                </el-option>
+              </el-select>
+            </div>
+          </section>
+
+          <BidIntakeAssessment
+            v-if="bidIntakeAgentProjectUuid"
+            :project-uuid="bidIntakeAgentProjectUuid"
+            :active="routeName === 'bidIntakePolicy'"
+          />
+          <el-empty v-else description="暂无可用于标准校准的项目" />
+        </template>
+
+        <UnifiedQuotes
+          v-else-if="['unifiedQuotes', 'unifiedQuoteNew'].includes(routeName)"
+          :create-mode="routeName === 'unifiedQuoteNew'"
+          :can-view-budget-projects="canViewBudgetProjects"
+          :can-edit-budget-projects="canEditBudgetProjects"
+          @navigate="navigate"
+          @open-chat="openQuickQuote('quick')"
+        />
+
         <template v-else-if="routeName === 'quoteNew'">
           <div class="content-heading">
             <div>
@@ -1939,105 +2073,6 @@
               </section>
             </el-tab-pane>
 
-            <el-tab-pane label="执行速度" name="execution" :disabled="dashboardFeature.executionDisabled">
-              <el-alert
-                v-if="dashboardFeature.executionDisabled"
-                class="dashboard-alert"
-                type="info"
-                show-icon
-                :closable="false"
-                title="执行速度看板暂不可用"
-              />
-              <template v-else>
-                <el-alert
-                  v-if="executionDashboard?.empty_state"
-                  class="dashboard-alert"
-                  type="info"
-                  show-icon
-                  :closable="false"
-                  title="暂无执行任务数据"
-                />
-                <el-alert
-                  v-else-if="executionDashboard?.low_sample_warning"
-                  class="dashboard-alert"
-                  type="warning"
-                  show-icon
-                  :closable="false"
-                  title="样本量较少，仅供参考"
-                />
-                <div class="metric-grid response-grid">
-                  <div class="metric-card">
-                    <span>执行任务</span>
-                    <strong>{{ executionDashboard?.task_count ?? 0 }}</strong>
-                    <small>未完成 {{ executionDashboard?.open_count ?? 0 }}</small>
-                  </div>
-                  <div class="metric-card">
-                    <span>已完成</span>
-                    <strong>{{ executionDashboard?.done_count ?? 0 }}</strong>
-                    <small>状态 done</small>
-                  </div>
-                  <div class="metric-card">
-                    <span>逾期任务</span>
-                    <strong>{{ executionDashboard?.overdue_count ?? 0 }}</strong>
-                    <small>动态按截止时间计算</small>
-                  </div>
-                  <div class="metric-card">
-                    <span>平均完成耗时</span>
-                    <strong>{{ formatMs(executionDashboard?.avg_completion_duration_ms) }}</strong>
-                    <small>创建到完成</small>
-                  </div>
-                  <div class="metric-card">
-                    <span>已取消</span>
-                    <strong>{{ executionDashboard?.cancelled_count ?? 0 }}</strong>
-                    <small>终态任务</small>
-                  </div>
-                </div>
-
-                <div class="dashboard-split">
-                  <section class="dashboard-section">
-                    <div class="section-title">
-                      <el-icon><TrendCharts /></el-icon>
-                      <span>执行趋势</span>
-                    </div>
-                    <el-table
-                      :data="visibleExecutionTrends"
-                      row-key="date"
-                      class="users-table"
-                      empty-text="暂无趋势数据"
-                    >
-                      <el-table-column prop="date" label="日期" min-width="120" />
-                      <el-table-column prop="task_count" label="任务" width="90" />
-                      <el-table-column prop="done_count" label="完成" width="90" />
-                      <el-table-column prop="cancelled_count" label="取消" width="90" />
-                      <el-table-column prop="overdue_count" label="逾期" width="90" />
-                      <el-table-column label="平均完成" min-width="120">
-                        <template #default="{ row }">{{ formatMs(row.avg_completion_duration_ms) }}</template>
-                      </el-table-column>
-                    </el-table>
-                  </section>
-
-                  <section class="dashboard-section">
-                    <div class="section-title">
-                      <el-icon><Histogram /></el-icon>
-                      <span>负责人</span>
-                    </div>
-                    <div class="status-list">
-                      <div
-                        v-for="item in visibleExecutionAssignees"
-                        :key="item.assignee_id"
-                        class="status-row stacked"
-                      >
-                        <span>{{ item.username }}</span>
-                        <strong>{{ item.done_count }} / {{ item.task_count }}</strong>
-                        <small>逾期 {{ item.overdue_count }} · 平均 {{ formatMs(item.avg_completion_duration_ms) }}</small>
-                      </div>
-                      <el-empty v-if="!visibleExecutionAssignees.length" description="暂无负责人数据" />
-                    </div>
-                  </section>
-                </div>
-              </template>
-            </el-tab-pane>
-
             <el-tab-pane label="项目进度" name="projects" :disabled="dashboardFeature.projectDisabled">
               <el-alert
                 v-if="dashboardFeature.projectDisabled"
@@ -2575,473 +2610,6 @@
           </div>
         </template>
 
-        <template v-else-if="routeName === 'execution'">
-          <div class="content-heading">
-            <div>
-              <p class="eyebrow">执行协同</p>
-              <h2>执行系统</h2>
-            </div>
-            <div class="heading-actions">
-              <el-button v-if="canCreateMeetingNote" :icon="Tickets" type="primary" plain @click="openMeetingCreate">
-                录入纪要
-              </el-button>
-              <el-button v-if="canCreateExecutionTask" :icon="Plus" type="primary" @click="openExecutionCreate">
-                新建任务
-              </el-button>
-              <el-button :icon="Refresh" plain @click="refreshExecutionPage">刷新</el-button>
-            </div>
-          </div>
-          <el-tabs v-model="executionPageTab" class="dashboard-tabs">
-            <el-tab-pane label="执行任务" name="tasks">
-              <el-alert
-                v-if="executionFeatureDisabled"
-                class="dashboard-alert"
-                type="info"
-                show-icon
-                :closable="false"
-                title="执行任务功能尚未开启"
-              />
-              <template v-else>
-                <section class="execution-overview-strip">
-                  <article
-                    v-for="card in executionTaskOverviewCards"
-                    :key="card.key"
-                    :class="['project-overview-card', card.tone]"
-                  >
-                    <span>{{ card.title }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <small>{{ card.detail }}</small>
-                  </article>
-                </section>
-                <div class="operation-filters">
-                  <el-select
-                    v-model="executionTaskFilters.status"
-                    size="small"
-                    clearable
-                    placeholder="任务状态"
-                    @change="applyExecutionTaskFilters"
-                  >
-                    <el-option
-                      v-for="option in executionStatusOptions"
-                      :key="option.value"
-                      :label="option.label"
-                      :value="option.value"
-                    />
-                  </el-select>
-                  <el-select
-                    v-model="executionTaskFilters.source"
-                    size="small"
-                    clearable
-                    placeholder="任务来源"
-                    @change="applyExecutionTaskFilters"
-                  >
-                    <el-option
-                      v-for="option in executionSourceOptions"
-                      :key="option.value"
-                      :label="option.label"
-                      :value="option.value"
-                    />
-                  </el-select>
-                  <el-input
-                    v-model="executionTaskFilters.keyword"
-                    size="small"
-                    clearable
-                    placeholder="任务标题/备注"
-                    @keyup.enter="applyExecutionTaskFilters"
-                    @clear="applyExecutionTaskFilters"
-                  />
-                  <el-button size="small" type="primary" plain @click="applyExecutionTaskFilters">查询</el-button>
-                </div>
-                <el-table
-                  :data="executionTasks"
-                  row-key="id"
-                  class="users-table"
-                  :row-class-name="executionTaskRowClassName"
-                  empty-text="暂无执行任务"
-                >
-                  <el-table-column label="任务" min-width="220" show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <div class="operation-client">
-                        <strong>{{ row.title }}</strong>
-                        <small>{{ executionSourceLabel(row.source) }} · {{ row.source_ref_id || '无来源编号' }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="assignee_username" label="负责人" width="120" />
-                  <el-table-column label="截止时间" min-width="150">
-                    <template #default="{ row }">{{ formatDate(row.due_at) }}</template>
-                  </el-table-column>
-                  <el-table-column label="状态" width="110">
-                    <template #default="{ row }">
-                      <el-tag :type="executionStatusTag(row.status)" effect="plain">{{ executionStatusLabel(row.status) }}</el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="逾期" width="90">
-                    <template #default="{ row }">
-                      <el-tag :type="row.is_overdue ? 'danger' : 'info'" effect="plain">
-                        {{ row.is_overdue ? '逾期' : '正常' }}
-                      </el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="下一步" min-width="190" show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <div :class="['execution-next-step', executionTaskNextStepTone(row)]">
-                        <strong>{{ executionTaskNextStepLabel(row) }}</strong>
-                        <small>{{ executionTaskNextStepDetail(row) }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="notes" label="备注" min-width="180" show-overflow-tooltip />
-                  <el-table-column label="操作" width="270" fixed="right">
-                    <template #default="{ row }">
-                      <div class="row-actions execution-task-actions">
-                        <el-button size="small" :icon="Document" plain @click="openExecutionDetail(row)">详情</el-button>
-                        <el-button
-                          size="small"
-                          type="primary"
-                          plain
-                          :disabled="row.status !== 'pending'"
-                          @click="updateExecutionTaskStatus(row, 'in_progress')"
-                        >
-                          开始
-                        </el-button>
-                        <el-button
-                          size="small"
-                          type="success"
-                          plain
-                          :disabled="!['pending', 'in_progress'].includes(row.status)"
-                          @click="updateExecutionTaskStatus(row, 'done')"
-                        >
-                          完成
-                        </el-button>
-                        <el-button
-                          v-if="canCreateExecutionTask"
-                          size="small"
-                          type="danger"
-                          plain
-                          :disabled="!['pending', 'in_progress'].includes(row.status)"
-                          @click="cancelExecutionTask(row)"
-                        >
-                          取消
-                        </el-button>
-                      </div>
-                    </template>
-                  </el-table-column>
-                </el-table>
-                <el-pagination
-                  v-if="executionTaskTotal > executionTaskPageSize"
-                  v-model:current-page="executionTaskPage"
-                  :page-size="executionTaskPageSize"
-                  :total="executionTaskTotal"
-                  layout="total, prev, pager, next"
-                  small
-                  @current-change="loadExecutionTasks"
-                />
-              </template>
-            </el-tab-pane>
-
-            <el-tab-pane label="会议纪要" name="meetings">
-              <el-alert
-                v-if="meetingFeatureDisabled"
-                class="dashboard-alert"
-                type="info"
-                show-icon
-                :closable="false"
-                title="会议纪要功能尚未开启"
-              />
-              <template v-else>
-                <section class="execution-overview-strip">
-                  <article
-                    v-for="card in meetingOverviewCards"
-                    :key="card.key"
-                    :class="['project-overview-card', card.tone]"
-                  >
-                    <span>{{ card.title }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <small>{{ card.detail }}</small>
-                  </article>
-                </section>
-                <div class="meeting-filters">
-                  <el-select
-                    v-model="meetingFilters.status"
-                    size="small"
-                    clearable
-                    placeholder="纪要状态"
-                    @change="applyMeetingFilters"
-                  >
-                    <el-option
-                      v-for="option in meetingStatusOptions"
-                      :key="option.value"
-                      :label="option.label"
-                      :value="option.value"
-                    />
-                  </el-select>
-                  <el-input
-                    v-model="meetingFilters.keyword"
-                    size="small"
-                    clearable
-                    placeholder="纪要内容/异常"
-                    @keyup.enter="applyMeetingFilters"
-                    @clear="applyMeetingFilters"
-                  />
-                  <el-button size="small" type="primary" plain @click="applyMeetingFilters">查询</el-button>
-                  <el-button size="small" :icon="Refresh" plain @click="loadMeetings">刷新</el-button>
-                </div>
-                <el-table
-                  :data="meetings"
-                  row-key="id"
-                  class="users-table"
-                  :row-class-name="meetingRowClassName"
-                  empty-text="暂无会议纪要"
-                >
-                  <el-table-column label="纪要" min-width="260" show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <div class="operation-client">
-                        <strong>{{ meetingPreview(row) }}</strong>
-                        <small>{{ row.created_by_username || '-' }} · {{ formatDate(row.created_at) }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="状态" width="110">
-                    <template #default="{ row }">
-                      <el-tag :type="meetingStatusTag(row.status)" effect="plain">{{ meetingStatusLabel(row.status) }}</el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="提取" width="120">
-                    <template #default="{ row }">
-                      <el-tag effect="plain">{{ meetingAiStatusLabel(row.ai_status) }}</el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="任务草稿" min-width="150">
-                    <template #default="{ row }">
-                      <div :class="['meeting-draft-progress', meetingDraftProgressTone(row)]">
-                        <strong>{{ row.accepted_draft_count || 0 }} / {{ row.draft_count || 0 }}</strong>
-                        <small>{{ meetingDraftProgressLabel(row) }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="操作" width="190" fixed="right">
-                    <template #default="{ row }">
-                      <div class="row-actions execution-task-actions">
-                        <el-button size="small" :icon="Document" type="primary" plain @click="openMeetingDetail(row)">详情</el-button>
-                        <el-button
-                          size="small"
-                          type="danger"
-                          plain
-                          :disabled="row.status !== 'draft'"
-                          @click="cancelMeeting(row)"
-                        >
-                          作废
-                        </el-button>
-                      </div>
-                    </template>
-                  </el-table-column>
-                </el-table>
-                <el-pagination
-                  v-if="meetingTotal > meetingPageSize"
-                  v-model:current-page="meetingPage"
-                  :page-size="meetingPageSize"
-                  :total="meetingTotal"
-                  layout="total, prev, pager, next"
-                  small
-                  @current-change="loadMeetings"
-                />
-              </template>
-            </el-tab-pane>
-          </el-tabs>
-        </template>
-
-        <template v-else-if="routeName === 'businessLedger'">
-          <div class="content-heading">
-            <div>
-              <p class="eyebrow">客户经营</p>
-              <h2>商务台账</h2>
-            </div>
-            <div class="heading-actions">
-              <el-button :icon="Plus" type="primary" :disabled="businessLedgerFeatureDisabled" @click="openBusinessLedgerCreate">
-                新建记录
-              </el-button>
-              <el-button :icon="Refresh" plain @click="loadBusinessLedgers">刷新</el-button>
-            </div>
-          </div>
-
-          <el-alert
-            v-if="businessLedgerFeatureDisabled"
-            class="dashboard-alert"
-            type="info"
-            show-icon
-            :closable="false"
-            title="商务台账功能尚未开启"
-          ></el-alert>
-          <template v-else>
-            <section class="business-ledger-overview">
-              <article
-                v-for="card in businessLedgerOverviewCards"
-                :key="card.key"
-                :class="['project-overview-card', card.tone]"
-              >
-                <span>{{ card.title }}</span>
-                <strong>{{ card.value }}</strong>
-                <small>{{ card.detail }}</small>
-              </article>
-            </section>
-            <div class="business-ledger-filters">
-              <el-select
-                v-model="businessLedgerFilters.stage"
-                size="small"
-                multiple
-                collapse-tags
-                collapse-tags-tooltip
-                clearable
-                placeholder="阶段"
-                @change="applyBusinessLedgerFilters"
-              >
-                <el-option
-                  v-for="option in businessLedgerStageOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                ></el-option>
-              </el-select>
-              <el-select
-                v-model="businessLedgerFilters.source"
-                size="small"
-                clearable
-                placeholder="来源"
-                @change="applyBusinessLedgerFilters"
-              >
-                <el-option
-                  v-for="option in clientInquirySourceOptions.slice(1)"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                ></el-option>
-              </el-select>
-              <el-select
-                v-if="canManageBusinessLedger"
-                v-model="businessLedgerFilters.responder_id"
-                size="small"
-                filterable
-                clearable
-                placeholder="负责人"
-                @change="applyBusinessLedgerFilters"
-              >
-                <el-option
-                  v-for="user in businessLedgerResponderOptions"
-                  :key="user.id"
-                  :label="user.username"
-                  :value="user.id"
-                ></el-option>
-              </el-select>
-              <el-date-picker
-                v-model="businessLedgerFilters.dateRange"
-                size="small"
-                type="datetimerange"
-                value-format="YYYY-MM-DDTHH:mm:ss"
-                format="YYYY-MM-DD HH:mm"
-                start-placeholder="开始时间"
-                end-placeholder="结束时间"
-                @change="applyBusinessLedgerFilters"
-              ></el-date-picker>
-              <el-input
-                v-model="businessLedgerFilters.keyword"
-                size="small"
-                clearable
-                placeholder="客户/电话/备注"
-                @keyup.enter="applyBusinessLedgerFilters"
-                @clear="applyBusinessLedgerFilters"
-              ></el-input>
-              <el-checkbox
-                v-model="businessLedgerFilters.overdue_only"
-                @change="applyBusinessLedgerFilters"
-              >
-                只看逾期
-              </el-checkbox>
-              <el-button size="small" type="primary" plain @click="applyBusinessLedgerFilters">查询</el-button>
-            </div>
-
-            <el-table
-              v-loading="businessLedgerLoading"
-              :data="businessLedgers"
-              row-key="inquiry_id"
-              class="users-table business-ledger-table"
-              empty-text="暂无商务台账"
-              :row-class-name="businessLedgerRowClass"
-            >
-              <el-table-column label="客户/要点" min-width="220" show-overflow-tooltip>
-                <template #default="{ row }">
-                  <div class="operation-client">
-                    <strong>{{ row.client_name || '-' }}</strong>
-                    <small>{{ businessLedgerPreview(row) }}</small>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column prop="client_phone" label="联系方式" min-width="130" />
-              <el-table-column prop="source" label="来源" width="110" />
-              <el-table-column label="阶段" width="120">
-                <template #default="{ row }">
-                  <el-tag :type="businessStageTag(row.stage)" effect="plain">{{ row.stage || '-' }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="下次跟进" min-width="160">
-                <template #default="{ row }">
-                  <div class="ledger-followup-cell">
-                    <span>{{ formatDate(row.next_followup_at) }}</span>
-                    <el-tag v-if="isBusinessLedgerOverdue(row)" type="danger" effect="plain" size="small">
-                      逾期
-                    </el-tag>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column label="建议下一步" min-width="210" show-overflow-tooltip>
-                <template #default="{ row }">
-                  <div :class="['ledger-next-step', businessLedgerNextStepTone(row)]">
-                    <strong>{{ businessLedgerNextStepLabel(row) }}</strong>
-                    <small>{{ businessLedgerNextStepDetail(row) }}</small>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column prop="responder_username" label="负责人" width="120" />
-              <el-table-column prop="notes" label="备注" min-width="180" show-overflow-tooltip />
-              <el-table-column label="操作" width="260" fixed="right">
-                <template #default="{ row }">
-                  <div class="row-actions business-ledger-actions">
-                    <el-button size="small" :icon="Document" type="primary" plain @click="openBusinessLedgerDetail(row)">详情</el-button>
-                    <el-button
-                      size="small"
-                      type="primary"
-                      plain
-                      :disabled="!canEditBusinessLedger(row)"
-                      @click="openBusinessLedgerEdit(row)"
-                    >
-                      编辑
-                    </el-button>
-                    <el-button
-                      v-if="canManageBusinessLedger"
-                      size="small"
-                      type="danger"
-                      plain
-                      :disabled="!canCancelBusinessLedger(row)"
-                      @click="cancelBusinessLedger(row)"
-                    >
-                      作废
-                    </el-button>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-pagination
-              v-if="businessLedgerTotal > businessLedgerPageSize"
-              v-model:current-page="businessLedgerPage"
-              :page-size="businessLedgerPageSize"
-              :total="businessLedgerTotal"
-              layout="total, prev, pager, next"
-              small
-              @current-change="loadBusinessLedgers"
-            ></el-pagination>
-          </template>
-        </template>
-
         <template v-else-if="routeName === 'bidding'">
           <div class="content-heading">
             <div>
@@ -3145,11 +2713,12 @@
                 <el-table-column label="截止时间" min-width="150">
                   <template #default="{ row }">{{ formatDate(row.tender_deadline_at) }}</template>
                 </el-table-column>
-                <el-table-column label="操作" width="170" fixed="right">
+                <el-table-column label="操作" width="250" fixed="right">
                   <template #default="{ row }">
                     <div class="row-actions">
                       <el-button size="small" :icon="Document" plain @click="openBiddingProjectDetail(row)">详情</el-button>
                       <el-button size="small" type="primary" plain @click="openBiddingProjectDetail(row, 'risks')">风险</el-button>
+                      <el-button size="small" type="success" plain @click="openBiddingProjectDetail(row, 'bidIntake')">研判</el-button>
                     </div>
                   </template>
                 </el-table-column>
@@ -3200,6 +2769,12 @@
                 </div>
 
                 <el-tabs v-model="biddingDrawer.activeTab" class="dashboard-tabs">
+                  <el-tab-pane label="立项研判" name="bidIntake">
+                    <BidIntakeAssessment
+                      :project-uuid="biddingDrawer.project.project_uuid"
+                      :active="biddingDrawer.visible && biddingDrawer.activeTab === 'bidIntake'"
+                    />
+                  </el-tab-pane>
                   <el-tab-pane label="资料与解析" name="files">
                     <section class="dashboard-section">
                       <div class="section-title">
@@ -4290,10 +3865,176 @@
 
                   <el-tab-pane label="商务标草案" name="businessBidDraft">
                     <section class="dashboard-section">
+                      <div class="bidding-risk-card-summary">
+                        <div><span>报价草案</span><strong>{{ businessBidQuoteImport ? 'V' + businessBidQuoteImport.version_no : '未导入' }}</strong><small>确认报价快照</small></div>
+                        <div><span>清单行数</span><strong>{{ businessBidQuoteImport?.line_count || 0 }}</strong><small>导入后固定留痕</small></div>
+                        <div><span>报价合计</span><strong>{{ businessBidQuoteImport?.total_amount || '-' }}</strong><small>以确认报价单为准</small></div>
+                        <div class="section-title-action">
+                          <el-button size="small" plain :loading="businessBidSourceLoading" @click="loadBusinessBidSources">刷新</el-button>
+                          <el-button size="small" type="primary" :disabled="!businessBidDraftSource || businessBidDraftSource.completeness_status !== 'complete'" :loading="businessBidImporting" @click="importBusinessBidQuote">导入确认报价</el-button>
+                          <el-button size="small" type="success" :disabled="!businessBidQuoteImport" :loading="businessBidExporting" @click="exportBusinessBidPdf('draft')">导出草案 PDF</el-button>
+                          <el-button size="small" type="warning" :disabled="!businessBidAssembly?.formal_ready" :loading="businessBidExporting" @click="exportBusinessBidPdf('formal')">导出正式版 PDF</el-button>
+                        </div>
+                      </div>
+                      <el-form label-position="top" class="form-grid-2">
+                        <el-form-item label="预算项目"><el-select v-model="businessBidBudgetProjectId" filterable placeholder="请选择已完成报价确认的项目" @change="loadBusinessBidDraftSource"><el-option v-for="item in businessBidBudgetProjects" :key="item.project_id" :label="item.name" :value="item.project_id" /></el-select></el-form-item>
+                        <el-form-item label="确认报价版本"><el-input :model-value="businessBidDraftSource ? ('版本 ' + businessBidDraftSource.revision + '，' + (businessBidDraftSource.completeness_status === 'complete' ? '可导入' : '报价单未完成')) : '请选择预算项目'" disabled /></el-form-item>
+                      </el-form>
+                      <el-alert type="info" :closable="false" show-icon title="系统生成报价清单和文字说明；企业证照、授权、业绩、保证金等资料需从资料库关联或人工导入。" />
+                      <el-alert
+                        v-if="businessBidAssembly && !businessBidAssembly.formal_ready"
+                        class="dashboard-alert"
+                        type="warning"
+                        show-icon
+                        :closable="false"
+                        :title="`正式版暂不可导出：${businessBidAssembly.blocking_items?.[0]?.title || '请完成成册资料核验'}`"
+                        :description="`当前有 ${businessBidAssembly.blocking_items?.length || 0} 项成册门禁待处理；草案仍可导出用于人工补齐资料。`"
+                      />
+                      <el-alert
+                        v-else-if="businessBidAssembly?.formal_ready"
+                        class="dashboard-alert"
+                        type="success"
+                        show-icon
+                        :closable="false"
+                        title="成册门禁已通过，可导出正式版 PDF"
+                        description="正式版仍需按附件索引人工核验扫描件、签章并合并后提交。"
+                      />
+                      <div v-if="businessBidAssembly?.template" class="business-bid-template-plan">
+                        <div class="section-title">
+                          <el-icon><DocumentChecked /></el-icon>
+                          <span>通用商务标模板 V1.4</span>
+                          <small>{{ businessBidAssembly.template.template_title }}，由本项目已确认的商务标目录决定生成范围</small>
+                        </div>
+                        <div class="bidding-risk-card-summary">
+                          <div><span>模板编号</span><strong>{{ businessBidAssembly.template.template_id }}</strong><small>{{ businessBidAssembly.template.template_version }}</small></div>
+                          <div><span>系统章节</span><strong>{{ businessBidAssembly.template.generated_sections?.length || 0 }}</strong><small>按目录命中后生成</small></div>
+                          <div><span>人工目录项</span><strong>{{ businessBidAssembly.template.manual_directory_items?.length || 0 }}</strong><small>保留招标原格式或附件</small></div>
+                          <div><span>目录状态</span><strong>{{ businessBidAssembly.template.has_confirmed_directory ? '已确认' : '草案基线' }}</strong><small>{{ businessBidAssembly.template.directory_driven ? '项目目录驱动' : '模板默认' }}</small></div>
+                        </div>
+                        <el-alert
+                          v-if="businessBidAssembly.template.warnings?.length"
+                          class="dashboard-alert"
+                          type="info"
+                          show-icon
+                          :closable="false"
+                          :title="businessBidAssembly.template.warnings[0].message"
+                        />
+                        <el-table :data="businessBidAssembly.template.generated_sections || []" row-key="section_key" class="users-table bidding-subtable">
+                          <el-table-column label="系统生成章节" min-width="260"><template #default="{ row }"><strong>{{ row.title }}</strong><small>{{ row.fallback_in_draft ? '草案基线章节' : '已匹配项目目录' }}</small></template></el-table-column>
+                          <el-table-column label="生成方式" width="210"><template #default="{ row }">{{ row.render_mode }}</template></el-table-column>
+                          <el-table-column label="签章要求" width="120"><template #default="{ row }">{{ row.requires_manual_signature ? '人工签章' : '不含签章' }}</template></el-table-column>
+                        </el-table>
+                        <el-table v-if="businessBidAssembly.template.manual_directory_items?.length" :data="businessBidAssembly.template.manual_directory_items" row-key="item_key" class="users-table bidding-subtable">
+                          <el-table-column label="人工处理目录项" min-width="280"><template #default="{ row }"><strong>{{ row.title }}</strong></template></el-table-column>
+                          <el-table-column label="处理要求" min-width="420"><template #default="{ row }">{{ row.reason }}</template></el-table-column>
+                        </el-table>
+                      </div>
+                      <div v-if="businessBidDraftFieldPlan" class="business-bid-field-plan">
+                        <div class="section-title">
+                          <el-icon><DocumentChecked /></el-icon>
+                          <span>草案字段责任清单 V1.4.1</span>
+                          <small>系统能填的直接生成；LLM 只做封闭资料源草稿；人工项会在 PDF 中以黄色底占位</small>
+                        </div>
+                        <div class="bidding-risk-card-summary">
+                          <div><span>字段总数</span><strong>{{ businessBidDraftFieldPlan.summary?.field_count || 0 }}</strong><small>覆盖已生成章节</small></div>
+                          <div><span>黄色占位</span><strong>{{ businessBidDraftFieldPlan.summary?.yellow_placeholder_count || 0 }}</strong><small>PDF 中显式标注</small></div>
+                          <div><span>LLM 待确认</span><strong>{{ businessBidDraftFieldPlan.summary?.llm_review_count || 0 }}</strong><small>只引用封闭资料源</small></div>
+                          <div><span>人工必处理</span><strong>{{ businessBidDraftFieldPlan.summary?.manual_required_count || 0 }}</strong><small>填写、上传、签章、复核</small></div>
+                        </div>
+                        <el-alert
+                          class="dashboard-alert"
+                          type="warning"
+                          show-icon
+                          :closable="false"
+                          :title="businessBidDraftFieldPlan.llm_source_policy?.rule || 'LLM 只能引用本项目招标文件、已确认企业资料和人工填写信息'"
+                        />
+                        <el-table :data="businessBidDraftFieldRows" row-key="field_key" class="users-table bidding-subtable">
+                          <el-table-column label="字段" min-width="240">
+                            <template #default="{ row }">
+                              <strong>{{ row.label }}</strong>
+                              <small>{{ row.pdf_location || row.section_key }}</small>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="责任类型" width="130">
+                            <template #default="{ row }"><el-tag size="small" effect="plain">{{ businessBidFieldModeLabel(row.mode) }}</el-tag></template>
+                          </el-table-column>
+                          <el-table-column label="状态" width="130">
+                            <template #default="{ row }"><el-tag size="small" :type="businessBidFieldStatusTag(row.status)" effect="plain">{{ businessBidFieldStatusLabel(row.status) }}</el-tag></template>
+                          </el-table-column>
+                          <el-table-column label="依据/说明" min-width="280">
+                            <template #default="{ row }">
+                              <span>{{ row.source_hint || '-' }}</span>
+                              <small>{{ row.instruction || row.placeholder }}</small>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </div>
+                      <div v-if="businessBidV12Review">
+                        <div class="section-title">
+                          <el-icon><DocumentChecked /></el-icon>
+                          <span>报价一致性与商务响应</span>
+                          <small>以已导入确认报价为唯一金额来源，仅展示商务标响应项</small>
+                        </div>
+                        <div class="bidding-risk-card-summary">
+                          <div><span>清单校验</span><strong>{{ businessBidV12Review.quote_consistency?.summary?.snapshot_line_count || 0 }}</strong><small>快照清单行</small></div>
+                          <div><span>商务响应</span><strong>{{ businessBidV12Review.business_responses?.summary?.total || 0 }}</strong><small>已闭环 {{ businessBidV12Review.business_responses?.summary?.resolved_count || 0 }} 项</small></div>
+                          <div><span>高风险响应</span><strong>{{ businessBidV12Review.business_responses?.summary?.high_risk_count || 0 }}</strong><small>需确认响应与依据</small></div>
+                          <div><span>正式版门禁</span><strong>{{ businessBidV12BlockingItems.length }}</strong><small>{{ businessBidV12BlockingItems.length ? '待处理高风险项' : '校验通过' }}</small></div>
+                        </div>
+                        <el-table
+                          v-if="businessBidV12BlockingItems.length"
+                          :data="businessBidV12BlockingItems"
+                          row-key="code"
+                          class="users-table bidding-subtable"
+                        >
+                          <el-table-column label="待处理事项" min-width="300"><template #default="{ row }"><strong>{{ row.title }}</strong></template></el-table-column>
+                          <el-table-column label="处理建议" min-width="420"><template #default="{ row }">{{ row.detail }}</template></el-table-column>
+                        </el-table>
+                        <el-table
+                          v-else
+                          :data="businessBidV12Review.business_responses?.items || []"
+                          row-key="response_item_uuid"
+                          class="users-table bidding-subtable"
+                          empty-text="暂无商务响应项，请先在响应矩阵生成并复核商务要求"
+                        >
+                          <el-table-column label="商务响应" min-width="260"><template #default="{ row }"><strong>{{ row.title }}</strong><small>{{ row.source_text }}</small></template></el-table-column>
+                          <el-table-column label="状态" width="120"><template #default="{ row }">{{ row.status }}</template></el-table-column>
+                          <el-table-column label="我方响应" min-width="300"><template #default="{ row }">{{ row.response_note || '待人工补充' }}</template></el-table-column>
+                          <el-table-column label="依据" width="100"><template #default="{ row }">{{ row.evidence_count || 0 }} 条</template></el-table-column>
+                        </el-table>
+                      </div>
+                      <div v-if="businessBidFormalPackagePreview" class="business-bid-formal-package">
+                        <div class="section-title">
+                          <el-icon><DocumentChecked /></el-icon>
+                          <span>正式投标件 V1.4</span>
+                          <small>固定表式、真实目录与连续页码成册后，合并已关联的企业 PDF 扫描件并保留版本记录</small>
+                          <div class="section-title-action">
+                            <el-button size="small" plain :loading="businessBidFormalPackageLoading" @click="loadBusinessBidFormalPackage">预检附件</el-button>
+                            <el-button size="small" type="primary" :disabled="!businessBidFormalPackagePreview.available" :loading="businessBidFormalPackageGenerating" @click="generateBusinessBidFormalPackage">生成正式投标件</el-button>
+                          </div>
+                        </div>
+                        <div class="bidding-risk-card-summary">
+                          <div><span>已关联附件</span><strong>{{ businessBidFormalPackagePreview.attachment_count || 0 }}</strong><small>PDF {{ businessBidFormalPackagePreview.pdf_attachment_count || 0 }} 份</small></div>
+                          <div><span>生成条件</span><strong>{{ businessBidFormalPackagePreview.available ? '已通过' : '待处理' }}</strong><small>{{ businessBidFormalPackagePreview.formal_gate_ready ? 'V1.2 门禁通过' : '先完成 V1.2 复核' }}</small></div>
+                          <div><span>附件问题</span><strong>{{ businessBidFormalPackagePreview.blocking_items?.length || 0 }}</strong><small>缺文件、非 PDF 或无法合并</small></div>
+                          <div><span>已生成版本</span><strong>{{ businessBidFormalPackages.length }}</strong><small>可追溯历史输出</small></div>
+                        </div>
+                        <el-table v-if="businessBidFormalPackagePreview.blocking_items?.length" :data="businessBidFormalPackagePreview.blocking_items" row-key="code" class="users-table bidding-subtable">
+                          <el-table-column label="成册阻断项" min-width="300"><template #default="{ row }"><strong>{{ row.title }}</strong></template></el-table-column>
+                          <el-table-column label="处理建议" min-width="420"><template #default="{ row }">{{ row.detail }}</template></el-table-column>
+                        </el-table>
+                        <el-table v-else-if="businessBidFormalPackages.length" :data="businessBidFormalPackages" row-key="package_uuid" class="users-table bidding-subtable">
+                          <el-table-column label="正式投标件" min-width="320"><template #default="{ row }"><strong>{{ row.output_filename }}</strong><small>{{ row.created_at }}</small></template></el-table-column>
+                          <el-table-column label="页数" width="100"><template #default="{ row }">{{ row.manifest?.merged_page_count || '-' }}</template></el-table-column>
+                          <el-table-column label="附件" width="100"><template #default="{ row }">{{ row.manifest?.attachments?.length || 0 }} 份</template></el-table-column>
+                          <el-table-column label="操作" width="110"><template #default="{ row }"><el-button size="small" plain @click="downloadBusinessBidFormalPackage(row)">下载</el-button></template></el-table-column>
+                        </el-table>
+                      </div>
+                      <div style="height: 16px"></div>
                       <div class="section-title">
                         <el-icon><Document /></el-icon>
-                        <span>投标文件格式确认</span>
-                        <small>先确认本项目商务/技术分册和目录项归属，再分别进入商务标、技术标草案链路</small>
+                        <span>商务标文件格式确认</span>
+                        <small>仅维护商务标分册的目录项、报价表和企业资料附件</small>
                         <div class="section-title-action bidding-outline-actions">
                           <el-button
                             size="small"
@@ -4315,7 +4056,7 @@
                           <el-button
                             size="small"
                             plain
-                            :disabled="!biddingFileFormatPackages.length"
+                            :disabled="!biddingBusinessFileFormatPackages.length"
                             @click="openBiddingFileFormatItemDialog"
                           >
                             新增目录项
@@ -4325,7 +4066,7 @@
                             type="success"
                             plain
                             :loading="biddingFileFormatConfirming"
-                            :disabled="!biddingFileFormatPackages.length"
+                            :disabled="!biddingBusinessFileFormatPackages.length"
                             @click="confirmBiddingFileFormatPlan"
                           >
                             {{ biddingFileFormatPlan?.review_status === 'confirmed' ? '重新确认' : '确认格式' }}
@@ -4336,18 +4077,18 @@
                       <div class="bidding-risk-card-summary">
                         <div>
                           <span>识别结论</span>
-                          <strong>{{ biddingFileFormatPlan?.package_mode_label || '-' }}</strong>
+                          <strong>商务标分册</strong>
                           <small>{{ biddingFileFormatPlan?.format_source_label || '等待识别' }}</small>
                         </div>
                         <div>
                           <span>文件包</span>
-                          <strong>{{ biddingFileFormatSummary.package_count || 0 }}</strong>
-                          <small>目录项 {{ biddingFileFormatSummary.item_count || 0 }} · 正文 {{ biddingFileFormatSummary.draft_section_count || 0 }}</small>
+                          <strong>{{ biddingBusinessFileFormatSummary.package_count || 0 }}</strong>
+                          <small>商务目录项 {{ biddingBusinessFileFormatSummary.item_count || 0 }}</small>
                         </div>
                         <div>
                           <span>固定表单</span>
-                          <strong>{{ biddingFileFormatSummary.fixed_form_count || 0 }}</strong>
-                          <small>报价表 {{ biddingFileFormatSummary.pricing_table_count || 0 }} · 附件 {{ biddingFileFormatSummary.attachment_count || 0 }}</small>
+                          <strong>{{ biddingBusinessFileFormatSummary.pricing_table_count || 0 }}</strong>
+                          <small>报价表 · 附件 {{ biddingBusinessFileFormatSummary.attachment_count || 0 }}</small>
                         </div>
                         <div>
                           <span>确认状态</span>
@@ -4357,22 +4098,22 @@
                       </div>
 
                       <el-alert
-                        v-if="biddingFileFormatWarnings.length"
+                        v-if="biddingBusinessFileFormatWarnings.length"
                         class="dashboard-alert"
                         type="warning"
                         show-icon
                         :closable="false"
-                        :title="biddingFileFormatWarnings[0].message || '投标文件格式仍需人工确认'"
+                        :title="biddingBusinessFileFormatWarnings[0].message || '商务标格式仍需人工确认'"
                       ></el-alert>
 
                       <el-table
                         v-loading="biddingFileFormatLoading || biddingFileFormatGenerating"
-                        :data="biddingFileFormatRows"
+                        :data="biddingBusinessFileFormatRows"
                         row-key="item_key"
                         class="users-table"
-                        empty-text="暂无投标文件格式识别结果，请先生成格式表"
+                        empty-text="暂无商务标格式识别结果，请先生成格式表"
                       >
-                        <el-table-column label="文件包/目录项" min-width="300" show-overflow-tooltip>
+                        <el-table-column label="商务标目录项" min-width="300" show-overflow-tooltip>
                           <template #default="{ row }">
                             <div class="operation-client">
                               <strong>{{ row.item_title }}</strong>
@@ -4404,22 +4145,7 @@
                         <el-table-column label="操作" width="250" fixed="right">
                           <template #default="{ row }">
                             <div class="row-actions">
-                              <el-button
-                                v-if="row.package_key !== 'business' && biddingFileFormatHasPackage('business')"
-                                size="small"
-                                plain
-                                @click="moveBiddingFileFormatItem(row, 'business')"
-                              >
-                                移到商务标
-                              </el-button>
-                              <el-button
-                                v-if="row.package_key !== 'technical' && biddingFileFormatHasPackage('technical')"
-                                size="small"
-                                plain
-                                @click="moveBiddingFileFormatItem(row, 'technical')"
-                              >
-                                移到技术标
-                              </el-button>
+
                               <el-button size="small" type="danger" plain @click="removeBiddingFileFormatItem(row)">
                                 删除
                               </el-button>
@@ -4452,33 +4178,6 @@
                         </el-table-column>
                       </el-table>
 
-                      <el-table
-                        v-if="biddingFileFormatAuditEvents.length"
-                        :data="biddingFileFormatAuditEvents"
-                        row-key="event_uuid"
-                        class="users-table bidding-subtable"
-                      >
-                        <el-table-column label="编辑审计" min-width="220" show-overflow-tooltip>
-                          <template #default="{ row }">
-                            <div class="operation-client">
-                              <strong>{{ biddingFileFormatEventTypeLabel(row.event_type) }}：{{ row.item_title || '-' }}</strong>
-                              <small>
-                                {{ row.pending ? '待确认保存' : `已保存 ${formatDate(row.created_at)}` }}
-                              </small>
-                            </div>
-                          </template>
-                        </el-table-column>
-                        <el-table-column label="文件包变化" min-width="180">
-                          <template #default="{ row }">
-                            {{ biddingFileFormatPackageLabel(row.from_package_key) || '-' }}
-                            <span v-if="row.from_package_key || row.to_package_key"> → </span>
-                            {{ biddingFileFormatPackageLabel(row.to_package_key) || '-' }}
-                          </template>
-                        </el-table-column>
-                        <el-table-column label="说明" min-width="260" show-overflow-tooltip>
-                          <template #default="{ row }">{{ row.detail?.note || '-' }}</template>
-                        </el-table-column>
-                      </el-table>
 
                       <el-dialog
                         v-model="biddingFileFormatItemDialog.visible"
@@ -4491,7 +4190,7 @@
                             <el-form-item label="文件包">
                               <el-select v-model="biddingFileFormatItemDialog.package_key" placeholder="选择文件包">
                                 <el-option
-                                  v-for="pkg in biddingFileFormatPackages"
+                                  v-for="pkg in biddingBusinessFileFormatPackages"
                                   :key="pkg.package_key"
                                   :label="pkg.package_title"
                                   :value="pkg.package_key"
@@ -4510,7 +4209,7 @@
                             </el-form-item>
                           </div>
                           <el-form-item label="目录项名称">
-                            <el-input v-model="biddingFileFormatItemDialog.item_title" placeholder="例如：投标函、施工组织设计、材料品牌表" />
+                            <el-input v-model="biddingFileFormatItemDialog.item_title" placeholder="例如：投标函、报价说明、材料品牌表" />
                           </el-form-item>
                           <div class="form-grid-2">
                             <el-form-item label="内容类型">
@@ -4697,7 +4396,7 @@
                       <div class="section-title">
                         <el-icon><Document /></el-icon>
                         <span>商务标目录骨架</span>
-                        <small>仅生成商务标分册下的章节草稿，技术方案和施工组织设计不会进入这里</small>
+                        <small>仅生成商务标分册下的章节草稿，用于后续成册与人工复核</small>
                         <div class="section-title-action bidding-outline-actions">
                           <el-button
                             size="small"
@@ -6804,1089 +6503,12 @@
           </el-dialog>
         </template>
 
-        <template v-else-if="routeName === 'costMeasurement'">
-          <div class="content-heading">
-            <div>
-              <p class="eyebrow">COST-MEASURE-1</p>
-              <h2>&#25104;&#26412;&#27979;&#31639;&#38381;&#29615;</h2>
-              <p>&#23548;&#20837;&#21382;&#21490;&#27979;&#31639; Excel&#65292;&#32479;&#19968;&#37325;&#31639;&#12289;&#26174;&#24335;&#22797;&#26680;&#12289;&#38145;&#23450;&#24182;&#23548;&#20986;&#25104;&#26524;&#12290;</p>
-            </div>
-            <div class="heading-actions">
-              <input
-                ref="costMeasurementFileInput"
-                type="file"
-                accept=".xlsx,.xlsm"
-                hidden
-                @change="handleCostMeasurementFile"
-              />
-              <el-button
-                v-if="canEditCostMeasurement"
-                type="primary"
-                :icon="Upload"
-                :disabled="costMeasurementFeatureDisabled"
-                @click="costMeasurementFileInput?.click()"
-              >
-                &#23548;&#20837;&#27979;&#31639; Excel
-              </el-button>
-              <el-button :icon="Refresh" plain :loading="costMeasurementLoading" @click="loadCostMeasurements">
-                &#21047;&#26032;
-              </el-button>
-            </div>
-          </div>
-
-          <el-alert
-            v-if="costMeasurementFeatureDisabled"
-            class="dashboard-alert"
-            type="info"
-            show-icon
-            :closable="false"
-            title="&#25104;&#26412;&#27979;&#31639;&#21151;&#33021;&#23578;&#26410;&#24320;&#21551;"
-          />
-          <template v-else>
-            <div class="cost-workbench-cards">
-              <article class="cost-workbench-card">
-                <span>&#27979;&#31639;&#39033;&#30446;</span>
-                <strong>{{ costMeasurementTotal }}</strong>
-                <small>&#21382;&#21490;&#25104;&#26524;&#19982;&#26032;&#27979;&#31639;&#32479;&#19968;&#31649;&#29702;</small>
-              </article>
-              <article class="cost-workbench-card warning">
-                <span>&#24453;&#22797;&#26680;&#34892;</span>
-                <strong>{{ costMeasurements.reduce((sum, row) => sum + Number(row.review_line_count || 0), 0) }}</strong>
-                <small>&#21382;&#21490;&#20844;&#24335;&#24046;&#24322;&#25110;&#20165;&#32508;&#21512;&#20215;</small>
-              </article>
-              <article class="cost-workbench-card success">
-                <span>&#24050;&#38145;&#23450;&#29256;&#26412;</span>
-                <strong>{{ costMeasurements.filter((row) => row.status === 'locked').length }}</strong>
-                <small>&#21487;&#20316;&#20026;&#21518;&#32493;&#25237;&#26631;&#19982;&#25104;&#26412;&#21488;&#36134;&#20381;&#25454;</small>
-              </article>
-            </div>
-            <el-table
-              v-loading="costMeasurementLoading"
-              :data="costMeasurements"
-              row-key="id"
-              class="users-table cost-db-table"
-              empty-text="&#26242;&#26080;&#25104;&#26412;&#27979;&#31639;&#39033;&#30446;"
-              @row-dblclick="openCostMeasurement"
-            >
-              <el-table-column label="&#27979;&#31639;&#39033;&#30446;" min-width="300">
-                <template #default="{ row }">
-                  <div class="operation-client">
-                    <strong>{{ row.measurement_code }} &#183; {{ row.name }}</strong>
-                    <small>{{ row.project_name || row.source_filename || '-' }}</small>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column label="&#29366;&#24577;" width="110">
-                <template #default="{ row }">
-                  <el-tag :type="row.status === 'locked' ? 'success' : 'warning'" effect="plain">
-                    {{ row.status === 'locked' ? '\u5df2\u9501\u5b9a' : '\u8349\u7a3f' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="line_count" label="&#28165;&#21333;&#34892;" width="90" />
-              <el-table-column prop="matched_quota_count" label="&#23450;&#39069;&#21629;&#20013;" width="100" />
-              <el-table-column label="&#24453;&#22797;&#26680;" width="100">
-                <template #default="{ row }">
-                  <el-tag :type="row.review_line_count ? 'danger' : 'success'" effect="plain">{{ row.review_line_count || 0 }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="&#31246;&#21069;&#21512;&#35745;" width="150" align="right">
-                <template #default="{ row }">{{ formatAmount(row.pretax_total) }}</template>
-              </el-table-column>
-              <el-table-column label="&#21547;&#31246;&#21512;&#35745;" width="150" align="right">
-                <template #default="{ row }">{{ formatAmount(row.grand_total) }}</template>
-              </el-table-column>
-              <el-table-column label="&#25805;&#20316;" width="110" fixed="right">
-                <template #default="{ row }">
-                  <el-button size="small" type="primary" plain @click="openCostMeasurement(row)">&#26597;&#30475;</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </template>
-
-          <el-dialog
-            v-model="costMeasurementImportDialog.visible"
-            title="&#23548;&#20837;&#25104;&#26412;&#27979;&#31639;"
-            width="720px"
-            destroy-on-close
-          >
-            <el-alert
-              v-if="costMeasurementImportDialog.preview"
-              type="info"
-              :closable="false"
-              show-icon
-              :title="`\u5df2\u8bc6\u522b ${costMeasurementImportDialog.preview.line_count || 0} \u884c\uff0c\u5f85\u590d\u6838 ${costMeasurementImportDialog.preview.review_line_count || 0} \u884c`"
-            />
-            <el-form label-position="top">
-              <el-form-item label="&#27979;&#31639;&#21517;&#31216;">
-                <el-input v-model="costMeasurementImportDialog.name" />
-              </el-form-item>
-              <el-form-item label="&#39033;&#30446;&#21517;&#31216;">
-                <el-input v-model="costMeasurementImportDialog.project_name" />
-              </el-form-item>
-              <el-form-item label="&#28304;&#25991;&#20214;">
-                <el-input :model-value="costMeasurementImportDialog.file?.name || '-'" disabled />
-              </el-form-item>
-            </el-form>
-            <template #footer>
-              <el-button @click="costMeasurementImportDialog.visible = false">&#21462;&#28040;</el-button>
-              <el-button type="primary" :loading="state.submitting" @click="commitCostMeasurementImport">
-                &#21019;&#24314;&#27979;&#31639;&#33609;&#31295;
-              </el-button>
-            </template>
-          </el-dialog>
-
-          <el-drawer
-            v-model="costMeasurementDrawer.visible"
-            size="94%"
-            :title="costMeasurementDetail?.name || '\u6210\u672c\u6d4b\u7b97\u8be6\u60c5'"
-            destroy-on-close
-          >
-            <template v-if="costMeasurementDetail">
-              <div class="heading-actions">
-                <el-tag :type="costMeasurementDetail.status === 'locked' ? 'success' : 'warning'">
-                  {{ costMeasurementDetail.status === 'locked' ? '\u5df2\u9501\u5b9a' : '\u8349\u7a3f' }}
-                </el-tag>
-                <span>&#31246;&#21069; {{ formatAmount(costMeasurementDetail.pretax_total) }}</span>
-                <span>&#21547;&#31246; {{ formatAmount(costMeasurementDetail.grand_total) }}</span>
-                <span>&#24453;&#22797;&#26680; {{ costMeasurementDetail.review_line_count || 0 }} &#34892;</span>
-                <el-button
-                  v-if="canEditCostMeasurement && costMeasurementDetail.status === 'draft'"
-                  :loading="costMeasurementLoading"
-                  @click="recalculateCostMeasurement"
-                >&#32479;&#19968;&#37325;&#31639;</el-button>
-                <el-button
-                  v-if="canApproveCostMeasurement && costMeasurementDetail.status === 'draft'"
-                  type="success"
-                  plain
-                  @click="lockCostMeasurement"
-                >&#22797;&#26680;&#24182;&#38145;&#23450;</el-button>
-                <el-button
-                  v-if="canEditCostMeasurement && costMeasurementDetail.status === 'locked'"
-                  type="primary"
-                  plain
-                  @click="previewCostMeasurementDrafts"
-                >&#27785;&#28096;&#25104;&#26412;&#24211;</el-button>
-                <el-button v-if="canExportCostMeasurement" :icon="Download" plain @click="exportCostMeasurement">
-                  &#23548;&#20986; Excel
-                </el-button>
-              </div>
-              <el-table :data="costMeasurementDetail.lines || []" row-key="id" max-height="680" class="users-table cost-db-table">
-                <el-table-column label="&#39033;&#30446;" min-width="280" fixed="left">
-                  <template #default="{ row }">
-                    <div class="operation-client">
-                      <strong>{{ row.sequence_no || row.sort_order }}. {{ row.item_name }}</strong>
-                      <small>{{ row.section_name || '-' }} &#183; {{ row.unit || '-' }}</small>
-                    </div>
-                  </template>
-                </el-table-column>
-                <el-table-column label="&#24037;&#31243;&#37327;" width="130">
-                  <template #default="{ row }">
-                    <el-input-number v-model="row.quantity" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="&#20154;&#24037;" width="125">
-                  <template #default="{ row }"><el-input-number v-model="row.labor_unit_price" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" /></template>
-                </el-table-column>
-                <el-table-column label="&#20027;&#26448;" width="125">
-                  <template #default="{ row }"><el-input-number v-model="row.main_material_unit_price" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" /></template>
-                </el-table-column>
-                <el-table-column label="&#36741;&#26448;&#21450;&#26426;&#26800;" width="135">
-                  <template #default="{ row }"><el-input-number v-model="row.auxiliary_machinery_unit_price" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" /></template>
-                </el-table-column>
-                <el-table-column label="&#20998;&#21253;" width="125">
-                  <template #default="{ row }"><el-input-number v-model="row.subcontract_unit_price" :min="0" :controls="false" size="small" :disabled="costMeasurementDetail.status !== 'draft' || !canEditCostMeasurement" /></template>
-                </el-table-column>
-                <el-table-column label="&#21382;&#21490;&#21333;&#20215;" width="120" align="right">
-                  <template #default="{ row }">{{ formatAmount(row.source_unit_price) }}</template>
-                </el-table-column>
-                <el-table-column label="&#37325;&#31639;&#21333;&#20215;" width="120" align="right">
-                  <template #default="{ row }">{{ formatAmount(row.calculated_unit_price) }}</template>
-                </el-table-column>
-                <el-table-column label="&#21512;&#35745;" width="130" align="right">
-                  <template #default="{ row }">{{ formatAmount(row.calculated_total_price) }}</template>
-                </el-table-column>
-                <el-table-column label="&#22797;&#26680;" width="145" fixed="right">
-                  <template #default="{ row }">
-                    <div class="row-actions">
-                      <el-tag :type="row.review_status === 'required' ? 'danger' : 'success'" effect="plain">
-                        {{ row.review_status === 'required' ? '\u5f85\u590d\u6838' : '\u5df2\u590d\u6838' }}
-                      </el-tag>
-                      <el-button
-                        v-if="canEditCostMeasurement && costMeasurementDetail.status === 'draft'"
-                        size="small"
-                        type="primary"
-                        plain
-                        @click="saveCostMeasurementLine(row)"
-                      >&#20445;&#23384;</el-button>
-                    </div>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </template>
-          </el-drawer>
-
-          <el-dialog
-            v-model="costMeasurementDraftDialog.visible"
-            title="&#27785;&#28096;&#20225;&#19994;&#25104;&#26412;&#24211;"
-            width="1120px"
-            destroy-on-close
-          >
-            <el-alert
-              type="info"
-              show-icon
-              :closable="false"
-              title="&#21482;&#20174;&#24050;&#38145;&#23450;&#29256;&#26412;&#20013;&#25552;&#21462;&#24050;&#22797;&#26680;&#34892;&#65307;&#19981;&#33258;&#21160;&#21551;&#29992;&#65292;&#19981;&#35206;&#30422;&#29616;&#26377;&#24050;&#21551;&#29992;&#25110;&#24453;&#26680;&#23450;&#26465;&#30446;&#12290;"
-            />
-            <div v-if="costMeasurementDraftDialog.summary" class="cost-workbench-cards">
-              <article class="cost-workbench-card">
-                <span>&#26412;&#27425;&#20505;&#36873;</span>
-                <strong>{{ costMeasurementDraftDialog.summary.selected_line_count || 0 }}</strong>
-                <small>&#38145;&#23450;&#27979;&#31639;&#29256;&#26412;&#30340;&#26126;&#32454;&#34892;</small>
-              </article>
-              <article class="cost-workbench-card success">
-                <span>&#21487;&#29983;&#25104;&#24453;&#26680;&#23450;&#26465;&#30446;</span>
-                <strong>{{ costMeasurementDraftDialog.summary.eligible_count || 0 }}</strong>
-                <small>&#37325;&#22797;&#20505;&#36873; {{ costMeasurementDraftDialog.summary.within_measurement_duplicate_count || 0 }} &#26465;&#65292;&#21487;&#20154;&#24037;&#25913;&#36873;</small>
-              </article>
-              <article class="cost-workbench-card warning">
-                <span>&#24050;&#38459;&#26029;</span>
-                <strong>{{ costMeasurementDraftDialog.summary.blocked_count || 0 }}</strong>
-                <small>&#24453;&#22797;&#26680;&#12289;&#37325;&#22797;&#25110;&#20215;&#26684;&#26080;&#25928;</small>
-              </article>
-            </div>
-            <el-form label-position="top">
-              <el-form-item label="&#26412;&#25209;&#27425;&#35828;&#26126;&#65288;&#20889;&#20837;&#25104;&#26412;&#21382;&#21490;&#19982;&#27979;&#31639;&#20107;&#20214;&#65289;">
-                <el-input
-                  v-model="costMeasurementDraftDialog.note"
-                  type="textarea"
-                  :rows="2"
-                  maxlength="2000"
-                  show-word-limit
-                  placeholder="&#20363;&#65306;&#24050;&#26680;&#23545;&#20449;&#36798;&#39033;&#30446;&#21382;&#21490;&#25104;&#26412;&#21475;&#24452;"
-                />
-              </el-form-item>
-            </el-form>
-            <el-table
-              v-loading="costMeasurementDraftDialog.loading"
-              :data="costMeasurementDraftDialog.candidates"
-              row-key="line_id"
-              max-height="520"
-              class="users-table cost-db-table"
-            >
-              <el-table-column label="&#36873;&#25321;" width="70" align="center">
-                <template #default="{ row }">
-                  <el-checkbox v-model="row.selected" :disabled="!row.can_create" />
-                </template>
-              </el-table-column>
-              <el-table-column label="&#27979;&#31639;&#26126;&#32454;" min-width="260">
-                <template #default="{ row }">
-                  <div class="operation-client">
-                    <strong>{{ row.sequence_no || row.line_id }}. {{ row.item_name }}</strong>
-                    <small>{{ row.feature || '-' }}</small>
-                    <small>{{ row.source_sheet || '-' }} &#183; &#21407;&#34892; {{ row.source_row_index || '-' }}</small>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column prop="unit" label="&#21333;&#20301;" width="80" />
-              <el-table-column label="&#30452;&#25509;&#25104;&#26412;" width="110" align="right">
-                <template #default="{ row }">{{ formatAmount(row.direct_unit_price) }}</template>
-              </el-table-column>
-              <el-table-column label="&#31649;&#29702;&#36153;&#21033;&#28070;" width="120" align="right">
-                <template #default="{ row }">{{ formatAmount(row.management_profit_unit_price) }}</template>
-              </el-table-column>
-              <el-table-column label="&#31246;&#21069;&#32508;&#21512;&#25104;&#26412;" width="135" align="right">
-                <template #default="{ row }">{{ formatAmount(row.calculated_unit_price) }}</template>
-              </el-table-column>
-              <el-table-column label="&#20505;&#36873;&#29366;&#24577;" min-width="220">
-                <template #default="{ row }">
-                  <div class="operation-client">
-                    <el-tag :type="costMeasurementDraftStatusTag(row.candidate_status)" effect="plain">
-                      {{ costMeasurementDraftStatusLabel(row.candidate_status) }}
-                    </el-tag>
-                    <small>{{ row.reason_message || '-' }}</small>
-                    <small v-if="row.existing_cost_item">
-                      &#24050;&#26377; #{{ row.existing_cost_item.id }} &#183; {{ row.existing_cost_item.status }} &#183; {{ formatAmount(row.existing_cost_item.price) }}
-                    </small>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
-            <template #footer>
-              <el-button @click="costMeasurementDraftDialog.visible = false">&#21462;&#28040;</el-button>
-              <el-button
-                type="primary"
-                :loading="costMeasurementDraftDialog.submitting"
-                :disabled="costMeasurementDraftSelectedCount === 0"
-                @click="commitCostMeasurementDrafts"
-              >&#25552;&#20132; {{ costMeasurementDraftSelectedCount }} &#26465;&#24453;&#26680;&#23450;&#26465;&#30446;</el-button>
-            </template>
-          </el-dialog>
-        </template>
-
-
         <template v-else-if="routeName === 'costDb'">
-          <div class="content-heading">
-            <div>
-              <p class="eyebrow">成本参考</p>
-              <h2>企业成本库</h2>
-            </div>
-            <div class="heading-actions">
-              <el-button
-                v-if="canApproveCostDb"
-                :icon="DataAnalysis"
-                plain
-                :loading="costRagSyncing"
-                :disabled="costDbFeatureDisabled || costRagSyncing"
-                @click="syncActiveCostItemsToRag"
-              >
-                更新成本参考
-              </el-button>
-              <el-button
-                v-if="canViewCostDb"
-                :icon="Clock"
-                plain
-                :disabled="costDbFeatureDisabled"
-                @click="openCostRagSyncDialog"
-              >
-                同步记录
-              </el-button>
-              <el-button
-                v-if="canViewCostAudit"
-                :icon="Search"
-                plain
-                :disabled="costDbFeatureDisabled"
-                @click="openCostAuditDialog"
-              >
-                审计记录
-              </el-button>
-              <el-button
-                :icon="TrendCharts"
-                plain
-                :disabled="costDbFeatureDisabled"
-                @click="openCostLineageDrawer"
-              >
-                状态与流向
-              </el-button>
-              <el-button :icon="Refresh" plain :loading="costMasterLoading" @click="refreshCostMaster">刷新</el-button>
-            </div>
-          </div>
-
-          <el-alert
-            v-if="costDbFeatureDisabled"
-            class="dashboard-alert"
-            type="info"
-            show-icon
-            :closable="false"
-            title="企业定额主库功能尚未开启"
-          ></el-alert>
-          <template v-else>
-            <el-alert
-              v-if="costRagSyncStatus"
-              class="dashboard-alert"
-              :type="costRagSyncSummaryAlertType(costRagSyncStatus.status)"
-              show-icon
-              :closable="false"
-            >
-              <template #title>
-                <span>
-                  成本参考更新状态：{{ costRagSyncStatus.status_label || costRagSyncSummaryLabel(costRagSyncStatus.status) }}
-                  · 已启用 {{ costRagSyncStatus.active_count || 0 }} 条
-                  · 最近成功 {{ formatShanghaiDate(costRagSyncStatus.latest_successful_run?.finished_at) }}
-                </span>
-              </template>
-              <div>{{ costRagSyncStatus.message || '暂无同步状态' }}</div>
-            </el-alert>
-            <section class="cost-workbench-panel">
-              <div class="cost-workbench-title">
-                <el-tag type="success" effect="plain">当前主源</el-tag>
-                <div>
-                  <strong>企业成本库</strong>
-                  <span>报价成本参考优先读取当前已启用的企业定额；旧成本条目仅保留历史维护和审计追溯。</span>
-                </div>
-              </div>
-              <div class="cost-workbench-cards">
-                <article
-                  v-for="card in costMasterOverviewCards"
-                  :key="card.key"
-                  :class="['cost-workbench-card', card.tone]"
-                >
-                  <span>{{ card.title }}</span>
-                  <strong>{{ card.value }}</strong>
-                  <small>{{ card.detail }}</small>
-                </article>
-              </div>
-            </section>
-
-            <el-tabs
-              v-model="costMasterActiveTab"
-              class="cost-master-tabs"
-              @tab-click="handleCostMasterTabClick"
-            >
-              <el-tab-pane label="定额主项" name="quotaItems">
-                <div class="cost-db-filters cost-item-filters">
-                  <el-input
-                    v-model="costMasterFilters.keyword"
-                    size="small"
-                    clearable
-                    placeholder="搜索编号/名称/工作内容/分部"
-                    @keyup.enter="applyCostMasterFilters"
-                    @clear="applyCostMasterFilters"
-                  ></el-input>
-                  <el-button size="small" type="primary" plain @click="applyCostMasterFilters">查询</el-button>
-                </div>
-                <el-table
-                  v-loading="costMasterLoading && costMasterActiveTab === 'quotaItems'"
-                  :data="enterpriseQuotaItems"
-                  row-key="id"
-                  class="users-table cost-db-table"
-                  empty-text="暂无已启用企业定额主项"
-                >
-                  <el-table-column label="定额主项" min-width="280" show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <div class="operation-client">
-                        <strong>{{ row.quota_code || '-' }} {{ row.item_name || '-' }}</strong>
-                        <small>{{ row.work_content || '-' }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="分部" min-width="160" show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <div class="operation-client">
-                        <strong>{{ row.section_code || '-' }}</strong>
-                        <small>{{ row.section_name || '-' }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="unit" label="单位" width="80" />
-                  <el-table-column label="工程量" width="100">
-                    <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
-                  </el-table-column>
-                  <el-table-column label="综合单价" width="120">
-                    <template #default="{ row }">{{ formatPrice(row.unit_price) }}</template>
-                  </el-table-column>
-                  <el-table-column label="费用拆分" min-width="220">
-                    <template #default="{ row }">
-                      <div class="price-stack">
-                        <span>人工：{{ formatPrice(row.labor_fee) }}</span>
-                        <small>主材：{{ formatPrice(row.main_material_fee) }}</small>
-                        <small>辅材：{{ formatPrice(row.auxiliary_material_fee) }}</small>
-                        <small>机械：{{ formatPrice(row.machinery_fee) }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="组成" width="96">
-                    <template #default="{ row }">{{ row.component_count || 0 }} 条</template>
-                  </el-table-column>
-                  <el-table-column label="操作" width="96" fixed="right">
-                    <template #default="{ row }">
-                      <el-button size="small" :icon="Document" plain @click="openEnterpriseQuotaItemDetail(row)">
-                        详情
-                      </el-button>
-                    </template>
-                  </el-table-column>
-                </el-table>
-                <el-pagination
-                  v-if="enterpriseQuotaItemTotal > costMasterPageSize"
-                  v-model:current-page="costMasterPage"
-                  :page-size="costMasterPageSize"
-                  :total="enterpriseQuotaItemTotal"
-                  layout="total, prev, pager, next"
-                  small
-                  @current-change="loadEnterpriseQuotaItems"
-                ></el-pagination>
-              </el-tab-pane>
-
-              <el-tab-pane label="组成明细" name="components">
-                <div class="cost-db-filters cost-item-filters">
-                  <el-input
-                    v-model="costMasterFilters.keyword"
-                    size="small"
-                    clearable
-                    placeholder="搜索父级编号/资源名称/组成类型"
-                    @keyup.enter="applyCostMasterFilters"
-                    @clear="applyCostMasterFilters"
-                  ></el-input>
-                  <el-input
-                    v-model="costMasterFilters.fee_bucket"
-                    size="small"
-                    clearable
-                    placeholder="费用桶"
-                    @keyup.enter="applyCostMasterFilters"
-                    @clear="applyCostMasterFilters"
-                  ></el-input>
-                  <el-button size="small" type="primary" plain @click="applyCostMasterFilters">查询</el-button>
-                </div>
-                <el-table
-                  v-loading="costMasterLoading && costMasterActiveTab === 'components'"
-                  :data="enterpriseQuotaComponents"
-                  row-key="id"
-                  class="users-table cost-db-table"
-                  empty-text="暂无已启用企业定额组成明细"
-                >
-                  <el-table-column label="所属主项" min-width="220" show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <div class="operation-client">
-                        <strong>{{ row.quota_code || row.parent_quota_code || '-' }}</strong>
-                        <small>{{ row.quota_item_name || '-' }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="资源" min-width="240" show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <div class="operation-client">
-                        <strong>{{ row.resource_name || '-' }}</strong>
-                        <small>{{ row.resource_code || row.component_type || '-' }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="unit" label="单位" width="80" />
-                  <el-table-column label="消耗量" width="100">
-                    <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
-                  </el-table-column>
-                  <el-table-column label="单价" width="120">
-                    <template #default="{ row }">{{ formatPrice(row.unit_price) }}</template>
-                  </el-table-column>
-                  <el-table-column label="金额" width="120">
-                    <template #default="{ row }">{{ formatPrice(row.amount) }}</template>
-                  </el-table-column>
-                  <el-table-column label="费用桶" width="120">
-                    <template #default="{ row }">{{ row.fee_bucket || '-' }}</template>
-                  </el-table-column>
-                </el-table>
-                <el-pagination
-                  v-if="enterpriseQuotaComponentTotal > costMasterPageSize"
-                  v-model:current-page="costMasterComponentPage"
-                  :page-size="costMasterPageSize"
-                  :total="enterpriseQuotaComponentTotal"
-                  layout="total, prev, pager, next"
-                  small
-                  @current-change="loadEnterpriseQuotaComponents"
-                ></el-pagination>
-              </el-tab-pane>
-
-              <el-tab-pane label="资源价格" name="resources">
-                <div class="cost-db-filters cost-item-filters">
-                  <el-input
-                    v-model="costMasterFilters.keyword"
-                    size="small"
-                    clearable
-                    placeholder="搜索资源编码/资源名称/价格块"
-                    @keyup.enter="applyCostMasterFilters"
-                    @clear="applyCostMasterFilters"
-                  ></el-input>
-                  <el-input
-                    v-model="costMasterFilters.resource_type"
-                    size="small"
-                    clearable
-                    placeholder="资源类型"
-                    @keyup.enter="applyCostMasterFilters"
-                    @clear="applyCostMasterFilters"
-                  ></el-input>
-                  <el-button size="small" type="primary" plain @click="applyCostMasterFilters">查询</el-button>
-                </div>
-                <el-table
-                  v-loading="costMasterLoading && costMasterActiveTab === 'resources'"
-                  :data="enterpriseQuotaResources"
-                  row-key="id"
-                  class="users-table cost-db-table"
-                  empty-text="暂无已启用企业定额资源价格"
-                >
-                  <el-table-column label="资源" min-width="260" show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <div class="operation-client">
-                        <strong>{{ row.resource_name || '-' }}</strong>
-                        <small>{{ row.resource_code || '-' }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="resource_type" label="类型" width="120" />
-                  <el-table-column prop="unit" label="单位" width="80" />
-                  <el-table-column label="原价" width="120">
-                    <template #default="{ row }">{{ formatPrice(row.price) }}</template>
-                  </el-table-column>
-                  <el-table-column label="含税/计算价" width="140">
-                    <template #default="{ row }">{{ formatPrice(row.computed_price) }}</template>
-                  </el-table-column>
-                  <el-table-column label="税率" width="96">
-                    <template #default="{ row }">{{ row.tax_rate ?? '-' }}</template>
-                  </el-table-column>
-                  <el-table-column label="价格块" min-width="180" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.price_block_label || '-' }}</template>
-                  </el-table-column>
-                </el-table>
-                <el-pagination
-                  v-if="enterpriseQuotaResourceTotal > costMasterPageSize"
-                  v-model:current-page="costMasterResourcePage"
-                  :page-size="costMasterPageSize"
-                  :total="enterpriseQuotaResourceTotal"
-                  layout="total, prev, pager, next"
-                  small
-                  @current-change="loadEnterpriseQuotaResources"
-                ></el-pagination>
-              </el-tab-pane>
-
-              <el-tab-pane label="项目采购入库" name="purchaseImports">
-                <el-alert
-                  type="info"
-                  show-icon
-                  :closable="false"
-                  title="采购资料先形成价格观察与待审核候选；只有审核通过后才能生成新的待核定企业定额，当前已启用版本不会被直接修改。"
-                ></el-alert>
-                <section class="cost-workbench-panel">
-                  <div class="cost-workbench-title">
-                    <el-tag type="primary" effect="plain">快速入库</el-tag>
-                    <div>
-                      <strong>上传采购单、订购单或 ZIP</strong>
-                      <span>系统自动识别材料、品牌、规格、单位、采购价、供应商、税率与运费口径，并保留源文件与原始行号。</span>
-                    </div>
-                  </div>
-                  <div class="cost-db-filters cost-item-filters">
-                    <el-input v-model="projectCostImportProjectName" size="small" placeholder="项目名称（必填）"></el-input>
-                    <input
-                      ref="projectCostImportFileInput"
-                      type="file"
-                      multiple
-                      accept=".xlsx,.xlsm,.zip"
-                      style="display: none"
-                      @change="selectProjectCostImportFiles"
-                    />
-                    <input
-                      ref="projectCostImportFolderInput"
-                      type="file"
-                      multiple
-                      webkitdirectory
-                      directory
-                      style="display: none"
-                      @change="selectProjectCostImportFiles"
-                    />
-                    <el-button size="small" plain @click="projectCostImportFileInput?.click()">选择文件/ZIP</el-button>
-                    <el-button size="small" plain @click="projectCostImportFolderInput?.click()">选择项目文件夹</el-button>
-                    <el-button
-                      v-if="canEditCostDb"
-                      size="small"
-                      type="primary"
-                      :loading="projectCostImportUploading"
-                      :disabled="!projectCostImportProjectName.trim() || !projectCostImportFiles.length"
-                      @click="uploadProjectCostImport"
-                    >
-                      开始解析
-                    </el-button>
-                    <span class="filter-count">已选 {{ projectCostImportFiles.length }} 个文件</span>
-                  </div>
-                </section>
-
-                <el-table
-                  v-loading="projectCostImportLoading"
-                  :data="projectCostImportBatches"
-                  row-key="id"
-                  class="users-table cost-db-table"
-                  empty-text="暂无项目采购导入批次"
-                >
-                  <el-table-column label="项目/批次" min-width="240" show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <div class="operation-client">
-                        <strong>{{ row.project_name }}</strong>
-                        <small>{{ row.batch_uuid }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="解析结果" min-width="220">
-                    <template #default="{ row }">
-                      <div class="price-stack">
-                        <span>文件 {{ row.parsed_file_count }}/{{ row.file_count }}</span>
-                        <small>观察 {{ row.observation_count }} · 候选 {{ row.candidate_count }}</small>
-                        <small>高置信 {{ row.high_confidence_count }} · 已通过 {{ row.approved_count }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="状态" width="120">
-                    <template #default="{ row }">
-                      <el-tag :type="row.status === 'draft_created' ? 'success' : 'warning'" effect="plain">
-                        {{ row.status === 'draft_created' ? '已生成草稿' : '待审核' }}
-                      </el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="企业定额草稿" min-width="160">
-                    <template #default="{ row }">{{ row.target_quota_version_id ? `#${row.target_quota_version_id}` : '-' }}</template>
-                  </el-table-column>
-                  <el-table-column label="创建时间" width="170">
-                    <template #default="{ row }">{{ formatShanghaiDate(row.created_at) }}</template>
-                  </el-table-column>
-                  <el-table-column label="操作" width="120" fixed="right">
-                    <template #default="{ row }">
-                      <el-button size="small" type="primary" plain @click="openProjectCostImportBatch(row)">审核候选</el-button>
-                    </template>
-                  </el-table-column>
-                </el-table>
-                <el-pagination
-                  v-if="projectCostImportTotal > projectCostImportPageSize"
-                  v-model:current-page="projectCostImportPage"
-                  :page-size="projectCostImportPageSize"
-                  :total="projectCostImportTotal"
-                  layout="total, prev, pager, next"
-                  small
-                  @current-change="loadProjectCostImportBatches"
-                ></el-pagination>
-
-                <template v-if="selectedProjectCostImportBatch">
-                  <el-divider content-position="left">
-                    候选审核 · {{ selectedProjectCostImportBatch.project_name }}
-                  </el-divider>
-                  <div class="cost-db-filters cost-item-filters">
-                    <el-select v-model="projectCostCandidateFilters.status" size="small" clearable placeholder="审核状态" @change="applyProjectCostCandidateFilters">
-                      <el-option label="待审核" value="pending"></el-option>
-                      <el-option label="已通过" value="approved"></el-option>
-                      <el-option label="已驳回" value="rejected"></el-option>
-                    </el-select>
-                    <el-select v-model="projectCostCandidateFilters.risk_level" size="small" clearable placeholder="风险等级" @change="applyProjectCostCandidateFilters">
-                      <el-option label="低风险" value="low"></el-option>
-                      <el-option label="中风险" value="medium"></el-option>
-                      <el-option label="高风险" value="high"></el-option>
-                    </el-select>
-                    <el-input v-model="projectCostCandidateFilters.keyword" size="small" clearable placeholder="材料/品牌/规格" @keyup.enter="applyProjectCostCandidateFilters"></el-input>
-                    <el-button size="small" plain @click="applyProjectCostCandidateFilters">查询</el-button>
-                    <el-button
-                      v-if="canApproveCostDb"
-                      size="small"
-                      type="success"
-                      plain
-                      :disabled="!selectedProjectCostCandidates.length"
-                      @click="reviewSelectedProjectCostCandidates('approve')"
-                    >批量通过</el-button>
-                    <el-button
-                      v-if="canApproveCostDb"
-                      size="small"
-                      type="danger"
-                      plain
-                      :disabled="!selectedProjectCostCandidates.length"
-                      @click="reviewSelectedProjectCostCandidates('reject')"
-                    >批量驳回</el-button>
-                    <el-button
-                      v-if="canApproveCostDb"
-                      size="small"
-                      type="primary"
-                      :disabled="!selectedProjectCostImportBatch.approved_count || selectedProjectCostImportBatch.target_quota_version_id"
-                      @click="createProjectCostDraftVersion"
-                    >生成企业定额草稿</el-button>
-                  </div>
-                  <el-table
-                    v-loading="projectCostCandidateLoading"
-                    :data="projectCostCandidates"
-                    row-key="id"
-                    class="users-table cost-db-table"
-                    @selection-change="selectedProjectCostCandidates = $event"
-                  >
-                    <el-table-column v-if="canApproveCostDb" type="selection" width="48"></el-table-column>
-                    <el-table-column label="材料候选" min-width="260" show-overflow-tooltip>
-                      <template #default="{ row }">
-                        <div class="operation-client">
-                          <strong>{{ row.normalized_item_name || '-' }}</strong>
-                          <small>{{ row.brand || '-' }} · {{ row.spec || '-' }}</small>
-                        </div>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="unit" label="单位" width="80"></el-table-column>
-                    <el-table-column label="价格区间" min-width="180">
-                      <template #default="{ row }">
-                        <div class="price-stack">
-                          <span>建议 {{ formatPrice(row.recommended_price) }}</span>
-                          <small>{{ formatPrice(row.min_price) }} ～ {{ formatPrice(row.max_price) }}</small>
-                        </div>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="样本" width="100">
-                      <template #default="{ row }">{{ row.observation_count }} 次 / {{ row.supplier_count }} 家</template>
-                    </el-table-column>
-                    <el-table-column label="质量" min-width="150">
-                      <template #default="{ row }">
-                        <div class="price-stack">
-                          <el-tag :type="row.risk_level === 'high' ? 'danger' : row.risk_level === 'low' ? 'success' : 'warning'" effect="plain">
-                            {{ row.risk_level }}
-                          </el-tag>
-                          <small>置信度 {{ Math.round((row.confidence_score || 0) * 100) }}%</small>
-                        </div>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="主库匹配" min-width="190" show-overflow-tooltip>
-                      <template #default="{ row }">
-                        <div class="operation-client">
-                          <strong>{{ row.matched_resource_name || '新增资源' }}</strong>
-                          <small>{{ row.match_type || '-' }} · {{ Math.round((row.match_confidence || 0) * 100) }}%</small>
-                        </div>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="审核状态" width="100">
-                      <template #default="{ row }">
-                        <el-tag :type="row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'" effect="plain">
-                          {{ row.status === 'approved' ? '已通过' : row.status === 'rejected' ? '已驳回' : '待审核' }}
-                        </el-tag>
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                  <el-pagination
-                    v-if="projectCostCandidateTotal > projectCostCandidatePageSize"
-                    v-model:current-page="projectCostCandidatePage"
-                    :page-size="projectCostCandidatePageSize"
-                    :total="projectCostCandidateTotal"
-                    layout="total, prev, pager, next"
-                    small
-                    @current-change="loadProjectCostCandidates"
-                  ></el-pagination>
-                </template>
-              </el-tab-pane>
-            </el-tabs>
-
-            <el-divider content-position="left">历史 cost_items 维护区</el-divider>
-            <section class="cost-workbench-panel">
-              <div class="cost-workbench-title">
-                <el-tag type="info" effect="plain">历史维护</el-tag>
-                <div>
-                  <strong>旧 cost_items 维护工作台</strong>
-                  <span>旧成本条目当前不再作为报价主源，仅保留导入、审计、状态流向等历史追溯能力。</span>
-                </div>
-              </div>
-              <div class="cost-workbench-cards">
-                <article
-                  v-for="card in costDbOverviewCards"
-                  :key="card.key"
-                  :class="['cost-workbench-card', card.tone]"
-                >
-                  <span>{{ card.title }}</span>
-                  <strong>{{ card.value }}</strong>
-                  <small>{{ card.detail }}</small>
-                </article>
-              </div>
-            </section>
-            <div class="cost-db-filters cost-item-filters">
-              <el-input
-                v-model="costItemFilters.category"
-                size="small"
-                clearable
-                placeholder="类别/子类"
-                @keyup.enter="applyCostItemFilters"
-                @clear="applyCostItemFilters"
-              ></el-input>
-              <el-select
-                v-model="costItemFilters.status"
-                size="small"
-                multiple
-                collapse-tags
-                collapse-tags-tooltip
-                clearable
-                placeholder="状态"
-                @change="applyCostItemFilters"
-              >
-                <el-option
-                  v-for="option in costStatusOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                ></el-option>
-              </el-select>
-              <el-select
-                v-model="costItemFilters.price_type"
-                size="small"
-                clearable
-                placeholder="价格类型"
-                @change="applyCostItemFilters"
-              >
-                <el-option
-                  v-for="option in costPriceTypeOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                ></el-option>
-              </el-select>
-              <el-select
-                v-model="costItemFilters.source"
-                size="small"
-                clearable
-                placeholder="来源"
-                @change="applyCostItemFilters"
-              >
-                <el-option
-                  v-for="option in costSourceOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                ></el-option>
-              </el-select>
-              <el-input
-                v-model="costItemFilters.keyword"
-                size="small"
-                clearable
-                placeholder="名称/特征/类别/备注"
-                @keyup.enter="applyCostItemFilters"
-                @clear="applyCostItemFilters"
-              ></el-input>
-              <el-button size="small" type="primary" plain @click="applyCostItemFilters">查询</el-button>
-            </div>
-            <div v-if="canApproveCostDb" class="cost-bulk-bar">
-              <div class="cost-bulk-summary">
-                <strong>批量操作</strong>
-                <span>{{ costDbSelectionSummary }}</span>
-              </div>
-              <div class="cost-bulk-actions">
-                <el-button
-                  :icon="Select"
-                  plain
-                  :loading="costAllSelecting"
-                  :disabled="costDbFeatureDisabled || costDbLoading || costAllSelecting || costItemTotal === 0"
-                  @click="toggleSelectAllCostItems"
-                >
-                  {{ selectedCostItemIds.length ? '取消全选' : '全选全部' }}
-                </el-button>
-                <el-button
-                  :icon="Tickets"
-                  type="success"
-                  plain
-                  :loading="costBulkSubmitting"
-                  :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedDraftCostItemCount === 0"
-                  @click="bulkActivateCostItems"
-                >
-                  批量核定为启用
-                </el-button>
-                <el-button
-                  :icon="Refresh"
-                  type="warning"
-                  plain
-                  :loading="costBulkSubmitting"
-                  :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedActiveCostItemCount === 0"
-                  @click="bulkRestoreCostItemsToDraft"
-                >
-                  批量恢复为待核定
-                </el-button>
-                <el-button
-                  :icon="Delete"
-                  type="danger"
-                  plain
-                  :loading="costBulkSubmitting"
-                  :disabled="costDbFeatureDisabled || costBulkSubmitting || selectedArchivableCostItemCount === 0"
-                  @click="bulkArchiveCostItems"
-                >
-                  批量归档
-                </el-button>
-              </div>
-            </div>
-
-            <el-table
-              ref="costItemsTable"
-              v-loading="costDbLoading"
-              :data="costItems"
-              row-key="id"
-              class="users-table cost-db-table"
-              empty-text="暂无成本条目"
-              @selection-change="handleCostItemSelectionChange"
-            >
-              <el-table-column
-                v-if="canApproveCostDb"
-                type="selection"
-                width="48"
-                :selectable="costItemSelectable"
-              ></el-table-column>
-              <el-table-column label="成本项/特征" min-width="260" show-overflow-tooltip>
-                <template #default="{ row }">
-                  <div class="operation-client">
-                    <strong>{{ row.item_name || '-' }}</strong>
-                    <small>{{ row.spec || '-' }}</small>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column label="类别" min-width="160" show-overflow-tooltip>
-                <template #default="{ row }">
-                  <div class="operation-client">
-                    <strong>{{ row.category || '-' }}</strong>
-                    <small>{{ row.subcategory || '-' }}</small>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column prop="unit" label="单位" width="80" />
-              <el-table-column label="状态" width="96">
-                <template #default="{ row }">
-                  <el-tag :type="costStatusTag(row.status)" effect="plain">
-                    {{ costStatusLabel(row.status) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="类型" width="96">
-                <template #default="{ row }">{{ costPriceTypeLabel(row.price_type) }}</template>
-              </el-table-column>
-              <el-table-column label="价格" min-width="210">
-                <template #default="{ row }">
-                  <div class="price-stack">
-                    <span>主参考：{{ formatPrice(row.price) }}</span>
-                    <small>对甲：{{ formatPrice(row.client_tax_excluded_price) }}</small>
-                    <small>劳务：{{ formatPrice(row.subcontract_composite_price) }}</small>
-                    <small>班组：{{ formatPrice(row.crew_benchmark_price) }}</small>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column label="来源" width="100">
-                <template #default="{ row }">{{ costSourceLabel(row.source) }}</template>
-              </el-table-column>
-              <el-table-column label="更新时间" min-width="160">
-                <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
-              </el-table-column>
-              <el-table-column label="操作" width="390" fixed="right">
-                <template #default="{ row }">
-                  <div class="row-actions">
-                    <el-button size="small" :icon="Document" plain @click="openCostItemDetail(row)">详情</el-button>
-                    <el-button
-                      v-if="canEditCostDb"
-                      size="small"
-                      plain
-                      :disabled="row.status === 'archived'"
-                      @click="openCostItemEdit(row)"
-                    >
-                      编辑
-                    </el-button>
-                    <el-button
-                      v-if="canApproveCostDb"
-                      size="small"
-                      type="success"
-                      plain
-                      :disabled="row.status !== 'draft'"
-                      @click="activateCostItem(row)"
-                    >
-                      启用
-                    </el-button>
-                    <el-button
-                      v-if="canApproveCostDb"
-                      size="small"
-                      type="warning"
-                      plain
-                      :disabled="row.status !== 'active'"
-                      @click="withdrawCostItem(row)"
-                    >
-                      撤回启用
-                    </el-button>
-                    <el-button
-                      v-if="canApproveCostDb"
-                      size="small"
-                      type="danger"
-                      plain
-                      :disabled="row.status === 'archived'"
-                      @click="archiveCostItem(row)"
-                    >
-                      归档
-                    </el-button>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-pagination
-              v-if="costItemTotal > costItemPageSize"
-              v-model:current-page="costItemPage"
-              :page-size="costItemPageSize"
-              :total="costItemTotal"
-              layout="total, prev, pager, next"
-              small
-              @current-change="loadCostItems"
-            ></el-pagination>
-          </template>
+          <EnterpriseQuotaWorkbench
+            :can-edit="canEditCostDb"
+            :can-approve="canApproveCostDb"
+          />
         </template>
-
         <template v-else-if="routeName === 'dwgTrial'">
           <div class="content-heading">
             <div>
@@ -8837,160 +7459,6 @@
         </template>
       </section>
     </main>
-
-    <el-dialog v-model="businessLedgerDialog.visible" :title="businessLedgerDialogTitle" width="620px">
-      <el-form label-position="top" :model="businessLedgerDialog.form">
-        <div class="ledger-form-grid">
-          <el-form-item label="客户">
-            <el-input
-              v-model="businessLedgerDialog.form.client_name"
-              maxlength="128"
-              :disabled="businessLedgerDialog.mode === 'edit' && !canManageBusinessLedger"
-            ></el-input>
-          </el-form-item>
-          <el-form-item label="联系方式">
-            <el-input v-model="businessLedgerDialog.form.client_phone" maxlength="64"></el-input>
-          </el-form-item>
-          <el-form-item label="来源">
-            <el-select
-              v-model="businessLedgerDialog.form.source"
-              class="full-width"
-              clearable
-              :disabled="businessLedgerDialog.mode === 'edit' && !canManageBusinessLedger"
-            >
-              <el-option
-                v-for="option in clientInquirySourceOptions.slice(1)"
-                :key="option.value"
-                :label="option.label"
-                :value="option.value"
-              ></el-option>
-            </el-select>
-          </el-form-item>
-          <el-form-item label="阶段">
-            <el-select v-model="businessLedgerDialog.form.stage" class="full-width">
-              <el-option
-                v-for="option in businessLedgerStageOptions"
-                :key="option.value"
-                :label="option.label"
-                :value="option.value"
-              ></el-option>
-            </el-select>
-          </el-form-item>
-          <el-form-item label="下次跟进">
-            <el-date-picker
-              v-model="businessLedgerDialog.form.next_followup_at"
-              class="full-width"
-              type="datetime"
-              value-format="YYYY-MM-DDTHH:mm:ss"
-              format="YYYY-MM-DD HH:mm"
-            ></el-date-picker>
-          </el-form-item>
-          <el-form-item v-if="canManageBusinessLedger" label="负责人">
-            <el-select v-model="businessLedgerDialog.form.responder_id" class="full-width" filterable>
-              <el-option
-                v-for="user in businessLedgerResponderOptions"
-                :key="user.id"
-                :label="user.username"
-                :value="user.id"
-              ></el-option>
-            </el-select>
-          </el-form-item>
-        </div>
-        <el-form-item label="备注">
-          <el-input
-            v-model="businessLedgerDialog.form.notes"
-            type="textarea"
-            :rows="4"
-            maxlength="2000"
-            show-word-limit
-          ></el-input>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="businessLedgerDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="state.submitting" @click="submitBusinessLedger">
-          保存
-        </el-button>
-      </template>
-    </el-dialog>
-
-    <el-drawer v-model="businessLedgerDrawer.visible" size="620px" title="商务台账详情">
-      <div v-if="businessLedgerDrawer.loading" class="center-state">
-        <el-icon class="spin"><Refresh /></el-icon>
-        <span>加载中</span>
-      </div>
-      <template v-else-if="businessLedgerDrawer.ledger">
-        <div class="detail-grid">
-          <div>
-            <small>客户</small>
-            <strong>{{ businessLedgerDrawer.ledger.client_name || '-' }}</strong>
-          </div>
-          <div>
-            <small>联系方式</small>
-            <strong>{{ businessLedgerDrawer.ledger.client_phone || '-' }}</strong>
-          </div>
-          <div>
-            <small>来源</small>
-            <strong>{{ businessLedgerDrawer.ledger.source || '-' }}</strong>
-          </div>
-          <div>
-            <small>阶段</small>
-            <strong>{{ businessLedgerDrawer.ledger.stage || '-' }}</strong>
-          </div>
-          <div>
-            <small>负责人</small>
-            <strong>{{ businessLedgerDrawer.ledger.responder_username || '-' }}</strong>
-          </div>
-          <div>
-            <small>下次跟进</small>
-            <strong>{{ formatDate(businessLedgerDrawer.ledger.next_followup_at) }}</strong>
-          </div>
-          <div>
-            <small>创建时间</small>
-            <strong>{{ formatDate(businessLedgerDrawer.ledger.created_at) }}</strong>
-          </div>
-          <div>
-            <small>更新时间</small>
-            <strong>{{ formatDate(businessLedgerDrawer.ledger.updated_at) }}</strong>
-          </div>
-        </div>
-        <section class="drawer-section" v-if="canViewAgentCenter">
-          <div class="section-title">
-            <el-icon><DataAnalysis /></el-icon>
-            <span>报价后审计</span>
-            <small>已下发报价可手动生成审计记录</small>
-          </div>
-          <el-button
-            type="primary"
-            plain
-            :icon="DataAnalysis"
-            :disabled="!canManualAuditQuoteJob(quoteJobDrawer.job)"
-            :loading="agentCenterLoading"
-            @click="manualAuditQuoteJob(quoteJobDrawer.job)"
-          >
-            手动审计此报价
-          </el-button>
-        </section>
-        <section class="drawer-section">
-          <div class="section-title">
-            <el-icon><Document /></el-icon>
-            <span>备注</span>
-          </div>
-          <p class="detail-text">{{ businessLedgerDrawer.ledger.notes || '-' }}</p>
-        </section>
-        <section v-if="businessLedgerDrawer.ledger.cancelled_at" class="drawer-section">
-          <div class="section-title">
-            <el-icon><Delete /></el-icon>
-            <span>作废记录</span>
-          </div>
-          <p class="detail-text">
-            {{ formatDate(businessLedgerDrawer.ledger.cancelled_at) }} ·
-            {{ businessLedgerDrawer.ledger.cancelled_by_username || '-' }} ·
-            {{ businessLedgerDrawer.ledger.cancel_reason || '-' }}
-          </p>
-        </section>
-      </template>
-    </el-drawer>
 
     <el-dialog v-model="costItemDialog.visible" :title="costItemDialogTitle" width="720px">
       <el-form label-position="top" :model="costItemDialog.form">
@@ -10175,62 +8643,6 @@
       </template>
     </el-drawer>
 
-    <el-dialog v-model="meetingDialog.visible" title="录入会议纪要" width="680px">
-      <el-form label-position="top" :model="meetingDialog.form">
-        <el-form-item label="会议纪要">
-          <el-input
-            v-model="meetingDialog.form.content"
-            type="textarea"
-            :rows="10"
-            maxlength="10000"
-            show-word-limit
-            placeholder="粘贴手动整理后的会议纪要，系统会生成待确认任务草稿"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="meetingDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="state.submitting" @click="createMeetingNote">生成草稿</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="manualDraftDialog.visible" title="人工补充任务草稿" width="520px">
-      <el-form label-position="top" :model="manualDraftDialog.form">
-        <el-form-item label="任务标题">
-          <el-input v-model="manualDraftDialog.form.title" maxlength="120" show-word-limit />
-        </el-form-item>
-        <el-form-item label="负责人">
-          <el-select v-model="manualDraftDialog.form.assignee_id" class="full-width" filterable>
-            <el-option
-              v-for="user in executionAssigneeOptions"
-              :key="user.id"
-              :label="user.username"
-              :value="user.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="截止时间">
-          <el-date-picker
-            v-model="manualDraftDialog.form.due_at"
-            class="full-width"
-            type="datetime"
-            value-format="YYYY-MM-DDTHH:mm:ss"
-            format="YYYY-MM-DD HH:mm"
-          />
-        </el-form-item>
-        <el-form-item label="依据">
-          <el-input v-model="manualDraftDialog.form.source_sentence" maxlength="500" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="manualDraftDialog.form.notes" type="textarea" :rows="3" maxlength="500" show-word-limit />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="manualDraftDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="state.submitting" @click="addManualDraft">保存草稿</el-button>
-      </template>
-    </el-dialog>
-
     <el-dialog v-model="projectDialog.visible" title="新建项目" width="560px">
       <el-form label-position="top" :model="projectDialog.form">
         <el-form-item label="项目名称">
@@ -10491,203 +8903,6 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="executionDialog.visible" title="新建执行任务" width="520px">
-      <el-form label-position="top" :model="executionDialog.form">
-        <el-form-item label="任务标题">
-          <el-input v-model="executionDialog.form.title" maxlength="120" show-word-limit />
-        </el-form-item>
-        <el-form-item label="负责人">
-          <el-select v-model="executionDialog.form.assignee_id" class="full-width" filterable>
-            <el-option
-              v-for="user in executionAssigneeOptions"
-              :key="user.id"
-              :label="user.username"
-              :value="user.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="截止时间">
-          <el-date-picker
-            v-model="executionDialog.form.due_at"
-            class="full-width"
-            type="datetime"
-            value-format="YYYY-MM-DDTHH:mm:ss"
-            format="YYYY-MM-DD HH:mm"
-          />
-        </el-form-item>
-        <el-form-item label="来源">
-          <el-select v-model="executionDialog.form.source" class="full-width">
-            <el-option
-              v-for="option in executionSourceOptions"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="来源编号">
-          <el-input v-model="executionDialog.form.source_ref_id" maxlength="64" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="executionDialog.form.notes" type="textarea" :rows="3" maxlength="500" show-word-limit />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="executionDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="state.submitting" @click="createExecutionTask">创建任务</el-button>
-      </template>
-    </el-dialog>
-
-    <el-drawer v-model="executionDrawer.visible" size="620px" title="执行任务详情">
-      <div v-if="executionDrawer.loading" class="center-state">
-        <el-icon class="spin"><Refresh /></el-icon>
-        <span>加载中</span>
-      </div>
-      <template v-else-if="executionDrawer.task">
-        <div class="detail-grid">
-          <div>
-            <small>任务</small>
-            <strong>{{ executionDrawer.task.title }}</strong>
-          </div>
-          <div>
-            <small>状态</small>
-            <strong>{{ executionStatusLabel(executionDrawer.task.status) }}</strong>
-          </div>
-          <div>
-            <small>负责人</small>
-            <strong>{{ executionDrawer.task.assignee_username || '-' }}</strong>
-          </div>
-          <div>
-            <small>截止时间</small>
-            <strong>{{ formatDate(executionDrawer.task.due_at) }}</strong>
-          </div>
-          <div>
-            <small>完成时间</small>
-            <strong>{{ formatDate(executionDrawer.task.completed_at) }}</strong>
-          </div>
-          <div>
-            <small>来源</small>
-            <strong>{{ executionSourceLabel(executionDrawer.task.source) }}</strong>
-          </div>
-        </div>
-        <section class="drawer-section">
-          <div class="section-title">
-            <el-icon><Document /></el-icon>
-            <span>备注</span>
-          </div>
-          <p class="detail-text">{{ executionDrawer.task.notes || '-' }}</p>
-        </section>
-        <section class="drawer-section">
-          <div class="section-title">
-            <el-icon><Clock /></el-icon>
-            <span>事件记录</span>
-          </div>
-          <el-timeline>
-            <el-timeline-item
-              v-for="event in executionDrawer.task.events || []"
-              :key="event.id"
-              :timestamp="formatDate(event.created_at)"
-              placement="top"
-            >
-              <div class="event-row">
-                <strong>{{ event.event_type }}</strong>
-                <el-tag size="small" effect="plain">{{ event.from_status || '-' }} -> {{ event.to_status || '-' }}</el-tag>
-              </div>
-              <p>{{ event.reason || '无备注' }}</p>
-            </el-timeline-item>
-          </el-timeline>
-          <el-empty v-if="!executionDrawer.task.events?.length" description="暂无事件" />
-        </section>
-      </template>
-    </el-drawer>
-
-    <el-drawer v-model="meetingDrawer.visible" size="760px" title="会议纪要详情">
-      <div v-if="meetingDrawer.loading" class="center-state">
-        <el-icon class="spin"><Refresh /></el-icon>
-        <span>加载中</span>
-      </div>
-      <template v-else-if="meetingDrawer.note">
-        <div class="detail-grid">
-          <div>
-            <small>状态</small>
-            <strong>{{ meetingStatusLabel(meetingDrawer.note.status) }}</strong>
-          </div>
-          <div>
-            <small>提取状态</small>
-            <strong>{{ meetingAiStatusLabel(meetingDrawer.note.ai_status) }}</strong>
-          </div>
-          <div>
-            <small>录入人</small>
-            <strong>{{ meetingDrawer.note.created_by_username || '-' }}</strong>
-          </div>
-          <div>
-            <small>确认时间</small>
-            <strong>{{ formatDate(meetingDrawer.note.confirmed_at) }}</strong>
-          </div>
-        </div>
-        <section class="drawer-section">
-          <div class="section-title">
-            <el-icon><Tickets /></el-icon>
-            <span>会议纪要</span>
-          </div>
-          <p class="detail-text">{{ meetingDrawer.note.content || '-' }}</p>
-        </section>
-        <section class="drawer-section">
-          <div class="section-title">
-            <el-icon><Document /></el-icon>
-            <span>任务草稿</span>
-            <small>{{ meetingDrawer.note.pending_draft_count || 0 }} 条待确认</small>
-            <el-button size="small" type="primary" plain @click="openManualDraft">人工补充</el-button>
-          </div>
-          <div class="draft-list">
-            <div
-              v-for="draft in meetingDrawer.note.drafts || []"
-              :key="draft.id"
-              class="draft-item"
-            >
-              <div class="draft-source">
-                <el-tag size="small" :type="draftStatusTag(draft.status)" effect="plain">
-                  {{ draftStatusLabel(draft.status) }}
-                </el-tag>
-                <span>{{ draft.source_sentence }}</span>
-              </div>
-              <div v-if="draft.status === 'pending_review'" class="draft-confirm-grid">
-                <el-input v-model="draft.confirm_title" size="small" maxlength="120" />
-                <el-select v-model="draft.confirm_assignee_id" size="small" filterable placeholder="负责人">
-                  <el-option
-                    v-for="user in executionAssigneeOptions"
-                    :key="user.id"
-                    :label="user.username"
-                    :value="user.id"
-                  />
-                </el-select>
-                <el-date-picker
-                  v-model="draft.confirm_due_at"
-                  size="small"
-                  type="datetime"
-                  value-format="YYYY-MM-DDTHH:mm:ss"
-                  format="YYYY-MM-DD HH:mm"
-                  placeholder="截止时间"
-                />
-                <el-input v-model="draft.confirm_notes" size="small" placeholder="确认备注" />
-                <div class="row-actions">
-                  <el-button size="small" type="primary" plain @click="confirmDraft(draft)">确认</el-button>
-                  <el-button size="small" type="danger" plain @click="rejectDraft(draft)">驳回</el-button>
-                </div>
-              </div>
-              <div v-else class="draft-result">
-                <span>负责人：{{ draft.confirmed_assignee_username || draft.suggested_assignee_username || '-' }}</span>
-                <span>截止：{{ formatDate(draft.confirmed_due_at || draft.suggested_due_at) }}</span>
-                <span v-if="draft.accepted_task_id">任务 #{{ draft.accepted_task_id }}</span>
-                <span v-if="draft.rejection_reason">原因：{{ draft.rejection_reason }}</span>
-              </div>
-            </div>
-            <el-empty v-if="!meetingDrawer.note.drafts?.length" description="暂无任务草稿，可人工补充" />
-          </div>
-        </section>
-      </template>
-    </el-drawer>
-
     <el-drawer v-model="requirementHistoryDrawer.visible" size="760px" title="历史解析记录">
       <div class="history-toolbar">
         <el-button :icon="Refresh" plain :loading="requirementHistoryDrawer.loading" @click="loadRequirementHistoryRecords">
@@ -10774,8 +8989,13 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import axios from 'axios'
+import BidIntakeAssessment from './BidIntakeAssessment.vue'
+import BidIntakeWorkbench from './BidIntakeWorkbench.vue'
 import BudgetProjects from './BudgetProjects.vue'
 import AccountQuotaLibrary from './AccountQuotaLibrary.vue'
+import EnterpriseQuotaWorkbench from './EnterpriseQuotaWorkbench.vue'
+import PricingAgentLab from './PricingAgentLab.vue'
+import UnifiedQuotes from './UnifiedQuotes.vue'
 import { cleanupSharedAuthStorage, clearAuth, getToken, setToken, setUserInfo } from './authStorage'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -10844,7 +9064,7 @@ const roleOptions = [
   { value: 'project_member', label: 'project_member', hint: '更新本人项目任务' },
   { value: 'project_manager', label: 'project_manager', hint: '管理项目进度' },
   { value: 'staff', label: 'staff', hint: '旧报价工作台' },
-  { value: 'manager', label: 'manager', hint: '执行任务上线后生效' },
+  { value: 'manager', label: 'manager', hint: '项目管理兼容角色' },
   { value: 'viewer', label: 'viewer', hint: '看板开启后生效' },
 ]
 
@@ -10874,14 +9094,6 @@ const quoteJobStatusOptions = [
   { value: 'canceled', label: '已取消' },
   { value: 'timed_out', label: '已超时' },
   { value: 'failed,canceled,timed_out', label: '异常状态' },
-]
-
-const executionStatusOptions = [
-  { value: '', label: '全部状态' },
-  { value: 'pending', label: '待处理' },
-  { value: 'in_progress', label: '进行中' },
-  { value: 'done', label: '已完成' },
-  { value: 'cancelled', label: '已取消' },
 ]
 
 const enterpriseProfileCategoryOptions = [
@@ -10947,30 +9159,6 @@ const projectPriorityOptions = [
   { value: 'high', label: '高' },
   { value: 'urgent', label: '紧急' },
 ]
-
-const executionSourceOptions = [
-  { value: 'manual', label: '手动创建' },
-  { value: 'quote', label: '报价跟进' },
-  { value: 'meeting', label: '会议纪要' },
-]
-
-const meetingStatusOptions = [
-  { value: '', label: '全部状态' },
-  { value: 'draft', label: '草稿' },
-  { value: 'confirmed', label: '已确认' },
-  { value: 'revised', label: '有更正' },
-  { value: 'cancelled', label: '已作废' },
-]
-
-const businessLedgerStageOptions = [
-  { value: '初步接触', label: '初步接触' },
-  { value: '需求确认', label: '需求确认' },
-  { value: '报价中', label: '报价中' },
-  { value: '跟进议价', label: '跟进议价' },
-  { value: '成单', label: '成单' },
-  { value: '丢单', label: '丢单' },
-]
-const businessLedgerTerminalStages = new Set(['成单', '丢单'])
 
 const costStatusOptions = [
   { value: 'draft', label: '草稿' },
@@ -11123,7 +9311,6 @@ const roleEvents = ref([])
 const businessDashboard = ref(null)
 const quoteDashboard = ref(null)
 const responseDashboard = ref(null)
-const executionDashboard = ref(null)
 const projectDashboard = ref(null)
 const clientInquiries = ref([])
 const clientInquiryTotal = ref(0)
@@ -11133,10 +9320,6 @@ const quoteJobs = ref([])
 const quoteJobTotal = ref(0)
 const quoteJobPage = ref(1)
 const quoteJobPageSize = 15
-const executionTasks = ref([])
-const executionTaskTotal = ref(0)
-const executionTaskPage = ref(1)
-const executionTaskPageSize = 20
 const projects = ref([])
 const projectTotal = ref(0)
 const projectPage = ref(1)
@@ -11149,21 +9332,20 @@ const myProjectTaskTotal = ref(0)
 const myProjectTaskPage = ref(1)
 const myProjectTaskPageSize = 20
 const projectUsers = ref([])
-const meetings = ref([])
-const meetingTotal = ref(0)
-const meetingPage = ref(1)
-const meetingPageSize = 20
-const businessLedgers = ref([])
-const businessLedgerTotal = ref(0)
-const businessLedgerPage = ref(1)
-const businessLedgerPageSize = 20
-const businessLedgerLoading = ref(false)
 const biddingProjects = ref([])
 const biddingProjectTotal = ref(0)
 const biddingProjectPage = ref(1)
 const biddingProjectPageSize = 20
 const biddingLoading = ref(false)
 const biddingFeatureDisabled = ref(false)
+const bidIntakeAgentProjects = ref([])
+const bidIntakeAgentProjectUuid = ref('')
+const bidIntakeAgentLoading = ref(false)
+const selectedBidIntakeAgentProject = computed(() => (
+  bidIntakeAgentProjects.value.find(
+    (project) => project.project_uuid === bidIntakeAgentProjectUuid.value,
+  ) || null
+))
 const biddingFiles = ref([])
 const biddingParseRuns = ref([])
 const biddingTenderAnalysis = ref(null)
@@ -11247,6 +9429,21 @@ const biddingFileFormatAuditEvents = computed(() => {
   const persisted = Array.isArray(biddingFileFormatPlan.value?.edit_events) ? biddingFileFormatPlan.value.edit_events : []
   return [...pending, ...persisted].slice(-30).reverse()
 })
+const biddingBusinessFileFormatPackages = computed(() => biddingFileFormatPackages.value.filter((pkg) => pkg.package_key === 'business'))
+const biddingBusinessFileFormatRows = computed(() => biddingFileFormatRows.value.filter((row) => row.package_key === 'business'))
+const biddingBusinessFileFormatSummary = computed(() => {
+  const rows = biddingBusinessFileFormatRows.value
+  return {
+    package_count: biddingBusinessFileFormatPackages.value.length,
+    item_count: rows.length,
+    pricing_table_count: rows.filter((row) => row.content_type === 'pricing_table').length,
+    attachment_count: rows.filter((row) => row.requires_attachment).length,
+  }
+})
+const biddingBusinessFileFormatWarnings = computed(() => biddingFileFormatWarnings.value.filter((warning) => {
+  const packageKey = String(warning?.package_key || warning?.detail?.package_key || '')
+  return !packageKey || packageKey === 'business'
+}))
 const biddingMaterialRequirements = ref([])
 const biddingMaterialRequirementSummary = ref({})
 const biddingMaterialRequirementsLoading = ref(false)
@@ -11499,11 +9696,6 @@ const quoteJobFilters = reactive({
   keyword: '',
   username: '',
 })
-const executionTaskFilters = reactive({
-  status: '',
-  source: '',
-  keyword: '',
-})
 const projectFilters = reactive({
   status: '',
   risk_level: '',
@@ -11512,18 +9704,6 @@ const projectFilters = reactive({
 const myProjectTaskFilters = reactive({
   status: '',
   keyword: '',
-})
-const meetingFilters = reactive({
-  status: '',
-  keyword: '',
-})
-const businessLedgerFilters = reactive({
-  stage: [],
-  source: '',
-  responder_id: null,
-  dateRange: [],
-  keyword: '',
-  overdue_only: false,
 })
 const biddingFilters = reactive({
   status: '',
@@ -11553,39 +9733,8 @@ const costLineageFilters = reactive({
 })
 const dashboardRange = ref('last_30_days')
 const dashboardTab = ref('business')
-const executionPageTab = ref('tasks')
-const dashboardFeature = reactive({ businessDisabled: false, quoteDisabled: false, responseDisabled: false, executionDisabled: false, projectDisabled: false })
-const executionFeatureDisabled = ref(false)
+const dashboardFeature = reactive({ businessDisabled: false, quoteDisabled: false, responseDisabled: false, projectDisabled: false })
 const projectFeatureDisabled = ref(false)
-const meetingFeatureDisabled = ref(false)
-const businessLedgerFeatureDisabled = ref(false)
-const costMeasurements = ref([])
-const costMeasurementTotal = ref(0)
-const costMeasurementPage = ref(1)
-const costMeasurementPageSize = 20
-const costMeasurementLoading = ref(false)
-const costMeasurementFeatureDisabled = ref(false)
-const costMeasurementDetail = ref(null)
-const costMeasurementFileInput = ref(null)
-const costMeasurementDrawer = reactive({ visible: false })
-const costMeasurementImportDialog = reactive({
-  visible: false,
-  file: null,
-  preview: null,
-  name: '',
-  project_name: '',
-})
-const costMeasurementDraftDialog = reactive({
-  visible: false,
-  loading: false,
-  submitting: false,
-  summary: null,
-  candidates: [],
-  note: '',
-})
-const costMeasurementDraftSelectedCount = computed(() =>
-  costMeasurementDraftDialog.candidates.filter((row) => row.can_create && row.selected).length,
-)
 const costDbFeatureDisabled = ref(false)
 const enterpriseProfileFeatureDisabled = ref(false)
 const agentCenterFeatureDisabled = ref(false)
@@ -11678,7 +9827,7 @@ const agentActionableSuggestions = computed(() => {
   if (agentIsAuditRun.value) return []
   return (agentRunDetail.value?.suggestions || []).filter((suggestion) => isAgentActionableSuggestion(suggestion))
 })
-const routeName = ref(routeFromPath(window.location.pathname))
+const routeName = ref(routeFromPath(`${window.location.pathname}${window.location.search}`))
 
 const grantDialog = reactive({
   visible: false,
@@ -11709,18 +9858,6 @@ const quoteJobDrawer = reactive({
   job: null,
   costEvidence: [],
   reviewDetail: null,
-})
-
-const executionDialog = reactive({
-  visible: false,
-  form: {
-    title: '',
-    assignee_id: null,
-    due_at: '',
-    source: 'manual',
-    source_ref_id: '',
-    notes: '',
-  },
 })
 
 const projectDialog = reactive({
@@ -11793,57 +9930,6 @@ const projectEvidenceDrawer = reactive({
     external_url: '',
     external_provider: 'other',
   },
-})
-
-const meetingDialog = reactive({
-  visible: false,
-  form: {
-    content: '',
-  },
-})
-
-const manualDraftDialog = reactive({
-  visible: false,
-  form: {
-    title: '',
-    assignee_id: null,
-    due_at: '',
-    source_sentence: '',
-    notes: '',
-  },
-})
-
-const executionDrawer = reactive({
-  visible: false,
-  loading: false,
-  task: null,
-})
-
-const meetingDrawer = reactive({
-  visible: false,
-  loading: false,
-  note: null,
-})
-
-const businessLedgerDialog = reactive({
-  visible: false,
-  mode: 'create',
-  inquiryId: '',
-  form: {
-    source: '',
-    client_name: '',
-    client_phone: '',
-    stage: '初步接触',
-    next_followup_at: '',
-    responder_id: null,
-    notes: '',
-  },
-})
-
-const businessLedgerDrawer = reactive({
-  visible: false,
-  loading: false,
-  ledger: null,
 })
 
 const biddingDialog = reactive({
@@ -12020,27 +10106,22 @@ const canViewDashboardMetrics = computed(() => canAccessPermissions.value || rol
 const canViewDashboard = computed(() => canViewDashboardMetrics.value || roles.value.includes('quote_operator'))
 const canViewQuoteOperations = computed(() => canAccessPermissions.value || roles.value.includes('quote_operator'))
 const canManageQuoteOperations = computed(() => canAccessPermissions.value)
-const canViewExecution = computed(() => canAccessPermissions.value || roles.value.includes('staff') || roles.value.includes('manager'))
-const canCreateExecutionTask = computed(() => canAccessPermissions.value)
-const canCreateMeetingNote = computed(() => canViewExecution.value)
 const canViewProjectProgress = computed(() => canAccessPermissions.value || hasRole('staff', 'manager', 'project_viewer', 'project_member', 'project_manager'))
 const canViewMyProjectTasks = computed(() => hasRole('staff', 'manager', 'project_member', 'project_manager'))
 const canManageProjectProgress = computed(() => canAccessPermissions.value || hasRole('manager', 'project_manager'))
-const canViewBusinessLedger = computed(() => canAccessPermissions.value || roles.value.includes('staff'))
-const canManageBusinessLedger = computed(() => canAccessPermissions.value)
 const canViewEnterpriseProfile = computed(() => canAccessPermissions.value || hasRole('enterprise_profile_viewer', 'enterprise_profile_editor', 'enterprise_profile_approver'))
 const canEditEnterpriseProfile = computed(() => canAccessPermissions.value || hasRole('enterprise_profile_editor', 'enterprise_profile_approver'))
 const canApproveEnterpriseProfile = computed(() => canAccessPermissions.value || roles.value.includes('enterprise_profile_approver'))
 const canViewCostDb = computed(() => canAccessPermissions.value || hasRole('cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter'))
-const canViewCostMeasurement = computed(() => canViewCostDb.value)
-const canEditCostMeasurement = computed(() => canEditCostDb.value)
-const canApproveCostMeasurement = computed(() => canApproveCostDb.value)
-const canExportCostMeasurement = computed(() => canExportCostDb.value)
 const canEditCostDb = computed(() => canAccessPermissions.value || hasRole('cost_editor', 'cost_approver'))
 const canApproveCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
 const canExportCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_exporter'))
 const canViewCostAudit = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
 const canViewRequirementStandardization = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
+const unifiedQuotesModule = computed(() => (session.user?.available_modules || []).find(
+  (module) => module.key === 'unified_quotes',
+))
+const unifiedQuotesFeatureAvailable = computed(() => unifiedQuotesModule.value?.status === 'available')
 const budgetProjectsModule = computed(() => (session.user?.available_modules || []).find(
   (module) => module.key === 'budget_projects' || module.path === '/admin/budget-projects',
 ))
@@ -12054,6 +10135,13 @@ const accountQuotasModule = computed(() => (session.user?.available_modules || [
 ))
 const accountQuotasFeatureAvailable = computed(() => accountQuotasModule.value?.status === 'available')
 const canViewAccountQuotas = computed(() => accountQuotasFeatureAvailable.value && canAccessPermissions.value)
+const pricingAgentModule = computed(() => (session.user?.available_modules || []).find(
+  (module) => module.key === 'pricing_agent' || module.path === '/admin/pricing-agent',
+))
+const canViewPricingAgent = computed(() => (
+  pricingAgentModule.value?.status === 'available'
+  && (canAccessPermissions.value || hasRole('staff', 'quote_user', 'quote_operator'))
+))
 const canViewBudgetProjectsByRole = computed(() => canAccessPermissions.value || hasRole(
   'viewer', 'staff', 'quote_user', 'quote_operator', 'manager',
   'project_viewer', 'project_member', 'project_manager',
@@ -12065,9 +10153,14 @@ const canEditBudgetProjectsByRole = computed(() => canAccessPermissions.value ||
 const canEditBudgetProjects = computed(() => budgetProjectsFeatureAvailable.value && canEditBudgetProjectsByRole.value)
 const canViewDwgTrial = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
 const canViewBidding = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user', 'quote_operator', 'manager'))
+const canManageBidIntakePolicy = computed(() => canAccessPermissions.value || hasRole('manager'))
 const canViewAgentCenter = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user', 'quote_operator'))
 const canManageAgentDailyReview = computed(() => canAccessPermissions.value || hasRole('quote_operator'))
 const canOpenLegacyQuote = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
+const canUseUnifiedQuotes = computed(() => (
+  unifiedQuotesFeatureAvailable.value
+  && (canOpenLegacyQuote.value || canViewBudgetProjects.value)
+))
 const canOpenLegacyAdmin = computed(() => canAccessPermissions.value)
 const selectedCostItemIds = computed(() => selectedCostItems.value.map((item) => item.id).filter(Boolean))
 const selectableCostItems = computed(() => costItems.value.filter((item) => costItemSelectable(item)))
@@ -12438,21 +10531,16 @@ const costDbOverviewCards = computed(() => {
 const visibleDailyTrends = computed(() => (quoteDashboard.value?.daily_trends || []).filter((item) => item.sample_count > 0).slice(-12))
 const visibleResponseSources = computed(() => (responseDashboard.value?.by_source || []).slice(0, 12))
 const visibleResponseResponders = computed(() => (responseDashboard.value?.by_responder || []).slice(0, 12))
-const visibleExecutionTrends = computed(() => (executionDashboard.value?.daily_trends || []).filter((item) => item.task_count > 0).slice(-12))
-const visibleExecutionAssignees = computed(() => (executionDashboard.value?.by_assignee || []).slice(0, 12))
 const visibleProjectManagers = computed(() => (projectDashboard.value?.by_project_manager || []).slice(0, 12))
 const businessSectionErrorCount = computed(() => (businessDashboard.value?.section_errors || []).length)
 const businessRisks = computed(() => businessDashboard.value?.risks || [])
 const managementFocusLinks = computed(() => [
   canViewProjectProgress.value ? { label: '项目进度', path: '/admin/projects' } : null,
-  canViewExecution.value ? { label: '执行任务', path: '/admin/execution' } : null,
-  canViewBusinessLedger.value ? { label: '商务台账', path: '/admin/business-ledger' } : null,
 ].filter(Boolean))
 const managementFocusCards = computed(() => {
   const cards = []
   const project = projectDashboard.value || {}
   const businessProject = businessDashboard.value?.project_progress || {}
-  const execution = executionDashboard.value || {}
 
   if (canViewProjectProgress.value && !dashboardFeature.projectDisabled && projectDashboard.value) {
     const blockedProjectCount = Number(project.blocked_count || 0)
@@ -12482,22 +10570,6 @@ const managementFocusCards = computed(() => {
         tone: 'warning',
         priority: 2,
         targetPath: '/admin/projects',
-      })
-    }
-  }
-
-  if (canViewExecution.value && !dashboardFeature.executionDisabled && executionDashboard.value) {
-    const overdueCount = Number(execution.overdue_count || 0)
-    if (overdueCount) {
-      cards.push({
-        key: 'execution_overdue',
-        title: '执行任务逾期',
-        value: `${overdueCount} 项`,
-        detail: `当前未完成 ${Number(execution.open_count || 0)} 项，需明确下一步`,
-        action: '进入执行任务处理',
-        tone: 'danger',
-        priority: 1,
-        targetPath: '/admin/execution',
       })
     }
   }
@@ -12838,14 +10910,6 @@ const visibleRequirementSheetMappings = computed(() => {
 const hiddenRequirementSheetCount = computed(() => (
   Math.max(0, requirementSheetMappings.value.length - visibleRequirementSheetMappings.value.length)
 ))
-const executionAssigneeOptions = computed(() => {
-  const source = users.value.length ? users.value : (session.user ? [session.user] : [])
-  return source.filter((user) => {
-    if (user.is_active === false) return false
-    if (!user.roles?.length) return user.id === session.user?.id
-    return user.roles.some((role) => ['system_admin', 'admin', 'staff', 'manager'].includes(role))
-  })
-})
 const projectUserOptions = computed(() => {
   const source = projectUsers.value.length ? projectUsers.value : (session.user ? [session.user] : [])
   return source.filter((user) => user.is_active !== false)
@@ -12867,120 +10931,6 @@ const projectEvidenceSummary = computed(() => {
     evidence_completion_percent: requiredTasks.length ? Math.round((evidencedTasks.length * 100) / requiredTasks.length) : 0,
   }
 })
-const businessLedgerOverviewCards = computed(() => {
-  const rows = businessLedgers.value || []
-  const openCount = rows.filter((item) => isBusinessLedgerActionable(item)).length
-  const overdueCount = rows.filter((item) => isBusinessLedgerOverdue(item)).length
-  const dueSoonCount = rows.filter((item) => isBusinessLedgerDueSoon(item)).length
-  const quoteStageCount = rows.filter((item) => ['报价中', '跟进议价'].includes(item.stage) && isBusinessLedgerActionable(item)).length
-  return [
-    {
-      key: 'total',
-      title: '筛选客户',
-      value: `${businessLedgerTotal.value || rows.length}`,
-      detail: rows.length ? `当前页 ${rows.length} 条台账` : '暂无客户台账数据',
-      tone: 'is-info',
-    },
-    {
-      key: 'open',
-      title: '待跟进',
-      value: `${openCount}`,
-      detail: openCount ? '尚未进入结束阶段的客户' : '当前页无待跟进客户',
-      tone: openCount ? 'is-info' : 'is-success',
-    },
-    {
-      key: 'overdue',
-      title: '已逾期',
-      value: `${overdueCount}`,
-      detail: overdueCount ? '请优先联系并更新跟进计划' : '当前页暂无逾期跟进',
-      tone: overdueCount ? 'is-danger' : 'is-success',
-    },
-    {
-      key: 'quote-stage',
-      title: '报价/议价',
-      value: `${quoteStageCount}`,
-      detail: dueSoonCount ? `未来 3 天内需跟进 ${dueSoonCount} 条` : '当前页无近期跟进提醒',
-      tone: quoteStageCount ? 'is-warning' : 'is-info',
-    },
-  ]
-})
-
-const executionTaskOverviewCards = computed(() => {
-  const rows = executionTasks.value || []
-  const pendingCount = rows.filter((item) => item.status === 'pending').length
-  const progressingCount = rows.filter((item) => item.status === 'in_progress').length
-  const overdueCount = rows.filter((item) => item.is_overdue && !['done', 'cancelled'].includes(item.status)).length
-  const doneCount = rows.filter((item) => item.status === 'done').length
-  return [
-    {
-      key: 'total',
-      title: '执行任务',
-      value: `${executionTaskTotal.value || rows.length}`,
-      detail: rows.length ? `当前页 ${rows.length} 项任务` : '暂无任务数据',
-      tone: 'is-info',
-    },
-    {
-      key: 'pending',
-      title: '待开始',
-      value: `${pendingCount}`,
-      detail: progressingCount ? `推进中 ${progressingCount} 项` : '可从待开始任务安排推进',
-      tone: pendingCount ? 'is-info' : 'is-success',
-    },
-    {
-      key: 'priority',
-      title: '优先处理',
-      value: `${overdueCount}`,
-      detail: overdueCount ? '逾期任务需要优先处理' : '当前页暂无逾期任务',
-      tone: overdueCount ? 'is-danger' : 'is-success',
-    },
-    {
-      key: 'done',
-      title: '已完成',
-      value: `${doneCount}`,
-      detail: rows.length ? `当前页完成率 ${Math.round((doneCount * 100) / rows.length)}%` : '暂无完成记录',
-      tone: doneCount ? 'is-success' : 'is-info',
-    },
-  ]
-})
-
-const meetingOverviewCards = computed(() => {
-  const rows = meetings.value || []
-  const draftCount = rows.filter((item) => item.status === 'draft').length
-  const revisedCount = rows.filter((item) => item.status === 'revised').length
-  const pendingDraftCount = rows.reduce((sum, item) => sum + meetingPendingDraftCount(item), 0)
-  const confirmedCount = rows.filter((item) => item.status === 'confirmed').length
-  return [
-    {
-      key: 'total',
-      title: '会议纪要',
-      value: `${meetingTotal.value || rows.length}`,
-      detail: rows.length ? `当前页 ${rows.length} 条纪要` : '暂无纪要数据',
-      tone: 'is-info',
-    },
-    {
-      key: 'draft',
-      title: '待整理',
-      value: `${draftCount}`,
-      detail: draftCount ? '草稿纪要可继续完善' : '当前页无待整理纪要',
-      tone: draftCount ? 'is-warning' : 'is-success',
-    },
-    {
-      key: 'pending-drafts',
-      title: '待确认任务',
-      value: `${pendingDraftCount}`,
-      detail: pendingDraftCount ? '请核对负责人和截止时间' : '任务草稿已全部处理',
-      tone: pendingDraftCount ? 'is-warning' : 'is-success',
-    },
-    {
-      key: 'confirmed',
-      title: '已确认',
-      value: `${confirmedCount}`,
-      detail: revisedCount ? `另有 ${revisedCount} 条待跟进更正` : '当前页无待跟进更正',
-      tone: revisedCount ? 'is-info' : 'is-success',
-    },
-  ]
-})
-
 const projectListOverviewCards = computed(() => {
   const rows = projects.value || []
   const activeCount = rows.filter((item) => item.status === 'active').length
@@ -13104,13 +11054,6 @@ const visibleProjectDetailTasks = computed(() => {
   if (projectTaskEvidenceFilter.value === 'open_missing') return tasks.filter((task) => projectTaskNeedsEvidence(task) && Number(task.evidence_count || 0) <= 0 && task.status !== 'done')
   return tasks
 })
-const businessLedgerResponderOptions = computed(() => {
-  const source = users.value.length ? users.value : (session.user ? [session.user] : [])
-  return source.filter((user) => user.is_active !== false)
-})
-const businessLedgerDialogTitle = computed(() => (
-  businessLedgerDialog.mode === 'edit' ? '编辑商务台账' : '新建商务台账'
-))
 const enterpriseProfileDialogTitle = computed(() => {
   if (enterpriseProfileDialog.mode === 'view') return '企业资料详情'
   return enterpriseProfileDialog.mode === 'edit' ? '编辑企业资料' : '新建企业资料'
@@ -13120,23 +11063,31 @@ const costItemDialogTitle = computed(() => (
 ))
 
 function routeFromPath(path) {
-  const pathname = String(path || '').split(/[?#]/)[0] || '/'
+  const rawPath = String(path || '')
+  const pathname = rawPath.split(/[?#]/)[0] || '/'
+  const search = rawPath.includes('?')
+    ? rawPath.split('?')[1].split('#')[0]
+    : ''
+  const view = new URLSearchParams(search).get('view')
   if (pathname === '/login') return 'login'
   if (pathname === '/no-access') return 'noAccess'
+  if (pathname === '/quotes') return 'unifiedQuotes'
+  if (pathname === '/quotes/new') return 'unifiedQuoteNew'
   if (pathname === '/quote/new') return 'quoteNew'
   if (pathname === '/admin/budget-projects') return 'budgetProjects'
   if (/^\/admin\/budget-projects\/\d+$/.test(pathname)) return 'budgetProjectDetail'
   if (pathname === '/admin/dashboard') return 'dashboard'
-  if (pathname === '/admin/execution') return 'execution'
   if (pathname === '/admin/projects') return 'projects'
   if (pathname === '/admin/project-tasks/my') return 'projectMyTasks'
   if (/^\/admin\/projects\/\d+$/.test(pathname)) return 'projectDetail'
-  if (pathname === '/admin/business-ledger') return 'businessLedger'
   if (pathname === '/admin/bidding') return 'bidding'
+  if (pathname === '/admin/bid-intake-agent' && view === 'policy') return 'bidIntakePolicy'
+  if (pathname === '/admin/bid-intake-agent') return 'bidIntakeAgent'
+  if (pathname === '/admin/bid-intake-policy') return 'bidIntakePolicy'
   if (pathname === '/admin/enterprise-profile') return 'enterpriseProfile'
-  if (pathname === '/admin/cost-measurement') return 'costMeasurement'
   if (pathname === '/admin/cost-db') return 'costDb'
   if (pathname === '/admin/account-quotas') return 'accountQuotas'
+  if (pathname === '/admin/pricing-agent') return 'pricingAgent'
   if (pathname === '/admin/requirement-standardization') return 'requirementStandardization'
   if (pathname === '/admin/dwg-trial') return 'dwgTrial'
   if (pathname === '/admin/agent-center') return 'agentCenter'
@@ -13371,7 +11322,8 @@ async function openBusinessTarget(path) {
     return
   }
   if (path === '/quote/new') {
-    navigate(path)
+    if (canUseUnifiedQuotes.value) openQuickQuote('quick')
+    else navigate(path)
     return
   }
   if (path.startsWith('/admin/')) {
@@ -13604,81 +11556,6 @@ function jobStatusTag(status) {
   return 'primary'
 }
 
-function executionStatusLabel(status) {
-  const labels = {
-    pending: '待处理',
-    in_progress: '进行中',
-    done: '已完成',
-    cancelled: '已取消',
-  }
-  return labels[status] || status
-}
-
-function executionSourceLabel(source) {
-  const option = executionSourceOptions.find((item) => item.value === source)
-  return option?.label || source || '-'
-}
-
-function executionStatusTag(status) {
-  if (status === 'done') return 'success'
-  if (status === 'cancelled') return 'info'
-  if (status === 'in_progress') return 'warning'
-  return 'primary'
-}
-
-function executionTaskNextStepLabel(row) {
-  if (row?.is_overdue && !['done', 'cancelled'].includes(row?.status)) return '先处理逾期任务'
-  if (row?.status === 'pending') return '开始处理'
-  if (row?.status === 'in_progress') return '更新进展或完成'
-  if (row?.status === 'done') return '任务已完成'
-  return '任务已取消'
-}
-
-function executionTaskNextStepDetail(row) {
-  if (row?.is_overdue && !['done', 'cancelled'].includes(row?.status)) return `截止时间 ${formatDate(row?.due_at)}`
-  if (row?.status === 'pending') return '开始后可持续更新进展'
-  if (row?.status === 'in_progress') return '完成后将沉淀为执行记录'
-  if (row?.status === 'done') return `完成于 ${formatDate(row?.completed_at)}`
-  return '如需继续推进，请重新建立任务'
-}
-
-function executionTaskNextStepTone(row) {
-  if (row?.is_overdue && !['done', 'cancelled'].includes(row?.status)) return 'is-danger'
-  if (row?.status === 'in_progress') return 'is-warning'
-  if (row?.status === 'done') return 'is-success'
-  return 'is-info'
-}
-
-function executionTaskRowClassName({ row }) {
-  if (row?.is_overdue && !['done', 'cancelled'].includes(row?.status)) return 'execution-task-row-overdue'
-  if (row?.status === 'in_progress') return 'execution-task-row-progressing'
-  return ''
-}
-
-function meetingPendingDraftCount(row) {
-  return Math.max(0, Number(row?.draft_count || 0) - Number(row?.accepted_draft_count || 0))
-}
-
-function meetingDraftProgressLabel(row) {
-  const draftCount = Number(row?.draft_count || 0)
-  const pendingCount = meetingPendingDraftCount(row)
-  if (!draftCount) return '未生成任务草稿'
-  if (pendingCount) return `待确认 ${pendingCount} 项`
-  return '草稿已全部确认'
-}
-
-function meetingDraftProgressTone(row) {
-  if (meetingPendingDraftCount(row)) return 'is-warning'
-  if (Number(row?.draft_count || 0)) return 'is-success'
-  return 'is-info'
-}
-
-function meetingRowClassName({ row }) {
-  if (row?.status !== 'cancelled' && meetingPendingDraftCount(row)) return 'meeting-row-pending'
-  if (row?.status === 'revised') return 'meeting-row-revised'
-  return ''
-}
-
 function projectStatusLabel(status) {
   const option = projectStatusOptions.find((item) => item.value === status)
   return option?.label || status || '-'
@@ -13805,53 +11682,6 @@ function projectEventLabel(eventType) {
     task_completed_bypass_gate: '关键节点放行完成',
   }
   return labels[eventType] || eventType || '-'
-}
-
-function meetingStatusLabel(status) {
-  const labels = {
-    draft: '草稿',
-    confirmed: '已确认',
-    revised: '有更正',
-    cancelled: '已作废',
-  }
-  return labels[status] || status
-}
-
-function meetingStatusTag(status) {
-  if (status === 'confirmed') return 'success'
-  if (status === 'cancelled') return 'info'
-  if (status === 'revised') return 'warning'
-  return 'primary'
-}
-
-function meetingAiStatusLabel(status) {
-  const labels = {
-    pending: '待提取',
-    extracted: '已生成草稿',
-    no_tasks: '无明确任务',
-    failed: '提取失败',
-  }
-  return labels[status] || status || '-'
-}
-
-function draftStatusLabel(status) {
-  const labels = {
-    pending_review: '待确认',
-    accepted: '已确认',
-    rejected: '已驳回',
-  }
-  return labels[status] || status
-}
-
-function draftStatusTag(status) {
-  if (status === 'accepted') return 'success'
-  if (status === 'rejected') return 'info'
-  return 'warning'
-}
-
-function meetingPreview(row) {
-  const content = row.content || row.extraction_error || `会议纪要 #${row.id}`
-  return content.length > 48 ? `${content.slice(0, 48)}...` : content
 }
 
 function toDatePickerValue(value) {
@@ -14096,83 +11926,6 @@ function canRetryQuoteJob(row) {
 
 function canCancelQuoteJob(row) {
   return canManageQuoteOperations.value && ['queued', 'running'].includes(row.status)
-}
-
-function businessStageTag(stage) {
-  if (stage === '成单') return 'success'
-  if (stage === '丢单') return 'danger'
-  if (stage === '报价中' || stage === '跟进议价') return 'warning'
-  return 'primary'
-}
-
-function isBusinessTerminal(stage) {
-  return businessLedgerTerminalStages.has(stage)
-}
-
-function isBusinessLedgerActionable(row) {
-  return Boolean(row) && !row.cancelled_at && !isBusinessTerminal(row.stage)
-}
-
-function isBusinessLedgerOverdue(row) {
-  const followupTime = toTimestamp(row.next_followup_at)
-  if (!followupTime || !isBusinessLedgerActionable(row)) return false
-  return followupTime < Date.now()
-}
-
-function isBusinessLedgerDueSoon(row) {
-  const followupTime = toTimestamp(row?.next_followup_at)
-  if (!followupTime || !isBusinessLedgerActionable(row) || followupTime < Date.now()) return false
-  return followupTime <= Date.now() + 3 * 24 * 60 * 60 * 1000
-}
-
-function businessLedgerNextStepLabel(row) {
-  if (row?.cancelled_at) return '记录已作废'
-  if (row?.stage === '成单') return '沉淀成交结果'
-  if (row?.stage === '丢单') return '保留丢单复盘'
-  if (isBusinessLedgerOverdue(row)) return '立即联系客户'
-  if (isBusinessLedgerDueSoon(row)) return '安排近期跟进'
-  if (row?.stage === '初步接触') return '确认客户需求'
-  if (row?.stage === '需求确认') return '明确范围与报价条件'
-  if (row?.stage === '报价中') return '完成报价并及时跟进'
-  if (row?.stage === '跟进议价') return '推进议价与决策'
-  return '补充下次跟进计划'
-}
-
-function businessLedgerNextStepDetail(row) {
-  if (row?.cancelled_at) return '该记录不再参与后续跟进'
-  if (row?.stage === '成单') return '可完善成交信息，便于后续复盘'
-  if (row?.stage === '丢单') return '建议保留原因和后续机会线索'
-  if (row?.next_followup_at) return `下次跟进：${formatDate(row.next_followup_at)}`
-  return '尚未设置下次跟进时间'
-}
-
-function businessLedgerNextStepTone(row) {
-  if (isBusinessLedgerOverdue(row)) return 'is-danger'
-  if (isBusinessLedgerDueSoon(row) || ['报价中', '跟进议价'].includes(row?.stage)) return 'is-warning'
-  if (row?.stage === '成单') return 'is-success'
-  return 'is-info'
-}
-
-function businessLedgerRowClass({ row }) {
-  if (isBusinessLedgerOverdue(row)) return 'ledger-overdue-row'
-  if (isBusinessLedgerDueSoon(row)) return 'ledger-due-soon-row'
-  if (['报价中', '跟进议价'].includes(row?.stage) && isBusinessLedgerActionable(row)) return 'ledger-active-row'
-  return ''
-}
-
-function businessLedgerPreview(row) {
-  const content = row.notes || row.source || row.inquiry_id || ''
-  return content.length > 42 ? `${content.slice(0, 42)}...` : content || '-'
-}
-
-function canEditBusinessLedger(row) {
-  if (!row || row.cancelled_at || isBusinessTerminal(row.stage)) return false
-  if (canManageBusinessLedger.value) return true
-  return row.responder_id === session.user?.id
-}
-
-function canCancelBusinessLedger(row) {
-  return canManageBusinessLedger.value && row && !row.cancelled_at && !isBusinessTerminal(row.stage)
 }
 
 function safeRedirectPath(value) {
@@ -15354,10 +13107,6 @@ function handoffRequirementQuoteJob(job) {
   window.location.href = `/index.html?${params.toString()}`
 }
 
-function isBusinessLedgerDisabled(error) {
-  return error.response?.status === 404 && error.response?.data?.detail === 'NOT_FOUND'
-}
-
 async function loadClientInquiries() {
   clientInquiries.value = []
   clientInquiryTotal.value = 0
@@ -16501,16 +14250,6 @@ async function markQuoteTimeouts() {
   }
 }
 
-async function loadExecutionUsers() {
-  if (!canCreateExecutionTask.value || users.value.length) return
-  try {
-    const response = await api.get('/admin/users')
-    users.value = responseData(response)
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '负责人加载失败'))
-  }
-}
-
 async function loadProjectUsers() {
   if (!canManageProjectProgress.value || projectUsers.value.length) return
   try {
@@ -16518,54 +14257,6 @@ async function loadProjectUsers() {
     projectUsers.value = responseData(response) || []
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '项目人员加载失败'))
-  }
-}
-
-async function loadBusinessLedgerUsers() {
-  if (!canManageBusinessLedger.value || users.value.length) return
-  try {
-    const response = await api.get('/admin/users')
-    users.value = responseData(response)
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '负责人加载失败'))
-  }
-}
-
-async function loadBusinessLedgers() {
-  if (!canViewBusinessLedger.value) return
-  businessLedgerFeatureDisabled.value = false
-  businessLedgerLoading.value = true
-  const params = {
-    page: businessLedgerPage.value,
-    page_size: businessLedgerPageSize,
-  }
-  if (businessLedgerFilters.stage.length) params.stage = businessLedgerFilters.stage.join(',')
-  if (businessLedgerFilters.source) params.source = businessLedgerFilters.source
-  if (canManageBusinessLedger.value && businessLedgerFilters.responder_id) {
-    params.responder_id = businessLedgerFilters.responder_id
-  }
-  const [dateFrom, dateTo] = businessLedgerFilters.dateRange || []
-  if (dateFrom) params.date_from = dateFrom
-  if (dateTo) params.date_to = dateTo
-  const keyword = businessLedgerFilters.keyword.trim()
-  if (keyword) params.keyword = keyword
-  if (businessLedgerFilters.overdue_only) params.overdue_only = true
-  try {
-    const response = await api.get('/business-ledger', { params })
-    businessLedgers.value = responseData(response) || []
-    businessLedgerTotal.value = response.data?.total ?? businessLedgers.value.length
-  } catch (error) {
-    businessLedgers.value = []
-    businessLedgerTotal.value = 0
-    if (isBusinessLedgerDisabled(error)) {
-      businessLedgerFeatureDisabled.value = true
-      return
-    }
-    if (error.response?.status === 401) state.error = 'unauthorized'
-    else if (error.response?.status === 403) state.error = 'forbidden'
-    else ElMessage.error(apiErrorMessage(error, '商务台账加载失败'))
-  } finally {
-    businessLedgerLoading.value = false
   }
 }
 
@@ -16721,6 +14412,36 @@ async function loadBiddingProjects() {
     else ElMessage.error(apiErrorMessage(error, '投标项目加载失败'))
   } finally {
     biddingLoading.value = false
+  }
+}
+
+async function loadBidIntakeAgentProjects() {
+  if (!canViewBidding.value) return
+  bidIntakeAgentLoading.value = true
+  try {
+    const response = await api.get('/admin/bidding/projects', {
+      params: { page: 1, page_size: 100 },
+    })
+    const projects = responseData(response) || []
+    bidIntakeAgentProjects.value = projects
+    const currentExists = projects.some(
+      (project) => project.project_uuid === bidIntakeAgentProjectUuid.value,
+    )
+    if (!currentExists) {
+      bidIntakeAgentProjectUuid.value = projects[0]?.project_uuid || ''
+    }
+  } catch (error) {
+    bidIntakeAgentProjects.value = []
+    bidIntakeAgentProjectUuid.value = ''
+    if (isBiddingFeatureDisabled(error)) {
+      biddingFeatureDisabled.value = true
+      return
+    }
+    if (error.response?.status === 401) state.error = 'unauthorized'
+    else if (error.response?.status === 403) state.error = 'forbidden'
+    else ElMessage.error(apiErrorMessage(error, '研判项目加载失败'))
+  } finally {
+    bidIntakeAgentLoading.value = false
   }
 }
 
@@ -19305,6 +17026,38 @@ function biddingMaterialRequirementStatusTag(value) {
   return ''
 }
 
+function businessBidFieldModeLabel(value) {
+  const labels = {
+    system: '系统生成',
+    llm_draft: 'LLM草稿',
+    manual_text: '人工填写',
+    manual_attachment: '人工导入',
+    manual_signature: '人工签章',
+    manual_review: '人工复核',
+  }
+  return labels[value] || value || '-'
+}
+
+function businessBidFieldStatusLabel(value) {
+  const labels = {
+    filled: '已填入',
+    generated: '已生成',
+    needs_manual: '待人工',
+    needs_review: '待确认',
+    needs_llm_draft: '待LLM草拟',
+    needs_quote_import: '待导入报价',
+  }
+  return labels[value] || value || '-'
+}
+
+function businessBidFieldStatusTag(value) {
+  if (value === 'filled' || value === 'generated') return 'success'
+  if (value === 'needs_review' || value === 'needs_llm_draft') return 'warning'
+  if (value === 'needs_quote_import') return 'danger'
+  if (value === 'needs_manual') return 'warning'
+  return 'info'
+}
+
 function biddingMaterialRequirementTypeLabel(value) {
   const labels = {
     profile: '企业资料',
@@ -19575,11 +17328,6 @@ function biddingRiskReviewTag(status) {
   if (status === 'to_quote_allowance') return 'primary'
   if (status === 'mixed') return 'warning'
   return 'danger'
-}
-
-function applyBusinessLedgerFilters() {
-  businessLedgerPage.value = 1
-  loadBusinessLedgers()
 }
 
 function clearCostMasterData() {
@@ -20166,239 +17914,6 @@ function handleCostMasterTabClick() {
   loadCostMasterActiveList()
 }
 
-async function loadCostMeasurements() {
-  costMeasurementLoading.value = true
-  try {
-    const response = await api.get('/admin/cost-measurements', {
-      params: { page: costMeasurementPage.value, page_size: costMeasurementPageSize },
-    })
-    costMeasurements.value = response.data?.data || []
-    costMeasurementTotal.value = Number(response.data?.total || 0)
-    costMeasurementFeatureDisabled.value = false
-  } catch (error) {
-    costMeasurements.value = []
-    costMeasurementTotal.value = 0
-    if (error.response?.status === 403 && error.response?.data?.detail === 'FEATURE_DISABLED') {
-      costMeasurementFeatureDisabled.value = true
-      return
-    }
-    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u5217\u8868\u52a0\u8f7d\u5931\u8d25'))
-  } finally {
-    costMeasurementLoading.value = false
-  }
-}
-
-async function handleCostMeasurementFile(event) {
-  const file = event.target?.files?.[0]
-  if (event.target) event.target.value = ''
-  if (!file) return
-  const form = new FormData()
-  form.append('file', file)
-  state.submitting = true
-  try {
-    const response = await api.post('/admin/cost-measurements/import-preview', form)
-    const preview = responseData(response)
-    costMeasurementImportDialog.file = file
-    costMeasurementImportDialog.preview = preview
-    costMeasurementImportDialog.name = `${preview.project_name || file.name}\u6210\u672c\u6d4b\u7b97`
-    costMeasurementImportDialog.project_name = preview.project_name || ''
-    costMeasurementImportDialog.visible = true
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, 'Excel \u89e3\u6790\u5931\u8d25'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function commitCostMeasurementImport() {
-  const file = costMeasurementImportDialog.file
-  if (!file) return
-  const form = new FormData()
-  form.append('file', file)
-  form.append('name', costMeasurementImportDialog.name || '')
-  form.append('project_name', costMeasurementImportDialog.project_name || '')
-  state.submitting = true
-  try {
-    const response = await api.post('/admin/cost-measurements/import', form)
-    costMeasurementImportDialog.visible = false
-    costMeasurementDetail.value = responseData(response)
-    costMeasurementDrawer.visible = true
-    ElMessage.success('\u6210\u672c\u6d4b\u7b97\u8349\u7a3f\u5df2\u521b\u5efa')
-    await loadCostMeasurements()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u5bfc\u5165\u5931\u8d25'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function openCostMeasurement(row) {
-  costMeasurementLoading.value = true
-  try {
-    const response = await api.get(`/admin/cost-measurements/${row.id}`)
-    costMeasurementDetail.value = responseData(response)
-    costMeasurementDrawer.visible = true
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u8be6\u60c5\u52a0\u8f7d\u5931\u8d25'))
-  } finally {
-    costMeasurementLoading.value = false
-  }
-}
-
-async function saveCostMeasurementLine(row) {
-  if (!costMeasurementDetail.value) return
-  state.submitting = true
-  try {
-    const response = await api.patch(
-      `/admin/cost-measurements/${costMeasurementDetail.value.id}/lines/${row.id}`,
-      {
-        quantity: Number(row.quantity || 0),
-        labor_unit_price: Number(row.labor_unit_price || 0),
-        main_material_unit_price: Number(row.main_material_unit_price || 0),
-        material_loss_rate: Number(row.material_loss_rate || 0),
-        auxiliary_machinery_unit_price: Number(row.auxiliary_machinery_unit_price || 0),
-        subcontract_unit_price: Number(row.subcontract_unit_price || 0),
-        review_status: 'reviewed',
-      },
-    )
-    const data = responseData(response)
-    Object.assign(row, data.line || {})
-    Object.assign(costMeasurementDetail.value, data.summary || {})
-    ElMessage.success('\u6d4b\u7b97\u884c\u5df2\u4fdd\u5b58\u5e76\u6807\u8bb0\u590d\u6838')
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '\u6d4b\u7b97\u884c\u4fdd\u5b58\u5931\u8d25'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function recalculateCostMeasurement() {
-  if (!costMeasurementDetail.value) return
-  costMeasurementLoading.value = true
-  try {
-    const response = await api.post(`/admin/cost-measurements/${costMeasurementDetail.value.id}/recalculate`)
-    costMeasurementDetail.value = responseData(response)
-    ElMessage.success('\u7edf\u4e00\u91cd\u7b97\u5df2\u5b8c\u6210')
-    await loadCostMeasurements()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '\u7edf\u4e00\u91cd\u7b97\u5931\u8d25'))
-  } finally {
-    costMeasurementLoading.value = false
-  }
-}
-
-async function lockCostMeasurement() {
-  if (!costMeasurementDetail.value) return
-  try {
-    const result = await ElMessageBox.prompt(
-      '\u8bf7\u586b\u5199\u590d\u6838\u7ed3\u8bba\uff1b\u5b58\u5728\u5dee\u5f02\u6216\u4ec5\u7efc\u5408\u4ef7\u9879\u76ee\u65f6\u81f3\u5c11\u586b\u5199 6 \u4e2a\u5b57\u3002',
-      '\u590d\u6838\u5e76\u9501\u5b9a\u6210\u672c\u6d4b\u7b97',
-      { confirmButtonText: '\u9501\u5b9a', cancelButtonText: '\u53d6\u6d88', inputType: 'textarea' },
-    )
-    const response = await api.post(
-      `/admin/cost-measurements/${costMeasurementDetail.value.id}/lock`,
-      { note: result.value || '' },
-    )
-    costMeasurementDetail.value = responseData(response)
-    ElMessage.success('\u6210\u672c\u6d4b\u7b97\u5df2\u9501\u5b9a')
-    await loadCostMeasurements()
-  } catch (error) {
-    if (error === 'cancel' || error === 'close') return
-    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u9501\u5b9a\u5931\u8d25'))
-  }
-}
-
-function costMeasurementDraftStatusLabel(status) {
-  const labels = {
-    ready: '\u53ef\u751f\u6210',
-    ready_with_archived_history: '\u53ef\u751f\u6210\uff0c\u5df2\u6709\u5f52\u6863\u5386\u53f2',
-    existing_active: '\u5df2\u6709\u5df2\u542f\u7528\u6761\u76ee',
-    existing_draft: '\u5df2\u6709\u5f85\u6838\u5b9a\u6761\u76ee',
-    duplicate_within_measurement: '\u91cd\u590d\u5019\u9009\uff0c\u9700\u4e8c\u9009\u4e00',
-    blocked: '\u5df2\u963b\u65ad',
-  }
-  return labels[status] || '\u5df2\u963b\u65ad'
-}
-
-function costMeasurementDraftStatusTag(status) {
-  if (status === 'ready') return 'success'
-  if (status === 'ready_with_archived_history' || status === 'duplicate_within_measurement') return 'warning'
-  if (status === 'existing_active' || status === 'existing_draft') return 'info'
-  return 'danger'
-}
-
-async function previewCostMeasurementDrafts() {
-  if (!costMeasurementDetail.value) return
-  costMeasurementDraftDialog.visible = true
-  costMeasurementDraftDialog.loading = true
-  costMeasurementDraftDialog.summary = null
-  costMeasurementDraftDialog.candidates = []
-  costMeasurementDraftDialog.note = ''
-  try {
-    const response = await api.post(
-      `/admin/cost-measurements/${costMeasurementDetail.value.id}/cost-drafts/preview`,
-      {},
-    )
-    const data = responseData(response)
-    costMeasurementDraftDialog.summary = data.summary || {}
-    costMeasurementDraftDialog.candidates = (data.candidates || []).map((row) => ({
-      ...row,
-      selected: Boolean(row.can_create && row.candidate_status !== 'duplicate_within_measurement'),
-    }))
-  } catch (error) {
-    costMeasurementDraftDialog.visible = false
-    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u5e93\u5019\u9009\u9884\u89c8\u5931\u8d25'))
-  } finally {
-    costMeasurementDraftDialog.loading = false
-  }
-}
-
-async function commitCostMeasurementDrafts() {
-  if (!costMeasurementDetail.value) return
-  const lineIds = costMeasurementDraftDialog.candidates
-    .filter((row) => row.can_create && row.selected)
-    .map((row) => row.line_id)
-  if (!lineIds.length) {
-    ElMessage.warning('\u8bf7\u81f3\u5c11\u9009\u62e9 1 \u6761\u53ef\u751f\u6210\u7684\u6d4b\u7b97\u660e\u7ec6')
-    return
-  }
-  costMeasurementDraftDialog.submitting = true
-  try {
-    const response = await api.post(
-      `/admin/cost-measurements/${costMeasurementDetail.value.id}/cost-drafts`,
-      { line_ids: lineIds, note: costMeasurementDraftDialog.note || null },
-    )
-    const result = responseData(response)
-    costMeasurementDraftDialog.visible = false
-    ElMessage.success(`\u5df2\u751f\u6210 ${result.created_count || 0} \u6761\u5f85\u6838\u5b9a\u6210\u672c\u6761\u76ee\uff0c\u8df3\u8fc7 ${result.skipped_count || 0} \u6761`)
-    await openCostMeasurement({ id: costMeasurementDetail.value.id })
-    await loadCostMeasurements()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '\u751f\u6210\u5f85\u6838\u5b9a\u6210\u672c\u6761\u76ee\u5931\u8d25'))
-  } finally {
-    costMeasurementDraftDialog.submitting = false
-  }
-}
-
-async function exportCostMeasurement() {
-  if (!costMeasurementDetail.value) return
-  try {
-    const response = await api.get(
-      `/admin/cost-measurements/${costMeasurementDetail.value.id}/export`,
-      { responseType: 'blob' },
-    )
-    const url = URL.createObjectURL(response.data)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${costMeasurementDetail.value.measurement_code}-${costMeasurementDetail.value.name}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '\u6210\u672c\u6d4b\u7b97\u5bfc\u51fa\u5931\u8d25'))
-  }
-}
 async function loadCostItems() {
   if (!canViewCostDb.value) return
   costDbFeatureDisabled.value = false
@@ -21874,473 +19389,12 @@ async function unblockProjectTask(row) {
   }
 }
 
-async function refreshExecutionPage() {
-  await loadExecutionTasks()
-  await loadMeetings()
-}
-
-async function loadExecutionTasks() {
-  executionFeatureDisabled.value = false
-  const params = {
-    page: executionTaskPage.value,
-    page_size: executionTaskPageSize,
-  }
-  if (executionTaskFilters.status) params.status = executionTaskFilters.status
-  if (executionTaskFilters.source) params.source = executionTaskFilters.source
-  const keyword = executionTaskFilters.keyword.trim()
-  if (keyword) params.keyword = keyword
-  try {
-    const response = await api.get('/execution-tasks', { params })
-    executionTasks.value = responseData(response) || []
-    executionTaskTotal.value = response.data?.total ?? executionTasks.value.length
-  } catch (error) {
-    executionTasks.value = []
-    executionTaskTotal.value = 0
-    if (isFeatureDisabled(error)) {
-      executionFeatureDisabled.value = true
-      return
-    }
-    if (error.response?.status === 401) state.error = 'unauthorized'
-    else if (error.response?.status === 403) state.error = 'forbidden'
-    else ElMessage.error(apiErrorMessage(error, '执行任务加载失败'))
-  }
-}
-
-function applyExecutionTaskFilters() {
-  executionTaskPage.value = 1
-  loadExecutionTasks()
-}
-
-async function loadMeetings() {
-  meetingFeatureDisabled.value = false
-  const params = {
-    page: meetingPage.value,
-    page_size: meetingPageSize,
-  }
-  if (meetingFilters.status) params.status = meetingFilters.status
-  const keyword = meetingFilters.keyword.trim()
-  if (keyword) params.keyword = keyword
-  try {
-    const response = await api.get('/meetings', { params })
-    meetings.value = responseData(response) || []
-    meetingTotal.value = response.data?.total ?? meetings.value.length
-  } catch (error) {
-    meetings.value = []
-    meetingTotal.value = 0
-    if (isFeatureDisabled(error)) {
-      meetingFeatureDisabled.value = true
-      return
-    }
-    if (error.response?.status === 401) state.error = 'unauthorized'
-    else if (error.response?.status === 403) state.error = 'forbidden'
-    else ElMessage.error(apiErrorMessage(error, '会议纪要加载失败'))
-  }
-}
-
-function applyMeetingFilters() {
-  meetingPage.value = 1
-  loadMeetings()
-}
-
-function resetBusinessLedgerForm(mode = 'create') {
-  businessLedgerDialog.mode = mode
-  businessLedgerDialog.inquiryId = ''
-  businessLedgerDialog.form.source = ''
-  businessLedgerDialog.form.client_name = ''
-  businessLedgerDialog.form.client_phone = ''
-  businessLedgerDialog.form.stage = '初步接触'
-  businessLedgerDialog.form.next_followup_at = ''
-  businessLedgerDialog.form.responder_id = session.user?.id ?? null
-  businessLedgerDialog.form.notes = ''
-}
-
-function fillBusinessLedgerForm(row) {
-  businessLedgerDialog.inquiryId = row.inquiry_id
-  businessLedgerDialog.form.source = row.source || ''
-  businessLedgerDialog.form.client_name = row.client_name || ''
-  businessLedgerDialog.form.client_phone = row.client_phone || ''
-  businessLedgerDialog.form.stage = row.stage || '初步接触'
-  businessLedgerDialog.form.next_followup_at = toDatePickerValue(row.next_followup_at)
-  businessLedgerDialog.form.responder_id = row.responder_id || session.user?.id || null
-  businessLedgerDialog.form.notes = row.notes || ''
-}
-
-async function openBusinessLedgerCreate() {
-  await loadBusinessLedgerUsers()
-  resetBusinessLedgerForm('create')
-  businessLedgerDialog.visible = true
-}
-
-async function openBusinessLedgerEdit(row) {
-  if (!canEditBusinessLedger(row)) return
-  await loadBusinessLedgerUsers()
-  businessLedgerDialog.mode = 'edit'
-  try {
-    const response = await api.get(`/business-ledger/${row.inquiry_id}`)
-    fillBusinessLedgerForm(responseData(response))
-    businessLedgerDialog.visible = true
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '台账详情加载失败'))
-  }
-}
-
-async function openBusinessLedgerDetail(row) {
-  businessLedgerDrawer.visible = true
-  businessLedgerDrawer.loading = true
-  businessLedgerDrawer.ledger = null
-  try {
-    const response = await api.get(`/business-ledger/${row.inquiry_id}`)
-    businessLedgerDrawer.ledger = responseData(response)
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '台账详情加载失败'))
-  } finally {
-    businessLedgerDrawer.loading = false
-  }
-}
-
-function businessLedgerSubmitPayload() {
-  const form = businessLedgerDialog.form
-  const payload = {
-    client_phone: form.client_phone,
-    stage: form.stage,
-    next_followup_at: form.next_followup_at || null,
-    notes: form.notes,
-  }
-  if (businessLedgerDialog.mode === 'create' || canManageBusinessLedger.value) {
-    payload.source = form.source
-    payload.client_name = form.client_name
-  }
-  if (canManageBusinessLedger.value && form.responder_id) {
-    payload.responder_id = form.responder_id
-  }
-  return payload
-}
-
-async function submitBusinessLedger() {
-  state.submitting = true
-  try {
-    if (businessLedgerDialog.mode === 'edit') {
-      await api.patch(`/business-ledger/${businessLedgerDialog.inquiryId}`, businessLedgerSubmitPayload())
-      ElMessage.success('已更新商务台账')
-    } else {
-      await api.post('/business-ledger', businessLedgerSubmitPayload())
-      ElMessage.success('已创建商务台账')
-    }
-    businessLedgerDialog.visible = false
-    await loadBusinessLedgers()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '保存失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function cancelBusinessLedger(row) {
-  if (!canCancelBusinessLedger(row)) return
-  let reason = ''
-  try {
-    const result = await ElMessageBox.prompt('请输入作废原因', '作废商务台账', {
-      inputPattern: /\S+/,
-      inputErrorMessage: '作废原因不能为空',
-      confirmButtonText: '确认作废',
-      cancelButtonText: '返回',
-      type: 'warning',
-    })
-    reason = result.value
-  } catch {
-    return
-  }
-  state.submitting = true
-  try {
-    await api.post(`/business-ledger/${row.inquiry_id}/cancel`, { reason })
-    ElMessage.success('已作废商务台账')
-    await loadBusinessLedgers()
-    if (businessLedgerDrawer.ledger?.inquiry_id === row.inquiry_id) {
-      businessLedgerDrawer.visible = false
-    }
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '作废失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function openExecutionCreate() {
-  await loadExecutionUsers()
-  executionDialog.form.title = ''
-  executionDialog.form.assignee_id = executionAssigneeOptions.value[0]?.id ?? null
-  executionDialog.form.due_at = ''
-  executionDialog.form.source = 'manual'
-  executionDialog.form.source_ref_id = ''
-  executionDialog.form.notes = ''
-  executionDialog.visible = true
-}
-
-function openMeetingCreate() {
-  meetingDialog.form.content = ''
-  meetingDialog.visible = true
-}
-
-async function createExecutionTask() {
-  if (!executionDialog.form.title.trim() || !executionDialog.form.assignee_id || !executionDialog.form.due_at) {
-    ElMessage.warning('请填写任务标题、负责人和截止时间')
-    return
-  }
-  state.submitting = true
-  try {
-    await api.post('/execution-tasks', {
-      title: executionDialog.form.title,
-      assignee_id: executionDialog.form.assignee_id,
-      due_at: executionDialog.form.due_at,
-      source: executionDialog.form.source,
-      source_ref_id: executionDialog.form.source_ref_id,
-      notes: executionDialog.form.notes,
-    })
-    executionDialog.visible = false
-    ElMessage.success('已创建执行任务')
-    await loadExecutionTasks()
-    if (routeName.value === 'dashboard') await loadDashboards()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '创建任务失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function createMeetingNote() {
-  if (!meetingDialog.form.content.trim()) {
-    ElMessage.warning('请填写会议纪要')
-    return
-  }
-  state.submitting = true
-  try {
-    const response = await api.post('/meetings', { content: meetingDialog.form.content })
-    meetingDialog.visible = false
-    ElMessage.success('已生成任务草稿')
-    await loadMeetings()
-    await openMeetingDetail(responseData(response))
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '会议纪要保存失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function updateExecutionTaskStatus(row, nextStatus) {
-  state.submitting = true
-  try {
-    await api.patch(`/execution-tasks/${row.id}`, { status: nextStatus })
-    ElMessage.success(nextStatus === 'done' ? '任务已完成' : '任务已更新')
-    await loadExecutionTasks()
-    if (routeName.value === 'dashboard') await loadDashboards()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '更新任务失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function cancelExecutionTask(row) {
-  let reason = ''
-  try {
-    const result = await ElMessageBox.prompt('请输入取消原因', '取消执行任务', {
-      inputPattern: /\S+/,
-      inputErrorMessage: '取消原因不能为空',
-      confirmButtonText: '确认取消',
-      cancelButtonText: '返回',
-      type: 'warning',
-    })
-    reason = result.value
-  } catch {
-    return
-  }
-  state.submitting = true
-  try {
-    await api.post(`/execution-tasks/${row.id}/cancel`, { reason })
-    ElMessage.success('已取消执行任务')
-    await loadExecutionTasks()
-    if (routeName.value === 'dashboard') await loadDashboards()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '取消任务失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function openExecutionDetail(row) {
-  executionDrawer.visible = true
-  executionDrawer.loading = true
-  executionDrawer.task = null
-  try {
-    const response = await api.get(`/execution-tasks/${row.id}`)
-    executionDrawer.task = responseData(response)
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '任务详情加载失败'))
-  } finally {
-    executionDrawer.loading = false
-  }
-}
-
-function prepareMeetingDetail(note) {
-  const fallbackAssignee = executionAssigneeOptions.value[0]?.id ?? session.user?.id ?? null
-  return {
-    ...note,
-    drafts: (note.drafts || []).map((draft) => ({
-      ...draft,
-      confirm_title: draft.title,
-      confirm_assignee_id: draft.confirmed_assignee_id || draft.suggested_assignee_id || fallbackAssignee,
-      confirm_due_at: toDatePickerValue(draft.confirmed_due_at || draft.suggested_due_at),
-      confirm_notes: draft.notes || '',
-    })),
-  }
-}
-
-async function openMeetingDetail(row) {
-  await loadExecutionUsers()
-  meetingDrawer.visible = true
-  meetingDrawer.loading = true
-  meetingDrawer.note = null
-  try {
-    const response = await api.get(`/meetings/${row.id}`)
-    meetingDrawer.note = prepareMeetingDetail(responseData(response))
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '会议纪要详情加载失败'))
-  } finally {
-    meetingDrawer.loading = false
-  }
-}
-
-function openManualDraft() {
-  if (!meetingDrawer.note) return
-  const fallbackAssignee = executionAssigneeOptions.value[0]?.id ?? session.user?.id ?? null
-  manualDraftDialog.form.title = ''
-  manualDraftDialog.form.assignee_id = fallbackAssignee
-  manualDraftDialog.form.due_at = ''
-  manualDraftDialog.form.source_sentence = '人工补充'
-  manualDraftDialog.form.notes = ''
-  manualDraftDialog.visible = true
-}
-
-async function addManualDraft() {
-  if (!meetingDrawer.note || !manualDraftDialog.form.title.trim()) {
-    ElMessage.warning('请填写任务标题')
-    return
-  }
-  state.submitting = true
-  try {
-    await api.post(`/meetings/${meetingDrawer.note.id}/drafts`, {
-      title: manualDraftDialog.form.title,
-      assignee_id: manualDraftDialog.form.assignee_id,
-      due_at: manualDraftDialog.form.due_at,
-      source_sentence: manualDraftDialog.form.source_sentence,
-      notes: manualDraftDialog.form.notes,
-    })
-    manualDraftDialog.visible = false
-    ElMessage.success('已补充任务草稿')
-    await openMeetingDetail(meetingDrawer.note)
-    await loadMeetings()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '补充草稿失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function confirmDraft(draft) {
-  if (!meetingDrawer.note) return
-  if (!draft.confirm_title?.trim() || !draft.confirm_assignee_id || !draft.confirm_due_at) {
-    ElMessage.warning('请补齐标题、负责人和截止时间')
-    return
-  }
-  state.submitting = true
-  try {
-    await api.post(`/meetings/${meetingDrawer.note.id}/confirm-tasks`, {
-      drafts: [
-        {
-          draft_id: draft.id,
-          action: 'accept',
-          title: draft.confirm_title,
-          assignee_id: draft.confirm_assignee_id,
-          due_at: draft.confirm_due_at,
-          notes: draft.confirm_notes,
-        },
-      ],
-    })
-    ElMessage.success('已写入执行任务')
-    await openMeetingDetail(meetingDrawer.note)
-    await loadMeetings()
-    await loadExecutionTasks()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '确认草稿失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function rejectDraft(draft) {
-  if (!meetingDrawer.note) return
-  let reason = ''
-  try {
-    const result = await ElMessageBox.prompt('请输入驳回原因', '驳回任务草稿', {
-      inputPattern: /\S+/,
-      inputErrorMessage: '驳回原因不能为空',
-      confirmButtonText: '确认驳回',
-      cancelButtonText: '返回',
-      type: 'warning',
-    })
-    reason = result.value
-  } catch {
-    return
-  }
-  state.submitting = true
-  try {
-    await api.post(`/meetings/${meetingDrawer.note.id}/confirm-tasks`, {
-      drafts: [{ draft_id: draft.id, action: 'reject', rejection_reason: reason }],
-    })
-    ElMessage.success('已驳回草稿')
-    await openMeetingDetail(meetingDrawer.note)
-    await loadMeetings()
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '驳回草稿失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
-async function cancelMeeting(row) {
-  let reason = ''
-  try {
-    const result = await ElMessageBox.prompt('请输入作废原因', '作废会议纪要', {
-      inputPattern: /\S+/,
-      inputErrorMessage: '作废原因不能为空',
-      confirmButtonText: '确认作废',
-      cancelButtonText: '返回',
-      type: 'warning',
-    })
-    reason = result.value
-  } catch {
-    return
-  }
-  state.submitting = true
-  try {
-    await api.post(`/meetings/${row.id}/cancel`, { reason })
-    ElMessage.success('已作废会议纪要')
-    await loadMeetings()
-    if (meetingDrawer.note?.id === row.id) await openMeetingDetail(row)
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '作废失败'))
-  } finally {
-    state.submitting = false
-  }
-}
-
 async function loadDashboards() {
   state.loading = true
   state.error = ''
   dashboardFeature.businessDisabled = false
   dashboardFeature.quoteDisabled = false
   dashboardFeature.responseDisabled = false
-  dashboardFeature.executionDisabled = false
   dashboardFeature.projectDisabled = false
   clientInquiryPage.value = 1
   quoteJobPage.value = 1
@@ -22404,23 +19458,6 @@ async function loadDashboards() {
 
     if (canViewDashboardMetrics.value) {
       try {
-        const response = await api.get('/admin/dashboard/execution-speed', {
-          params: { range: dashboardRange.value },
-        })
-        executionDashboard.value = responseData(response)
-        loadedCount += 1
-      } catch (error) {
-        executionDashboard.value = null
-        if (isFeatureDisabled(error)) dashboardFeature.executionDisabled = true
-        else throw error
-      }
-    } else {
-      executionDashboard.value = null
-      dashboardFeature.executionDisabled = true
-    }
-
-    if (canViewDashboardMetrics.value) {
-      try {
         if (await loadProjectDashboard()) loadedCount += 1
       } catch (error) {
         projectDashboard.value = null
@@ -22445,7 +19482,6 @@ async function loadDashboards() {
     if (!dashboardFeature.quoteDisabled) availableTabs.push('quote')
     if (!dashboardFeature.responseDisabled) availableTabs.push('response')
     if (canViewQuoteOperations.value) availableTabs.push('operations')
-    if (!dashboardFeature.executionDisabled) availableTabs.push('execution')
     if (!dashboardFeature.projectDisabled) availableTabs.push('projects')
     if (!availableTabs.includes(dashboardTab.value)) {
       dashboardTab.value = availableTabs[0] || 'quote'
@@ -22454,7 +19490,6 @@ async function loadDashboards() {
     businessDashboard.value = null
     quoteDashboard.value = null
     responseDashboard.value = null
-    executionDashboard.value = null
     projectDashboard.value = null
     clientInquiries.value = []
     clientInquiryTotal.value = 0
@@ -22494,6 +19529,10 @@ async function bootstrap() {
   try {
     await loadMe()
     if (routeName.value === 'noAccess') return
+    if (routeName.value === 'unifiedQuotes' || routeName.value === 'unifiedQuoteNew') {
+      if (!canUseUnifiedQuotes.value) state.error = 'forbidden'
+      return
+    }
     if (routeName.value === 'quoteNew') {
       if (!canOpenLegacyQuote.value) state.error = 'forbidden'
       return
@@ -22514,17 +19553,8 @@ async function bootstrap() {
       if (!canViewAccountQuotas.value) state.error = 'forbidden'
       return
     }
-    if (routeName.value === 'execution') {
-      if (!canViewExecution.value) {
-        state.error = 'forbidden'
-        return
-      }
-      await loadExecutionTasks()
-      await loadExecutionUsers()
-      await loadMeetings()
-      if (executionFeatureDisabled.value && !meetingFeatureDisabled.value) {
-        executionPageTab.value = 'meetings'
-      }
+    if (routeName.value === 'pricingAgent') {
+      if (!canViewPricingAgent.value) state.error = 'forbidden'
       return
     }
     if (routeName.value === 'projects') {
@@ -22552,21 +19582,28 @@ async function bootstrap() {
       await loadMyProjectTasks()
       return
     }
-    if (routeName.value === 'businessLedger') {
-      if (!canViewBusinessLedger.value) {
-        state.error = 'forbidden'
-        return
-      }
-      await loadBusinessLedgerUsers()
-      await loadBusinessLedgers()
-      return
-    }
     if (routeName.value === 'bidding') {
       if (!canViewBidding.value) {
         state.error = 'forbidden'
         return
       }
       await loadBiddingProjects()
+      return
+    }
+    if (routeName.value === 'bidIntakeAgent') {
+      if (!canViewBidding.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadBidIntakeAgentProjects()
+      return
+    }
+    if (routeName.value === 'bidIntakePolicy') {
+      if (!canManageBidIntakePolicy.value) {
+        state.error = 'forbidden'
+        return
+      }
+      await loadBidIntakeAgentProjects()
       return
     }
     if (routeName.value === 'enterpriseProfile') {
@@ -22577,21 +19614,11 @@ async function bootstrap() {
       await refreshEnterpriseProfile()
       return
     }
-    if (routeName.value === 'costMeasurement') {
-      if (!canViewCostMeasurement.value) {
-        state.error = 'forbidden'
-        return
-      }
-      await loadCostMeasurements()
-      return
-    }
     if (routeName.value === 'costDb') {
       if (!canViewCostDb.value) {
         state.error = 'forbidden'
         return
       }
-      await refreshCostMaster()
-      await loadCostItems()
       const urlParams = new URLSearchParams(window.location.search)
       const enterpriseQuotaItemId = positiveId(urlParams.get('enterprise_quota_item_id'))
       if (enterpriseQuotaItemId) {
@@ -22748,7 +19775,7 @@ function logout() {
 }
 
 window.addEventListener('popstate', () => {
-  routeName.value = routeFromPath(window.location.pathname)
+  routeName.value = routeFromPath(`${window.location.pathname}${window.location.search}`)
   bootstrap()
 })
 
@@ -22756,6 +19783,99 @@ onMounted(() => {
   bootstrap()
 })
 
+const businessBidBudgetProjects = ref([])
+const businessBidBudgetProjectId = ref(null)
+const businessBidDraftSource = ref(null)
+const businessBidQuoteImport = ref(null)
+const businessBidAssembly = ref(null)
+const businessBidV12Review = computed(() => businessBidAssembly.value?.v12_review || null)
+const businessBidV12BlockingItems = computed(() => businessBidV12Review.value?.formal_blocking_items || [])
+const businessBidDraftFieldPlan = computed(() => businessBidAssembly.value?.draft_field_plan || null)
+const businessBidDraftFieldRows = computed(() => businessBidDraftFieldPlan.value?.fields || [])
+const businessBidFormalPackagePreview = ref(null)
+const businessBidFormalPackages = ref([])
+const businessBidFormalPackageLoading = ref(false)
+const businessBidFormalPackageGenerating = ref(false)
+const businessBidSourceLoading = ref(false)
+const businessBidImporting = ref(false)
+const businessBidExporting = ref(false)
+
+async function loadBusinessBidDraftSource() {
+  businessBidDraftSource.value = null
+  if (!businessBidBudgetProjectId.value) return
+  try { businessBidDraftSource.value = responseData(await api.get(`/admin/budget-projects/${businessBidBudgetProjectId.value}/pricing-draft/current`)) }
+  catch (error) { ElMessage.error(apiErrorMessage(error, '加载确认报价失败')) }
+}
+async function loadBusinessBidSources() {
+  const projectUuid = currentBiddingProjectUuid()
+  if (!projectUuid) return
+  businessBidSourceLoading.value = true
+  try {
+    const [projectsResponse, sourceResponse, assemblyResponse, packagePreviewResponse, packagesResponse] = await Promise.all([api.get('/admin/budget-projects', { params: { page: 1, page_size: 100 } }), api.get(`/admin/bidding/projects/${projectUuid}/business-bid/quote-import`), api.get(`/admin/bidding/projects/${projectUuid}/business-bid/assembly`), api.get(`/admin/bidding/projects/${projectUuid}/business-bid/formal-package/preview`), api.get(`/admin/bidding/projects/${projectUuid}/business-bid/formal-packages`)])
+    const projects = responseData(projectsResponse)
+    businessBidBudgetProjects.value = Array.isArray(projects) ? projects : (projects?.items || [])
+    businessBidQuoteImport.value = responseData(sourceResponse)
+    businessBidAssembly.value = responseData(assemblyResponse)
+    businessBidFormalPackagePreview.value = responseData(packagePreviewResponse)
+    businessBidFormalPackages.value = responseData(packagesResponse) || []
+    if (businessBidQuoteImport.value?.budget_project_id) { businessBidBudgetProjectId.value = businessBidQuoteImport.value.budget_project_id; await loadBusinessBidDraftSource() }
+  } catch (error) { ElMessage.error(apiErrorMessage(error, '加载商务标来源失败')) }
+  finally { businessBidSourceLoading.value = false }
+}
+async function importBusinessBidQuote() {
+  const projectUuid = currentBiddingProjectUuid(); const draft = businessBidDraftSource.value
+  if (!projectUuid || !draft || !businessBidBudgetProjectId.value) return
+  try {
+    await ElMessageBox.confirm('导入后会冻结当前确认报价版本，后续报价调整需重新导入。是否继续？', '导入确认报价', { confirmButtonText: '确认导入', cancelButtonText: '取消', type: 'warning' })
+    businessBidImporting.value = true
+    businessBidQuoteImport.value = responseData(await api.post(`/admin/bidding/projects/${projectUuid}/business-bid/quote-import`, { budget_project_id: businessBidBudgetProjectId.value, pricing_draft_uuid: draft.draft_uuid, expected_draft_revision: draft.revision }))
+    businessBidAssembly.value = responseData(await api.get(`/admin/bidding/projects/${projectUuid}/business-bid/assembly`))
+    ElMessage.success('确认报价已导入商务标草案')
+  } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error(apiErrorMessage(error, '导入确认报价失败')) }
+  finally { businessBidImporting.value = false }
+}
+async function loadBusinessBidFormalPackage() {
+  const projectUuid = currentBiddingProjectUuid(); if (!projectUuid) return
+  businessBidFormalPackageLoading.value = true
+  try {
+    const [previewResponse, packagesResponse] = await Promise.all([api.get(`/admin/bidding/projects/${projectUuid}/business-bid/formal-package/preview`), api.get(`/admin/bidding/projects/${projectUuid}/business-bid/formal-packages`)])
+    businessBidFormalPackagePreview.value = responseData(previewResponse)
+    businessBidFormalPackages.value = responseData(packagesResponse) || []
+  } catch (error) { ElMessage.error(apiErrorMessage(error, '正式投标件预检失败')) }
+  finally { businessBidFormalPackageLoading.value = false }
+}
+async function generateBusinessBidFormalPackage() {
+  const projectUuid = currentBiddingProjectUuid(); if (!projectUuid) return
+  try {
+    await ElMessageBox.confirm('系统将锁定当前报价快照和已关联 PDF 附件，生成新的正式投标件记录。签章和原件核验仍须人工完成。是否继续？', '生成正式投标件', { confirmButtonText: '生成', cancelButtonText: '取消', type: 'warning' })
+    businessBidFormalPackageGenerating.value = true
+    const packageRow = responseData(await api.post(`/admin/bidding/projects/${projectUuid}/business-bid/formal-packages`))
+    await loadBusinessBidFormalPackage()
+    ElMessage.success('正式投标件已生成')
+    if (packageRow?.output_file_id) await downloadBusinessBidFormalPackage(packageRow)
+  } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error(apiErrorMessage(error, '正式投标件生成失败')) }
+  finally { businessBidFormalPackageGenerating.value = false }
+}
+async function downloadBusinessBidFormalPackage(row) {
+  if (!row?.output_file_id) return
+  try {
+    const response = await api.get(`/files/${row.output_file_id}/download_url`)
+    const url = responseData(response)?.download_url
+    if (!url) throw new Error('DOWNLOAD_URL_MISSING')
+    window.open(url, '_blank', 'noopener')
+  } catch (error) { ElMessage.error(apiErrorMessage(error, '正式投标件下载失败')) }
+}
+async function exportBusinessBidPdf(mode = 'draft') {
+  const projectUuid = currentBiddingProjectUuid(); if (!projectUuid) return
+  businessBidExporting.value = true
+  try {
+    const response = await api.get(`/admin/bidding/projects/${projectUuid}/business-bid/export`, { params: { mode }, responseType: 'blob' })
+    const label = mode === 'formal' ? '正式版' : '草案'
+    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' })); link.download = `${biddingDrawer.project?.project_name || '商务标'}_商务标${label}.pdf`; link.click(); URL.revokeObjectURL(link.href)
+    ElMessage.success(`商务标${label} PDF 已生成`)
+  } catch (error) { ElMessage.error(apiErrorMessage(error, `导出商务标${mode === 'formal' ? '正式版' : '草案'} PDF 失败`)) }
+  finally { businessBidExporting.value = false }
+}
 onBeforeUnmount(() => {
   clearBiddingImportantInfoProgressTimer()
   clearBiddingRiskClauseProgressTimer()

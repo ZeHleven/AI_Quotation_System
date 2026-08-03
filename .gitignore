@@ -6,6 +6,8 @@ __pycache__/
 .Python
 .pytest_cache/
 AI_Middle_Office/.pytest_tmp*/
+/.tmp/
+/.docx-qa/
 
 # Environment & secrets
 .env

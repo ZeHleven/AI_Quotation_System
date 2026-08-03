@@ -13,6 +13,7 @@ param(
     [switch]$NoBrowser,
     [switch]$SkipRemoteWait,
     [switch]$SkipCelery,
+    [switch]$SkipBidIntakeAgent,
     [switch]$SkipMigrations,
     [switch]$Restart
 )
@@ -35,6 +36,40 @@ $LogDir = Join-Path $WorkDir "logs"
 $EnvFile = Join-Path $WorkDir ".env"
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
 
+function Enter-StartupInstanceLock {
+    param([string]$Path)
+
+    try {
+        $stream = [System.IO.File]::Open(
+            $Path,
+            [System.IO.FileMode]::OpenOrCreate,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None
+        )
+        $content = "pid={0}; started_at={1}`r`n" -f (
+            $PID,
+            (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        )
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($content)
+        $stream.SetLength(0)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush()
+        return $stream
+    } catch [System.IO.IOException] {
+        Write-Host (
+            "[SKIP] Another start_all.ps1 instance is already running. " +
+            "This duplicate startup request will exit."
+        ) -ForegroundColor Yellow
+        return $null
+    }
+}
+
+$StartupLockPath = Join-Path $LogDir "start_all.lock"
+$StartupLockStream = Enter-StartupInstanceLock -Path $StartupLockPath
+if (-not $StartupLockStream) {
+    exit 0
+}
+
 function Get-DotEnvValue {
     param(
         [string]$Name,
@@ -42,7 +77,10 @@ function Get-DotEnvValue {
     )
     if (-not (Test-Path $EnvFile)) { return $Default }
     $prefix = "$Name="
-    $line = Get-Content -Path $EnvFile -ErrorAction SilentlyContinue |
+    $line = Get-Content `
+        -Path $EnvFile `
+        -Encoding UTF8 `
+        -ErrorAction SilentlyContinue |
         Where-Object { $_ -and $_.TrimStart().StartsWith($prefix) } |
         Select-Object -First 1
     if (-not $line) { return $Default }
@@ -52,7 +90,10 @@ function Get-DotEnvValue {
 
 function Import-DotEnvToProcess {
     if (-not (Test-Path $EnvFile)) { return }
-    Get-Content -Path $EnvFile -ErrorAction SilentlyContinue |
+    Get-Content `
+        -Path $EnvFile `
+        -Encoding UTF8 `
+        -ErrorAction SilentlyContinue |
         ForEach-Object {
             $line = $_
             if (-not $line) { return }
@@ -102,6 +143,34 @@ function Test-TcpPort {
         if ($client) { $client.Close() }
         return $false
     }
+}
+
+function Get-ListeningProcessIds {
+    param([int]$Port)
+
+    $ids = @()
+    try {
+        $connections = Get-NetTCPConnection `
+            -LocalPort $Port `
+            -State Listen `
+            -ErrorAction Stop
+        $ids += $connections | Select-Object -ExpandProperty OwningProcess
+    } catch {
+        $pattern = (
+            "^\s*TCP\s+\S+:$Port\s+\S+\s+LISTENING\s+(\d+)\s*$"
+        )
+        foreach ($line in (& netstat.exe -ano -p tcp 2>$null)) {
+            if ($line -match $pattern) {
+                $ids += [int]$Matches[1]
+            }
+        }
+    }
+
+    return @(
+        $ids |
+            Where-Object { $_ -and $_ -gt 0 } |
+            Sort-Object -Unique
+    )
 }
 
 function Resolve-BindHost {
@@ -274,6 +343,20 @@ function Start-FastApi {
                     Write-Host "[OK] FastAPI already appears to be running with pid: $oldPid" -ForegroundColor Green
                     return
                 }
+                $listenerProcessIds = @(
+                    Get-ListeningProcessIds -Port $AppPort
+                )
+                if (
+                    $StartupMode -eq "local-dev" -and
+                    $portAlreadyListening -and
+                    $listenerProcessIds -contains $oldPid
+                ) {
+                    Write-Host (
+                        "[OK] FastAPI pid file matches the port $AppPort " +
+                        "listener: pid=$oldPid"
+                    ) -ForegroundColor Green
+                    return
+                }
             }
         }
         Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
@@ -325,6 +408,44 @@ function Start-Celery {
         -WorkingDirectory $WorkDir `
         -WindowStyle Hidden | Out-Null
     Write-Host "[START] Celery worker launcher invoked" -ForegroundColor Cyan
+}
+
+function Start-BidIntakeAgent {
+    if ($SkipBidIntakeAgent) {
+        Write-Host (
+            "[SKIP] Bid-intake Agent startup skipped"
+        ) -ForegroundColor Yellow
+        return
+    }
+    $runtimeEnabled = (
+        Get-DotEnvValue `
+            -Name "BID_INTAKE_AGENT_RUNTIME_ENABLED" `
+            -Default "false"
+    ).ToLowerInvariant()
+    if ($runtimeEnabled -notin @("1", "true", "yes", "on")) {
+        Write-Host (
+            "[SKIP] Bid-intake Agent runtime is disabled"
+        ) -ForegroundColor Yellow
+        return
+    }
+    $launcher = Join-Path $WorkDir "start_bid_intake_agent.ps1"
+    if (-not (Test-Path $launcher)) {
+        throw "Bid-intake Agent launcher not found: $launcher"
+    }
+    $agentArgs = @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $launcher
+    )
+    if ($Restart) {
+        $agentArgs += "-Restart"
+    }
+    & powershell.exe @agentArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Bid-intake Agent runtime startup failed"
+    }
 }
 
 function Invoke-DatabaseMigrations {
@@ -402,6 +523,29 @@ Invoke-DatabaseMigrations -PythonPath $PythonPath
 Start-Celery
 Start-FastApi -PythonPath $PythonPath
 $ready = Wait-FastApiReady -TimeoutSeconds $LocalTimeoutSeconds
+$bidIntakeAgentStatus = "ok"
+try {
+    Start-BidIntakeAgent
+} catch {
+    $bidIntakeAgentStatus = "degraded"
+    $agentError = $_.Exception.Message
+    Write-Warning (
+        "Bid-intake Agent startup failed, but FastAPI remains available: " +
+        $agentError
+    )
+    $agentLog = Join-Path $LogDir (
+        "bid_intake_startup_warning_{0}.log" -f (
+            Get-Date -Format "yyyyMMdd"
+        )
+    )
+    $agentLogLine = "[{0}] {1}" -f (
+        Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    ), $agentError
+    Add-Content `
+        -LiteralPath $agentLog `
+        -Encoding UTF8 `
+        -Value $agentLogLine
+}
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
@@ -411,6 +555,7 @@ foreach ($line in (Get-AccessUrlLines)) {
 }
 Write-AccessInfoFile
 Write-Host " Queue: $($ready.task_queue.mode) / ok=$($ready.task_queue.ok)"
+Write-Host " Bid-intake Agent: $bidIntakeAgentStatus"
 Write-Host " Logs: $LogDir"
 if ($StartupMode -eq "lan-trial") {
     Write-Host " Firewall: ensure Windows allows inbound TCP $AppPort on the current private LAN before other PCs connect."
@@ -420,3 +565,5 @@ Write-Host "========================================" -ForegroundColor Green
 if (-not $NoBrowser) {
     Start-Process "http://${ProbeHost}:$AppPort/"
 }
+
+$StartupLockStream.Dispose()

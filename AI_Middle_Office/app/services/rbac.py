@@ -189,6 +189,20 @@ def get_available_modules(user: User) -> list[dict]:
     roles = set(_roles_with_implications(user))
     modules: list[dict] = []
 
+    if BUDGET_PROJECT_ACCESS_ROLES & roles:
+        quick_source_available = bool({"system_admin", "admin", "staff", "quote_user"} & roles)
+        budget_source_available = bool(settings.feature_budget_projects and BUDGET_PROJECT_ACCESS_ROLES & roles)
+        modules.append(
+            {
+                "key": "unified_quotes",
+                "name": "报价工作台",
+                "path": "/quote/new",
+                "status": "available"
+                if settings.feature_unified_quotes and (quick_source_available or budget_source_available)
+                else "pending",
+                "stage": "trial",
+            }
+        )
     if {"system_admin", "admin", "staff", "quote_user"} & roles:
         modules.append(
             {
@@ -217,24 +231,6 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available",
             }
         )
-    if {"system_admin", "admin", "staff", "manager"} & roles:
-        modules.append(
-            {
-                "key": "execution",
-                "name": "执行任务",
-                "path": "/admin/execution",
-                "status": "available" if settings.feature_execution or settings.feature_meeting_ai else "pending",
-            }
-        )
-    if {"system_admin", "admin", "staff"} & roles:
-        modules.append(
-            {
-                "key": "business_ledger",
-                "name": "商务台账",
-                "path": "/admin/business-ledger",
-                "status": "available" if settings.feature_business_ledger else "pending",
-            }
-        )
     if {"system_admin", "admin", "staff", "manager", "project_viewer", "project_member", "project_manager"} & roles:
         modules.append(
             {
@@ -251,6 +247,16 @@ def get_available_modules(user: User) -> list[dict]:
                 "name": "\u9884\u7b97\u9879\u76ee",
                 "path": "/admin/budget-projects",
                 "status": "available" if settings.feature_budget_projects else "pending",
+            }
+        )
+    if {"system_admin", "admin", "staff", "quote_user", "quote_operator"} & roles:
+        modules.append(
+            {
+                "key": "pricing_agent",
+                "name": "智能组价实验室",
+                "path": "/admin/pricing-agent",
+                "status": "available" if settings.feature_pricing_agent else "pending",
+                "stage": "trial",
             }
         )
     if (BUDGET_PRICING_VIEW_ROLES | BUDGET_PROJECT_ACCESS_ROLES) & roles:
@@ -290,15 +296,6 @@ def get_available_modules(user: User) -> list[dict]:
             }
         )
     if {"system_admin", "admin", "staff", "quote_user"} & roles:
-        modules.append(
-            {
-                "key": "cost_measurement",
-                "name": "\u6210\u672c\u6d4b\u7b97",
-                "path": "/admin/cost-measurement",
-                "status": "available" if settings.feature_cost_measurement else "pending",
-                "stage": "trial",
-            }
-        )
         modules.append(
             {
                 "key": "requirement_standardization",
@@ -350,7 +347,6 @@ def get_available_modules(user: User) -> list[dict]:
         dashboard_enabled = (
             settings.feature_dashboard_quote
             or settings.feature_dashboard_response
-            or settings.feature_dashboard_execution
             or settings.feature_dashboard_project
             or settings.feature_dashboard_business_lite
             or "quote_operator" in roles
@@ -373,7 +369,7 @@ def get_default_home_path(user: User) -> str:
 
     def path_is_available(path: str) -> bool:
         if path == "/quote/new":
-            return "/index.html" in available_paths
+            return "/quote/new" in available_paths or "/index.html" in available_paths
         if path == "/admin/project-tasks/my":
             return "/admin/projects" in available_paths
         return path in available_paths

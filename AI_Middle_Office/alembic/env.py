@@ -32,8 +32,10 @@ from app.models import (  # noqa: F401,E402
     quote_job,
     quote_requirement_row,
     rag_eval_report,
+    tender_evidence,
     user,
 )
+from app.models import registry as model_registry  # noqa: F401,E402
 
 
 config = context.config

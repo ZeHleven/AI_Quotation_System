@@ -1,0 +1,112 @@
+{
+  "schema_version": "bid_intake_graph_development_baseline_execution_v1",
+  "execution_id": "RET-GRAPH-EXPAND-001-DEV-B-BASELINE-EXECUTION-V1",
+  "freeze_id": "RET-GRAPH-EXPAND-001-DEV-B-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-EXPAND-001",
+  "executed_at": "2026-07-30T14:11:55+08:00",
+  "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253",
+  "baseline_report_path": "outputs/bid_intake_retrieval_eval/20260730_141155_RET-GRAPH-BASELINE-DEV-B_report.json",
+  "baseline_predictions_path": "outputs/bid_intake_retrieval_eval/20260730_141155_RET-GRAPH-BASELINE-DEV-B_predictions.jsonl",
+  "configuration": {
+    "backend": "database_layered_retrieval",
+    "top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "hybrid_search_enabled": true,
+    "candidate_coverage_selection_enabled": false,
+    "structured_context_groups_enabled": false,
+    "controlled_second_round_enabled": false,
+    "graph_expansion_enabled": false,
+    "reranker": "none",
+    "prediction_excerpts_persisted": false
+  },
+  "overall_metrics": {
+    "hit_rate_at_5": 1.0,
+    "mean_recall_at_5": 0.598333,
+    "mean_precision_at_5": 0.42,
+    "mrr": 0.866667,
+    "mean_ndcg_at_5": 0.605277,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 884.0,
+    "p95_latency_ms": 1421,
+    "error_count": 0
+  },
+  "group_metrics": {
+    "graph_trigger_expected": {
+      "case_count": 6,
+      "mean_recall_at_5": 0.494444,
+      "mrr": 0.777778,
+      "mean_ndcg_at_5": 0.491304,
+      "full_recall_case_count": 1
+    },
+    "graph_no_trigger_expected": {
+      "case_count": 4,
+      "mean_recall_at_5": 0.754167,
+      "mrr": 1.0,
+      "mean_ndcg_at_5": 0.776237,
+      "full_recall_case_count": 1
+    },
+    "conflict": {
+      "case_count": 3,
+      "mean_recall_at_5": 0.433333,
+      "mrr": 0.555555,
+      "mean_ndcg_at_5": 0.364196,
+      "full_recall_case_count": 0
+    },
+    "cross_document_joint_answer": {
+      "case_count": 7,
+      "mean_recall_at_5": 0.519048,
+      "mrr": 0.809524,
+      "mean_ndcg_at_5": 0.51703,
+      "full_recall_case_count": 1
+    }
+  },
+  "per_case_recall": {
+    "RET-GRAPH-DEV-B-Q001": 0.333333,
+    "RET-GRAPH-DEV-B-Q002": 0.5,
+    "RET-GRAPH-DEV-B-Q003": 0.333333,
+    "RET-GRAPH-DEV-B-Q004": 0.2,
+    "RET-GRAPH-DEV-B-Q005": 0.6,
+    "RET-GRAPH-DEV-B-Q006": 1.0,
+    "RET-GRAPH-DEV-B-Q007": 0.666667,
+    "RET-GRAPH-DEV-B-Q008": 1.0,
+    "RET-GRAPH-DEV-B-Q009": 0.75,
+    "RET-GRAPH-DEV-B-Q010": 0.6
+  },
+  "miss_diagnosis": {
+    "RET-GRAPH-DEV-B-Q001": "命中招标文件和答疑，但清单连续4行房型/公共区域Gold全部缺失。",
+    "RET-GRAPH-DEV-B-Q002": "已返回合同类候选，但缺失包含90%付款比例的正确合同块，说明文档类型覆盖不等于事实覆盖。",
+    "RET-GRAPH-DEV-B-Q003": "命中答疑中的30%提问，但招标文件和合同中的无预付款状态均未命中。",
+    "RET-GRAPH-DEV-B-Q004": "只命中招标文件约260平方米，清单连续4行面积与数量全部缺失。",
+    "RET-GRAPH-DEV-B-Q005": "命中两条答疑和一条清单结晶项目，但缺失未回写的第23项及DD1结晶行。",
+    "RET-GRAPH-DEV-B-Q007": "严格触发契约下不应启用图扩展；缺失清单挂画行应由结构检索独立解决。",
+    "RET-GRAPH-DEV-B-Q009": "单文档题缺少商务标份数块，不得用跨文档图扩展补救。",
+    "RET-GRAPH-DEV-B-Q010": "单文档长表题缺2个编制说明连续块，不得用跨文档图扩展补救。"
+  },
+  "reasoning_record": {
+    "problem": "Top5对跨文档、多事实和长表关系的覆盖明显不足。",
+    "evidence": [
+      "10题Hit@5为100%，但总体Recall@5仅59.83%，说明每题至少命中一条正确证据却经常无法完整覆盖。",
+      "满足图触发契约的6题平均Recall仅49.44%，只有Q008完整召回。",
+      "3道冲突题平均Recall仅43.33%，没有一道完整召回。",
+      "路由与Query数量准确率均为100%，执行错误为0，主要瓶颈不在是否会拆Query或选择检索模式。",
+      "Q001和Q004共同缺失清单block 32至35的连续结构行；Q002和Q003即使返回了目标文档类型，也没有命中承载目标事实的正确块。"
+    ],
+    "inference": "当前系统知道怎么找，也能找到部分正确证据，但缺少从已命中锚点到可验证跨文档关系目标的受控扩展；仅做文档类型多样化不足以解决事实级对应。",
+    "alternatives": [
+      "直接扩大TopK会增加下游噪声和成本，且不能证明关系路径正确。",
+      "把所有跨文档问题都走混合检索会违背已有轻量路由原则。",
+      "Q007、Q009和Q010的缺失分别属于严格触发负样本和单文档结构问题，不应为了提高总体Recall而放宽图触发器。"
+    ],
+    "falsifiable_next_hypothesis": "只在冻结的6个触发题上，沿系统已有的文档版本、父结构和精确引用关系做最多1跳、2个种子、4条证据的扩展，并保留首轮Top5锚点，可使触发组平均Gold Recall至少提升0.10且无逐题退化。"
+  },
+  "decision": {
+    "baseline_recorded": true,
+    "candidate_graph_implemented": false,
+    "production_flag_enabled": false,
+    "old_holdout_or_challenge_rerun": false,
+    "next_step": "实现通用、可审计、默认关闭的选择性图关系扩展，然后按冻结阈值做单变量A/B。"
+  }
+}

@@ -375,11 +375,22 @@ def test_pricing_router_exposes_only_p2_read_and_create_contract():
     paths = {route.path for route in router.routes}
     assert "/admin/budget-projects/{project_id}/pricing-readiness" in paths
     assert "/admin/budget-projects/{project_id}/pricing-runs" in paths
+    assert "/admin/budget-projects/{project_id}/pricing-runs/{run_identifier}/activate" in paths
+    assert "/admin/budget-projects/{project_id}/pricing-runs/{run_identifier}/archive" in paths
     assert "/admin/budget-projects/pricing-runs/{run_identifier}" in paths
     assert "/admin/budget-projects/pricing-runs/{run_identifier}/lines" in paths
     assert "/admin/budget-projects/pricing-runs/{run_identifier}/lines/{line_identifier}/candidates" in paths
     assert "/admin/budget-projects/pricing-runs/{run_identifier}/events" in paths
-    assert {method for route in router.routes for method in route.methods} <= {"GET", "POST", "PATCH"}
+    assert {method for route in router.routes for method in route.methods} <= {
+        "GET",
+        "POST",
+        "PATCH",
+        "DELETE",
+    }
+    assert (
+        "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}"
+        "/project-quota/resources/{resource_identifier}"
+    ) in paths
     assert "/admin/budget-projects/{project_id}/pricing-draft/current" in paths
     assert "/admin/budget-projects/{project_id}/pricing-draft" in paths
     assert "/admin/budget-projects/{project_id}/pricing-draft/lines" in paths

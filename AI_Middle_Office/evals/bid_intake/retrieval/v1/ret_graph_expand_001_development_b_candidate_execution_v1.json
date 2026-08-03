@@ -1,0 +1,166 @@
+{
+  "schema_version": "bid_intake_graph_development_candidate_execution_v1",
+  "execution_id": "RET-GRAPH-EXPAND-001-DEV-B-CANDIDATE-EXECUTION-V1",
+  "freeze_id": "RET-GRAPH-EXPAND-001-DEV-B-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-EXPAND-001",
+  "executed_at": "2026-07-30T14:32:20+08:00",
+  "status": "rejected",
+  "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253",
+  "baseline_report_path": "outputs/bid_intake_retrieval_eval/20260730_141155_RET-GRAPH-BASELINE-DEV-B_report.json",
+  "candidate_report_path": "outputs/bid_intake_retrieval_eval/20260730_143220_RET-GRAPH-EXPAND-001-DEV-B_report.json",
+  "candidate_predictions_path": "outputs/bid_intake_retrieval_eval/20260730_143220_RET-GRAPH-EXPAND-001-DEV-B_predictions.jsonl",
+  "configuration": {
+    "backend": "database_layered_retrieval",
+    "top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "selective_graph_expansion_enabled": true,
+    "all_other_optional_retrieval_enhancements_enabled": false,
+    "graph_budget": {
+      "max_graph_calls_per_triggered_case": 1,
+      "max_hops": 1,
+      "max_seed_anchors": 2,
+      "max_expanded_evidence": 4,
+      "preserve_first_round_top5_anchors": true,
+      "additional_llm_token_budget": 0
+    }
+  },
+  "overall_metrics": {
+    "hit_rate_at_5": 1.0,
+    "mean_recall_at_5": 0.618333,
+    "mean_precision_at_5": 0.381944,
+    "mrr": 0.866667,
+    "mean_ndcg_at_5": 0.626676,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 1113.6,
+    "p95_latency_ms": 1643,
+    "error_count": 0
+  },
+  "deltas_vs_baseline": {
+    "hit_rate_at_5": 0.0,
+    "mean_recall_at_5": 0.02,
+    "mean_precision_at_5": -0.038056,
+    "mrr": 0.0,
+    "mean_ndcg_at_5": 0.021399,
+    "routing_exact_rate": 0.0,
+    "query_count_accuracy": 0.0,
+    "topic_recall": 0.0,
+    "fact_gate_assessment_rate": 0.0,
+    "mean_latency_ms": 229.6,
+    "p95_latency_ms": 222
+  },
+  "graph_metrics": {
+    "expected_trigger_count": 6,
+    "actual_trigger_count": 6,
+    "true_positive_trigger_count": 6,
+    "false_positive_trigger_count": 0,
+    "false_negative_trigger_count": 0,
+    "graph_trigger_precision": 1.0,
+    "graph_trigger_recall": 1.0,
+    "single_document_false_trigger_rate": 0.0,
+    "negative_relation_erroneous_expansion_rate": 0.0,
+    "expanded_path_count": 11,
+    "gold_target_path_count": 1,
+    "graph_path_precision": 0.090909,
+    "triggered_case_mean_recall_baseline": 0.494444,
+    "triggered_case_mean_recall_candidate": 0.527778,
+    "triggered_case_mean_recall_delta": 0.033334,
+    "triggered_case_improvement_count": 1,
+    "triggered_case_recall_regression_count": 0,
+    "additional_llm_tokens": 0
+  },
+  "per_case_recall": {
+    "RET-GRAPH-DEV-B-Q001": 0.333333,
+    "RET-GRAPH-DEV-B-Q002": 0.5,
+    "RET-GRAPH-DEV-B-Q003": 0.333333,
+    "RET-GRAPH-DEV-B-Q004": 0.4,
+    "RET-GRAPH-DEV-B-Q005": 0.6,
+    "RET-GRAPH-DEV-B-Q006": 1.0,
+    "RET-GRAPH-DEV-B-Q007": 0.666667,
+    "RET-GRAPH-DEV-B-Q008": 1.0,
+    "RET-GRAPH-DEV-B-Q009": 0.75,
+    "RET-GRAPH-DEV-B-Q010": 0.6
+  },
+  "acceptance_evaluation": {
+    "passed": false,
+    "passed_thresholds": [
+      "graph_trigger_precision_min",
+      "graph_trigger_recall_min",
+      "single_document_false_trigger_rate_max",
+      "negative_relation_erroneous_expansion_rate_max",
+      "triggered_case_recall_regression_count_max",
+      "global_mrr_delta_min",
+      "global_ndcg_at_5_delta_min",
+      "p95_latency_delta_ms_max",
+      "execution_error_count_max",
+      "additional_llm_tokens_max"
+    ],
+    "failed_thresholds": [
+      {
+        "name": "graph_path_precision_min",
+        "required": 0.8,
+        "actual": 0.090909
+      },
+      {
+        "name": "triggered_case_mean_gold_recall_delta_min",
+        "required": 0.1,
+        "actual": 0.033334
+      },
+      {
+        "name": "triggered_case_improvement_count_min",
+        "required": 2,
+        "actual": 1
+      }
+    ],
+    "not_evaluable_thresholds": [
+      {
+        "name": "fact_gate_alignment_delta_min",
+        "reason": "baseline与candidate的事实门assessment_rate均为0，不能把未评估写成通过"
+      },
+      {
+        "name": "fact_gate_false_sufficient_rate_delta_max",
+        "reason": "baseline与candidate均没有可计算样本"
+      }
+    ]
+  },
+  "diagnosis": {
+    "problem": "严格触发器准确，但扩展边的识别与目标解析不足，导致多数新增证据与Gold无关。",
+    "evidence": [
+      "Q001把投标须知中的普通表格数据行误判成表头，扩展4条同表后续正文，Recall未提升。",
+      "Q004先由误判的招标文件数据行消耗3条扩展预算，只剩1条预算用于正确清单表头，因此4条清单Gold只补回1条。",
+      "Q005把答疑数据行误判成表头，扩展3条无关后续答疑；对明确的清单序号23执行了1次普通exact检索，但Top20没有目标清单行。",
+      "将精确引用查询从“清单序号23”改为引用中实际可核验的“23 TK1”进行只读诊断时，目标清单行排第1，证明失败来自解析策略而不是资料缺失。",
+      "Q002、Q003、Q008没有可验证结构种子或精确引用，因此没有强行扩展，符合受控边界。"
+    ],
+    "root_causes": [
+      "表头识别使用“任意单元格包含两个通用词”的宽松规则，普通业务数据行也可能满足。",
+      "精确引用目标仍依赖面向自然语言问题的普通检索表达，查询中含目标块不存在的“清单序号”字样。",
+      "扩展预算按种子发现顺序消耗，错误种子会抢占正确父表的有限证据额度。"
+    ],
+    "anti_overfitting_judgement": "两个问题都能用文档结构和引用标识符解释，不需要加入陵水、TK1、结晶等项目专用词。下一候选只允许收紧通用表头语法，并让精确引用使用编号加原文限定符后再做首单元格与文档角色复核。",
+    "alternatives_rejected": [
+      "不放宽触发器，因为触发Precision与Recall已经达到100%。",
+      "不扩大图跳数、种子数或证据数，因为当前问题是错误关系消耗预算，扩大预算只会放大噪声。",
+      "不降低Recall或路径Precision门槛。",
+      "不运行旧Holdout或Challenge来挑选修复。"
+    ]
+  },
+  "decision": {
+    "candidate_accepted": false,
+    "production_flag_enabled": false,
+    "thresholds_changed": false,
+    "dataset_or_gold_changed": false,
+    "old_holdout_or_challenge_rerun": false,
+    "next_experiment": "RET-GRAPH-EXPAND-002",
+    "next_hypothesis": "要求表头首单元格具有表头语法，并以精确编号加引用限定符定位目标、再做文档角色和首单元格复核，可阻断错误父节点并可靠恢复显式清单引用，在保持原预算和触发契约不变时通过原验收门槛。"
+  },
+  "code_snapshot": {
+    "mcp_servers/tender_evidence/selective_graph.py": "bcc076a2174ff2c8e0877dd4b3b9c7609dfcbfd4480020155528868710a8c9d3",
+    "mcp_servers/tender_evidence/service.py": "a974d41c2b92ed66bd03cfdd9348a51f66551f9563094a0f689123a8630c37d3",
+    "scripts/bid_intake_retrieval_eval.py": "6dd01bf80e0fdff11a991ee9495767d0c59f5a9611fdafd88ba5e3376ddac86e",
+    "app/agents/bid_intake/retrieval_evaluation.py": "1674ac3bc896c87d8188e835aea9468b42a32e4751d315584ee26fffc7eccd28",
+    "tests/test_tender_selective_graph.py": "912545ad610da41290000cadcfe6fd40a71727b8afb71e03438a84a20c010751"
+  }
+}

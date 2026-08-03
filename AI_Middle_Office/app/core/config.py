@@ -74,16 +74,12 @@ class Settings:
     access_token_expire_minutes: int = _env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24)
     system_admin_username: str = _env("SYSTEM_ADMIN_USERNAME", "admin")
     feature_vite_frontend: bool = _env_bool("FEATURE_VITE_FRONTEND", False)
+    feature_unified_quotes: bool = _env_bool("FEATURE_UNIFIED_QUOTES", False)
+    feature_enterprise_quota_v2_review: bool = _env_bool("FEATURE_ENTERPRISE_QUOTA_V2_REVIEW", False)
     feature_dashboard_quote: bool = _env_bool("FEATURE_DASHBOARD_QUOTE", False)
     feature_client_inquiry: bool = _env_bool("FEATURE_CLIENT_INQUIRY", False)
     feature_dashboard_response: bool = _env_bool("FEATURE_DASHBOARD_RESPONSE", False)
-    feature_execution: bool = _env_bool("FEATURE_EXECUTION", False)
-    feature_dashboard_execution: bool = _env_bool("FEATURE_DASHBOARD_EXECUTION", False)
-    feature_meeting_ai: bool = _env_bool("FEATURE_MEETING_AI", False)
-    feature_audio_transcription: bool = _env_bool("FEATURE_AUDIO_TRANSCRIPTION", False)
-    feature_business_ledger: bool = _env_bool("FEATURE_BUSINESS_LEDGER", False)
     feature_cost_db: bool = _env_bool("FEATURE_COST_DB", False)
-    feature_cost_measurement: bool = _env_bool("FEATURE_COST_MEASUREMENT", False)
     feature_project_cost_import: bool = _env_bool("FEATURE_PROJECT_COST_IMPORT", False)
     feature_requirement_standardization: bool = _env_bool("FEATURE_REQUIREMENT_STANDARDIZATION", False)
     feature_budget_projects: bool = _env_bool("FEATURE_BUDGET_PROJECTS", False)
@@ -92,6 +88,24 @@ class Settings:
     feature_budget_pricing_ai_estimate: bool = _env_bool("FEATURE_BUDGET_PRICING_AI_ESTIMATE", False)
     feature_account_quotas: bool = _env_bool("FEATURE_ACCOUNT_QUOTAS", False)
     feature_account_quota_draft_sync: bool = _env_bool("FEATURE_ACCOUNT_QUOTA_DRAFT_SYNC", False)
+    feature_pricing_agent: bool = _env_bool("FEATURE_PRICING_AGENT", False)
+    feature_pricing_agent_expanded_match: bool = _env_bool("FEATURE_PRICING_AGENT_EXPANDED_MATCH", False)
+    feature_pricing_agent_industry_estimate: bool = _env_bool("FEATURE_PRICING_AGENT_INDUSTRY_ESTIMATE", False)
+    feature_pricing_agent_hybrid_search: bool = _env_bool("FEATURE_PRICING_AGENT_HYBRID_SEARCH", False)
+    pricing_agent_hybrid_top_k: int = _env_int("PRICING_AGENT_HYBRID_TOP_K", 20)
+    pricing_agent_hybrid_shard_rows: int = _env_int("PRICING_AGENT_HYBRID_SHARD_ROWS", 5000)
+    pricing_agent_hybrid_min_vector_score: float = _env_float(
+        "PRICING_AGENT_HYBRID_MIN_VECTOR_SCORE",
+        0.72,
+    )
+    pricing_agent_archive_storage_backend: str = _env("PRICING_AGENT_ARCHIVE_STORAGE_BACKEND", "auto")
+    pricing_agent_archive_local_root: str = _env(
+        "PRICING_AGENT_ARCHIVE_LOCAL_ROOT",
+        str(BASE_DIR / "data" / "pricing_agent_archives"),
+    )
+    pricing_agent_archive_max_upload_mb: int = _env_int("PRICING_AGENT_ARCHIVE_MAX_UPLOAD_MB", 30)
+    pricing_agent_archive_account_quota_gb: int = _env_int("PRICING_AGENT_ARCHIVE_ACCOUNT_QUOTA_GB", 20)
+    pricing_agent_archive_max_indexed_rows: int = _env_int("PRICING_AGENT_ARCHIVE_MAX_INDEXED_ROWS", 100000)
     feature_bidding_mvp: bool = _env_bool("FEATURE_BIDDING_MVP", False)
     feature_bidding_llm_review: bool = _env_bool("FEATURE_BIDDING_LLM_REVIEW", False)
     feature_enterprise_profile: bool = _env_bool("FEATURE_ENTERPRISE_PROFILE", False)
@@ -116,7 +130,7 @@ class Settings:
     budget_pricing_ai_provider: str = _env("BUDGET_PRICING_AI_PROVIDER", "rule")
     budget_pricing_ai_model: str = _env("BUDGET_PRICING_AI_MODEL", "deepseek-v4-flash")
     budget_pricing_ai_prompt_version: str = _env("BUDGET_PRICING_AI_PROMPT_VERSION", "budget_pricing_ai_estimate_p2_2c1")
-    budget_pricing_ai_timeout_seconds: int = _env_int("BUDGET_PRICING_AI_TIMEOUT_SECONDS", 45)
+    budget_pricing_ai_timeout_seconds: int = _env_int("BUDGET_PRICING_AI_TIMEOUT_SECONDS", 90)
     deepseek_api_key: str = _env("DEEPSEEK_API_KEY", "")
     deepseek_chat_url: str = _env("DEEPSEEK_CHAT_URL", "https://api.deepseek.com/chat/completions")
     deepseek_model: str = _env("DEEPSEEK_MODEL", "deepseek-chat")
@@ -145,7 +159,7 @@ class Settings:
     zhipu_api_key: str = _env("ZHIPU_API_KEY")
     webhook_secret: str = _env("WEBHOOK_SECRET")
     reload_secret: str = _env("RELOAD_SECRET")
-    n8n_webhook_url_calc: str = _env("N8N_WEBHOOK_URL_CALC", "http://192.168.88.128:5678/webhook/budget-calc")
+    n8n_webhook_url_calc: str = _env("N8N_WEBHOOK_URL_CALC", "http://192.168.88.128:5678/webhook/budget-calc-no-rag")
     n8n_webhook_url_push: str = _env("N8N_WEBHOOK_URL_PUSH", "http://192.168.88.128:5678/webhook/budget-push")
     rag_service_url: str = _env("RAG_SERVICE_URL", "http://192.168.88.128:8001")
     rag_reload_timeout_seconds: float = _env_float("RAG_RELOAD_TIMEOUT_SECONDS", 900.0)
@@ -239,6 +253,10 @@ class Settings:
     minio_bucket: str = _env("MINIO_BUCKET", "quote-files")
     minio_presigned_expire_seconds: int = _env_int("MINIO_PRESIGNED_EXPIRE_SECONDS", 3600)
     minio_max_upload_mb: int = _env_int("MINIO_MAX_UPLOAD_MB", 50)
+    tender_evidence_body_storage_enabled: bool = _env_bool(
+        "TENDER_EVIDENCE_BODY_STORAGE_ENABLED",
+        False,
+    )
     rag_eval_enabled: bool = _env_bool("RAG_EVAL_ENABLED", True)
     rag_eval_top_k: int = _env_int("RAG_EVAL_TOP_K", 5)
     rag_eval_warn_hit_rate: float = _env_float("RAG_EVAL_WARN_HIT_RATE", 0.70)

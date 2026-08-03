@@ -1,0 +1,139 @@
+{
+  "schema_version": "bid_intake_graph_holdout_freeze_v1",
+  "freeze_id": "RET-GRAPH-HOLDOUT-001-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-HOLDOUT-001",
+  "candidate_id": "RET-GRAPH-EXPAND-003",
+  "status": "frozen_prebaseline",
+  "frozen_at": "2026-07-30T15:59:35+08:00",
+  "purpose": "Use one completely unseen project for the only independent Holdout quality comparison and paired latency validation of RET-GRAPH-EXPAND-003.",
+  "dataset": {
+    "path": "evals/bid_intake/retrieval/v1/private_graph_holdout_future_garden_approved_v1.jsonl",
+    "file_sha256": "812521dd518acaaaaca14c216d508b4fa0398b9a0ffefde51e2e31540ddd58d9",
+    "dataset_fingerprint": "080b68df7cffbcb14efe4b6c82abcba8c07d07cafa6f83ca58d3784e82a9dc1f",
+    "case_count": 10,
+    "dataset_split": "holdout",
+    "approved_case_count": 10,
+    "graph_trigger_expected_count": 6,
+    "graph_no_trigger_expected_count": 4,
+    "gold_evidence_reference_count": 44,
+    "unique_gold_evidence_count": 32,
+    "dataset_split_locked": true
+  },
+  "project_snapshot": {
+    "project_id": 39,
+    "project_uuid": "1d39eae4-af79-47ae-815b-cc3ce2f20d42",
+    "project_name": "惠州未来花园项目三期19及21号楼室内精装修工程",
+    "active_manifest_version": 4,
+    "active_manifest_hash": "2f5071d93156ab76a3d439312395a54461a945d14d63124a9f7528b6577bb59f",
+    "active_document_count": 4,
+    "active_evidence_block_count": 3007,
+    "index_job_uuid": "b9f683d3-1742-46a3-be34-997088b116a4",
+    "index_status": "completed",
+    "indexed_block_count": 3007,
+    "formal_agent_run_count_before_freeze": 0
+  },
+  "source_snapshot": {
+    "manifest_path": "evals/bid_intake/retrieval/v1/private_graph_holdout_future_garden_source_manifest_v1.json",
+    "manifest_file_sha256": "d2f5162c36702823afc74621643f71fdb736b5a40d6d223d5b2ed3d65a103fe0",
+    "review_path": "evals/bid_intake/retrieval/v1/private_graph_holdout_future_garden_review_v1.md",
+    "review_file_sha256": "e6daeef936f8c935b8d41022e132609168ecf85be0d8dfb5273aefe5f504b5b9",
+    "source_file_sha256": {
+      "tender_document": "d4ee0ad6d8bcb1b281ba25be6f095441ff55ba581b8c0c205a66b591d09ca0e8",
+      "contract": "d0abfacb01bd31e954b6c9996f50a21e40aa9520c532e3b9ec746dc7d543d927",
+      "bill_of_quantities_19": "a959987850719f37cf60b03da01cc50813a536004c57e97f431b624f3a1ff31f",
+      "bill_of_quantities_21": "9c7ef963e11f8fdff5f201af38b5af1f487116ec1c9fe9dcb388493feabc289e"
+    }
+  },
+  "candidate_configuration": {
+    "backend": "database_layered_retrieval",
+    "hybrid_search_enabled": true,
+    "top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "baseline_selective_graph_enabled": false,
+    "candidate_selective_graph_enabled": true,
+    "all_other_optional_retrieval_enhancements_enabled": false,
+    "graph_budget": {
+      "max_calls": 1,
+      "max_hops": 1,
+      "max_seed_count": 2,
+      "max_added_evidence": 4
+    },
+    "additional_analysis_llm_tokens": 0,
+    "prediction_excerpts_persisted": false
+  },
+  "quality_execution_contract": {
+    "maximum_formal_execution_count": 1,
+    "one_execution_definition": "one frozen Baseline pass followed by one frozen Candidate pass on the same 10 cases",
+    "baseline_must_run_before_candidate": true,
+    "candidate_must_reference_baseline_report": true,
+    "rerun_after_result_forbidden": true
+  },
+  "quality_acceptance_thresholds": {
+    "candidate_hit_rate_at_5_min": 0.8,
+    "candidate_mean_recall_at_5_min": 0.6,
+    "candidate_mrr_min": 0.75,
+    "candidate_mean_ndcg_at_5_min": 0.6,
+    "routing_exact_rate_min": 1.0,
+    "query_count_accuracy_min": 1.0,
+    "topic_recall_min": 1.0,
+    "graph_trigger_precision_min": 1.0,
+    "graph_trigger_recall_min": 1.0,
+    "single_document_false_trigger_rate_max": 0.0,
+    "negative_relation_erroneous_expansion_rate_max": 0.0,
+    "expanded_path_count_min": 1,
+    "graph_path_precision_min": 0.8,
+    "triggered_case_mean_gold_recall_delta_min": 0.0,
+    "triggered_case_improvement_count_min": 1,
+    "triggered_case_recall_regression_count_max": 0,
+    "global_mrr_delta_min": -0.02,
+    "global_ndcg_at_5_delta_min": -0.02,
+    "fact_gate_alignment_delta_min_if_evaluable": 0.0,
+    "fact_gate_false_sufficient_rate_delta_max_if_evaluable": 0.0,
+    "execution_error_count_max": 0,
+    "additional_llm_tokens_max": 0
+  },
+  "paired_latency_execution_contract": {
+    "maximum_formal_execution_count": 1,
+    "dataset_split": "holdout",
+    "warmup_pairs_per_case": 1,
+    "measured_pairs_per_case": 6,
+    "expected_measured_pair_count": 60,
+    "order": "three AB and three BA pairs per case with rotating case start",
+    "paired_delta_definition": "candidate_latency_ms - baseline_latency_ms",
+    "paired_delta_p95_max_ms": 500,
+    "baseline_error_count_max": 0,
+    "candidate_error_count_max": 0,
+    "trigger_decision_mismatch_count_max": 0,
+    "rerun_after_result_forbidden": true
+  },
+  "interpretation_contract": {
+    "absolute_quality_pass": "Candidate must satisfy every absolute quality threshold.",
+    "graph_mechanism_pass": "At least one verified path must be produced, path precision must pass, and at least one trigger-positive case must improve without recall regression.",
+    "fact_gate": "If no case is assessed, fact-gate thresholds are not_evaluable and cannot be described as passed.",
+    "full_release": "Requires absolute quality, graph mechanism, paired latency and every evaluable safety gate to pass; a non-evaluable required mechanism cannot authorize production.",
+    "holdout_result_must_not_define_new_rules": true
+  },
+  "anti_overfitting_guards": {
+    "project_specific_keywords_forbidden": true,
+    "dataset_or_gold_change_after_freeze_forbidden": true,
+    "threshold_change_after_freeze_forbidden": true,
+    "holdout_rerun_forbidden": true,
+    "old_holdout_rerun_forbidden": true,
+    "old_challenge_rerun_forbidden": true,
+    "production_enable_from_development_only_forbidden": true
+  },
+  "code_snapshot": {
+    "git_head": "ac8f0b6ca57664640a0f50816df70d315321d07a",
+    "files": {
+      "mcp_servers/tender_evidence/selective_graph.py": "c8a2d276689d24e7ba8e9851b8bb314cd06971f392f30e4aa95c3b7fd3a8e0e1",
+      "mcp_servers/tender_evidence/service.py": "fd1b2df579bce78b8892274541110cda32bca9ac62a457bfcadd7098cd950322",
+      "mcp_servers/tender_evidence/query_planner.py": "76459d5e2a50a99a0f881b6b395a69aa6d66ea29d87b08708b4273041a86955a",
+      "mcp_servers/tender_evidence/retrieval_router.py": "b701467c4ee256e271fda16e276866045026a221e0151cc6951f0eef230f46d2",
+      "mcp_servers/tender_evidence/sqlalchemy_repository.py": "96c89a71e542ce57a6aa5282ba7ade4217bc8ec4637e73aea328b5ab6f28bc35",
+      "app/agents/bid_intake/retrieval_evaluation.py": "c26c316c44ab10f62d7d22c45167c1ef89938bf7e21cc98735c2bbdb4c948fd2",
+      "app/agents/bid_intake/paired_latency.py": "ac995ce47abac2ede8dcfed2ff5dc5e0bf3a9221eec89537476ecb584279f9f5",
+      "scripts/bid_intake_retrieval_eval.py": "6dd01bf80e0fdff11a991ee9495767d0c59f5a9611fdafd88ba5e3376ddac86e",
+      "scripts/bid_intake_paired_latency_eval.py": "7ff8a5a5e1e85a5eab0492f8228b2d9ab589b70ebbbd3decbd2a7d1adca05c7f"
+    }
+  }
+}

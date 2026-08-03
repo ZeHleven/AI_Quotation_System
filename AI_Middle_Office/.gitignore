@@ -1,5 +1,11 @@
 .env
+.venv-agent/
 __pycache__/
 *.pyc
 *.pyo
 sql_app.db
+data/pricing_agent_archives/
+
+# Private bid-intake evaluation annotations and review notes.
+evals/bid_intake/retrieval/v1/private_*
+outputs/bid_intake_retrieval_eval/private_*

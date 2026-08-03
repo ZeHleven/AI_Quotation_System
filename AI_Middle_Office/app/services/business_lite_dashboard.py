@@ -482,7 +482,6 @@ def _build_system_section(db: Session) -> dict[str, Any]:
         "dashboard_business_lite": settings.feature_dashboard_business_lite,
         "dashboard_quote": settings.feature_dashboard_quote,
         "dashboard_response": settings.feature_dashboard_response,
-        "dashboard_execution": settings.feature_dashboard_execution,
         "dashboard_project": settings.feature_dashboard_project,
         "cost_db": settings.feature_cost_db,
         "project_progress": settings.feature_project_progress,
@@ -733,7 +732,11 @@ def build_business_lite_dashboard(db: Session, *, range_name: str = "last_30_day
         "risks": risks,
         "links": [
             {"key": "dashboard", "label": "效率驾驶舱", "path": "/admin/dashboard"},
-            {"key": "quote_workspace", "label": "新建报价", "path": "/quote/new"},
+            {
+                "key": "quote_workspace",
+                "label": "报价工作台" if settings.feature_unified_quotes else "新建报价",
+                "path": "/quote/new",
+            },
             {"key": "cost_db", "label": "企业定额主库", "path": "/admin/cost-db"},
             {"key": "project_progress", "label": "项目进度", "path": "/admin/projects"},
             {"key": "ops_dashboard", "label": "运维接口", "path": "/api/v1/admin/ops/dashboard"},

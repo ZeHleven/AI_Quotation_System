@@ -1,0 +1,67 @@
+{
+  "schema_version": "bid_intake_retrieval_challenge_execution_v1",
+  "execution_id": "DATA-CHALLENGE-001-EXECUTION-V1",
+  "freeze_id": "DATA-CHALLENGE-001-FREEZE-V1",
+  "candidate_experiment_id": "RET-EXP-003B",
+  "executed_at": "2026-07-29T14:12:44.774905+00:00",
+  "execution_count": 1,
+  "formal_execution": {
+    "python_runtime": ".venv-agent/Scripts/python.exe",
+    "experiment_name": "DATA-CHALLENGE-001-blind-v1",
+    "dataset_fingerprint": "e804fb9faef665eea41c35c06a6bd3415e7bb15b3a17133c6045d32627e1cc0a",
+    "report_path": "outputs/bid_intake_retrieval_eval/private_DATA_CHALLENGE_001_blind_v1/20260729_221244_DATA-CHALLENGE-001-blind-v1_report.json",
+    "report_sha256": "3335712b499788f2c690224aa478624a6bc5c370ff43715eb837f55cfba3c1cd",
+    "markdown_report_path": "outputs/bid_intake_retrieval_eval/private_DATA_CHALLENGE_001_blind_v1/20260729_221244_DATA-CHALLENGE-001-blind-v1_report.md",
+    "markdown_report_sha256": "9196f71356af5dda5b5a1b9880097c4f8d024757ff94221294f0547aa99811e6",
+    "predictions_path": "outputs/bid_intake_retrieval_eval/private_DATA_CHALLENGE_001_blind_v1/20260729_221244_DATA-CHALLENGE-001-blind-v1_predictions.jsonl",
+    "predictions_sha256": "7d7caa6b25ec56b43e0106b601fe04163a9b515c310969981a47c34eb8d84475"
+  },
+  "preflight": {
+    "base_runtime_import_failed": true,
+    "reason": "C:/Users/12521/miniconda3/python.exe did not contain the mcp dependency",
+    "case_count_executed": 0,
+    "output_created": false,
+    "counts_as_formal_execution": false
+  },
+  "known_non_metric_issue": {
+    "field": "experiment.change_note",
+    "issue": "The Chinese command-line note was mojibake in the generated report because of shell argument encoding.",
+    "impact": "None. Dataset, query plan, predictions, metrics, timestamps and frozen configuration are intact; the original report remains unmodified so its hash stays auditable."
+  },
+  "overall": {
+    "case_count": 10,
+    "positive_case_count": 9,
+    "negative_case_count": 1,
+    "error_count": 0,
+    "hit_rate_at_5": 0.888889,
+    "mean_recall_at_5": 0.475926,
+    "mean_precision_at_5": 0.266667,
+    "mrr": 0.685185,
+    "mean_ndcg_at_5": 0.497287,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "negative_accuracy": 0.0,
+    "mean_latency_ms": 658.4,
+    "p95_latency_ms": 1677
+  },
+  "acceptance": {
+    "hit_rate_at_5": true,
+    "mean_recall_at_5": false,
+    "mrr": false,
+    "mean_ndcg_at_5": false,
+    "routing_exact_rate": true,
+    "query_count_accuracy": true,
+    "negative_accuracy": false,
+    "p95_latency_ms": true,
+    "error_count": true,
+    "overall_passed": false
+  },
+  "governance": {
+    "challenge_locked_after_execution": true,
+    "rerun_permitted": false,
+    "parameter_tuning_from_challenge_permitted": false,
+    "project_specific_rules_permitted": false,
+    "future_improvements_require_new_development_projects": true
+  }
+}

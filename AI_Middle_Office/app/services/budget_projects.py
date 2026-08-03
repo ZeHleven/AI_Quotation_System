@@ -46,6 +46,7 @@ from app.services.requirement_standardizer import (
     MAX_ROWS_PER_SHEET,
     RequirementStandardizationError,
     apply_manual_field_mappings,
+    standardization_quote_rows,
     standardize_requirement_excel_bytes,
 )
 
@@ -730,6 +731,15 @@ def serialize_budget_project(
             "can_activate_import": can_activate,
             "can_view_pricing": can_view_pricing,
             "can_create_pricing_run": can_create_pricing_run,
+            "can_manage_pricing_draft": can_create_pricing_run,
+            "can_sync_enterprise_quota": bool(
+                can_create_pricing_run
+                and current_user
+                and has_any_role(
+                    current_user,
+                    {"system_admin", "admin", "cost_approver"},
+                )
+            ),
         },
     }
 
@@ -1718,6 +1728,28 @@ def _sanitize_automatic_quantity_mappings(preview: dict[str, Any]) -> dict[str, 
     return _annotate_sequence_guards(sanitized)
 
 
+def standardize_budget_workbook_bytes(
+    content: bytes,
+    *,
+    filename: str,
+) -> dict[str, Any]:
+    """Apply the shared bill-of-quantities semantics used by every quote entry.
+
+    The generic requirement standardizer intentionally understands only flat
+    tables.  Formal workbooks additionally need sheet-role detection, layered
+    quantity handling, aggregate quantity selection, price-column locks and
+    formula provenance.  Keeping this sequence public prevents the chat quote
+    path from silently choosing the first floor quantity instead of the total.
+    """
+
+    safe_filename = _clean_text(filename, 255) or "requirements.xlsx"
+    _validate_workbook_limits(content, safe_filename)
+    preview = standardize_requirement_excel_bytes(content, filename=safe_filename)
+    preview = _apply_workbook_semantics(preview, content)
+    preview = _ensure_budget_mapping_columns(preview)
+    return _sanitize_automatic_quantity_mappings(preview)
+
+
 def _validate_sheet_mapping_request(preview: dict[str, Any], sheet_mappings: list[dict[str, Any]]) -> None:
     names = [str(item.get("sheet_name") or "") for item in sheet_mappings]
     duplicates = sorted({name for name in names if name and names.count(name) > 1})
@@ -1916,6 +1948,49 @@ def _budget_quantity(
     return raw_quantity, parser_quantity, calculation_quantity, "valid", source
 
 
+def budget_preview_quote_rows(preview: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return formal bill rows with the same quantity semantics as budget import."""
+
+    mappings = _mapping_by_sheet(preview)
+    prepared_rows: list[dict[str, Any]] = []
+    for raw_row in preview.get("rows") or []:
+        if not isinstance(raw_row, dict):
+            continue
+        row = copy.deepcopy(raw_row)
+        sheet_name = str(row.get("source_sheet") or "")
+        sheet_mapping = mappings.get(sheet_name, {})
+        sheet_role = str(
+            row.get("sheet_role")
+            or sheet_mapping.get("sheet_role")
+            or BUDGET_SHEET_ROLE_BILL
+        )
+        row["sheet_role"] = sheet_role
+        if sheet_role != BUDGET_SHEET_ROLE_BILL:
+            continue
+        if _is_repeated_header_row(row, sheet_mapping):
+            continue
+        if row.get("row_type") != "data_row":
+            continue
+
+        raw_quantity, parser_quantity, calculation_quantity, quantity_status, budget_source = _budget_quantity(
+            row,
+            sheet_mapping,
+        )
+        row["raw_quantity"] = raw_quantity
+        row["parser_quantity"] = float(parser_quantity) if parser_quantity is not None else None
+        row["calculation_quantity"] = float(calculation_quantity)
+        row["quantity_status"] = quantity_status
+        row["budget_quantity_source"] = budget_source
+        row["quantity_source"] = {
+            **(row.get("quantity_source") or {}),
+            "budget": budget_source,
+        }
+        row["quantity"] = float(calculation_quantity) if quantity_status == "valid" else None
+        prepared_rows.append(row)
+
+    return standardization_quote_rows({"rows": prepared_rows})
+
+
 def _row_key(row: dict[str, Any], sort_order: int) -> str:
     source_sheet = str(row.get("source_sheet") or "Sheet")
     raw_row_index = row.get("raw_row_index") or sort_order + 1
@@ -2099,11 +2174,7 @@ def create_import_batch(
     if len(content) > MAX_IMPORT_BYTES:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="BUDGET_IMPORT_FILE_TOO_LARGE")
     safe_filename = _clean_text(filename, 255) or "requirements.xlsx"
-    _validate_workbook_limits(content, safe_filename)
-    preview = standardize_requirement_excel_bytes(content, filename=safe_filename)
-    preview = _apply_workbook_semantics(preview, content)
-    preview = _ensure_budget_mapping_columns(preview)
-    preview = _sanitize_automatic_quantity_mappings(preview)
+    preview = standardize_budget_workbook_bytes(content, filename=safe_filename)
     preview_json = _json_dump(preview)
     batch = BudgetProjectImportBatch(
         batch_uuid=str(uuid.uuid4()),

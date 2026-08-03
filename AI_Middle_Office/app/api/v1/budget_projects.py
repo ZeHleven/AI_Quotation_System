@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -18,6 +20,7 @@ from app.models.budget_project import (
     BudgetProjectStandardRow,
 )
 from app.models.project_progress import Project
+from app.models.file_object import FileObject
 from app.models.user import User
 from app.schemas.budget_project import (
     BudgetImportRemap,
@@ -48,6 +51,7 @@ from app.services.budget_projects import (
     update_budget_project,
 )
 from app.services.requirement_standardizer import RequirementStandardizationError
+from app.services.file_storage import StorageDisabledError, store_file_bytes
 
 
 router = APIRouter()
@@ -348,7 +352,38 @@ async def upload_project_budget_import(
             content=content,
             current_user=current_user,
         )
+        try:
+            stored = await asyncio.to_thread(
+                store_file_bytes,
+                content=content,
+                original_filename=file.filename or "requirements.xlsx",
+                content_type=file.content_type or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                username=current_user.username,
+                purpose="budget_project_source_workbook",
+            )
+        except StorageDisabledError:
+            # The import remains usable in metadata-only mode, but original-format export is unavailable.
+            pass
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"BUDGET_IMPORT_SOURCE_FILE_STORE_FAILED: {exc}") from exc
+        else:
+            file_object = FileObject(
+                file_id=str(uuid.uuid4()),
+                username=current_user.username,
+                purpose="budget_project_source_workbook",
+                bucket=stored["bucket"],
+                object_name=stored["object_name"],
+                original_filename=file.filename or "requirements.xlsx",
+                content_type=stored["content_type"],
+                size_bytes=stored["size_bytes"],
+            )
+            db.add(file_object)
+            db.flush()
+            batch.source_file_object_id = file_object.id
+            batch.source_storage_mode = "file_object"
     except RequirementStandardizationError as exc:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     batch = _commit_and_reload_batch(db, batch)
     return api_ok(

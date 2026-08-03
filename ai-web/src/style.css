@@ -1115,16 +1115,7 @@ textarea {
   margin-bottom: 16px;
 }
 
-.business-ledger-overview {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
 .business-trial-card,
-.cost-workbench-card,
 .project-overview-card {
   min-width: 0;
   display: grid;
@@ -1139,8 +1130,6 @@ textarea {
 
 .business-trial-card span,
 .business-trial-card small,
-.cost-workbench-card span,
-.cost-workbench-card small,
 .project-overview-card span,
 .project-overview-card small {
   color: var(--color-muted);
@@ -1149,7 +1138,6 @@ textarea {
 }
 
 .business-trial-card strong,
-.cost-workbench-card strong,
 .project-overview-card strong {
   color: var(--color-text-strong);
   font-size: 19px;
@@ -1158,21 +1146,18 @@ textarea {
 }
 
 .business-trial-card.is-success,
-.cost-workbench-card.is-success,
 .project-overview-card.is-success {
   border-color: rgba(69, 162, 124, 0.35);
   background: #f4fbf8;
 }
 
 .business-trial-card.is-warning,
-.cost-workbench-card.is-warning,
 .project-overview-card.is-warning {
   border-color: rgba(218, 151, 66, 0.35);
   background: #fffaf0;
 }
 
 .business-trial-card.is-danger,
-.cost-workbench-card.is-danger,
 .project-overview-card.is-danger {
   border-color: rgba(199, 77, 77, 0.35);
   background: #fff6f6;
@@ -1350,22 +1335,6 @@ textarea {
   margin-bottom: 10px;
 }
 
-.meeting-filters {
-  display: grid;
-  grid-template-columns: 140px minmax(180px, 1fr) auto auto;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.business-ledger-filters {
-  display: grid;
-  grid-template-columns: 170px 130px 140px minmax(260px, 1.25fr) minmax(180px, 1fr) auto auto;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
 .cost-db-filters {
   display: grid;
   grid-template-columns: 160px 170px 140px minmax(220px, 1fr) auto;
@@ -1380,51 +1349,6 @@ textarea {
 
 .cost-db-filters.lineage-filters {
   grid-template-columns: 140px 140px minmax(220px, 1fr) auto auto;
-}
-
-.cost-workbench-panel {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1.25fr);
-  gap: 12px;
-  align-items: stretch;
-  margin-bottom: 12px;
-}
-
-.cost-workbench-title {
-  min-width: 0;
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 16px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-}
-
-.cost-workbench-title div {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-}
-
-.cost-workbench-title strong {
-  color: var(--color-text-strong);
-  line-height: 1.35;
-}
-
-.cost-workbench-title span {
-  color: var(--color-muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.cost-workbench-cards {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
 }
 
 .cost-bulk-bar {
@@ -1484,6 +1408,28 @@ textarea {
   margin-top: 16px;
 }
 
+.bid-intake-agent-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bid-intake-agent-selector .el-select {
+  width: min(100%, 520px);
+}
+
+.bid-intake-agent-selector .el-select-dropdown__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.bid-intake-agent-selector .el-select-dropdown__item small,
+.bid-intake-agent-project-meta {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 .project-overview-strip {
   min-width: 0;
   display: grid;
@@ -1494,87 +1440,6 @@ textarea {
 
 .project-overview-strip.compact {
   margin-bottom: 10px;
-}
-
-.execution-overview-strip {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.execution-next-step,
-.meeting-draft-progress {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-  padding-left: 10px;
-  border-left: 3px solid var(--color-border-strong);
-}
-
-.execution-next-step strong,
-.execution-next-step small,
-.meeting-draft-progress strong,
-.meeting-draft-progress small {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.execution-next-step strong,
-.meeting-draft-progress strong {
-  color: var(--color-text-strong);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.execution-next-step small,
-.meeting-draft-progress small {
-  color: var(--color-muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.execution-next-step.is-info,
-.meeting-draft-progress.is-info {
-  border-left-color: var(--color-primary);
-}
-
-.execution-next-step.is-success,
-.meeting-draft-progress.is-success {
-  border-left-color: var(--color-success);
-}
-
-.execution-next-step.is-warning,
-.meeting-draft-progress.is-warning {
-  border-left-color: var(--color-warning);
-}
-
-.execution-next-step.is-danger,
-.meeting-draft-progress.is-danger {
-  border-left-color: var(--color-danger);
-}
-
-.users-table .el-table__body tr.execution-task-row-overdue > td.el-table__cell {
-  background: #fff6f6;
-}
-
-.users-table .el-table__body tr.execution-task-row-progressing > td.el-table__cell,
-.users-table .el-table__body tr.meeting-row-revised > td.el-table__cell {
-  background: #f4f8ff;
-}
-
-.users-table .el-table__body tr.meeting-row-pending > td.el-table__cell {
-  background: #fffaf0;
-}
-
-.execution-task-actions {
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.execution-task-actions .el-button + .el-button {
-  margin-left: 0;
 }
 
 .project-focus-hint {
@@ -1742,11 +1607,6 @@ textarea {
 .inquiry-filters .el-input,
 .operation-filters .el-select,
 .operation-filters .el-input,
-.meeting-filters .el-select,
-.meeting-filters .el-input,
-.business-ledger-filters .el-select,
-.business-ledger-filters .el-input,
-.business-ledger-filters .el-date-editor,
 .cost-db-filters .el-select,
 .cost-db-filters .el-input,
 .project-filters .el-select,
@@ -1933,83 +1793,6 @@ textarea {
   color: var(--color-muted);
   font-size: 12px;
   line-height: 1.4;
-}
-
-.ledger-followup-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.ledger-followup-cell span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ledger-next-step {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-  padding-left: 10px;
-  border-left: 3px solid var(--color-border-strong);
-}
-
-.ledger-next-step strong,
-.ledger-next-step small {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.ledger-next-step strong {
-  color: var(--color-text-strong);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.ledger-next-step small {
-  color: var(--color-muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.ledger-next-step.is-info {
-  border-left-color: var(--color-primary);
-}
-
-.ledger-next-step.is-success {
-  border-left-color: var(--color-success);
-}
-
-.ledger-next-step.is-warning {
-  border-left-color: var(--color-warning);
-}
-
-.ledger-next-step.is-danger {
-  border-left-color: var(--color-danger);
-}
-
-.business-ledger-table .ledger-overdue-row .el-table__cell {
-  background: #fff1f0;
-}
-
-.business-ledger-table .ledger-due-soon-row .el-table__cell {
-  background: #fffaf0;
-}
-
-.business-ledger-table .ledger-active-row .el-table__cell {
-  background: #f4f8ff;
-}
-
-.business-ledger-actions {
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.business-ledger-actions .el-button + .el-button {
-  margin-left: 0;
 }
 
 .price-stack {
@@ -2626,48 +2409,6 @@ textarea {
   border: 1px solid #d9e0ea;
   border-radius: 8px;
   white-space: pre-wrap;
-}
-
-.draft-list {
-  display: grid;
-  gap: 10px;
-}
-
-.draft-item {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  background: #ffffff;
-  border: 1px solid #d9e0ea;
-  border-radius: 8px;
-}
-
-.draft-source {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  color: #344054;
-  line-height: 1.5;
-}
-
-.draft-source span {
-  min-width: 0;
-}
-
-.draft-confirm-grid {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) 130px 180px minmax(140px, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.draft-result {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.5;
 }
 
 .center-state {
@@ -4082,15 +3823,11 @@ textarea {
   }
 
   .business-trial-rail,
-  .business-ledger-overview,
-  .cost-workbench-cards,
   .project-overview-strip,
-  .execution-overview-strip,
   .project-detail-focus-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .cost-workbench-panel,
   .project-detail-focus-bar,
   .bidding-risk-card-summary,
   .bidding-structure-panel,
@@ -4119,14 +3856,6 @@ textarea {
     grid-template-columns: 1fr 1fr;
   }
 
-  .meeting-filters {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .business-ledger-filters {
-    grid-template-columns: 1fr 1fr;
-  }
-
     .cost-db-filters,
     .cost-db-filters.cost-item-filters,
     .cost-db-filters.lineage-filters,
@@ -4139,10 +3868,6 @@ textarea {
 
   .lineage-layout {
     grid-template-columns: 1fr;
-  }
-
-  .draft-confirm-grid {
-    grid-template-columns: 1fr 1fr;
   }
 
   .agent-run-form {
@@ -4283,6 +4008,15 @@ textarea {
     width: 100%;
   }
 
+  .bid-intake-agent-selector {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bid-intake-agent-selector .el-select {
+    width: 100%;
+  }
+
   .history-toolbar {
     align-items: flex-start;
     flex-direction: column;
@@ -4339,7 +4073,6 @@ textarea {
 
   .business-trial-rail,
   .management-focus-grid,
-  .cost-workbench-cards,
   .project-overview-strip,
   .project-detail-focus-cards {
     grid-template-columns: 1fr;
@@ -4359,8 +4092,6 @@ textarea {
   }
 
     .operation-filters,
-    .meeting-filters,
-    .business-ledger-filters,
     .cost-db-filters,
     .cost-db-filters.cost-item-filters,
     .cost-db-filters.lineage-filters,
@@ -4370,7 +4101,6 @@ textarea {
   .cost-import-summary,
   .detail-grid,
   .review-summary-grid,
-  .draft-confirm-grid,
   .ledger-form-grid,
   .form-grid-2 {
     grid-template-columns: 1fr;

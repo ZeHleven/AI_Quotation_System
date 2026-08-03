@@ -1,0 +1,85 @@
+{
+  "schema_version": "bid-intake-internal-pilot-freeze-stage2/v1",
+  "record_id": "BID-INTAKE-INTERNAL-PILOT-STAGE2-DB-CLOSEOUT-20260801-V1",
+  "verified_at": "2026-08-01T12:11:41.3648680+08:00",
+  "status": "stage2_database_alignment_verified_head_0081",
+  "execution_provenance": {
+    "environment_already_at_0081_when_checked": true,
+    "duplicate_backup_created_by_this_task": false,
+    "migration_command_executed_by_this_task": false,
+    "service_restart_performed_by_this_task": false,
+    "feature_flag_changed_by_this_task": false,
+    "formal_evaluation_performed": false
+  },
+  "backup": {
+    "path": "backups/pre_0081_pricing_snapshot_recovery_20260801_092701.sql",
+    "size_bytes": 809317170,
+    "size_mib": 771.82,
+    "sha256": "64DC1AA14C68DBB474B1C02031C051551FFE1EB4991CB88AFD3CCADF891580A3",
+    "format": "mysqldump",
+    "database": "ai_quotation",
+    "dump_completed_at": "2026-08-01T09:27:13+08:00",
+    "contains_sensitive_data": true,
+    "git_commit_allowed": false
+  },
+  "migration": {
+    "current": "20260801_0081",
+    "head": "20260801_0081",
+    "aligned": true,
+    "migration_file": "alembic/versions/20260801_0081_add_pricing_run_draft_snapshots.py",
+    "migration_sha256": "e512b17b66b150b31b43057581bfab626d1938bbbf0dbf635dd75db1ab867acf",
+    "operation": "create_table_only",
+    "agent_schema_modified": false,
+    "snapshot_table_exists": true,
+    "snapshot_row_count_at_verification": 2
+  },
+  "schema_audit": {
+    "expected_agent_and_evidence_table_count": 14,
+    "missing_expected_tables": [],
+    "retired_table_count": 9,
+    "lingering_retired_tables": []
+  },
+  "runtime": {
+    "listener_pid": 3156,
+    "health": "ready",
+    "database": "ok",
+    "celery": "ok",
+    "celery_worker_count": 1,
+    "agent_ready_to_start": true,
+    "agent_blockers": [],
+    "agent_worker_id": "小智:24268",
+    "agent_worker_status": "online",
+    "runtime_version": "bid_intake_runtime_phase5a",
+    "model_id": "deepseek-v4-flash",
+    "policy_version": "qs_bid_decision_policy_2026_01",
+    "checkpoint_backend": "sqlalchemy",
+    "search_backend": "hybrid_rrf",
+    "index_status": "completed",
+    "mcp_probe": "skipped",
+    "model_probe": "skipped"
+  },
+  "safety_configuration": {
+    "public_access_enabled": false,
+    "agent_runtime_enabled": true,
+    "fact_coverage_mode": "shadow",
+    "candidate_coverage_selection": false,
+    "evidence_sufficiency_assessment": false
+  },
+  "tests": {
+    "passed": 89,
+    "failed": 0,
+    "warnings": 1,
+    "duration_seconds": 4.95,
+    "formal_evaluation": false
+  },
+  "remaining_release_risks": [
+    "agent_core_not_versioned",
+    "shared_integration_files_contain_unrelated_changes",
+    "sufficiency_assessment_disabled",
+    "fact_coverage_shadow_only",
+    "live_mcp_and_model_probes_skipped",
+    "single_agent_worker",
+    "fallback_model_not_configured"
+  ],
+  "next_stage": "stage3_reproducible_release_packaging"
+}

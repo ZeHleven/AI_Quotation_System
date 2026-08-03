@@ -111,6 +111,27 @@ def _unconfirmed_ai_note_conflict_rows(details: list[dict]) -> list[dict]:
     return rows
 
 
+def _unconfirmed_enterprise_quota_v2_review_rows(details: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for index, row in enumerate(details):
+        if not isinstance(row, dict):
+            continue
+        review = row.get("enterprise_quota_v2_review") or {}
+        if not isinstance(review, dict) or not review.get("requires_manual_confirmation"):
+            continue
+        status_value = str(review.get("manual_confirmation_status") or "").strip().lower()
+        if status_value in {"confirmed_adopted", "confirmed_rejected", "not_required"}:
+            continue
+        rows.append(
+            {
+                "index": index,
+                "project_name": row.get("project_name") or row.get("item_name"),
+                "decision": review.get("decision"),
+            }
+        )
+    return rows
+
+
 def _get_accessible_quote_job_for_push(db: Session, current_user: User, quote_job_id: str | None) -> QuoteJob | None:
     if not quote_job_id:
         return None
@@ -232,7 +253,7 @@ async def process_chat(
                         "active_cost_item_count": cost_context.active_cost_item_count,
                     },
                 )
-            yield _sse_event("processing", "[RAG & Agent] 🔍 正在穿透企业知识库寻找刚性底价并驱动专家大脑...\n(后台算力执行中，预计静候 15~30 秒，完成后将弹出核对面板)", trace_id=request_trace_id)
+            yield _sse_event("processing", "[成本库 & Agent] 🔍 正在匹配企业成本依据并驱动报价专家...\n(后台算力执行中，预计静候 15~30 秒，完成后将弹出核对面板)", trace_id=request_trace_id)
 
             payload = {"text": {"content": final_query}, "conversationId": str(uuid.uuid4())}
             response = await post_json_via_gateway(
@@ -374,7 +395,7 @@ async def confirm_and_push(
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    f"预审单中还有 {len(unpriced_placeholders)} 行是 AI 未返回的占位行，"
+                    f"预审单中还有 {len(unpriced_placeholders)} 行待补价占位行，"
                     "请先人工填写单价和系统合计后再下发。"
                 ),
             )
@@ -403,6 +424,15 @@ async def confirm_and_push(
                 detail=(
                     f"预审单中还有 {len(unconfirmed_ai_notes)} 行存在 AI 备注与成本库依据不一致，"
                     "请先人工确认备注处理或修改备注后再下发。"
+                ),
+            )
+        unconfirmed_v2_reviews = _unconfirmed_enterprise_quota_v2_review_rows(details)
+        if unconfirmed_v2_reviews:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"预审单中还有 {len(unconfirmed_v2_reviews)} 行企业定额命中结果尚未人工确认，"
+                    "请采用推荐定额、改选其他企业定额，或明确确认继续使用 AI 估价后再下发。"
                 ),
             )
         excel_b64 = build_excel_base64(details)

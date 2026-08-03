@@ -1,0 +1,127 @@
+schema_version: bid_decision_policy_schema_v1
+policy_version: qs_bid_decision_policy_2026_01
+status: draft
+owner_role: general_office
+scope: decoration_project_bid_intake
+title: 旗胜装饰工程报价立项标准（总经办建议稿）
+
+required_documents:
+  - tender_document
+
+rating_scores:
+  favorable: 100
+  acceptable: 75
+  adverse: 35
+  critical: 0
+  unknown: 0
+
+decision_thresholds:
+  recommend_quote_min: 75
+  conditional_quote_min: 60
+  min_coverage_for_quote: 80
+  min_coverage_for_conditional: 60
+
+factors:
+  - id: compliance_risk
+    name: 合规与法律风险
+    weight: 10
+    critical_unknown: true
+    guidance: 是否存在围标串标、商业贿赂、违法分包、失信限制或明显不公平条款。
+  - id: qualification_fit
+    name: 资质与准入匹配
+    weight: 10
+    critical_unknown: true
+    guidance: 企业资质、业绩、人员证书和联合体要求是否满足且无冲突。
+  - id: scope_cost_clarity
+    name: 范围与成本可控性
+    weight: 15
+    critical_unknown: false
+    guidance: 工作范围、清单、界面、技术标准和主要材料是否足以支持可靠成本测算。
+  - id: margin_potential
+    name: 目标利润空间
+    weight: 15
+    critical_unknown: true
+    guidance: 结合成本测算、竞争性和风险准备金后，是否仍有可接受的目标利润。
+  - id: payment_cashflow
+    name: 回款与现金流
+    weight: 10
+    critical_unknown: true
+    guidance: 预付款、进度款、结算周期、质保金、垫资和付款前置条件是否可承受。
+  - id: client_credit
+    name: 客户信用与履约可信度
+    weight: 10
+    critical_unknown: true
+    guidance: 客户资信、历史付款、争议记录、资金来源和项目真实性是否可靠。
+  - id: delivery_capacity
+    name: 工期与履约能力
+    weight: 10
+    critical_unknown: true
+    guidance: 工期、资源、供应链、地域、交叉施工和违约责任是否在企业承载范围内。
+  - id: strategic_value
+    name: 战略与客户价值
+    weight: 5
+    critical_unknown: false
+    guidance: 是否有利于重点客户、重点区域、标杆案例、业务协同或长期复购。
+  - id: win_probability
+    name: 中标概率与竞争态势
+    weight: 5
+    critical_unknown: false
+    guidance: 评标方法、竞争对手、客户关系基础、技术差异化和价格竞争强度是否有利。
+  - id: bond_exposure
+    name: 保证金与资金占用
+    weight: 5
+    critical_unknown: false
+    guidance: 投标、履约、预付款和质保担保的金额、期限及释放条件是否可接受。
+  - id: tender_readiness
+    name: 投标资料与时间准备度
+    weight: 5
+    critical_unknown: false
+    guidance: 招标文件、答疑、图纸、清单、提交方式和截止时间是否完整、稳定且来得及响应。
+
+hard_rules:
+  - id: compliance_red_line
+    factor_id: compliance_risk
+    ratings: [critical]
+    level: hard
+    outcome: special_approval_required
+    message: 存在合规或法律红线，原则上不报价；如继续必须由总经办特别审批。
+  - id: qualification_not_satisfied
+    factor_id: qualification_fit
+    ratings: [critical]
+    level: hard
+    outcome: special_approval_required
+    message: 核心准入条件不能满足，原则上不报价；合法联合体方案需专项确认。
+  - id: expected_loss
+    factor_id: margin_potential
+    ratings: [critical]
+    level: hard
+    outcome: special_approval_required
+    message: 当前测算预计亏损或无法形成风险准备，原则上不报价。
+  - id: unacceptable_payment
+    factor_id: payment_cashflow
+    ratings: [critical]
+    level: hard
+    outcome: special_approval_required
+    message: 回款或垫资条件超过企业承受范围，原则上不报价。
+  - id: client_credit_red_line
+    factor_id: client_credit
+    ratings: [critical]
+    level: hard
+    outcome: special_approval_required
+    message: 客户信用存在重大风险，原则上不报价。
+  - id: delivery_impossible
+    factor_id: delivery_capacity
+    ratings: [critical]
+    level: hard
+    outcome: special_approval_required
+    message: 工期或履约资源明显不可实现，原则上不报价。
+
+topics:
+  立项硬门槛:
+    description: 合规、资质、利润、回款、客户信用和履约能力任一触发 critical 时进入特别审批。
+  评分口径:
+    description: 11项经营因素按权重和固定五档分值计算，未知项按0分并降低覆盖率。
+  报价建议:
+    description: 75分及以上且覆盖率不低于80%建议报价；60至74.99分建议有条件报价；低于60分建议不报价。
+  缺失信息:
+    description: 关键因素 unknown 或覆盖率不足时要求补充，不得用模型猜测。

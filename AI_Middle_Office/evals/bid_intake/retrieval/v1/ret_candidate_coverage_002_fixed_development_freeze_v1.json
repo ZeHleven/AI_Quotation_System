@@ -1,0 +1,201 @@
+{
+  "schema_version": "bid_intake_fixed_development_candidate_freeze_v1",
+  "freeze_id": "RET-CANDIDATE-COVERAGE-002-FIXED-DEV-FREEZE-20260730-V1",
+  "experiment_id": "RET-CANDIDATE-COVERAGE-002",
+  "status": "frozen_prebaseline",
+  "frozen_at": "2026-07-30T16:36:07+08:00",
+  "purpose": "Revalidate the unchanged deterministic candidate coverage selector on one fixed four-project Development pool without consuming another Holdout.",
+  "methodology": {
+    "development_policy": "fixed_reusable_pool",
+    "project_level_observation": true,
+    "holdout_treadmill_avoided": true,
+    "old_holdout_or_challenge_execution_forbidden": true,
+    "final_new_holdout_deferred_until_full_architecture_freeze": true
+  },
+  "dataset": {
+    "path": "evals/bid_intake/retrieval/v1/private_fixed_development_pool_v2_approved.jsonl",
+    "file_sha256": "203737153d1fe5b85383ec6972c14cd5f7088fe2bf3695c3daa4412a9627eebd",
+    "dataset_fingerprint": "c1b1dc434353aee5b8e19aed30be204c43e8385195f5d0fb94afb918bce81c87",
+    "case_count": 38,
+    "positive_case_count": 35,
+    "negative_case_count": 3,
+    "project_count": 4,
+    "approved_case_count": 38,
+    "gold_evidence_reference_count": 82,
+    "unique_gold_evidence_count": 68,
+    "dataset_split": "development",
+    "source_datasets": [
+      {
+        "path": "evals/bid_intake/retrieval/v1/private_development_approved_v1.jsonl",
+        "file_sha256": "080d6078df57d8e6bf9b46ad656ca51e668766ffb2371cd666fc7875a2de6464",
+        "case_count": 20,
+        "project_count": 2,
+        "dataset_fingerprint": "48e44f2271aa831714e82855363980766acaa6b028a1a55f918c58cbca7bb80a"
+      },
+      {
+        "path": "evals/bid_intake/retrieval/v1/private_fact_coverage_development_approved_v1.jsonl",
+        "file_sha256": "0d22c88be9ec4f470ec03043493a83704f683d89d088e841ed67765e6603080d",
+        "case_count": 8,
+        "project_count": 1,
+        "dataset_fingerprint": "a253cbe9e3bdad051b3e903077740cbec2c71cadd6cafc8a3a8f6d036ea74886"
+      },
+      {
+        "path": "evals/bid_intake/retrieval/v1/private_graph_development_b_lingshui_approved_v1.jsonl",
+        "file_sha256": "9df9dca0f95782521cbc99807cddd453e186a183f73f30300ddf25144cdc92f2",
+        "case_count": 10,
+        "project_count": 1,
+        "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253"
+      }
+    ]
+  },
+  "project_snapshots": [
+    {
+      "project_uuid": "d6d9fa60-c00c-4580-afb4-17ef8168c9f9",
+      "project_label": "香港中心",
+      "case_count": 10,
+      "active_manifest_version": 2,
+      "active_manifest_hash": "4de1a9dd0fc250739a41e8d647a53d3ad8079cf262cc68cd7cbfb12cff43a8ee",
+      "active_document_count": 2,
+      "active_block_count": 1869,
+      "index_job_uuid": "6a3e7667-4a4a-4022-a803-02be2bbf2260",
+      "index_status": "completed",
+      "gold_verification_ok": true
+    },
+    {
+      "project_uuid": "d9382132-e111-4b08-a799-40c4377db0cf",
+      "project_label": "深圳丰隆",
+      "case_count": 10,
+      "active_manifest_version": 1,
+      "active_manifest_hash": "c1c1bd21d4ba678f959342145d90ceea309858cbd494ec9e4fdf27e1354e858e",
+      "active_document_count": 1,
+      "active_block_count": 381,
+      "index_job_uuid": "a3efe9c8-1f4a-4a14-9aa1-7f303041933c",
+      "index_status": "completed",
+      "gold_verification_ok": true
+    },
+    {
+      "project_uuid": "4a495b13-4373-437b-b536-af1975c8cda1",
+      "project_label": "总部基地",
+      "case_count": 8,
+      "active_manifest_version": 1,
+      "active_manifest_hash": "c0416d2d5a299ccc667ec3e3f2614522fb1b8ac81484a0b75770f6a10acab514",
+      "active_document_count": 1,
+      "active_block_count": 122,
+      "index_job_uuid": "b391f771-c421-436e-a2d8-1b2bf3c5e4b4",
+      "index_status": "completed",
+      "gold_verification_ok": true
+    },
+    {
+      "project_uuid": "25091d80-15ab-40b7-ad20-fd9a169d1dc8",
+      "project_label": "陵水",
+      "case_count": 10,
+      "active_manifest_version": 5,
+      "active_manifest_hash": "c4244d5424976fa661664f60716934368d1aea4228b678b0d394992941c1f841",
+      "active_document_count": 4,
+      "active_block_count": 947,
+      "index_job_uuid": "83bfa7f3-3f2c-4104-aaf4-a28d933990b8",
+      "index_status": "completed",
+      "gold_verification_ok": true
+    }
+  ],
+  "configuration": {
+    "backend": "database_layered_retrieval",
+    "hybrid_search_enabled": true,
+    "top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "baseline_candidate_coverage_selection_enabled": false,
+    "candidate_candidate_coverage_selection_enabled": true,
+    "all_other_optional_retrieval_enhancements_enabled": false,
+    "embedding_model": "maidalun1020/bce-embedding-base_v1",
+    "embedding_dimension": 768,
+    "chunk_max_chars": 1200,
+    "chunk_overlap_chars": 0,
+    "fusion": "rrf",
+    "analysis_llm_calls": 0,
+    "prediction_excerpts_persisted": false
+  },
+  "candidate_pool_diagnostics": {
+    "captured_during_same_formal_retrieval": true,
+    "evidence_ids_only": true,
+    "evidence_content_persisted": false,
+    "metrics": [
+      "mean_candidate_pool_recall",
+      "candidate_pool_oracle_complete_rate",
+      "mean_candidate_to_top_k_gold_retention",
+      "total_gold_dropped_from_candidate_pool"
+    ]
+  },
+  "formal_execution_contract": {
+    "maximum_formal_execution_count": 1,
+    "one_execution_definition": "one frozen Baseline pass followed by one frozen Candidate pass on the same 38 Development cases",
+    "baseline_must_run_before_candidate": true,
+    "candidate_must_reference_baseline_report": true,
+    "rerun_to_select_a_better_result_forbidden": true
+  },
+  "acceptance_thresholds": {
+    "candidate_hit_rate_at_5_min": 0.8,
+    "candidate_mean_recall_at_5_min": 0.6,
+    "candidate_mrr_min": 0.75,
+    "candidate_mean_ndcg_at_5_min": 0.6,
+    "global_recall_delta_min": 0.05,
+    "improvement_case_count_min": 3,
+    "recall_regression_case_count_max": 0,
+    "global_mrr_delta_min": -0.02,
+    "global_ndcg_at_5_delta_min": -0.02,
+    "candidate_pool_recall_min": 0.6,
+    "candidate_to_top_k_gold_retention_delta_min": 0.1,
+    "total_gold_dropped_from_candidate_pool_must_decrease": true,
+    "improved_project_count_min": 3,
+    "per_project_recall_delta_min": -0.02,
+    "non_origin_project_improvement_count_min": 1,
+    "origin_projects": [
+      "d6d9fa60-c00c-4580-afb4-17ef8168c9f9",
+      "d9382132-e111-4b08-a799-40c4377db0cf"
+    ],
+    "non_origin_projects": [
+      "4a495b13-4373-437b-b536-af1975c8cda1",
+      "25091d80-15ab-40b7-ad20-fd9a169d1dc8"
+    ],
+    "routing_exact_rate_min": 1.0,
+    "query_count_accuracy_min": 1.0,
+    "topic_recall_min": 1.0,
+    "negative_accuracy_delta_min": 0.0,
+    "search_call_count_delta_max": 0,
+    "p95_latency_delta_ms_max": 500,
+    "execution_error_count_max": 0,
+    "additional_llm_tokens_max": 0
+  },
+  "interpretation_contract": {
+    "candidate_pool_recall_below_threshold": "Selection may work, but retrieval generation is insufficient; do not accept a selector-only solution.",
+    "improvement_only_on_origin_projects": "Reject as insufficient cross-project stability.",
+    "full_development_pass": "Requires every absolute, delta, per-project and safety threshold to pass.",
+    "production_release": "Development pass alone never authorizes production."
+  },
+  "pre_freeze_validation": {
+    "focused_test_count": 43,
+    "focused_test_passed": 43,
+    "compile_passed": true,
+    "gold_verification_project_count": 4,
+    "gold_verification_all_passed": true,
+    "warnings": [
+      "pytest cache path permission warning only",
+      "requests dependency compatibility warning only"
+    ]
+  },
+  "code_snapshot": {
+    "git_head": "ac8f0b6ca57664640a0f50816df70d315321d07a",
+    "files": {
+      "evals/bid_intake/retrieval/v1/ret_candidate_coverage_002_development_c_contract.md": "e2eb90f0a1918d64e9d4ae858050591261bd39c6234c4ce22bb68473cac2e69f",
+      "app/agents/bid_intake/retrieval_evaluation.py": "ebd5a84a493c19300660db44789796d36ca88626b08773adf4e15249a56f37ce",
+      "scripts/bid_intake_retrieval_eval.py": "793a2aca73b2944db1b4b984a77aaf3ed63f894f1fb82cb43de9fb90c7d4f373",
+      "scripts/build_bid_intake_fixed_development_pool.py": "6a4c7a197d5612d552f1467223ff21ca707a568917ca193d7402c9e59fdfc12e",
+      "scripts/verify_bid_intake_eval_gold.py": "c14f7092fcef7055916414b8f6e4befceea431fce5664b60d539400f324732d8",
+      "mcp_servers/tender_evidence/query_planner.py": "76459d5e2a50a99a0f881b6b395a69aa6d66ea29d87b08708b4273041a86955a",
+      "mcp_servers/tender_evidence/service.py": "fd1b2df579bce78b8892274541110cda32bca9ac62a457bfcadd7098cd950322",
+      "mcp_servers/tender_evidence/retrieval_router.py": "b701467c4ee256e271fda16e276866045026a221e0151cc6951f0eef230f46d2",
+      "mcp_servers/tender_evidence/sqlalchemy_repository.py": "96c89a71e542ce57a6aa5282ba7ade4217bc8ec4637e73aea328b5ab6f28bc35",
+      "tests/test_bid_intake_retrieval_evaluation.py": "593e4c06d1c41dbb7c5c801b07d08f6ac682e459b0a9f785a673bfb5c3e57c3d",
+      "tests/test_tender_query_planner.py": "bfec78ed8f03405ee5dafed88d2b4fe29393271b95e409b6af705c442447d94a"
+    }
+  }
+}

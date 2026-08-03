@@ -233,6 +233,79 @@ class BudgetProjectPricingRun(Base):
         back_populates="run",
         order_by="BudgetProjectPricingEvent.id",
     )
+    draft_snapshot = relationship(
+        "BudgetProjectPricingRunDraftSnapshot",
+        back_populates="run",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class BudgetProjectPricingRunDraftSnapshot(Base):
+    """Immutable full quote-draft payload bound to one pricing version."""
+
+    __tablename__ = "budget_project_pricing_run_draft_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "snapshot_uuid",
+            name="uq_budget_pricing_run_draft_snapshots_uuid",
+        ),
+        UniqueConstraint("run_id", name="uq_budget_pricing_run_draft_snapshots_run"),
+        Index(
+            "ix_budget_pricing_run_draft_snapshots_project_created",
+            "project_id",
+            "created_at",
+        ),
+        Index(
+            "ix_budget_pricing_run_draft_snapshots_account_created",
+            "account_id",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    snapshot_uuid = Column(String(36), nullable=False)
+    run_id = Column(
+        Integer,
+        ForeignKey("budget_project_pricing_runs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    account_id = Column(
+        Integer,
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    project_id = Column(
+        Integer,
+        ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    source_draft_id = Column(
+        Integer,
+        ForeignKey("budget_project_pricing_drafts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_draft_uuid = Column(String(36), nullable=False)
+    source_draft_revision = Column(Integer, nullable=False)
+    pricing_mode = Column(String(32), nullable=False)
+    row_count = Column(Integer, nullable=False, default=0, server_default="0")
+    snapshot_sha256 = Column(String(64), nullable=False, index=True)
+    snapshot_json = Column(_longtext_type(), nullable=False)
+    created_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    run = relationship("BudgetProjectPricingRun", back_populates="draft_snapshot")
+    account = relationship("Account")
+    project = relationship("Project")
+    source_draft = relationship("BudgetProjectPricingDraft")
+    creator = relationship("User", foreign_keys=[created_by])
 
 
 class BudgetProjectPricingRunLine(Base):

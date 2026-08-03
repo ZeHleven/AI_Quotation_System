@@ -1,0 +1,376 @@
+{
+  "schema_version": "bid_intake_predicate_aware_marginal_gain_execution_v1",
+  "execution_id": "RET-CANDIDATE-COVERAGE-005-FIXED-DEV-EXECUTION-V1",
+  "freeze_id": "RET-CANDIDATE-COVERAGE-005-FIXED-DEV-FREEZE-20260731-V1",
+  "experiment_id": "RET-CANDIDATE-COVERAGE-005",
+  "executed_at": "2026-07-31T11:45:20+08:00",
+  "status": "rejected_candidate_pool_order_equivalence_and_gold_retention_gates",
+  "dataset_fingerprint": "c1b1dc434353aee5b8e19aed30be204c43e8385195f5d0fb94afb918bce81c87",
+  "formal_execution_counts": {
+    "quality_comparison": 1,
+    "baseline_pass": 1,
+    "candidate_pass": 1,
+    "agent_run": 0,
+    "rerun_performed": false
+  },
+  "artifacts": {
+    "freeze": {
+      "path": "evals/bid_intake/retrieval/v1/ret_candidate_coverage_005_fixed_development_freeze_v1.json",
+      "sha256": "eed884f7c4201f00b6efe9fdef4d2ee9f646596aec08af0a81e563149b5a1ae9"
+    },
+    "baseline_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_005_fixed_dev_baseline/20260731_114425_RET-CANDIDATE-COVERAGE-005-FIXED-DEV-BASELINE_report.json",
+      "sha256": "1ec4cbfbefc6eee4a3e52603d4b732b002f30478286244f3307aa64a20e46d95"
+    },
+    "baseline_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_005_fixed_dev_baseline/20260731_114425_RET-CANDIDATE-COVERAGE-005-FIXED-DEV-BASELINE_predictions.jsonl",
+      "sha256": "08d58e2cb1f2331a26f79b20736f3aeec1e6f077aba3ca547a7363de76b372c6"
+    },
+    "candidate_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_005_fixed_dev_candidate/20260731_114520_RET-CANDIDATE-COVERAGE-005-FIXED-DEV-CANDIDATE_report.json",
+      "sha256": "b50720e65721c6145289b0faf6c9956ab4359082e6405ff58208d3885175b8bb"
+    },
+    "candidate_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_005_fixed_dev_candidate/20260731_114520_RET-CANDIDATE-COVERAGE-005-FIXED-DEV-CANDIDATE_predictions.jsonl",
+      "sha256": "c300292b8f787a5cedaff69dee6b85724015330735970604d616d736df759486"
+    }
+  },
+  "baseline_metrics": {
+    "hit_rate_at_5": 0.885714,
+    "mean_recall_at_5": 0.706667,
+    "mean_precision_at_5": 0.28,
+    "mrr": 0.792857,
+    "mean_ndcg_at_5": 0.690369,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "negative_accuracy": 0.0,
+    "mean_candidate_pool_recall": 0.871429,
+    "candidate_pool_oracle_complete_rate": 0.771429,
+    "mean_candidate_to_top_k_gold_retention": 0.800476,
+    "total_gold_dropped_from_candidate_pool": 17,
+    "mean_latency_ms": 619.447,
+    "p95_latency_ms": 1541,
+    "search_call_count": 62,
+    "error_count": 0
+  },
+  "candidate_metrics": {
+    "hit_rate_at_5": 0.942857,
+    "mean_recall_at_5": 0.76619,
+    "mean_precision_at_5": 0.302857,
+    "mrr": 0.809048,
+    "mean_ndcg_at_5": 0.723695,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "negative_accuracy": 0.0,
+    "mean_candidate_pool_recall": 0.871429,
+    "candidate_pool_oracle_complete_rate": 0.771429,
+    "mean_candidate_to_top_k_gold_retention": 0.874286,
+    "total_gold_dropped_from_candidate_pool": 13,
+    "fact_gate_assessment_rate": 0.815789,
+    "fact_gate_alignment_accuracy": 0.548387,
+    "fact_gate_negative_accuracy": 1.0,
+    "fact_gate_false_sufficient_rate": 0.25,
+    "fact_gate_false_insufficient_rate": 0.666667,
+    "mean_latency_ms": 521.447,
+    "p95_latency_ms": 1172,
+    "search_call_count": 62,
+    "error_count": 0
+  },
+  "deltas_vs_baseline": {
+    "hit_rate_at_5": 0.057143,
+    "mean_recall_at_5": 0.059523,
+    "mean_precision_at_5": 0.022857,
+    "mrr": 0.016191,
+    "mean_ndcg_at_5": 0.033326,
+    "mean_candidate_pool_recall": 0.0,
+    "candidate_pool_oracle_complete_rate": 0.0,
+    "mean_candidate_to_top_k_gold_retention": 0.07381,
+    "total_gold_dropped_from_candidate_pool": -4,
+    "routing_exact_rate": 0.0,
+    "query_count_accuracy": 0.0,
+    "topic_recall": 0.0,
+    "negative_accuracy": 0.0,
+    "mean_latency_ms": -98.0,
+    "p95_latency_ms": -369,
+    "search_call_count": 0
+  },
+  "by_project": [
+    {
+      "project_uuid": "d6d9fa60-c00c-4580-afb4-17ef8168c9f9",
+      "project_label": "香港中心",
+      "origin_project": true,
+      "baseline_recall_at_5": 0.633333,
+      "candidate_recall_at_5": 0.783333,
+      "recall_delta": 0.15,
+      "baseline_mrr": 0.575,
+      "candidate_mrr": 0.615,
+      "mrr_delta": 0.04,
+      "baseline_ndcg_at_5": 0.583304,
+      "candidate_ndcg_at_5": 0.645709,
+      "ndcg_delta": 0.062405,
+      "baseline_gold_retention": 0.633333,
+      "candidate_gold_retention": 0.833333,
+      "gold_retention_delta": 0.2,
+      "baseline_dropped_gold": 5,
+      "candidate_dropped_gold": 3,
+      "project_improved": true
+    },
+    {
+      "project_uuid": "d9382132-e111-4b08-a799-40c4377db0cf",
+      "project_label": "深圳丰隆",
+      "origin_project": true,
+      "baseline_recall_at_5": 0.916667,
+      "candidate_recall_at_5": 0.95,
+      "recall_delta": 0.033333,
+      "baseline_mrr": 1.0,
+      "candidate_mrr": 1.0,
+      "mrr_delta": 0.0,
+      "baseline_ndcg_at_5": 0.923679,
+      "candidate_ndcg_at_5": 0.953287,
+      "ndcg_delta": 0.029608,
+      "baseline_gold_retention": 0.966667,
+      "candidate_gold_retention": 1.0,
+      "gold_retention_delta": 0.033333,
+      "baseline_dropped_gold": 1,
+      "candidate_dropped_gold": 0,
+      "project_improved": true
+    },
+    {
+      "project_uuid": "4a495b13-4373-437b-b536-af1975c8cda1",
+      "project_label": "总部基地",
+      "origin_project": false,
+      "baseline_recall_at_5": 0.65,
+      "candidate_recall_at_5": 0.7,
+      "recall_delta": 0.05,
+      "baseline_mrr": 0.666667,
+      "candidate_mrr": 0.7,
+      "mrr_delta": 0.033333,
+      "baseline_ndcg_at_5": 0.608063,
+      "candidate_ndcg_at_5": 0.657323,
+      "ndcg_delta": 0.04926,
+      "baseline_gold_retention": 0.65,
+      "candidate_gold_retention": 0.7,
+      "gold_retention_delta": 0.05,
+      "baseline_dropped_gold": 6,
+      "candidate_dropped_gold": 5,
+      "project_improved": true
+    },
+    {
+      "project_uuid": "25091d80-15ab-40b7-ad20-fd9a169d1dc8",
+      "project_label": "陵水",
+      "origin_project": false,
+      "baseline_recall_at_5": 0.598333,
+      "candidate_recall_at_5": 0.598333,
+      "recall_delta": 0.0,
+      "baseline_mrr": 0.866667,
+      "candidate_mrr": 0.866667,
+      "mrr_delta": 0.0,
+      "baseline_ndcg_at_5": 0.605277,
+      "candidate_ndcg_at_5": 0.605277,
+      "ndcg_delta": 0.0,
+      "baseline_gold_retention": 0.876667,
+      "candidate_gold_retention": 0.876667,
+      "gold_retention_delta": 0.0,
+      "baseline_dropped_gold": 5,
+      "candidate_dropped_gold": 5,
+      "project_improved": false
+    }
+  ],
+  "implementation_conformance": {
+    "passed": false,
+    "selection_policy_invariants_passed": true,
+    "contract_requirement": "Baseline and Candidate must share identical candidate-pool IDs and order, and every Candidate output change must be explained by positive audited marginal-gain promotion on the ordered Baseline copy.",
+    "observed_case_count": 38,
+    "changed_output_case_count": 8,
+    "coverage_promotion_case_count": 8,
+    "coverage_promotion_count": 9,
+    "total_net_coverage_gain": 10,
+    "zero_promotion_case_count": 30,
+    "zero_promotion_ordered_top_k_equivalence_case_count": 30,
+    "changed_without_coverage_promotion_case_count": 0,
+    "multi_query_zero_promotion_case_count": 8,
+    "multi_query_changed_without_coverage_promotion_case_count": 0,
+    "protected_baseline_anchor_count": 34,
+    "maximum_observed_promotions_per_case": 2,
+    "all_promotions_have_positive_net_gain": true,
+    "all_promotions_strictly_increase_coverage": true,
+    "all_promotion_coverage_chains_valid": true,
+    "all_victim_exclusive_fact_guards_passed": true,
+    "all_query_diversity_audits_passed": true,
+    "all_top_one_positions_preserved": true,
+    "all_non_replaced_positions_preserved": true,
+    "replacement_audits_match_output_differences": true,
+    "candidate_pool_id_set_equivalence_case_count": 38,
+    "candidate_pool_id_and_order_equivalence_case_count": 37,
+    "query_task_equivalence_case_count": 38,
+    "search_call_count_baseline": 62,
+    "search_call_count_candidate": 62,
+    "candidate_context_read_count": 0,
+    "candidate_graph_call_count": 0,
+    "candidate_additional_llm_tokens": 0,
+    "candidate_pool_order_mismatches": [
+      {
+        "eval_case_id": "HK-CENTER-DEV-Q009",
+        "baseline_positions_one_based": {
+          "9": "EV-207a1dc1-e4de-5a13-bd03-b87e01b90b14",
+          "10": "EV-030d1fc0-117e-5de5-bdbd-cb4dda09e0f0"
+        },
+        "candidate_positions_one_based": {
+          "9": "EV-030d1fc0-117e-5de5-bdbd-cb4dda09e0f0",
+          "10": "EV-207a1dc1-e4de-5a13-bd03-b87e01b90b14"
+        },
+        "candidate_pool_id_sets_equal": true,
+        "ordered_top_5_equal": true,
+        "promotion_count": 0,
+        "decision_reason": "unsupported_relation_shape",
+        "interpretation": "A lower-rank live retrieval tie-order swap did not affect Top-5 or quality, but violates the frozen 100% candidate-pool order-equivalence gate. No rerun is allowed."
+      }
+    ],
+    "changed_cases": [
+      {
+        "eval_case_id": "FACT-COVERAGE-DEV-A-Q002",
+        "promotion_count": 1,
+        "replaced_positions_one_based": [5],
+        "quality_result": "neutral"
+      },
+      {
+        "eval_case_id": "FACT-COVERAGE-DEV-A-Q003",
+        "promotion_count": 1,
+        "replaced_positions_one_based": [2],
+        "quality_result": "improved"
+      },
+      {
+        "eval_case_id": "HK-CENTER-DEV-Q003",
+        "promotion_count": 1,
+        "replaced_positions_one_based": [5],
+        "quality_result": "improved"
+      },
+      {
+        "eval_case_id": "HK-CENTER-DEV-Q004",
+        "promotion_count": 2,
+        "replaced_positions_one_based": [5, 4],
+        "quality_result": "improved"
+      },
+      {
+        "eval_case_id": "HK-CENTER-DEV-Q010",
+        "promotion_count": 1,
+        "replaced_positions_one_based": [5],
+        "quality_result": "neutral"
+      },
+      {
+        "eval_case_id": "RET-GRAPH-DEV-B-Q008",
+        "promotion_count": 1,
+        "replaced_positions_one_based": [5],
+        "quality_result": "neutral"
+      },
+      {
+        "eval_case_id": "RET-GRAPH-DEV-B-Q009",
+        "promotion_count": 1,
+        "replaced_positions_one_based": [2],
+        "quality_result": "neutral"
+      },
+      {
+        "eval_case_id": "SZ-FENGLONG-DEV-Q010",
+        "promotion_count": 1,
+        "replaced_positions_one_based": [2],
+        "quality_result": "improved"
+      }
+    ],
+    "unsupported_relation_shape_case_count": 7,
+    "unsupported_relation_shape_case_ids": [
+      "HK-CENTER-DEV-Q006",
+      "HK-CENTER-DEV-Q007",
+      "HK-CENTER-DEV-Q009",
+      "SZ-FENGLONG-DEV-Q004",
+      "SZ-FENGLONG-DEV-Q005",
+      "SZ-FENGLONG-DEV-Q007",
+      "SZ-FENGLONG-DEV-Q009"
+    ],
+    "quality_interpretation": "The selector-level invariants passed, but the formal implementation gate fails because one live candidate-pool ordering was not identical. Quality deltas are retained as observational evidence only and cannot override the failed frozen gate."
+  },
+  "case_level_diagnostics": {
+    "improvement_case_count": 4,
+    "ranking_regression_case_count": 0,
+    "recall_regression_case_count": 0,
+    "improvement_case_ids": [
+      "FACT-COVERAGE-DEV-A-Q003",
+      "HK-CENTER-DEV-Q003",
+      "HK-CENTER-DEV-Q004",
+      "SZ-FENGLONG-DEV-Q010"
+    ],
+    "neutral_promotion_case_ids": [
+      "FACT-COVERAGE-DEV-A-Q002",
+      "HK-CENTER-DEV-Q010",
+      "RET-GRAPH-DEV-B-Q008",
+      "RET-GRAPH-DEV-B-Q009"
+    ],
+    "recall_regression_case_ids": [],
+    "ranking_regression_case_ids": []
+  },
+  "acceptance_evaluation": {
+    "implementation_contract_passed": false,
+    "absolute_quality_passed": true,
+    "global_delta_passed": true,
+    "candidate_pool_recall_passed": true,
+    "candidate_to_top_k_retention_passed": false,
+    "cross_project_stability_passed": true,
+    "safety_and_cost_passed": true,
+    "full_development_passed": false,
+    "passed_thresholds": [
+      "selection_policy_invariants",
+      "promotion_zero_ordered_top_k_equivalence",
+      "every_output_change_requires_promotion",
+      "every_promotion_net_coverage_gain_min",
+      "coverage_after_strictly_greater_than_before",
+      "top_one_position_and_survival",
+      "unique_auxiliary_query_representative_preservation",
+      "victim_exclusive_fact_preservation",
+      "all_non_replaced_positions_preserved",
+      "maximum_promotions_per_case",
+      "query_task_equivalence",
+      "search_call_count_delta_required",
+      "candidate_hit_rate_at_5_min",
+      "candidate_mean_recall_at_5_min",
+      "candidate_mrr_min",
+      "candidate_mean_ndcg_at_5_min",
+      "global_recall_delta_min",
+      "improvement_case_count_min",
+      "recall_regression_case_count_max",
+      "global_mrr_delta_min",
+      "global_ndcg_at_5_delta_min",
+      "candidate_pool_recall_min",
+      "total_gold_dropped_from_candidate_pool_must_decrease",
+      "improved_project_count_min",
+      "per_project_recall_delta_min",
+      "non_origin_project_improvement_count_min",
+      "routing_exact_rate_min",
+      "query_count_accuracy_min",
+      "topic_recall_min",
+      "negative_accuracy_delta_min",
+      "p95_latency_delta_ms_max",
+      "execution_error_count_max",
+      "additional_llm_tokens_max"
+    ],
+    "failed_thresholds": [
+      {
+        "name": "candidate_pool_id_and_order_equivalence_required",
+        "required": "38/38",
+        "observed": "37/38"
+      },
+      {
+        "name": "candidate_to_top_k_gold_retention_delta_min",
+        "required": 0.1,
+        "observed": 0.07381
+      }
+    ]
+  },
+  "final_decision": {
+    "decision": "reject_005",
+    "reason": "The frozen candidate-pool order-equivalence gate and the minimum Gold-retention delta gate failed. Thresholds are not lowered and the formal A/B is not rerun.",
+    "production_candidate_coverage_feature_enabled": false,
+    "holdout_or_challenge_unlocked": false,
+    "recommended_next_step": "If work continues, create an independently numbered experiment that first freezes or deterministically replays the shared candidate pool before comparing final selectors. Do not rerun 005 or tune from locked Holdout/Challenge data."
+  }
+}

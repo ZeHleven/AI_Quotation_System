@@ -1,0 +1,53 @@
+{
+  "schema_version": "bid_intake_struct_context_development_execution_v1",
+  "execution_id": "RET-STRUCT-CONTEXT-001-DEV-A-EXECUTION-V1",
+  "freeze_id": "RET-STRUCT-CONTEXT-001-DEV-A-FREEZE-V1",
+  "executed_at": "2026-07-30T10:14:24+08:00",
+  "dataset_fingerprint": "a253cbe9e3bdad051b3e903077740cbec2c71cadd6cafc8a3a8f6d036ea74886",
+  "baseline_report_path": "outputs/bid_intake_retrieval_eval/ret_fact_gate_001_dev_a/20260730_095344_RET-FACT-GATE-001-DEV-A_report.json",
+  "candidate_report_path": "outputs/bid_intake_retrieval_eval/ret_struct_context_001_dev_a/20260730_101424_RET-STRUCT-CONTEXT-001-DEV-A_report.json",
+  "metrics": {
+    "hit_rate_at_5": 1.0,
+    "mean_recall_at_5": 0.716667,
+    "recall_delta": 0.066667,
+    "mrr": 0.633333,
+    "mrr_delta": 0.066666,
+    "mean_ndcg_at_5": 0.632681,
+    "ndcg_delta": 0.046928,
+    "positive_case_improvement_count": 1,
+    "positive_case_regression_count": 0,
+    "fact_gate_negative_accuracy": 1.0,
+    "fact_gate_false_sufficient_rate": 0.333333,
+    "fact_gate_false_insufficient_rate": 0.5,
+    "query_count_accuracy": 1.0,
+    "p95_latency_ms": 748,
+    "error_count": 0
+  },
+  "acceptance_results": {
+    "mean_recall_at_5": "passed",
+    "positive_case_improvement_count": "failed",
+    "mrr": "passed",
+    "mean_ndcg_at_5": "passed",
+    "fact_gate_negative_accuracy": "passed",
+    "fact_gate_false_sufficient_rate": "passed_unchanged",
+    "fact_gate_false_insufficient_rate": "passed_unchanged",
+    "query_count_accuracy": "passed",
+    "p95_latency_ms": "passed",
+    "error_count": "passed",
+    "overall": "failed"
+  },
+  "diagnosis": {
+    "improved_cases": [
+      "FACT-COVERAGE-DEV-A-Q002"
+    ],
+    "regressed_cases": [],
+    "inference": "父章节与表头让设计工作/成果题找回一条正确子行，但没有改善其他四道正向题；聚合Recall上升来自单题，未满足跨问法门槛。",
+    "next_candidate": "在同一结构父节点下选择查询相关的多个子行组成有界证据组，仍不增加Query且不占用Top5锚点。"
+  },
+  "decision": {
+    "enable_production_flag": false,
+    "keep_as_partial_experiment": true,
+    "continue_item_2_with_bounded_sibling_groups": true,
+    "rerun_old_holdout_or_challenge": false
+  }
+}

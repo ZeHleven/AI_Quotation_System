@@ -13,7 +13,10 @@ else:
         "ai_middle_office",
         broker=settings.celery_broker_url,
         backend=settings.celery_result_backend,
-        include=["app.tasks.quote_tasks"],
+        include=[
+            "app.tasks.quote_tasks",
+            "app.tasks.tender_evidence_tasks",
+        ],
     )
     celery_app.conf.update(
         task_track_started=True,

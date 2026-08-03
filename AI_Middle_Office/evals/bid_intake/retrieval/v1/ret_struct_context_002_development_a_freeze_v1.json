@@ -1,0 +1,89 @@
+{
+  "schema_version": "bid_intake_struct_sibling_context_development_freeze_v1",
+  "freeze_id": "RET-STRUCT-CONTEXT-002-DEV-A-FREEZE-V1",
+  "frozen_at": "2026-07-30T02:35:00+00:00",
+  "experiment_id": "RET-STRUCT-CONTEXT-002",
+  "dataset": {
+    "dataset_path": "evals/bid_intake/retrieval/v1/private_fact_coverage_development_approved_v1.jsonl",
+    "dataset_fingerprint": "a253cbe9e3bdad051b3e903077740cbec2c71cadd6cafc8a3a8f6d036ea74886",
+    "case_count": 8,
+    "positive_case_count": 5,
+    "negative_case_count": 3,
+    "reviewed_by": "user-business-review-2026-07-30"
+  },
+  "baseline": {
+    "experiment_id": "RET-FACT-GATE-001-DEV-A",
+    "report_path": "outputs/bid_intake_retrieval_eval/ret_fact_gate_001_dev_a/20260730_095344_RET-FACT-GATE-001-DEV-A_report.json",
+    "hit_rate_at_5": 0.8,
+    "mean_recall_at_5": 0.65,
+    "mrr": 0.566667,
+    "mean_ndcg_at_5": 0.585753,
+    "fact_gate_false_sufficient_rate": 0.333333,
+    "fact_gate_false_insufficient_rate": 0.5,
+    "p95_latency_ms": 982
+  },
+  "prior_candidate": {
+    "experiment_id": "RET-STRUCT-CONTEXT-001-DEV-A",
+    "report_path": "outputs/bid_intake_retrieval_eval/ret_struct_context_001_dev_a/20260730_101424_RET-STRUCT-CONTEXT-001-DEV-A_report.json",
+    "mean_recall_at_5": 0.716667,
+    "mrr": 0.633333,
+    "mean_ndcg_at_5": 0.632681,
+    "positive_case_improvement_count_vs_baseline": 1
+  },
+  "single_change": {
+    "description": "在第一版已验证的同文档表格父节点下，从既有Top20候选池中选择查询相关的兄弟子行，并作为有界证据组附着到一个Top5锚点。",
+    "same_verified_parent_required": true,
+    "eligible_parent_must_contain_final_anchor": true,
+    "max_parent_groups": 1,
+    "max_sibling_members_per_group": 3,
+    "sibling_members_must_come_from_existing_candidate_pool": true,
+    "siblings_do_not_consume_top_k": true,
+    "additional_retrieval_query_count": 0,
+    "second_round_retrieval_enabled": false,
+    "graph_expansion_enabled": false,
+    "memory_enabled": false
+  },
+  "frozen_retrieval_config": {
+    "backend": "database_layered_retrieval",
+    "final_top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "candidate_coverage_selection_enabled": true,
+    "semantic_fact_companion_enabled": false,
+    "atomic_fact_slots_enabled": false,
+    "adjacent_candidate_expansion_enabled": false,
+    "legacy_context_evidence_groups_enabled": false,
+    "structured_context_groups_enabled": true,
+    "analysis_llm_invoked": false,
+    "prediction_excerpts_persisted": false
+  },
+  "code_sha256": {
+    "mcp_servers/tender_evidence/contracts.py": "74B19B38E7848654B550E89C80B32E657C78D20B50468C200DEC84EAB6C16522",
+    "mcp_servers/tender_evidence/structure_context.py": "50DBBF87AD7E09B792A90D4EC10200B0CEA624AE76D10E9CAE1535F9FB0273FA",
+    "mcp_servers/tender_evidence/local_repository.py": "6CBEC70BD3DE6C5DD6EB09A73B32156C33B90FE2892F1CA71161B6C7131D271F",
+    "mcp_servers/tender_evidence/sqlalchemy_repository.py": "96C89A71E542CE57A6AA5282BA7ADE4217BC8EC4637E73AEA328B5AB6F28BC35",
+    "mcp_servers/tender_evidence/query_planner.py": "76459D5E2A50A99A0F881B6B395A69AA6D66EA29D87B08708B4273041A86955A",
+    "mcp_servers/tender_evidence/service.py": "5B23C580B455DD6E132AD036BE996BB4F8858CD23F76D686C1F41FE950ED2EC3",
+    "app/services/tender_evidence_body_storage.py": "6A4A3748ED3F96D7F7A62546314AC6A613C0D294F45F3CC22945CFA80933D564",
+    "scripts/bid_intake_retrieval_eval.py": "4E9DC6C160C3C0DAA283F7FDA9DB42BA8B6F70106ED4EDB3D09FE45BAD8A8945"
+  },
+  "predeclared_acceptance": {
+    "mean_recall_at_5_min": 0.75,
+    "positive_case_improvement_count_vs_baseline_min": 2,
+    "positive_case_regression_count_vs_baseline_max": 0,
+    "mrr_min": 0.6,
+    "mean_ndcg_at_5_min": 0.6,
+    "fact_gate_negative_accuracy_required": 1.0,
+    "fact_gate_false_sufficient_rate_max": 0.333333,
+    "fact_gate_false_insufficient_rate_max": 0.5,
+    "query_count_accuracy_required": 1.0,
+    "p95_latency_ms_max": 1130,
+    "error_count_max": 0
+  },
+  "decision_policy": {
+    "single_project_success_cannot_enable_production_flag": true,
+    "development_b_from_a_new_project_is_required": true,
+    "old_holdout_and_challenge_must_not_be_rerun": true,
+    "no_project_specific_keyword_may_be_added": true,
+    "failure_means_record_and_move_to_the_next_general_hypothesis": true
+  }
+}

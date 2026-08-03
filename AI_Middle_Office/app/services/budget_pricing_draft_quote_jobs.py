@@ -361,9 +361,9 @@ def _mark_job_running(job_id: int) -> tuple[int, int, int]:
         if job is None:
             return 0, 1, 1
         request = _json_load(job.request_json, {})
-        concurrency = int(request.get("ai_concurrency") or 3)
+        concurrency = int(request.get("ai_concurrency") or 1)
         concurrency = max(1, min(3, concurrency))
-        batch_size = int(request.get("ai_batch_size") or 6)
+        batch_size = int(request.get("ai_batch_size") or 3)
         batch_size = max(1, min(20, batch_size))
         if job.status in TERMINAL_JOB_STATUSES:
             return 0, concurrency, batch_size

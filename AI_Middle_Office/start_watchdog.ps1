@@ -29,6 +29,40 @@ function Write-WatchdogLog {
     Write-Host $line
 }
 
+function Enter-WatchdogInstanceLock {
+    param([string]$Path)
+
+    try {
+        $stream = [System.IO.File]::Open(
+            $Path,
+            [System.IO.FileMode]::OpenOrCreate,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None
+        )
+        $content = "pid={0}; started_at={1}`r`n" -f (
+            $PID,
+            (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        )
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($content)
+        $stream.SetLength(0)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush()
+        return $stream
+    } catch [System.IO.IOException] {
+        Write-WatchdogLog (
+            "another watchdog instance is already running; " +
+            "duplicate exits"
+        )
+        return $null
+    }
+}
+
+$WatchdogLockPath = Join-Path $LogDir "startup_watchdog.lock"
+$WatchdogLockStream = Enter-WatchdogInstanceLock -Path $WatchdogLockPath
+if (-not $WatchdogLockStream) {
+    exit 0
+}
+
 function Resolve-BindHost {
     param(
         [string]$RequestedHost,
@@ -112,4 +146,5 @@ while ((Get-Date) -lt $deadline) {
 }
 
 Write-WatchdogLog "watchdog timed out after ${MaxMinutes} minutes; system is not ready"
+$WatchdogLockStream.Dispose()
 exit 1

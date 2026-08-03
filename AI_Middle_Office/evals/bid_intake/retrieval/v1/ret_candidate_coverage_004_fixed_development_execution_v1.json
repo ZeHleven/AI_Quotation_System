@@ -1,0 +1,347 @@
+{
+  "schema_version": "bid_intake_anchor_preserving_shared_baseline_execution_v1",
+  "execution_id": "RET-CANDIDATE-COVERAGE-004-FIXED-DEV-EXECUTION-V1",
+  "freeze_id": "RET-CANDIDATE-COVERAGE-004-FIXED-DEV-FREEZE-20260730-V1",
+  "experiment_id": "RET-CANDIDATE-COVERAGE-004",
+  "executed_at": "2026-07-30T18:17:03+08:00",
+  "status": "rejected_quality_gain_retention_and_cross_project_gates",
+  "dataset_fingerprint": "c1b1dc434353aee5b8e19aed30be204c43e8385195f5d0fb94afb918bce81c87",
+  "formal_execution_counts": {
+    "quality_comparison": 1,
+    "baseline_pass": 1,
+    "candidate_pass": 1,
+    "agent_run": 0,
+    "rerun_performed": false
+  },
+  "artifacts": {
+    "freeze": {
+      "path": "evals/bid_intake/retrieval/v1/ret_candidate_coverage_004_fixed_development_freeze_v1.json",
+      "sha256": "1736b8016e0f79f31771bc1c0e393f96cbf903adf5cccf6952c5bcb76c5badbf"
+    },
+    "baseline_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_004_fixed_dev_baseline/20260730_181557_RET-CANDIDATE-COVERAGE-004-FIXED-DEV-BASELINE_report.json",
+      "sha256": "cd33635edddc119ad687e2555f6e60f44ddc3066c91ad3616925537422775d99"
+    },
+    "baseline_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_004_fixed_dev_baseline/20260730_181557_RET-CANDIDATE-COVERAGE-004-FIXED-DEV-BASELINE_predictions.jsonl",
+      "sha256": "3f953d7c83a897b4dbf7ec30d15b16a57d634807a1d96cf90d329c5e9b49364b"
+    },
+    "candidate_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_004_fixed_dev_candidate/20260730_181703_RET-CANDIDATE-COVERAGE-004-FIXED-DEV-CANDIDATE_report.json",
+      "sha256": "bc351a877f2ea9b7518280059df9a83594c6891eeb8c9c005c18e7f9afafecaf"
+    },
+    "candidate_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_004_fixed_dev_candidate/20260730_181703_RET-CANDIDATE-COVERAGE-004-FIXED-DEV-CANDIDATE_predictions.jsonl",
+      "sha256": "afda1fe7dd6926d1699e7b95dc22584b928a44d669d150436f82bf516fa9fbb1"
+    }
+  },
+  "baseline_metrics": {
+    "hit_rate_at_5": 0.885714,
+    "mean_recall_at_5": 0.706667,
+    "mean_precision_at_5": 0.28,
+    "mrr": 0.792857,
+    "mean_ndcg_at_5": 0.690369,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "negative_accuracy": 0.0,
+    "mean_candidate_pool_recall": 0.871429,
+    "candidate_pool_oracle_complete_rate": 0.771429,
+    "mean_candidate_to_top_k_gold_retention": 0.800476,
+    "total_gold_dropped_from_candidate_pool": 17,
+    "mean_latency_ms": 561.263,
+    "p95_latency_ms": 1257,
+    "search_call_count": 62,
+    "error_count": 0
+  },
+  "candidate_metrics": {
+    "hit_rate_at_5": 0.914286,
+    "mean_recall_at_5": 0.730476,
+    "mean_precision_at_5": 0.291429,
+    "mrr": 0.802381,
+    "mean_ndcg_at_5": 0.704618,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "negative_accuracy": 0.0,
+    "mean_candidate_pool_recall": 0.871429,
+    "candidate_pool_oracle_complete_rate": 0.771429,
+    "mean_candidate_to_top_k_gold_retention": 0.838571,
+    "total_gold_dropped_from_candidate_pool": 15,
+    "fact_gate_assessment_rate": 0.815789,
+    "fact_gate_alignment_accuracy": 0.645161,
+    "fact_gate_negative_accuracy": 1.0,
+    "fact_gate_false_sufficient_rate": 0.052632,
+    "fact_gate_false_insufficient_rate": 0.833333,
+    "mean_latency_ms": 574.974,
+    "p95_latency_ms": 1302,
+    "search_call_count": 62,
+    "error_count": 0
+  },
+  "deltas_vs_baseline": {
+    "hit_rate_at_5": 0.028572,
+    "mean_recall_at_5": 0.023809,
+    "mean_precision_at_5": 0.011429,
+    "mrr": 0.009524,
+    "mean_ndcg_at_5": 0.014249,
+    "mean_candidate_pool_recall": 0.0,
+    "candidate_pool_oracle_complete_rate": 0.0,
+    "mean_candidate_to_top_k_gold_retention": 0.038095,
+    "total_gold_dropped_from_candidate_pool": -2,
+    "routing_exact_rate": 0.0,
+    "query_count_accuracy": 0.0,
+    "topic_recall": 0.0,
+    "negative_accuracy": 0.0,
+    "mean_latency_ms": 13.711,
+    "p95_latency_ms": 45,
+    "search_call_count": 0
+  },
+  "by_project": [
+    {
+      "project_uuid": "d6d9fa60-c00c-4580-afb4-17ef8168c9f9",
+      "project_label": "香港中心",
+      "origin_project": true,
+      "baseline_recall_at_5": 0.633333,
+      "candidate_recall_at_5": 0.716667,
+      "recall_delta": 0.083334,
+      "baseline_mrr": 0.575,
+      "candidate_mrr": 0.608333,
+      "mrr_delta": 0.033333,
+      "baseline_ndcg_at_5": 0.583304,
+      "candidate_ndcg_at_5": 0.633174,
+      "ndcg_delta": 0.04987,
+      "baseline_gold_retention": 0.633333,
+      "candidate_gold_retention": 0.766667,
+      "gold_retention_delta": 0.133334,
+      "baseline_dropped_gold": 5,
+      "candidate_dropped_gold": 3,
+      "project_improved": true
+    },
+    {
+      "project_uuid": "d9382132-e111-4b08-a799-40c4377db0cf",
+      "project_label": "深圳丰隆",
+      "origin_project": true,
+      "baseline_recall_at_5": 0.916667,
+      "candidate_recall_at_5": 0.916667,
+      "recall_delta": 0.0,
+      "baseline_mrr": 1.0,
+      "candidate_mrr": 1.0,
+      "mrr_delta": 0.0,
+      "baseline_ndcg_at_5": 0.923679,
+      "candidate_ndcg_at_5": 0.923679,
+      "ndcg_delta": 0.0,
+      "baseline_gold_retention": 0.966667,
+      "candidate_gold_retention": 0.966667,
+      "gold_retention_delta": 0.0,
+      "baseline_dropped_gold": 1,
+      "candidate_dropped_gold": 1,
+      "project_improved": false
+    },
+    {
+      "project_uuid": "4a495b13-4373-437b-b536-af1975c8cda1",
+      "project_label": "总部基地",
+      "origin_project": false,
+      "baseline_recall_at_5": 0.65,
+      "candidate_recall_at_5": 0.65,
+      "recall_delta": 0.0,
+      "baseline_mrr": 0.666667,
+      "candidate_mrr": 0.666667,
+      "mrr_delta": 0.0,
+      "baseline_ndcg_at_5": 0.608063,
+      "candidate_ndcg_at_5": 0.608063,
+      "ndcg_delta": 0.0,
+      "baseline_gold_retention": 0.65,
+      "candidate_gold_retention": 0.65,
+      "gold_retention_delta": 0.0,
+      "baseline_dropped_gold": 6,
+      "candidate_dropped_gold": 6,
+      "project_improved": false
+    },
+    {
+      "project_uuid": "25091d80-15ab-40b7-ad20-fd9a169d1dc8",
+      "project_label": "陵水",
+      "origin_project": false,
+      "baseline_recall_at_5": 0.598333,
+      "candidate_recall_at_5": 0.598333,
+      "recall_delta": 0.0,
+      "baseline_mrr": 0.866667,
+      "candidate_mrr": 0.866667,
+      "mrr_delta": 0.0,
+      "baseline_ndcg_at_5": 0.605277,
+      "candidate_ndcg_at_5": 0.605277,
+      "ndcg_delta": 0.0,
+      "baseline_gold_retention": 0.876667,
+      "candidate_gold_retention": 0.876667,
+      "gold_retention_delta": 0.0,
+      "baseline_dropped_gold": 5,
+      "candidate_dropped_gold": 5,
+      "project_improved": false
+    }
+  ],
+  "implementation_conformance": {
+    "passed": true,
+    "contract_requirement": "Baseline and Candidate must share the ordinary ordered Top-5 skeleton; Candidate may only replace positions through reported coverage promotions.",
+    "observed_case_count": 38,
+    "changed_output_case_count": 3,
+    "coverage_promotion_case_count": 3,
+    "coverage_promotion_count": 3,
+    "zero_promotion_case_count": 35,
+    "changed_without_coverage_promotion_case_count": 0,
+    "multi_query_zero_promotion_case_count": 9,
+    "multi_query_changed_without_coverage_promotion_case_count": 0,
+    "protected_anchor_count": 94,
+    "single_position_replacement_case_count": 3,
+    "replacement_count_mismatch_case_count": 0,
+    "candidate_pool_order_equivalence_case_count": 38,
+    "query_task_equivalence_case_count": 38,
+    "search_call_count_baseline": 62,
+    "search_call_count_candidate": 62,
+    "all_non_replaced_positions_preserved": true,
+    "changed_cases": [
+      {
+        "eval_case_id": "HK-CENTER-DEV-Q004",
+        "promotion_count": 1,
+        "protected_anchor_count": 3,
+        "replaced_position_one_based": 4
+      },
+      {
+        "eval_case_id": "HK-CENTER-DEV-Q010",
+        "promotion_count": 1,
+        "protected_anchor_count": 4,
+        "replaced_position_one_based": 3
+      },
+      {
+        "eval_case_id": "RET-GRAPH-DEV-B-Q001",
+        "promotion_count": 1,
+        "protected_anchor_count": 1,
+        "replaced_position_one_based": 5
+      }
+    ],
+    "known_003_regression_cases_same_ordered_top_5": [
+      "SZ-FENGLONG-DEV-Q010",
+      "RET-GRAPH-DEV-B-Q004"
+    ],
+    "prior_002_regression_case_same_ordered_top_5": "RET-GRAPH-DEV-B-Q008",
+    "quality_interpretation": "004 validly tests the intended anchor-preserving policy. Unlike 003, every output change is explained by exactly one reported promotion."
+  },
+  "case_level_diagnostics": {
+    "improvement_case_count": 2,
+    "ranking_regression_case_count": 0,
+    "recall_regression_case_count": 0,
+    "improvement_case_ids": [
+      "HK-CENTER-DEV-Q004",
+      "HK-CENTER-DEV-Q010"
+    ],
+    "neutral_promotion_case_ids": [
+      "RET-GRAPH-DEV-B-Q001"
+    ],
+    "recall_regression_case_ids": []
+  },
+  "acceptance_evaluation": {
+    "implementation_contract_passed": true,
+    "absolute_quality_passed": true,
+    "global_delta_passed": false,
+    "candidate_pool_recall_passed": true,
+    "candidate_to_top_k_retention_passed": false,
+    "cross_project_stability_passed": false,
+    "safety_and_cost_passed": true,
+    "full_development_passed": false,
+    "passed_thresholds": [
+      "implementation_contract_conformance",
+      "candidate_hit_rate_at_5_min",
+      "candidate_mean_recall_at_5_min",
+      "candidate_mrr_min",
+      "candidate_mean_ndcg_at_5_min",
+      "recall_regression_case_count_max",
+      "global_mrr_delta_min",
+      "global_ndcg_at_5_delta_min",
+      "candidate_pool_recall_min",
+      "total_gold_dropped_from_candidate_pool_must_decrease",
+      "per_project_recall_delta_min",
+      "routing_exact_rate_min",
+      "query_count_accuracy_min",
+      "topic_recall_min",
+      "negative_accuracy_delta_min",
+      "search_call_count_delta_max",
+      "p95_latency_delta_ms_max",
+      "execution_error_count_max",
+      "additional_llm_tokens_max"
+    ],
+    "failed_thresholds": [
+      {
+        "name": "global_recall_delta_min",
+        "required_min": 0.05,
+        "actual": 0.023809
+      },
+      {
+        "name": "improvement_case_count_min",
+        "required_min": 3,
+        "actual": 2
+      },
+      {
+        "name": "candidate_to_top_k_gold_retention_delta_min",
+        "required_min": 0.1,
+        "actual": 0.038095
+      },
+      {
+        "name": "improved_project_count_min",
+        "required_min": 3,
+        "actual": 1
+      },
+      {
+        "name": "non_origin_project_improvement_count_min",
+        "required_min": 1,
+        "actual": 0
+      }
+    ]
+  },
+  "reasoning_record": {
+    "problem": "After the shared Baseline fix, determine whether direct-alignment promotions improve candidate-to-Top-5 retention across the fixed four-project Development pool.",
+    "evidence": [
+      "All 35 zero-promotion cases preserved the exact ordered Baseline Top-5.",
+      "All three changed outputs had exactly one reported promotion and exactly one replaced position.",
+      "Recall improved by 2.38 percentage points, below the pre-registered 5-point threshold.",
+      "Gold retention improved by 3.81 percentage points, below the pre-registered 10-point threshold.",
+      "Only HK-CENTER-DEV-Q004 and HK-CENTER-DEV-Q010 improved; RET-GRAPH-DEV-B-Q001 had a quality-neutral promotion.",
+      "Only Hong Kong improved at project level; Shenzhen, Headquarters and Lingshui were unchanged.",
+      "There were zero Recall or ranking regressions, and search calls remained 62 versus 62."
+    ],
+    "inference": "The shared Baseline skeleton makes the policy causally valid and safe, but the direct-alignment promotion rule is too sparse and project-concentrated to solve the remaining candidate-to-Top-5 loss.",
+    "alternatives_considered": [
+      {
+        "option": "Accept 004 because every aggregate quality metric improved and no case regressed",
+        "decision": "rejected",
+        "reason": "Recall gain, retention gain, improvement-case count and cross-project gates were frozen before execution and did not pass."
+      },
+      {
+        "option": "Lower the Recall or retention thresholds after observing a safe result",
+        "decision": "rejected",
+        "reason": "Post-result threshold changes would invalidate the experiment discipline."
+      },
+      {
+        "option": "Rerun 004 to seek more promotions",
+        "decision": "rejected",
+        "reason": "The frozen one-Baseline/one-Candidate contract forbids reruns."
+      },
+      {
+        "option": "Keep the shared Baseline engineering fix but reject the 004 quality candidate",
+        "decision": "selected",
+        "reason": "The refactor restores a required invariant without authorizing an underpowered selection policy."
+      }
+    ],
+    "next_optimization_direction": [
+      "Keep _select_baseline_top_k and its metamorphic tests as the only Baseline skeleton.",
+      "Keep production candidate coverage disabled.",
+      "Do not tune 004 thresholds or rerun 003/004.",
+      "Before a new candidate, use only saved Development diagnostics to pre-register a marginal fact-coverage replacement policy that compares candidate gain with anchor replacement harm.",
+      "Any new policy must remain a separate experiment and must not run Taifeng Holdout, Lancheng Challenge or Huizhou Holdout."
+    ]
+  },
+  "production_decision": {
+    "enabled": false,
+    "candidate_accepted": false,
+    "shared_baseline_refactor_retained": true,
+    "reason": "Implementation conformance and safety passed, but Recall gain, Gold-retention gain, improvement count and cross-project stability did not meet frozen thresholds.",
+    "old_holdout_or_challenge_rerun": false
+  }
+}

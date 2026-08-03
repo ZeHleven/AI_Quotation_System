@@ -305,7 +305,7 @@ def test_business_lite_dashboard_allows_viewer_and_aggregates(client, monkeypatc
     assert "hard_gate_bypassed_missing_evidence" in risk_keys
     assert {item["key"] for item in data["links"]} >= {"cost_db", "project_progress", "quote_workspace"}
     quote_link = next(item for item in data["links"] if item["key"] == "quote_workspace")
-    assert quote_link["label"] == "新建报价"
+    assert quote_link["label"] == ("报价工作台" if settings.feature_unified_quotes else "新建报价")
     assert quote_link["path"] == "/quote/new"
 
 

@@ -1,0 +1,66 @@
+{
+  "schema_version": "bid_intake_graph_candidate_freeze_v1",
+  "freeze_id": "RET-GRAPH-EXPAND-002-DEV-B-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-EXPAND-002",
+  "status": "frozen_prerun",
+  "frozen_at": "2026-07-30T14:39:16+08:00",
+  "dataset": {
+    "path": "evals/bid_intake/retrieval/v1/private_graph_development_b_lingshui_approved_v1.jsonl",
+    "file_sha256": "9df9dca0f95782521cbc99807cddd453e186a183f73f30300ddf25144cdc92f2",
+    "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253",
+    "case_count": 10,
+    "gold_evidence_reference_count": 38,
+    "dataset_split_locked": true
+  },
+  "parent_freeze": {
+    "freeze_id": "RET-GRAPH-EXPAND-001-DEV-B-FREEZE-20260730-V1",
+    "file_sha256": "b046556d0b783facEE897C9C71588F2F644A0EAA598EFF6C423EA0092F760833"
+  },
+  "rejected_parent_candidate": {
+    "execution_id": "RET-GRAPH-EXPAND-001-DEV-B-CANDIDATE-EXECUTION-V1",
+    "file_sha256": "f907ddefd227841dafab7b23d4d001f99864ce94cfD2549fd59abe836b7bd75c"
+  },
+  "single_variable": {
+    "name": "verified_table_parent_first_cell_grammar",
+    "change": "表头首单元格必须是通用表头标签，数字开头的数据行不得成为父节点。",
+    "unchanged": [
+      "图触发器",
+      "显式清单编号引用查询与复核",
+      "Top5与每Query候选深度20",
+      "最多1次图调用、1跳、2个种子、4条证据",
+      "首轮Top5锚点和顺序",
+      "其他检索增强开关",
+      "LLM调用预算0"
+    ]
+  },
+  "candidate_acceptance_thresholds": {
+    "graph_trigger_precision_min": 1.0,
+    "graph_trigger_recall_min": 1.0,
+    "single_document_false_trigger_rate_max": 0.0,
+    "negative_relation_erroneous_expansion_rate_max": 0.0,
+    "graph_path_precision_min": 0.8,
+    "triggered_case_mean_gold_recall_delta_min": 0.1,
+    "triggered_case_improvement_count_min": 2,
+    "triggered_case_recall_regression_count_max": 0,
+    "global_mrr_delta_min": -0.02,
+    "global_ndcg_at_5_delta_min": -0.02,
+    "fact_gate_alignment_delta_min": 0.0,
+    "fact_gate_false_sufficient_rate_delta_max": 0.0,
+    "p95_latency_delta_ms_max": 500,
+    "execution_error_count_max": 0,
+    "additional_llm_tokens_max": 0
+  },
+  "prerun_hypothesis": "收紧表头首单元格语法可以移除001中的错误父节点并释放正确父表预算，至少恢复Q004的连续清单证据，同时提高图路径Precision。",
+  "anti_overfitting_guards": {
+    "project_specific_keywords_forbidden": true,
+    "dataset_or_gold_change_forbidden": true,
+    "threshold_change_forbidden": true,
+    "old_holdout_rerun_forbidden": true,
+    "old_challenge_rerun_forbidden": true,
+    "production_enable_from_single_project_forbidden": true
+  },
+  "code_before_change": {
+    "git_head": "ac8f0b6",
+    "mcp_servers/tender_evidence/selective_graph.py": "bcc076a2174ff2c8e0877dd4b3b9c7609dfcbfd4480020155528868710a8c9d3"
+  }
+}

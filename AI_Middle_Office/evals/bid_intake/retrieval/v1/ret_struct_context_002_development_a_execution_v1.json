@@ -1,0 +1,91 @@
+{
+  "schema_version": "bid_intake_struct_sibling_context_development_execution_v1",
+  "execution_id": "RET-STRUCT-CONTEXT-002-DEV-A-EXECUTION-V1",
+  "freeze_id": "RET-STRUCT-CONTEXT-002-DEV-A-FREEZE-V1",
+  "executed_at": "2026-07-30T10:22:30+08:00",
+  "dataset_fingerprint": "a253cbe9e3bdad051b3e903077740cbec2c71cadd6cafc8a3a8f6d036ea74886",
+  "baseline_report_path": "outputs/bid_intake_retrieval_eval/ret_fact_gate_001_dev_a/20260730_095344_RET-FACT-GATE-001-DEV-A_report.json",
+  "prior_candidate_report_path": "outputs/bid_intake_retrieval_eval/ret_struct_context_001_dev_a/20260730_101424_RET-STRUCT-CONTEXT-001-DEV-A_report.json",
+  "candidate_report_path": "outputs/bid_intake_retrieval_eval/ret_struct_context_002_dev_a/20260730_102230_RET-STRUCT-CONTEXT-002-DEV-A_report.json",
+  "metrics": {
+    "hit_rate_at_5_anchor_groups": 1.0,
+    "mean_recall_at_5_anchor_groups": 0.9,
+    "recall_delta_vs_baseline": 0.25,
+    "mrr": 0.633333,
+    "mrr_delta_vs_baseline": 0.066666,
+    "mean_ndcg_at_5": 0.632681,
+    "ndcg_delta_vs_baseline": 0.046928,
+    "positive_case_improvement_count_vs_baseline": 2,
+    "positive_case_regression_count_vs_baseline": 0,
+    "fact_gate_alignment_accuracy": 0.75,
+    "fact_gate_negative_accuracy": 1.0,
+    "fact_gate_false_sufficient_rate": 0.2,
+    "fact_gate_false_insufficient_rate": 0.333333,
+    "query_count_accuracy": 1.0,
+    "p95_latency_ms": 696,
+    "error_count": 0
+  },
+  "acceptance_results": {
+    "mean_recall_at_5_anchor_groups": "passed",
+    "positive_case_improvement_count_vs_baseline": "passed",
+    "positive_case_regression_count_vs_baseline": "passed",
+    "mrr": "passed",
+    "mean_ndcg_at_5": "passed",
+    "fact_gate_negative_accuracy": "passed",
+    "fact_gate_false_sufficient_rate": "passed_improved",
+    "fact_gate_false_insufficient_rate": "passed_improved",
+    "query_count_accuracy": "passed",
+    "p95_latency_ms": "passed",
+    "error_count": "passed",
+    "overall": "passed_development_a"
+  },
+  "per_case_diagnosis": {
+    "improved_cases": {
+      "FACT-COVERAGE-DEV-A-Q002": {
+        "recall_before": 0.0,
+        "recall_after": 1.0,
+        "sibling_member_count": 2
+      },
+      "FACT-COVERAGE-DEV-A-Q004": {
+        "recall_before": 0.5,
+        "recall_after": 0.75,
+        "sibling_member_count": 1
+      }
+    },
+    "unchanged_positive_cases": {
+      "FACT-COVERAGE-DEV-A-Q001": 1.0,
+      "FACT-COVERAGE-DEV-A-Q003": 0.75,
+      "FACT-COVERAGE-DEV-A-Q005": 1.0
+    },
+    "regressed_cases": [],
+    "negative_cases": [
+      "FACT-COVERAGE-DEV-A-Q006",
+      "FACT-COVERAGE-DEV-A-Q007",
+      "FACT-COVERAGE-DEV-A-Q008"
+    ]
+  },
+  "bounded_group_observation": {
+    "questions_with_selected_group": 3,
+    "member_counts_by_case": {
+      "FACT-COVERAGE-DEV-A-Q002": 2,
+      "FACT-COVERAGE-DEV-A-Q003": 1,
+      "FACT-COVERAGE-DEV-A-Q004": 1
+    },
+    "max_parent_groups_observed": 1,
+    "max_members_observed": 2,
+    "additional_retrieval_query_count": 0,
+    "note": "报告中的Recall@5以5个锚点证据组为结果单位；附属兄弟块不会占用5个锚点，但会增加组内实际证据块数量。"
+  },
+  "diagnosis": {
+    "inference": "正确证据此前已经位于Top20候选池，主要损失发生在长表行被扁平化后缺少共同表头关系、且Top5无法同时容纳多个兄弟行。按已验证父表头聚合兄弟子行能跨两种问题改善覆盖，而无需扩大Query或直接引入GraphRAG。",
+    "remaining_gap": "Q003仍缺1个Gold，Q004仍缺1个Gold；单父组上限和候选内覆盖选择尚不能处理所有未覆盖事实。"
+  },
+  "decision": {
+    "accept_for_development_a": true,
+    "enable_production_flag": false,
+    "keep_feature_flag_default_false": true,
+    "development_b_from_a_new_project_required": true,
+    "rerun_old_holdout_or_challenge": false,
+    "next_experiment": "RET-CONTROLLED-RETRY-001"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "chunk-overlap-ablation-v1",
+  "change_note": "只改变切块重叠长度，验证跨块条款召回是否改善。",
+  "controlled_variables": {
+    "dataset_fingerprint": "由评测器自动生成",
+    "model_id": "deepseek-v4-flash",
+    "embedding_model": "maidalun1020/bce-embedding-base_v1",
+    "top_k": 5,
+    "query_planner": "tender-query-plan/v1",
+    "retrieval_router": "adaptive-retrieval-route/v1"
+  },
+  "independent_variable": {
+    "chunk_overlap_chars": {
+      "baseline": 0,
+      "candidate": 120
+    }
+  },
+  "optimization_target": {
+    "component": "要优化的系统组件",
+    "file": "具体代码文件",
+    "function": "具体函数或节点",
+    "current_problem": "由基线指标和失败样本支持的问题",
+    "planned_change": "本次唯一准备改变的内容",
+    "target_metrics": [
+      "期望改善的指标"
+    ]
+  },
+  "success_criteria": {
+    "mean_recall_at_k_min_delta": 0.03,
+    "mrr_min_delta": 0.0,
+    "p95_latency_ms_max_increase_ratio": 0.15,
+    "regression_case_count_max": 0
+  },
+  "reasoning_record": {
+    "observation": "只记录指标和样本中直接观察到的事实。",
+    "evidence": [
+      "列出支持判断的指标、分层结果或失败样本。"
+    ],
+    "inference": "说明从证据得出的工程判断，不把推断写成事实。",
+    "alternatives": [
+      "列出至少一个可能的替代解释。"
+    ],
+    "falsifiable_hypothesis": "写出下一实验可以验证或推翻的明确假设。",
+    "next_experiment_id": "RET-EXP-XXX",
+    "decision_rationale": "实验结束后说明为什么保留、拒绝或继续验证。"
+  },
+  "conclusion": "实验完成后填写，不凭主观感受下结论。"
+}

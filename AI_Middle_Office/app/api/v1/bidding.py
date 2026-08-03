@@ -24,6 +24,7 @@ from app.models.bidding import (
     BidProject,
     BidProjectFile,
     BidDraftSection,
+    BidBusinessBidFormalPackage,
     TenderBusinessObject,
     TenderRequirement,
     TenderResponseItem,
@@ -108,6 +109,9 @@ from app.services.bidding_technical_word_export import (
 )
 from app.services.rbac import has_any_role
 
+from app.services.bidding_business_bid import BusinessBidError, build_business_bid_pdf, get_active_business_bid_quote_import, import_business_bid_quote, list_business_bid_quote_imports, serialize_business_bid_quote_import
+from app.services.bidding_business_bid_assembly import BusinessBidAssemblyError, build_business_bid_assembly, ensure_business_bid_formal_exportable
+from app.services.bidding_formal_package import FormalPackageError, build_formal_package_preview, create_formal_package, list_formal_packages, serialize_formal_package
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1843,6 +1847,8 @@ async def update_tender_response_item(
         if action not in RESPONSE_ACTIONS:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="INVALID_RESPONSE_ACTION")
         item.response_action = action
+
+
     if "status" in field_set:
         next_status = (payload.status or "").strip()
         if next_status not in RESPONSE_STATUSES:
@@ -1859,6 +1865,209 @@ async def update_tender_response_item(
     db.commit()
     db.refresh(item)
     return api_ok(_serialize_response_item(item))
+class BusinessBidQuoteImportRequest(BaseModel):
+    budget_project_id: int = Field(..., gt=0)
+    pricing_draft_uuid: str = Field(..., min_length=1, max_length=36)
+    expected_draft_revision: int = Field(..., ge=1)
+    import_note: Optional[str] = Field(None, max_length=2000)
+
+
+def _ensure_business_bid_source_enabled() -> None:
+    if not (settings.feature_budget_projects and settings.feature_budget_pricing_drafts):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="FEATURE_DISABLED")
+
+
+def _business_bid_http_error(exc: BusinessBidError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+@router.get("/admin/bidding/projects/{project_uuid}/business-bid/quote-import", summary="获取当前商务标报价快照")
+async def get_business_bid_quote_import_api(
+    project_uuid: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    _ensure_business_bid_source_enabled()
+    _require_bidding_access(current_user)
+    project = _get_project(db, project_uuid, current_user)
+    imported = get_active_business_bid_quote_import(db, project)
+    return api_ok(serialize_business_bid_quote_import(imported, include_lines=True) if imported else None)
+
+
+@router.get("/admin/bidding/projects/{project_uuid}/business-bid/quote-imports", summary="查询商务标报价快照版本")
+async def list_business_bid_quote_imports_api(
+    project_uuid: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    _ensure_business_bid_source_enabled()
+    _require_bidding_access(current_user)
+    project = _get_project(db, project_uuid, current_user)
+    return api_ok([serialize_business_bid_quote_import(item) for item in list_business_bid_quote_imports(db, project)])
+
+
+@router.post("/admin/bidding/projects/{project_uuid}/business-bid/quote-import", summary="导入确认报价到商务标")
+async def import_business_bid_quote_api(
+    project_uuid: str,
+    payload: BusinessBidQuoteImportRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    _ensure_business_bid_source_enabled()
+    _require_bidding_access(current_user)
+    project = _get_project(db, project_uuid, current_user)
+    try:
+        imported = import_business_bid_quote(
+            db,
+            project,
+            current_user,
+            budget_project_id=payload.budget_project_id,
+            pricing_draft_uuid=payload.pricing_draft_uuid,
+            expected_draft_revision=payload.expected_draft_revision,
+            import_note=payload.import_note,
+        )
+        db.commit()
+        db.refresh(imported)
+    except BusinessBidError as exc:
+        db.rollback()
+        raise _business_bid_http_error(exc) from exc
+    return api_ok(serialize_business_bid_quote_import(imported, include_lines=True), message="确认报价已导入商务标")
+
+
+@router.get("/admin/bidding/projects/{project_uuid}/business-bid/assembly", summary="查询商务标成册状态")
+async def get_business_bid_assembly_api(
+    project_uuid: str,
+    run_uuid: Optional[str] = Query("latest"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    _ensure_business_bid_source_enabled()
+    _require_bidding_access(current_user)
+    project = _get_project(db, project_uuid, current_user)
+    run = _resolve_run(db, project, run_uuid)
+    imported = get_active_business_bid_quote_import(db, project)
+    return api_ok(build_business_bid_assembly(db, project, run, imported), run_uuid=run.run_uuid)
+
+@router.get("/admin/bidding/projects/{project_uuid}/business-bid/formal-package/preview", summary="预检正式商务投标件")
+async def preview_business_bid_formal_package_api(
+    project_uuid: str,
+    run_uuid: Optional[str] = Query("latest"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    _ensure_business_bid_source_enabled()
+    _require_bidding_access(current_user)
+    project = _get_project(db, project_uuid, current_user)
+    run = _resolve_run(db, project, run_uuid)
+    imported = get_active_business_bid_quote_import(db, project)
+    assembly = build_business_bid_assembly(db, project, run, imported)
+    return api_ok(build_formal_package_preview(db, run, assembly), run_uuid=run.run_uuid)
+
+
+@router.get("/admin/bidding/projects/{project_uuid}/business-bid/formal-packages", summary="查询正式商务投标件记录")
+async def list_business_bid_formal_packages_api(
+    project_uuid: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    _ensure_business_bid_source_enabled()
+    _require_bidding_access(current_user)
+    project = _get_project(db, project_uuid, current_user)
+    return api_ok([serialize_formal_package(row) for row in list_formal_packages(db, project)])
+
+
+@router.post("/admin/bidding/projects/{project_uuid}/business-bid/formal-packages", summary="生成正式商务投标件")
+async def create_business_bid_formal_package_api(
+    project_uuid: str,
+    run_uuid: Optional[str] = Query("latest"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    _ensure_business_bid_source_enabled()
+    _require_bidding_access(current_user)
+    project = _get_project(db, project_uuid, current_user)
+    run = _resolve_run(db, project, run_uuid)
+    imported = get_active_business_bid_quote_import(db, project)
+    if not imported:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BUSINESS_BID_QUOTE_IMPORT_REQUIRED")
+    assembly = build_business_bid_assembly(db, project, run, imported)
+    try:
+        ensure_business_bid_formal_exportable(assembly)
+        core_pdf = build_business_bid_pdf(db, project, imported, assembly=assembly, export_mode="formal")
+        package, _, _ = create_formal_package(db, project, run, imported, assembly, core_pdf, current_user)
+        db.commit()
+        db.refresh(package)
+    except BusinessBidAssemblyError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.detail) from exc
+    except FormalPackageError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.detail) from exc
+    except Exception as exc:
+        db.rollback()
+        logger.exception("formal business bid package generation failed for project=%s", project.project_uuid)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="BUSINESS_BID_FORMAL_PACKAGE_FAILED") from exc
+    return api_ok(serialize_formal_package(package), message="正式商务投标件已生成")
+
+@router.get("/admin/bidding/projects/{project_uuid}/business-bid/v12-review", summary="查询商务标报价一致性与商务响应复核")
+async def get_business_bid_v12_review_api(
+    project_uuid: str,
+    run_uuid: Optional[str] = Query("latest"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    _ensure_business_bid_source_enabled()
+    _require_bidding_access(current_user)
+    project = _get_project(db, project_uuid, current_user)
+    run = _resolve_run(db, project, run_uuid)
+    imported = get_active_business_bid_quote_import(db, project)
+    assembly = build_business_bid_assembly(db, project, run, imported)
+    return api_ok(assembly["v12_review"], run_uuid=run.run_uuid)
+
+@router.get("/admin/bidding/projects/{project_uuid}/business-bid/export", summary="导出商务标成册 PDF")
+async def export_business_bid_pdf_api(
+    project_uuid: str,
+    run_uuid: Optional[str] = Query("latest"),
+    mode: str = Query("draft"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_feature_enabled()
+    _ensure_business_bid_source_enabled()
+    _require_bidding_access(current_user)
+    if mode not in {"draft", "formal"}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="INVALID_BUSINESS_BID_EXPORT_MODE")
+    project = _get_project(db, project_uuid, current_user)
+    run = _resolve_run(db, project, run_uuid)
+    imported = get_active_business_bid_quote_import(db, project)
+    if not imported:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BUSINESS_BID_QUOTE_IMPORT_REQUIRED")
+    assembly = build_business_bid_assembly(db, project, run, imported)
+    if mode == "formal":
+        try:
+            ensure_business_bid_formal_exportable(assembly)
+        except BusinessBidAssemblyError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.detail) from exc
+    try:
+        content = build_business_bid_pdf(db, project, imported, assembly=assembly, export_mode=mode)
+    except Exception as exc:
+        logger.exception("business bid PDF export failed for project=%s", project.project_uuid)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="BUSINESS_BID_PDF_EXPORT_FAILED") from exc
+    filename = f"{_safe_download_stem(project.project_name)}_business_bid_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=business_bid_draft.pdf; filename*=UTF-8''{quote(filename)}"},
+    )
+
 
 
 @router.get("/admin/bidding/projects/{project_uuid}/requirements", summary="查询招标要求清单")

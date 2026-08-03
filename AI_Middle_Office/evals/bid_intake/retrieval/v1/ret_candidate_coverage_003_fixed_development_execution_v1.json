@@ -1,0 +1,326 @@
+{
+  "schema_version": "bid_intake_anchor_preserving_coverage_execution_v1",
+  "execution_id": "RET-CANDIDATE-COVERAGE-003-FIXED-DEV-EXECUTION-V1",
+  "freeze_id": "RET-CANDIDATE-COVERAGE-003-FIXED-DEV-FREEZE-20260730-V1",
+  "experiment_id": "RET-CANDIDATE-COVERAGE-003",
+  "executed_at": "2026-07-30T17:08:57+08:00",
+  "status": "rejected_implementation_contract_violation_and_quality_gates",
+  "dataset_fingerprint": "c1b1dc434353aee5b8e19aed30be204c43e8385195f5d0fb94afb918bce81c87",
+  "formal_execution_counts": {
+    "quality_comparison": 1,
+    "baseline_pass": 1,
+    "candidate_pass": 1,
+    "agent_run": 0,
+    "rerun_performed": false
+  },
+  "artifacts": {
+    "baseline_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_003_fixed_dev_baseline/20260730_170818_RET-CANDIDATE-COVERAGE-003-FIXED-DEV-BASELINE_report.json",
+      "sha256": "41a8998a241fe8bf868ad12eb9c99e3e2611558ab6b6ff7304898d6e71ea0d11"
+    },
+    "baseline_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_003_fixed_dev_baseline/20260730_170818_RET-CANDIDATE-COVERAGE-003-FIXED-DEV-BASELINE_predictions.jsonl",
+      "sha256": "baf6861ee3571a5881e425913d472224c3f05bc842e466c6384e43a6c37cd72b"
+    },
+    "candidate_report": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_003_fixed_dev_candidate/20260730_170857_RET-CANDIDATE-COVERAGE-003-FIXED-DEV-CANDIDATE_report.json",
+      "sha256": "03bd3652becf2ea6a83e259eec861f3a677f1c8a0654504bd21c33bbfee62807"
+    },
+    "candidate_predictions": {
+      "path": "outputs/bid_intake_retrieval_eval/private_RET_CANDIDATE_COVERAGE_003_fixed_dev_candidate/20260730_170857_RET-CANDIDATE-COVERAGE-003-FIXED-DEV-CANDIDATE_predictions.jsonl",
+      "sha256": "97b69204079ae0e071273829a8706fbe5f5c9a21c3c99dba1bf27f7f7d211918"
+    }
+  },
+  "baseline_metrics": {
+    "hit_rate_at_5": 0.885714,
+    "mean_recall_at_5": 0.706667,
+    "mean_precision_at_5": 0.28,
+    "mrr": 0.792857,
+    "mean_ndcg_at_5": 0.690369,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "negative_accuracy": 0.0,
+    "mean_candidate_pool_recall": 0.871429,
+    "candidate_pool_oracle_complete_rate": 0.771429,
+    "mean_candidate_to_top_k_gold_retention": 0.800476,
+    "total_gold_dropped_from_candidate_pool": 17,
+    "mean_latency_ms": 626.342,
+    "p95_latency_ms": 1535,
+    "search_call_count": 62,
+    "error_count": 0
+  },
+  "candidate_metrics": {
+    "hit_rate_at_5": 0.885714,
+    "mean_recall_at_5": 0.705714,
+    "mean_precision_at_5": 0.274286,
+    "mrr": 0.752381,
+    "mean_ndcg_at_5": 0.676536,
+    "routing_exact_rate": 1.0,
+    "query_count_accuracy": 1.0,
+    "topic_recall": 1.0,
+    "negative_accuracy": 0.0,
+    "mean_candidate_pool_recall": 0.871429,
+    "candidate_pool_oracle_complete_rate": 0.771429,
+    "mean_candidate_to_top_k_gold_retention": 0.790952,
+    "total_gold_dropped_from_candidate_pool": 18,
+    "fact_gate_assessment_rate": 0.815789,
+    "fact_gate_alignment_accuracy": 0.645161,
+    "fact_gate_negative_accuracy": 1.0,
+    "fact_gate_false_sufficient_rate": 0.052632,
+    "fact_gate_false_insufficient_rate": 0.833333,
+    "mean_latency_ms": 632.816,
+    "p95_latency_ms": 1388,
+    "search_call_count": 62,
+    "error_count": 0
+  },
+  "deltas_vs_baseline": {
+    "hit_rate_at_5": 0.0,
+    "mean_recall_at_5": -0.000953,
+    "mean_precision_at_5": -0.005714,
+    "mrr": -0.040476,
+    "mean_ndcg_at_5": -0.013833,
+    "mean_candidate_pool_recall": 0.0,
+    "candidate_pool_oracle_complete_rate": 0.0,
+    "mean_candidate_to_top_k_gold_retention": -0.009524,
+    "total_gold_dropped_from_candidate_pool": 1,
+    "routing_exact_rate": 0.0,
+    "query_count_accuracy": 0.0,
+    "topic_recall": 0.0,
+    "negative_accuracy": 0.0,
+    "mean_latency_ms": 6.474,
+    "p95_latency_ms": -147,
+    "search_call_count": 0
+  },
+  "by_project": [
+    {
+      "project_uuid": "d6d9fa60-c00c-4580-afb4-17ef8168c9f9",
+      "project_label": "香港中心",
+      "origin_project": true,
+      "baseline_recall_at_5": 0.633333,
+      "candidate_recall_at_5": 0.683333,
+      "recall_delta": 0.05,
+      "baseline_mrr": 0.575,
+      "candidate_mrr": 0.625,
+      "mrr_delta": 0.05,
+      "baseline_ndcg_at_5": 0.583304,
+      "candidate_ndcg_at_5": 0.619108,
+      "ndcg_delta": 0.035804,
+      "baseline_gold_retention": 0.633333,
+      "candidate_gold_retention": 0.733333,
+      "gold_retention_delta": 0.1,
+      "baseline_dropped_gold": 5,
+      "candidate_dropped_gold": 4,
+      "project_improved": true
+    },
+    {
+      "project_uuid": "d9382132-e111-4b08-a799-40c4377db0cf",
+      "project_label": "深圳丰隆",
+      "origin_project": true,
+      "baseline_recall_at_5": 0.916667,
+      "candidate_recall_at_5": 0.883333,
+      "recall_delta": -0.033334,
+      "baseline_mrr": 1.0,
+      "candidate_mrr": 0.875,
+      "mrr_delta": -0.125,
+      "baseline_ndcg_at_5": 0.923679,
+      "candidate_ndcg_at_5": 0.836591,
+      "ndcg_delta": -0.087088,
+      "baseline_gold_retention": 0.966667,
+      "candidate_gold_retention": 0.933333,
+      "gold_retention_delta": -0.033334,
+      "baseline_dropped_gold": 1,
+      "candidate_dropped_gold": 2,
+      "project_improved": false
+    },
+    {
+      "project_uuid": "4a495b13-4373-437b-b536-af1975c8cda1",
+      "project_label": "总部基地",
+      "origin_project": false,
+      "baseline_recall_at_5": 0.65,
+      "candidate_recall_at_5": 0.65,
+      "recall_delta": 0.0,
+      "baseline_mrr": 0.666667,
+      "candidate_mrr": 0.666667,
+      "mrr_delta": 0.0,
+      "baseline_ndcg_at_5": 0.608063,
+      "candidate_ndcg_at_5": 0.608063,
+      "ndcg_delta": 0.0,
+      "baseline_gold_retention": 0.65,
+      "candidate_gold_retention": 0.65,
+      "gold_retention_delta": 0.0,
+      "baseline_dropped_gold": 6,
+      "candidate_dropped_gold": 6,
+      "project_improved": false
+    },
+    {
+      "project_uuid": "25091d80-15ab-40b7-ad20-fd9a169d1dc8",
+      "project_label": "陵水",
+      "origin_project": false,
+      "baseline_recall_at_5": 0.598333,
+      "candidate_recall_at_5": 0.578333,
+      "recall_delta": -0.02,
+      "baseline_mrr": 0.866667,
+      "candidate_mrr": 0.8,
+      "mrr_delta": -0.066667,
+      "baseline_ndcg_at_5": 0.605277,
+      "candidate_ndcg_at_5": 0.608147,
+      "ndcg_delta": 0.00287,
+      "baseline_gold_retention": 0.876667,
+      "candidate_gold_retention": 0.776667,
+      "gold_retention_delta": -0.1,
+      "baseline_dropped_gold": 5,
+      "candidate_dropped_gold": 6,
+      "project_improved": false
+    }
+  ],
+  "implementation_conformance": {
+    "passed": false,
+    "contract_requirement": "Use the ordinary final merged Top-5, including deterministic multi-query diversity anchors, as the immutable baseline skeleton before any coverage replacement.",
+    "implemented_behavior": "The anchor-preserving selector initialized its skeleton from raw RRF ranked_ids[:top_k] before the existing multi-query diversity selection step.",
+    "observed_case_count": 38,
+    "changed_output_case_count": 12,
+    "coverage_promotion_case_count": 2,
+    "coverage_promotion_count": 2,
+    "changed_without_coverage_promotion_case_count": 10,
+    "multi_query_changed_without_coverage_promotion_case_count": 10,
+    "protected_anchor_count": 95,
+    "invariant_violation": "When promoted_evidence_count is zero, Candidate output must equal Baseline output for the same candidate rankings; this failed on ten multi-query cases.",
+    "quality_interpretation": "The measured quality deltas are valid for the frozen implementation but cannot be used to accept or reject the intended anchor-preserving hypothesis because the implementation changed the baseline merge behavior."
+  },
+  "case_level_diagnostics": {
+    "improvement_case_count": 6,
+    "ranking_regression_case_count": 5,
+    "recall_regression_case_count": 2,
+    "recall_regression_case_ids": [
+      "SZ-FENGLONG-DEV-Q010",
+      "RET-GRAPH-DEV-B-Q004"
+    ],
+    "prior_002_regression_repaired": {
+      "eval_case_id": "RET-GRAPH-DEV-B-Q008",
+      "baseline_recall_at_5": 1.0,
+      "candidate_recall_at_5": 1.0,
+      "baseline_ndcg_at_5": 0.877215,
+      "candidate_ndcg_at_5": 0.877215,
+      "same_ordered_top_5": true
+    }
+  },
+  "acceptance_evaluation": {
+    "implementation_contract_passed": false,
+    "absolute_quality_passed": true,
+    "global_delta_passed": false,
+    "candidate_pool_recall_passed": true,
+    "candidate_to_top_k_retention_passed": false,
+    "cross_project_stability_passed": false,
+    "safety_and_cost_passed": true,
+    "full_development_passed": false,
+    "passed_thresholds": [
+      "candidate_hit_rate_at_5_min",
+      "candidate_mean_recall_at_5_min",
+      "candidate_mrr_min",
+      "candidate_mean_ndcg_at_5_min",
+      "improvement_case_count_min",
+      "global_ndcg_at_5_delta_min",
+      "candidate_pool_recall_min",
+      "routing_exact_rate_min",
+      "query_count_accuracy_min",
+      "topic_recall_min",
+      "negative_accuracy_delta_min",
+      "search_call_count_delta_max",
+      "p95_latency_delta_ms_max",
+      "execution_error_count_max",
+      "additional_llm_tokens_max"
+    ],
+    "failed_thresholds": [
+      {
+        "name": "implementation_contract_conformance",
+        "required": true,
+        "actual": false
+      },
+      {
+        "name": "global_recall_delta_min",
+        "required_min": 0.05,
+        "actual": -0.000953
+      },
+      {
+        "name": "recall_regression_case_count_max",
+        "required_max": 0,
+        "actual": 2
+      },
+      {
+        "name": "global_mrr_delta_min",
+        "required_min": -0.02,
+        "actual": -0.040476
+      },
+      {
+        "name": "candidate_to_top_k_gold_retention_delta_min",
+        "required_min": 0.1,
+        "actual": -0.009524
+      },
+      {
+        "name": "total_gold_dropped_from_candidate_pool_must_decrease",
+        "required": true,
+        "actual_before": 17,
+        "actual_after": 18
+      },
+      {
+        "name": "improved_project_count_min",
+        "required_min": 3,
+        "actual": 1
+      },
+      {
+        "name": "per_project_recall_delta_min",
+        "required_min": -0.02,
+        "actual": -0.033334
+      },
+      {
+        "name": "non_origin_project_improvement_count_min",
+        "required_min": 1,
+        "actual": 0
+      }
+    ]
+  },
+  "reasoning_record": {
+    "problem": "The frozen Candidate changed ten multi-query outputs even when no evidence was promoted by coverage.",
+    "evidence": [
+      "Only two of 38 cases had a real coverage promotion, but 12 cases changed output.",
+      "All ten changed-without-promotion cases were multi-query cases.",
+      "The implementation initialized selected_ids from raw RRF Top-5, while the Baseline first reserves diversity anchors from auxiliary queries.",
+      "SZ-FENGLONG-DEV-Q010 and RET-GRAPH-DEV-B-Q004 lost Recall even though their reported coverage promotion count was zero.",
+      "RET-GRAPH-DEV-B-Q008 kept the exact Baseline Top-5 and repaired the known 002 regression, proving the direct-alignment guard can protect that case but not validating the full intended policy."
+    ],
+    "inference": "The experiment exposed a merge-pipeline invariant bug before it could test the intended hypothesis. Quality changes combine anchor protection with accidental removal of existing multi-query diversity, so no causal claim about the intended selector is valid.",
+    "alternatives_considered": [
+      {
+        "option": "Rerun 003 after silently fixing the code",
+        "decision": "rejected",
+        "reason": "It would violate the frozen one-run contract and erase a useful failed engineering experiment."
+      },
+      {
+        "option": "Accept 003 because it repaired the known Q008 regression",
+        "decision": "rejected",
+        "reason": "Two new Recall regressions, project instability and implementation non-conformance outweigh one repaired case."
+      },
+      {
+        "option": "Create a new 004 experiment with an exact baseline-skeleton invariant",
+        "decision": "selected",
+        "reason": "It preserves scientific traceability and tests the intended policy without consuming new data."
+      }
+    ],
+    "next_optimization_direction": [
+      "Keep 003 rejected and the production feature disabled.",
+      "For 004, extract the existing ordinary merge behavior into one shared baseline-selection function, including auxiliary-query diversity anchors and RRF filling.",
+      "Make anchor-preserving coverage operate only on a copy of that exact baseline output.",
+      "Add a metamorphic test: when coverage promotions equal zero, ordered Candidate Top-5 must equal ordered Baseline Top-5.",
+      "Add tests that protected anchors never move or disappear and search-call counts remain unchanged.",
+      "Freeze 004 separately and run one A/B on the same 38-question Development pool; do not rerun 003 and do not use old Holdout/Challenge."
+    ]
+  },
+  "production_decision": {
+    "enabled": false,
+    "candidate_accepted": false,
+    "reason": "The frozen implementation violated its baseline-skeleton contract and failed multiple quality and cross-project gates.",
+    "old_holdout_or_challenge_rerun": false,
+    "new_project_required_for_next_development_iteration": false
+  }
+}

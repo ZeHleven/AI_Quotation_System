@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
 
@@ -68,6 +68,16 @@ class BidProjectFile(Base):
     parser_version = Column(String(64), nullable=False)
     extracted_text = Column(Text, nullable=True)
     segments_json = Column(Text, nullable=True)
+    parsed_artifact_bucket = Column(String(128), nullable=True)
+    parsed_artifact_object_name = Column(String(512), nullable=True)
+    parsed_artifact_sha256 = Column(String(64), nullable=True, index=True)
+    parsed_artifact_size_bytes = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    parsed_artifact_schema_version = Column(String(64), nullable=True)
     page_count = Column(Integer, nullable=False, default=0, server_default="0")
     section_count = Column(Integer, nullable=False, default=0, server_default="0")
     error_message = Column(Text, nullable=True)
@@ -443,6 +453,7 @@ class BidMaterialRequirement(Base):
     source_file = Column(String(255), nullable=True)
     source_location = Column(String(255), nullable=True)
     source_text = Column(Text, nullable=True)
+
     fulfillment_mode = Column(String(64), nullable=False, default="manual_upload", server_default="manual_upload", index=True)
     status = Column(String(32), nullable=False, default="missing", server_default="missing", index=True)
     priority = Column(String(16), nullable=False, default="normal", server_default="normal", index=True)
@@ -498,3 +509,70 @@ class BidMaterialRequirementEvent(Base):
     requirement = relationship("BidMaterialRequirement", back_populates="events")
     project = relationship("BidProject", back_populates="material_requirement_events")
     parse_run = relationship("BidParseRun", back_populates="material_requirement_events")
+
+
+
+class BidBusinessBidQuoteImport(Base):
+    """Immutable commercial-bid quote snapshot imported from a budget draft."""
+
+    __tablename__ = "bid_business_bid_quote_imports"
+    __table_args__ = (
+        UniqueConstraint("import_uuid", name="uq_bid_business_bid_quote_imports_uuid"),
+        UniqueConstraint("project_id", "version_no", name="uq_bid_business_bid_quote_imports_project_version"),
+        Index("ix_bid_business_bid_quote_imports_project_status", "project_id", "status"),
+        Index("ix_bid_business_bid_quote_imports_budget_project", "budget_project_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    import_uuid = Column(String(36), nullable=False, unique=True, index=True)
+    project_id = Column(Integer, ForeignKey("bid_projects.id"), nullable=False, index=True)
+    budget_project_id = Column(Integer, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False, index=True)
+    pricing_draft_id = Column(Integer, ForeignKey("budget_project_pricing_drafts.id", ondelete="RESTRICT"), nullable=False, index=True)
+    version_no = Column(Integer, nullable=False)
+    status = Column(String(24), nullable=False, default="active", server_default="active", index=True)
+    source_draft_uuid = Column(String(36), nullable=False, index=True)
+    source_draft_revision = Column(Integer, nullable=False)
+    pricing_mode = Column(String(32), nullable=False)
+    source_project_name = Column(String(255), nullable=False)
+    source_snapshot_sha256 = Column(String(64), nullable=False)
+    line_count = Column(Integer, nullable=False, default=0, server_default="0")
+    total_amount = Column(Numeric(24, 6), nullable=False)
+    snapshot_json = Column(_long_text(), nullable=False)
+    import_note = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    superseded_at = Column(DateTime(timezone=True), nullable=True)
+
+    project = relationship("BidProject")
+    budget_project = relationship("Project")
+    pricing_draft = relationship("BudgetProjectPricingDraft")
+    created_by_user = relationship("User", foreign_keys=[created_by])
+
+
+class BidBusinessBidFormalPackage(Base):
+    """A persisted, immutable record for one generated formal business-bid package."""
+
+    __tablename__ = "bid_business_bid_formal_packages"
+    __table_args__ = (
+        UniqueConstraint("package_uuid", name="uq_bid_business_bid_formal_packages_uuid"),
+        Index("ix_bid_business_bid_formal_packages_project_created", "project_id", "created_at"),
+        Index("ix_bid_business_bid_formal_packages_run_created", "parse_run_id", "created_at"),
+        Index("ix_bid_business_bid_formal_packages_quote_import", "quote_import_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    package_uuid = Column(String(36), nullable=False, unique=True, index=True)
+    project_id = Column(Integer, ForeignKey("bid_projects.id"), nullable=False, index=True)
+    parse_run_id = Column(Integer, ForeignKey("bid_parse_runs.id"), nullable=False, index=True)
+    quote_import_id = Column(Integer, ForeignKey("bid_business_bid_quote_imports.id"), nullable=False, index=True)
+    status = Column(String(24), nullable=False, default="generated", server_default="generated", index=True)
+    manifest_json = Column(_long_text(), nullable=False)
+    output_file_id = Column(String(36), ForeignKey("file_objects.file_id"), nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    project = relationship("BidProject")
+    parse_run = relationship("BidParseRun")
+    quote_import = relationship("BidBusinessBidQuoteImport")
+    output_file = relationship("FileObject")
+    created_by_user = relationship("User", foreign_keys=[created_by])

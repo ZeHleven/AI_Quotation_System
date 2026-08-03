@@ -56,6 +56,18 @@ class BudgetPricingDraftLinePatch(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class BudgetPricingDraftLineConstructionNotePatch(BaseModel):
+    """Optimistic-lock construction note edit that must not change pricing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pricing_mode: Literal["enterprise_ai", "account_strict"] = "enterprise_ai"
+    expected_revision: int = Field(gt=0)
+    expected_line_revision: int = Field(gt=0)
+    remark: str = Field(min_length=1, max_length=2000)
+    reason: str | None = Field(default=None, max_length=2000)
+
+
 class BudgetPricingDraftTotalsConfigPatch(BaseModel):
     """Draft-level editable totals/rate settings for the quote summary panel."""
 
@@ -83,6 +95,83 @@ class BudgetPricingDraftLineAiEstimateIn(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class BudgetProjectQuotaMaterializeIn(BaseModel):
+    """Idempotently create the project-local quota snapshot for one draft line."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pricing_mode: Literal["enterprise_ai", "account_strict"] = "enterprise_ai"
+
+
+class BudgetProjectQuotaResourceCreateIn(BaseModel):
+    """Create one project-local labor/material/machinery composition row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_snapshot_revision: int = Field(gt=0)
+    component_type: str | None = Field(default=None, max_length=64)
+    resource_code: str | None = Field(default=None, max_length=64)
+    resource_name: str = Field(min_length=1, max_length=255)
+    worker_or_subtype: str | None = Field(default=None, max_length=128)
+    work_content: str | None = Field(default=None, max_length=4000)
+    specification: str | None = Field(default=None, max_length=255)
+    brand: str | None = Field(default=None, max_length=255)
+    unit: str | None = Field(default=None, max_length=64)
+    quantity: Decimal = Field(default=Decimal("0"), ge=Decimal("0"), max_digits=20, decimal_places=6)
+    unit_price: Decimal = Field(default=Decimal("0"), ge=Decimal("0"), max_digits=20, decimal_places=6)
+    amount: Decimal | None = Field(default=None, ge=Decimal("0"), max_digits=20, decimal_places=6)
+    fee_bucket: Literal["labor", "main_material", "auxiliary_material", "machinery"]
+    library_kind: Literal["labor", "material"] | None = None
+    category: str | None = Field(default=None, max_length=128)
+    calculation_rule: str | None = Field(default=None, max_length=4000)
+    tax_rate: Decimal | None = Field(default=None, ge=Decimal("0"), max_digits=12, decimal_places=6)
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class BudgetProjectQuotaResourceUpdateIn(BaseModel):
+    """Optimistic-lock update for every editable project resource field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_snapshot_revision: int = Field(gt=0)
+    expected_resource_revision: int = Field(gt=0)
+    component_type: str | None = Field(default=None, max_length=64)
+    resource_code: str | None = Field(default=None, max_length=64)
+    resource_name: str | None = Field(default=None, min_length=1, max_length=255)
+    worker_or_subtype: str | None = Field(default=None, max_length=128)
+    work_content: str | None = Field(default=None, max_length=4000)
+    specification: str | None = Field(default=None, max_length=255)
+    brand: str | None = Field(default=None, max_length=255)
+    unit: str | None = Field(default=None, max_length=64)
+    quantity: Decimal | None = Field(default=None, ge=Decimal("0"), max_digits=20, decimal_places=6)
+    unit_price: Decimal | None = Field(default=None, ge=Decimal("0"), max_digits=20, decimal_places=6)
+    amount: Decimal | None = Field(default=None, ge=Decimal("0"), max_digits=20, decimal_places=6)
+    fee_bucket: Literal["labor", "main_material", "auxiliary_material", "machinery"] | None = None
+    library_kind: Literal["labor", "material"] | None = None
+    category: str | None = Field(default=None, max_length=128)
+    calculation_rule: str | None = Field(default=None, max_length=4000)
+    tax_rate: Decimal | None = Field(default=None, ge=Decimal("0"), max_digits=12, decimal_places=6)
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class BudgetProjectQuotaResourceDeleteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_snapshot_revision: int = Field(gt=0)
+    expected_resource_revision: int = Field(gt=0)
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class BudgetProjectQuotaEnterpriseSyncIn(BaseModel):
+    """Explicit opt-in for writing the project snapshot to an enterprise draft."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_snapshot_revision: int = Field(gt=0)
+    sync_to_enterprise: Literal[True]
+    reason: str = Field(min_length=4, max_length=500)
+
+
 class BudgetPricingDraftQuoteJobCreate(BaseModel):
     """One-click enterprise-quota plus AI fallback quote draft generation."""
 
@@ -93,8 +182,8 @@ class BudgetPricingDraftQuoteJobCreate(BaseModel):
     source_import_revision_id: int = Field(gt=0)
     expected_active_quota_version_id: int | None = Field(default=None, gt=0)
     expected_revision: int | None = Field(default=None, gt=0)
-    ai_concurrency: int = Field(default=3, ge=1, le=3)
-    ai_batch_size: int = Field(default=6, ge=1, le=20)
+    ai_concurrency: int = Field(default=1, ge=1, le=3)
+    ai_batch_size: int = Field(default=3, ge=1, le=20)
     reason: str | None = Field(default=None, max_length=2000)
 
 

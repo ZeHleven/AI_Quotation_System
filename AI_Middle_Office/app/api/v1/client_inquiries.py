@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.responses import api_ok, api_page
 from app.dependencies import get_current_user
-from app.models.client_inquiry import DIRECTION_INBOUND, ClientInquiry
+from app.models.client_inquiry import ClientInquiry
 from app.models.quote_job import QuoteJob
 from app.models.user import User
 from app.services.client_inquiries import (
@@ -69,7 +69,7 @@ async def list_client_inquiries(
     _ensure_feature_enabled()
     require_client_inquiry_access(current_user)
 
-    query = db.query(ClientInquiry).filter(ClientInquiry.direction == DIRECTION_INBOUND)
+    query = db.query(ClientInquiry)
     if not can_view_all_client_inquiries(current_user):
         query = query.filter(ClientInquiry.responder_id == current_user.id)
     elif responder_id is not None:

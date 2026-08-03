@@ -1,0 +1,80 @@
+{
+  "schema_version": "bid_intake_controlled_retry_parent_targeted_freeze_v1",
+  "freeze_id": "RET-CONTROLLED-RETRY-003-DEV-A-FREEZE-V1",
+  "frozen_at": "2026-07-30T03:08:00+00:00",
+  "experiment_id": "RET-CONTROLLED-RETRY-003",
+  "dataset": {
+    "dataset_path": "evals/bid_intake/retrieval/v1/private_fact_coverage_development_approved_v1.jsonl",
+    "dataset_fingerprint": "a253cbe9e3bdad051b3e903077740cbec2c71cadd6cafc8a3a8f6d036ea74886",
+    "case_count": 8,
+    "positive_case_count": 5,
+    "negative_case_count": 3,
+    "reviewed_by": "user-business-review-2026-07-30"
+  },
+  "baseline": {
+    "experiment_id": "RET-STRUCT-CONTEXT-002-DEV-A",
+    "report_path": "outputs/bid_intake_retrieval_eval/ret_struct_context_002_dev_a/20260730_102230_RET-STRUCT-CONTEXT-002-DEV-A_report.json",
+    "mean_recall_at_5_anchor_groups": 0.9,
+    "mrr": 0.633333,
+    "mean_ndcg_at_5": 0.632681,
+    "fact_gate_negative_accuracy": 1.0,
+    "p95_latency_ms": 696
+  },
+  "single_change": {
+    "description": "在002保留首轮锚点的基础上，只让每条补查Query首个具有真实表格父节点的结果指定优先扩展父节点。",
+    "integration_policy": "preserve_first_round_anchors_and_target_retry_parent",
+    "preferred_parent_must_be_verified_structure": true,
+    "preferred_parent_must_contain_first_round_anchor": true,
+    "max_parent_groups": 1,
+    "max_sibling_members": 3,
+    "max_retry_round_count": 1,
+    "max_retry_query_count": 2,
+    "zero_coverage_retry_allowed": false,
+    "second_round_may_rerank_anchors": false,
+    "graph_expansion_enabled": false,
+    "memory_enabled": false
+  },
+  "frozen_retrieval_config": {
+    "backend": "database_layered_retrieval",
+    "final_top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "candidate_coverage_selection_enabled": true,
+    "structured_context_groups_enabled": true,
+    "controlled_second_round_enabled": true,
+    "analysis_llm_invoked": false,
+    "prediction_excerpts_persisted": false
+  },
+  "code_sha256": {
+    "mcp_servers/tender_evidence/service.py": "4878E2396B91DD016FFB4120D6A4F155DC9F6339ED7B8EAE410C601073A37E93",
+    "tests/test_tender_query_planner.py": "BFEC78ED8F03405EE5DAFED88D2B4FE29393271B95E409B6AF705C442447D94A",
+    "scripts/bid_intake_retrieval_eval.py": "6B408D19895A2AF5E9EE6DF39584F5242EE84D02BEBFE6E0358ACE9F5A8E1E22",
+    "app/agents/bid_intake/retrieval_evaluation.py": "C6C26D22A72677FFA975A9CAF9D68A08E826CBE145B4BD9839C32E5BE5922A4C"
+  },
+  "predeclared_acceptance": {
+    "mean_recall_at_5_anchor_groups_min": 0.925,
+    "positive_case_improvement_count_min": 1,
+    "positive_case_regression_count_max": 0,
+    "mrr_min": 0.633333,
+    "mean_ndcg_at_5_min": 0.632681,
+    "first_round_anchor_order_preservation_required": true,
+    "preferred_parent_applied_when_retry_has_verified_parent": true,
+    "negative_case_retry_trigger_count_max": 0,
+    "total_retry_query_count_max": 2,
+    "max_retry_query_count_per_case": 2,
+    "fact_gate_decision_change_count_max": 0,
+    "fact_gate_negative_accuracy_required": 1.0,
+    "primary_query_count_accuracy_required": 1.0,
+    "p95_latency_ms_max": 1000,
+    "error_count_max": 0
+  },
+  "metric_interpretation": {
+    "fact_gate_false_rates_are_diagnostic_not_acceptance_for_this_retrieval_only_candidate": true,
+    "fact_gate_per_case_decision_must_not_regress": true
+  },
+  "decision_policy": {
+    "single_project_success_cannot_enable_production_flag": true,
+    "development_b_from_a_new_project_is_required": true,
+    "old_holdout_and_challenge_must_not_be_rerun": true,
+    "no_project_specific_keyword_may_be_added": true
+  }
+}

@@ -55,89 +55,11 @@
         <el-button :icon="Refresh" plain :loading="loading" @click="loadDetail">刷新</el-button>
       </div>
     </div>
-    <el-alert
-      v-if="!pricingFeatureAvailable"
-      class="budget-mode-alert"
-      type="info"
-      show-icon
-      :closable="false"
-      title="当前为成本计价准备模式"
-      description="已完成 Excel 清单导入、表头映射、工程量标准化和异常标记；成本计价功能当前未开启。"
+    <BudgetProjectPricing
+      :project="detail"
+      :feature-available="pricingFeatureAvailable"
+      @version-activated="loadDetail"
     />
-    <el-alert
-      v-else
-      class="budget-mode-alert"
-      type="info"
-      show-icon
-      :closable="false"
-      title="企业定额部分计价已启用"
-      description="计价只绑定当前正式清单和当次企业定额版本；未匹配项不会按 0 元计入完整项目成本。"
-    />
-    <div class="budget-metrics">
-      <div><span>项目状态</span><strong>{{ statusLabel(projectStatus(detail)) }}</strong></div>
-      <div><span>导入批次</span><strong>{{ imports.length }}</strong></div>
-      <div><span>当前 Sheet</span><strong>{{ selectedImport?.summary?.sheet_count || mappingSheets.length }}</strong></div>
-      <div><span>识别条目</span><strong>{{ selectedImport?.summary?.standard_item_count ?? standardRows.length }}</strong><small>有效工程量 {{ selectedImport?.summary?.valid_quantity_count ?? validQuantityCount }} 行，异常 {{ abnormalCount }} 行</small></div>
-    </div>
-    <BudgetProjectPricing :project="detail" :feature-available="pricingFeatureAvailable" />
-    <section class="budget-panel">
-      <div class="budget-title"><div><strong>导入甲方清单</strong><small>仅支持 .xlsx / .xlsm；保留文件名、SHA256 及解析快照，第一阶段暂不提供原件下载</small></div></div>
-      <el-alert v-if="detailArchived" type="warning" show-icon :closable="false" title="项目已归档，仅可查看历史导入和标准清单" />
-      <div v-else-if="canUploadCurrent" class="budget-upload">
-        <el-upload ref="uploadRef" :auto-upload="false" :limit="1" accept=".xlsx,.xlsm" :on-change="fileChanged" :on-remove="clearUpload"><el-button :icon="Upload" plain>选择 Excel</el-button></el-upload>
-        <el-button type="primary" :loading="uploading" :disabled="!uploadFile" @click="uploadImport">导入并标准化</el-button>
-      </div>
-    </section>
-    <section class="budget-panel">
-      <div class="budget-title"><div><strong>导入批次</strong><small>选择批次查看 Sheet、表头映射及标准清单</small></div><span>{{ imports.length }} 个</span></div>
-      <el-table :data="imports" :row-key="batchIdOf" :row-class-name="importRowClassName" class="users-table" empty-text="尚未导入清单">
-        <el-table-column label="批次" min-width="260"><template #default="{ row }"><div class="budget-name"><strong>{{ row.batch_no || row.import_code || `批次 ${batchIdOf(row)}` }} <el-tag v-if="isSelectedImport(row)" size="small" type="primary" effect="light">当前查看</el-tag></strong><small>{{ sourceFileName(row) }}</small></div></template></el-table-column>
-        <el-table-column label="Sheet" width="90" align="right"><template #default="{ row }">{{ row.sheet_count ?? row.summary?.sheet_count ?? 0 }}</template></el-table-column>
-        <el-table-column label="识别条目" width="100" align="right"><template #default="{ row }">{{ row.summary?.standard_item_count ?? row.standard_item_count ?? row.row_count ?? row.standard_row_count ?? 0 }}</template></el-table-column>
-        <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="batchStatusTag(row)" effect="plain">{{ batchStatusLabel(row) }}</el-tag></template></el-table-column>
-        <el-table-column label="导入时间" width="170"><template #default="{ row }">{{ formatDate(row.created_at || row.imported_at) }}</template></el-table-column>
-        <el-table-column label="操作" width="260"><template #default="{ row }"><el-button size="small" :type="isSelectedImport(row) ? 'primary' : ''" :plain="!isSelectedImport(row)" @click="selectImport(row)">{{ isSelectedImport(row) ? '正在查看' : '查看批次' }}</el-button><el-button v-if="canConfirmImport(row)" size="small" plain @click="confirmImport(row)">确认清单</el-button><el-button v-if="canActivateImport(row)" size="small" type="success" plain @click="activateImport(row)">设为当前批次</el-button></template></el-table-column>
-      </el-table>
-    </section>
-    <template v-if="selectedImport">
-      <section class="budget-panel">
-        <div class="budget-title"><div><strong>Sheet 表头映射</strong><small>可选择项目名称、项目特征、单位、工程量或忽略；重新生成只影响当前批次 · 映射修订 {{ selectedImport.remap_revision ?? 0 }}</small></div></div>
-        <el-tabs v-if="mappingSheets.length" v-model="activeMappingSheet">
-          <el-tab-pane v-for="sheet in mappingSheets" :key="sheet.sheet_name" :label="sheet.sheet_name" :name="sheet.sheet_name">
-            <div class="mapping-summary">
-              <el-tag :type="quantityMappingColumn(sheet) ? 'success' : 'warning'" effect="light">计算工程量列：{{ quantityMappingColumn(sheet) || '未指定' }}</el-tag>
-              <span>每个 Sheet 只允许一个合计工程量列；分层工程量及价格/金额列固定忽略。</span>
-            </div>
-            <el-table :data="sheet.columns" row-key="column" class="users-table">
-              <el-table-column prop="column" label="列" width="75" />
-              <el-table-column label="原始表头" min-width="160"><template #default="{ row }">{{ row.label || row.header || '-' }}</template></el-table-column>
-              <el-table-column label="样例" min-width="230"><template #default="{ row }">{{ samples(row) }}</template></el-table-column>
-              <el-table-column label="标准字段" width="235"><template #default="{ row }"><div class="mapping-field"><el-select v-model="mappings[sheet.sheet_name][row.column]" size="small" :disabled="mappingColumnDisabled(row)" @change="mappingChanged(sheet, row, $event)"><el-option v-for="option in mappingOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select><small v-if="isLockedPriceColumn(row)">价格/金额列已锁定忽略</small><small v-else-if="isLockedLayerQuantityColumn(row)">分层工程量列已锁定忽略</small><small v-else-if="mappings[sheet.sheet_name]?.[row.column] === 'quantity'">当前合计工程量列</small><small v-else-if="!canRemapCurrent">当前项目仅可查看</small></div></template></el-table-column>
-            </el-table>
-          </el-tab-pane>
-        </el-tabs>
-        <el-empty v-else description="当前批次未返回表头映射" />
-        <div v-if="canRemapCurrent" class="budget-actions"><el-button type="primary" :loading="mappingLoading" :disabled="!mappingSheets.length" @click="regenerate">应用映射并重新生成当前批次</el-button></div>
-      </section>
-      <section class="budget-panel">
-        <div class="budget-title"><div><strong>标准清单</strong><small>清单项目参与工程量统计和报价；编制说明、计算规则等参考信息仅展示，不参与计算</small></div></div>
-        <el-tabs v-if="sheetNames.length" v-model="activeRowSheet">
-          <el-tab-pane v-for="sheet in sheetNames" :key="sheet" :label="`${sheet} (${rowsBySheet(sheet).length})`" :name="sheet">
-            <el-table :data="rowsBySheet(sheet)" row-key="__key" :row-class-name="standardRowClassName" class="users-table" max-height="620">
-              <el-table-column label="来源" width="100"><template #default="{ row }">行 {{ row.raw_row_index || row.source_row_number || '-' }}</template></el-table-column>
-              <el-table-column label="项目名称 / 参考内容" min-width="280"><template #default="{ row }">{{ standardRowTitle(row) }}</template></el-table-column>
-              <el-table-column label="项目特征" min-width="240"><template #default="{ row }">{{ isReferenceRow(row) ? '-' : (row.spec || row.project_feature || '-') }}</template></el-table-column>
-              <el-table-column label="单位" width="85"><template #default="{ row }">{{ isReferenceRow(row) ? '-' : (row.unit || '-') }}</template></el-table-column>
-              <el-table-column label="原始工程量" width="135" align="right"><template #default="{ row }">{{ isReferenceRow(row) ? '-' : originalQuantity(row) }}</template></el-table-column>
-              <el-table-column label="计算工程量" width="135" align="right"><template #default="{ row }"><strong>{{ isReferenceRow(row) ? '-' : calculatedQuantity(row) }}</strong></template></el-table-column>
-              <el-table-column label="数量状态" width="125"><template #default="{ row }"><el-tag v-if="isReferenceRow(row)" type="info" effect="plain">参考信息</el-tag><el-tag v-else :type="quantityValid(row.quantity_status) ? 'success' : 'warning'" effect="plain">{{ quantityLabel(row.quantity_status) }}</el-tag></template></el-table-column>
-              <el-table-column label="原因" min-width="220"><template #default="{ row }">{{ isReferenceRow(row) ? '仅作为估价上下文，不参与工程量和报价计算' : quantityReason(row) }}</template></el-table-column>
-            </el-table>
-          </el-tab-pane>
-        </el-tabs>
-        <el-empty v-else description="当前批次暂无标准清单行" />
-      </section>
-    </template>
   </div>
   <el-dialog v-model="dialog.visible" :title="dialog.id ? '修改预算项目' : '新建预算项目'" width="560px">
     <el-form label-position="top" :model="dialog.form">
@@ -432,6 +354,6 @@ onMounted(initialize)
 </script>
 
 <style scoped>
-.budget-mode-alert,.budget-panel{margin-bottom:18px}.budget-filters{display:grid;grid-template-columns:minmax(260px,1fr) 180px auto;gap:12px;margin-bottom:16px}.budget-panel{padding:20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.9);box-shadow:0 14px 34px rgba(15,23,42,.06)}.budget-title{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.budget-title div,.budget-name{display:flex;flex-direction:column;gap:4px}.budget-title small,.budget-title span,.budget-name small,.budget-metrics span,.budget-metrics small{color:#64748b}.budget-upload{display:flex;align-items:flex-start;gap:12px}.budget-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.budget-metrics>div{padding:18px;border:1px solid rgba(148,163,184,.2);border-radius:18px;background:#fff}.budget-metrics strong{display:block;margin-top:8px;font-size:24px}.budget-actions{display:flex;justify-content:flex-end;margin-top:16px}.mapping-summary{display:flex;align-items:center;gap:10px;margin:0 0 12px;color:#64748b;font-size:13px}.mapping-field{display:flex;flex-direction:column;gap:4px}.mapping-field small{color:#64748b}.mapping-field small:first-of-type{color:#b45309}:deep(.current-import-row td.el-table__cell){background:#eff6ff!important}.el-pagination{margin-top:16px;justify-content:flex-end}@media(max-width:900px){.budget-filters{grid-template-columns:1fr}.budget-metrics{grid-template-columns:repeat(2,1fr)}.mapping-summary{align-items:flex-start;flex-direction:column}}
+.budget-panel{margin-bottom:18px}.budget-filters{display:grid;grid-template-columns:minmax(260px,1fr) 180px auto;gap:12px;margin-bottom:16px}.budget-panel{padding:20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.9);box-shadow:0 14px 34px rgba(15,23,42,.06)}.budget-title{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.budget-title div,.budget-name{display:flex;flex-direction:column;gap:4px}.budget-title small,.budget-title span,.budget-name small{color:#64748b}.budget-upload{display:flex;align-items:flex-start;gap:12px}.budget-actions{display:flex;justify-content:flex-end;margin-top:16px}.mapping-summary{display:flex;align-items:center;gap:10px;margin:0 0 12px;color:#64748b;font-size:13px}.mapping-field{display:flex;flex-direction:column;gap:4px}.mapping-field small{color:#64748b}.mapping-field small:first-of-type{color:#b45309}:deep(.current-import-row td.el-table__cell){background:#eff6ff!important}.el-pagination{margin-top:16px;justify-content:flex-end}@media(max-width:900px){.budget-filters{grid-template-columns:1fr}.mapping-summary{align-items:flex-start;flex-direction:column}}
 :deep(.budget-reference-row td.el-table__cell){background:#f8fafc;color:#475569}
 </style>

@@ -6,8 +6,10 @@ import json
 import os
 
 from hybrid_searcher import execute_strict_retrieval, rebuild_indexes, _GLOBAL_MODEL
+from tender_evidence_search import register_tender_evidence_routes
 
 app = FastAPI(title="Enterprise RAG Core API", version="2.0.0")
+register_tender_evidence_routes(app, embedding_model=_GLOBAL_MODEL)
 
 RELOAD_SECRET = os.environ.get("RELOAD_SECRET", "")
 

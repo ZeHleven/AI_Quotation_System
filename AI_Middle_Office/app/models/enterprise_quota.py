@@ -63,6 +63,14 @@ class EnterpriseQuotaVersion(Base):
     import_batch_id = Column(Integer, ForeignKey("cost_import_batches.id"), nullable=True, index=True)
     source_filename = Column(String(255), nullable=True)
     source_file_sha256 = Column(String(64), nullable=True, index=True)
+    schema_version = Column(String(32), nullable=True, index=True)
+    workbook_title = Column(String(255), nullable=True)
+    workbook_metadata_json = Column(_long_text(), nullable=True)
+    quality_status = Column(String(24), nullable=True, index=True)
+    quality_summary_json = Column(_long_text(), nullable=True)
+    formula_count = Column(Integer, nullable=False, default=0, server_default="0")
+    revision = Column(Integer, nullable=False, default=1, server_default="1")
+    last_recalculated_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(24), nullable=False, default=QUOTA_VERSION_STATUS_DRAFT, server_default=QUOTA_VERSION_STATUS_DRAFT, index=True)
     is_active = Column(Boolean, nullable=False, default=False, server_default="0", index=True)
     summary_json = Column(_long_text(), nullable=True)
@@ -100,6 +108,18 @@ class EnterpriseQuotaVersion(Base):
         cascade="all, delete-orphan",
         order_by="EnterpriseCostResource.sort_order",
     )
+    workbook_rows = relationship(
+        "EnterpriseQuotaSheetRow",
+        back_populates="version",
+        cascade="all, delete-orphan",
+        order_by="EnterpriseQuotaSheetRow.sheet_order, EnterpriseQuotaSheetRow.row_number",
+    )
+    events = relationship(
+        "EnterpriseQuotaVersionEvent",
+        back_populates="version",
+        cascade="all, delete-orphan",
+        order_by="EnterpriseQuotaVersionEvent.created_at, EnterpriseQuotaVersionEvent.id",
+    )
 
 
 class EnterpriseQuotaSection(Base):
@@ -111,8 +131,11 @@ class EnterpriseQuotaSection(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     version_id = Column(Integer, ForeignKey("enterprise_quota_versions.id"), nullable=False, index=True)
+    parent_section_id = Column(Integer, ForeignKey("enterprise_quota_sections.id"), nullable=True, index=True)
     section_code = Column(String(64), nullable=True, index=True)
     section_name = Column(String(255), nullable=True, index=True)
+    level = Column(Integer, nullable=False, default=1, server_default="1", index=True)
+    outline_level = Column(Integer, nullable=False, default=0, server_default="0")
     source_sheet = Column(String(128), nullable=True)
     source_row_index = Column(Integer, nullable=True, index=True)
     sort_order = Column(Integer, nullable=False, default=0, server_default="0")
@@ -120,6 +143,12 @@ class EnterpriseQuotaSection(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     version = relationship("EnterpriseQuotaVersion", back_populates="sections")
+    parent = relationship("EnterpriseQuotaSection", remote_side=[id], back_populates="children")
+    children = relationship(
+        "EnterpriseQuotaSection",
+        back_populates="parent",
+        order_by="EnterpriseQuotaSection.sort_order",
+    )
     items = relationship(
         "EnterpriseQuotaItem",
         back_populates="section",
@@ -140,9 +169,12 @@ class EnterpriseQuotaItem(Base):
     version_id = Column(Integer, ForeignKey("enterprise_quota_versions.id"), nullable=False, index=True)
     section_id = Column(Integer, ForeignKey("enterprise_quota_sections.id"), nullable=True, index=True)
     quota_code = Column(String(64), nullable=True, index=True)
+    row_type = Column(String(32), nullable=True, index=True)
     item_name = Column(String(255), nullable=True, index=True)
     work_content = Column(_long_text(), nullable=True)
     worker_or_subtype = Column(String(128), nullable=True)
+    specification = Column(String(255), nullable=True)
+    brand = Column(String(255), nullable=True)
     unit = Column(String(64), nullable=True, index=True)
     quantity = Column(Float, nullable=True)
     unit_price = Column(Float, nullable=True, index=True)
@@ -152,6 +184,8 @@ class EnterpriseQuotaItem(Base):
     machinery_fee = Column(Float, nullable=True)
     source_sheet = Column(String(128), nullable=True)
     source_row_index = Column(Integer, nullable=True, index=True)
+    outline_level = Column(Integer, nullable=False, default=0, server_default="0")
+    formulas_json = Column(_long_text(), nullable=True)
     sort_order = Column(Integer, nullable=False, default=0, server_default="0")
     raw_row_json = Column(_long_text(), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -180,13 +214,21 @@ class EnterpriseCostResource(Base):
     resource_code = Column(String(64), nullable=True, index=True)
     resource_name = Column(String(255), nullable=True, index=True)
     resource_type = Column(String(32), nullable=False, default=RESOURCE_TYPE_UNKNOWN, server_default=RESOURCE_TYPE_UNKNOWN, index=True)
+    library_kind = Column(String(24), nullable=True, index=True)
+    category = Column(String(128), nullable=True, index=True)
+    specification = Column(String(255), nullable=True)
+    brand = Column(String(255), nullable=True)
+    work_content = Column(_long_text(), nullable=True)
+    calculation_rule = Column(_long_text(), nullable=True)
     unit = Column(String(64), nullable=True, index=True)
+    default_quantity = Column(Float, nullable=True)
     price = Column(Float, nullable=True, index=True)
     tax_rate = Column(Float, nullable=True)
     computed_price = Column(Float, nullable=True)
     price_block_label = Column(String(64), nullable=True)
     source_sheet = Column(String(128), nullable=True)
     source_row_index = Column(Integer, nullable=True, index=True)
+    formulas_json = Column(_long_text(), nullable=True)
     sort_order = Column(Integer, nullable=False, default=0, server_default="0")
     raw_row_json = Column(_long_text(), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -213,6 +255,9 @@ class EnterpriseQuotaComponent(Base):
     resource_code = Column(String(64), nullable=True, index=True)
     resource_name = Column(String(255), nullable=True, index=True)
     worker_or_subtype = Column(String(128), nullable=True)
+    work_content = Column(_long_text(), nullable=True)
+    specification = Column(String(255), nullable=True)
+    brand = Column(String(255), nullable=True)
     unit = Column(String(64), nullable=True, index=True)
     quantity = Column(Float, nullable=True)
     unit_price = Column(Float, nullable=True)
@@ -220,6 +265,10 @@ class EnterpriseQuotaComponent(Base):
     fee_bucket = Column(String(32), nullable=True, index=True)
     source_sheet = Column(String(128), nullable=True)
     source_row_index = Column(Integer, nullable=True, index=True)
+    outline_level = Column(Integer, nullable=False, default=1, server_default="1")
+    formulas_json = Column(_long_text(), nullable=True)
+    formula_library_kind = Column(String(24), nullable=True, index=True)
+    formula_link_status = Column(String(24), nullable=True, index=True)
     sort_order = Column(Integer, nullable=False, default=0, server_default="0")
     raw_row_json = Column(_long_text(), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -228,3 +277,74 @@ class EnterpriseQuotaComponent(Base):
     version = relationship("EnterpriseQuotaVersion", back_populates="components")
     quota_item = relationship("EnterpriseQuotaItem", back_populates="components")
     resource = relationship("EnterpriseCostResource", back_populates="components")
+
+
+class EnterpriseQuotaSheetRow(Base):
+    __tablename__ = "enterprise_quota_sheet_rows"
+    __table_args__ = (
+        UniqueConstraint(
+            "version_id",
+            "sheet_name",
+            "row_number",
+            name="uq_enterprise_quota_sheet_rows_version_sheet_row",
+        ),
+        Index(
+            "ix_enterprise_quota_sheet_rows_version_sheet_order",
+            "version_id",
+            "sheet_order",
+            "row_number",
+        ),
+        Index(
+            "ix_enterprise_quota_sheet_rows_entity",
+            "entity_type",
+            "entity_id",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    version_id = Column(Integer, ForeignKey("enterprise_quota_versions.id"), nullable=False, index=True)
+    sheet_name = Column(String(128), nullable=False, index=True)
+    sheet_order = Column(Integer, nullable=False, default=0, server_default="0")
+    row_number = Column(Integer, nullable=False)
+    row_kind = Column(String(32), nullable=False, default="data", server_default="data", index=True)
+    outline_level = Column(Integer, nullable=False, default=0, server_default="0")
+    parent_row_number = Column(Integer, nullable=True)
+    entity_type = Column(String(32), nullable=True, index=True)
+    entity_id = Column(Integer, nullable=True, index=True)
+    values_json = Column(_long_text(), nullable=False)
+    formulas_json = Column(_long_text(), nullable=True)
+    styles_json = Column(_long_text(), nullable=True)
+    merge_ranges_json = Column(_long_text(), nullable=True)
+    row_height = Column(Float, nullable=True)
+    hidden = Column(Boolean, nullable=False, default=False, server_default="0")
+    collapsed = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    version = relationship("EnterpriseQuotaVersion", back_populates="workbook_rows")
+
+
+class EnterpriseQuotaVersionEvent(Base):
+    __tablename__ = "enterprise_quota_version_events"
+    __table_args__ = (
+        Index(
+            "ix_enterprise_quota_version_events_version_created",
+            "version_id",
+            "created_at",
+        ),
+        Index(
+            "ix_enterprise_quota_version_events_type_created",
+            "event_type",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    version_id = Column(Integer, ForeignKey("enterprise_quota_versions.id"), nullable=False, index=True)
+    event_type = Column(String(48), nullable=False, index=True)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    reason = Column(_long_text(), nullable=True)
+    details_json = Column(_long_text(), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    version = relationship("EnterpriseQuotaVersion", back_populates="events")

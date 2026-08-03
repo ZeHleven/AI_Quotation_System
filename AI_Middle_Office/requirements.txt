@@ -20,3 +20,5 @@ pdfplumber
 numpy
 Pillow
 pypdfium2
+reportlab
+PyYAML>=6,<7

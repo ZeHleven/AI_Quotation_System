@@ -58,13 +58,20 @@ def isolate_account_pricing_feature_flags():
 
     previous = settings.feature_budget_pricing_drafts
     previous_account_quotas = settings.feature_account_quotas
+    previous_pricing_agent_hybrid = settings.feature_pricing_agent_hybrid_search
     object.__setattr__(settings, "feature_budget_pricing_drafts", False)
     object.__setattr__(settings, "feature_account_quotas", False)
+    object.__setattr__(settings, "feature_pricing_agent_hybrid_search", False)
     try:
         yield
     finally:
         object.__setattr__(settings, "feature_budget_pricing_drafts", previous)
         object.__setattr__(settings, "feature_account_quotas", previous_account_quotas)
+        object.__setattr__(
+            settings,
+            "feature_pricing_agent_hybrid_search",
+            previous_pricing_agent_hybrid,
+        )
 
 
 @pytest.fixture(scope="session")

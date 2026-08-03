@@ -1,0 +1,80 @@
+{
+  "schema_version": "bid_intake_graph_paired_latency_freeze_v1",
+  "freeze_id": "RET-GRAPH-LATENCY-001-PAIRED-FREEZE-20260730-V1",
+  "experiment_id": "RET-GRAPH-LATENCY-001",
+  "status": "frozen_prerun",
+  "frozen_at": "2026-07-30T14:55:47+08:00",
+  "purpose": "使用同题AB/BA交错配对测量003选择性图扩展的因果延迟增量，不进行质量调参。",
+  "dataset": {
+    "path": "evals/bid_intake/retrieval/v1/private_graph_development_b_lingshui_approved_v1.jsonl",
+    "file_sha256": "9df9dca0f95782521cbc99807cddd453e186a183f73f30300ddf25144cdc92f2",
+    "dataset_fingerprint": "ec6152ce2a2ea7d06fc1013798427e976c1426ac405b0e9ab4ceffb15c636253",
+    "case_count": 10,
+    "dataset_split": "development",
+    "dataset_split_locked": true
+  },
+  "candidate": {
+    "source_experiment_id": "RET-GRAPH-EXPAND-003",
+    "source_execution_id": "RET-GRAPH-EXPAND-003-DEV-B-CANDIDATE-EXECUTION-V1",
+    "source_execution_file_sha256": "94a6d33f6dbd41ed915ccb3260e90b242c8fec90dcdb66ab910ea33adc8cf7ad",
+    "formal_quality_status": "quality_hypothesis_supported",
+    "formal_overall_status": "rejected_by_latency_gate",
+    "selective_graph_expansion_enabled": true
+  },
+  "baseline": {
+    "selective_graph_expansion_enabled": false,
+    "all_other_optional_retrieval_enhancements_enabled": false
+  },
+  "shared_configuration": {
+    "backend": "database_layered_retrieval",
+    "top_k": 5,
+    "per_query_candidate_top_k": 20,
+    "same_process": true,
+    "same_repository_instance": true,
+    "warmup_pairs_per_case": 1,
+    "measured_pairs_per_case": 6,
+    "total_measured_pair_count": 60,
+    "order_balance_per_case": {
+      "baseline_first": 3,
+      "candidate_first": 3
+    },
+    "rotating_case_start": true,
+    "question_or_evidence_content_persisted": false,
+    "additional_llm_tokens": 0
+  },
+  "acceptance_thresholds": {
+    "valid_pair_count": 60,
+    "baseline_error_count_max": 0,
+    "candidate_error_count_max": 0,
+    "trigger_mismatch_count_max": 0,
+    "paired_delta_p95_ms_max": 500
+  },
+  "diagnostic_groups": [
+    "all",
+    "graph_trigger_expected",
+    "graph_no_trigger_expected",
+    "candidate_graph_path_present",
+    "candidate_graph_path_absent",
+    "baseline_first",
+    "candidate_first"
+  ],
+  "anti_bias_guards": {
+    "threshold_change_after_run_forbidden": true,
+    "extra_repeat_after_result_forbidden": true,
+    "quality_metric_reselection_forbidden": true,
+    "old_holdout_rerun_forbidden": true,
+    "old_challenge_rerun_forbidden": true,
+    "production_enable_from_this_latency_test_forbidden": true
+  },
+  "code_snapshot_before_harness": {
+    "git_head": "ac8f0b6",
+    "mcp_servers/tender_evidence/selective_graph.py": "c8a2d276689d24e7ba8e9851b8bb314cd06971f392f30e4aa95c3b7fd3a8e0e1",
+    "mcp_servers/tender_evidence/service.py": "fd1b2df579bce78b8892274541110cda32bca9ac62a457bfcadd7098cd950322"
+  },
+  "harness_snapshot_prerun": {
+    "app/agents/bid_intake/paired_latency.py": "ac995ce47abac2ede8dcfed2ff5dc5e0bf3a9221eec89537476ecb584279f9f5",
+    "scripts/bid_intake_paired_latency_eval.py": "38f99a24906e3f431f9f683bb5bf099ab00550b1f9655c9e23fe1baee96f661a",
+    "tests/test_bid_intake_paired_latency.py": "ba434111274222729d4d352811e2e698508abe755e53a90a59bab099c89998f8",
+    "focused_test_result": "34 passed"
+  }
+}

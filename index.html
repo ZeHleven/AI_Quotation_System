@@ -207,22 +207,57 @@
     .file-preview { margin-bottom: 10px; }
     .preview-img { width: 160px; height: 160px; border-radius: 8px; object-fit: cover; border: 1px solid var(--steel); }
 
-    /* ── 优化2：阶段进度条 ── */
+    /* ── 面向业务用户的报价进度 ── */
     .stage-indicator {
-      background: var(--bg); border-radius: 8px;
-      padding: 8px 12px; margin-bottom: 10px;
+      min-width: min(560px, 72vw); padding: 16px; margin-bottom: 10px;
+      border: 1px solid #DDE7F0; border-radius: 14px;
+      background: linear-gradient(145deg, #FFFFFF 0%, #F7FAFD 100%);
+      box-shadow: 0 10px 28px rgba(31, 45, 61, 0.07);
     }
-    .stage-track { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; }
+    .quote-progress-heading {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+    }
+    .quote-progress-heading > div { display: grid; gap: 4px; min-width: 0; }
+    .quote-progress-heading strong { color: var(--strong); font-size: 15px; line-height: 1.4; }
+    .quote-progress-heading span { color: var(--slate); font-size: 12px; line-height: 1.45; }
+    .quote-progress-percent {
+      flex: 0 0 auto; color: #14735D; font-size: 20px; font-weight: 750;
+      font-variant-numeric: tabular-nums;
+    }
+    .quote-progress-bar {
+      position: relative; height: 9px; margin: 14px 0 13px; overflow: hidden;
+      border-radius: 999px; background: #E8EEF3;
+    }
+    .quote-progress-bar-fill {
+      position: relative; height: 100%; min-width: 8px; border-radius: inherit;
+      background: linear-gradient(90deg, #2BAF78 0%, #45C995 56%, #74DCAF 100%);
+      box-shadow: 0 0 12px rgba(43, 175, 120, 0.26);
+      transition: width 0.65s ease;
+    }
+    .quote-progress-bar-fill::after {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,.1) 36%, rgba(255,255,255,.72) 50%, rgba(255,255,255,.1) 64%, transparent 100%);
+      transform: translateX(-100%); animation: quote-progress-shimmer 1.7s linear infinite;
+    }
+    @keyframes quote-progress-shimmer { to { transform: translateX(100%); } }
+    .stage-track {
+      display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px;
+    }
     .stage-item {
-      display: flex; align-items: center; gap: 4px;
-      font-size: 12px; color: var(--steel); transition: color 0.25s; white-space: nowrap;
+      display: grid; gap: 4px; justify-items: center; min-width: 0; padding: 7px 5px;
+      border-radius: 9px; color: #95A2AC; font-size: 11px; text-align: center;
+      transition: color 0.25s, background 0.25s;
     }
-    .stage-item.active { color: var(--dark); font-weight: 600; }
+    .stage-item.active { color: #166D52; background: #EAF8F2; font-weight: 650; }
     .stage-item.done   { color: var(--green); }
-    .stage-sep { margin: 0 8px; color: var(--steel); font-size: 11px; }
+    .stage-item-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px; border: 1px solid currentColor; border-radius: 50%;
+      background: #FFF; font-size: 12px; font-weight: 700;
+    }
     .progress-meta {
-      margin-top: 7px; padding-top: 7px; border-top: 1px solid rgba(201,214,223,0.6);
-      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      margin-top: 11px; padding-top: 10px; border-top: 1px solid rgba(201,214,223,0.65);
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
       font-size: 12px; color: var(--slate);
     }
     .progress-main { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
@@ -235,6 +270,9 @@
     .progress-meta.error   .progress-dot { background: #F56C6C; box-shadow: 0 0 0 3px rgba(245,108,108,0.14); }
     .progress-status { overflow-wrap: anywhere; }
     .progress-elapsed { color: var(--steel); white-space: nowrap; }
+    .progress-reassurance {
+      display: block; margin-top: 8px; color: #73808A; font-size: 11px; line-height: 1.45;
+    }
     .quote-meta {
       margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;
       font-size: 12px; color: var(--slate);
@@ -370,6 +408,8 @@
       .quote-workflow-steps {
         grid-template-columns: 1fr;
       }
+      .stage-indicator { min-width: 0; width: min(100%, 88vw); }
+      .stage-track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .client-info-fields { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 520px) {
@@ -381,6 +421,38 @@
       display: grid; grid-template-columns: minmax(280px, 1.15fr) minmax(360px, 1fr);
       gap: 12px; margin-bottom: 14px; align-items: stretch;
     }
+    .preview-workspace-switcher {
+      display: grid; gap: 10px; margin-bottom: 14px; padding: 12px;
+      border: 1px solid var(--steel); border-radius: var(--radius-lg); background: var(--panel);
+    }
+    .preview-workspace-flow {
+      display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px;
+    }
+    .preview-workspace-flow span {
+      padding: 7px 8px; border-radius: var(--radius-md); background: #eef2f6;
+      color: var(--slate); font-size: 12px; font-weight: 600; text-align: center;
+    }
+    .preview-workspace-flow span.done { background: #edf8ef; color: #2f6b1f; }
+    .preview-workspace-flow span.active { background: #e8f1ff; color: #1d4ed8; box-shadow: inset 0 0 0 1px #9fc1ff; }
+    .preview-workspace-switcher .el-radio-group { display: flex; width: 100%; }
+    .preview-workspace-switcher .el-radio-button { flex: 1; }
+    .preview-workspace-switcher .el-radio-button__inner { width: 100%; }
+    .preview-professional-table { border-top: 3px solid #2563eb; }
+    .preview-workspace-panel {
+      display: grid; gap: 12px; padding: 14px;
+      border: 1px solid var(--steel); border-radius: var(--radius-lg); background: var(--white);
+    }
+    .preview-summary-metrics {
+      display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px;
+    }
+    .preview-summary-metrics article, .preview-version-panel article {
+      display: grid; gap: 5px; padding: 12px;
+      border: 1px solid var(--steel); border-radius: var(--radius-md); background: var(--panel);
+    }
+    .preview-summary-metrics span, .preview-version-panel span { color: var(--slate); font-size: 12px; }
+    .preview-summary-metrics strong, .preview-version-panel strong { color: var(--dark); font-size: 16px; }
+    .preview-version-panel { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .preview-version-panel .el-button { grid-column: 1 / -1; justify-self: end; }
     .preview-summary-bar {
       min-height: 100%; display: flex; justify-content: space-between; align-items: center;
       background: #111111; color: var(--white);
@@ -501,7 +573,43 @@
     .cost-reference-fallback { font-size: 12px; color: #b45309; }
     .cost-reference-no-cost { font-size: 12px; color: #b45309; line-height: 1.35; }
     .cost-reference-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .enterprise-quota-v2-review-card {
+      display: grid; gap: 5px; margin-top: 4px; padding: 8px 9px;
+      border: 1px solid #f0c36b; border-radius: 8px; background: #fffbeb;
+    }
+    .enterprise-quota-v2-review-card.is-resolved { border-color: #a7d8bc; background: #f0fdf4; }
+    .enterprise-quota-v2-review-card__head {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .enterprise-quota-v2-review-card__head strong { color: var(--dark); font-size: 12px; }
+    .enterprise-quota-v2-review-card > small { color: var(--slate); line-height: 1.45; }
+    .enterprise-quota-v2-review-card__actions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .enterprise-quota-v2-review-card__actions .el-button + .el-button { margin-left: 0; }
     .total-price-cell { display: grid; gap: 4px; }
+    .construction-note-cell { display: grid; gap: 6px; min-width: 0; }
+    .construction-note-cell-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .construction-note-cell-head .el-button { margin-left: 0; }
+    .construction-note-cell > span {
+      display: -webkit-box; overflow: hidden; color: var(--slate);
+      font-size: 12px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    }
+    .construction-note-cell > span.empty { color: #94a3b8; }
+    .construction-note-drawer { display: grid; gap: 16px; }
+    .construction-note-hero {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+      padding: 16px; border: 1px solid var(--steel); border-radius: var(--radius-lg); background: var(--panel);
+    }
+    .construction-note-hero > div, .construction-note-section-title { display: flex; flex-direction: column; gap: 5px; }
+    .construction-note-hero strong { color: var(--dark); font-size: 17px; }
+    .construction-note-hero span, .construction-note-section-title span { color: var(--slate); font-size: 12px; line-height: 1.5; }
+    .construction-note-section {
+      display: grid; gap: 10px; padding: 15px;
+      border: 1px solid var(--steel); border-radius: var(--radius-lg); background: var(--white);
+    }
+    .construction-note-section p { margin: 0; color: var(--slate); font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+    .construction-note-review-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .construction-note-empty { color: var(--slate); font-size: 13px; }
+    .construction-note-footer { display: flex; justify-content: flex-end; gap: 8px; }
     .preview-footer-bar {
       display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%;
       padding-top: 4px;
@@ -514,6 +622,8 @@
       .preview-command-center { grid-template-columns: 1fr; }
       .preview-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .preview-blocker-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .preview-workspace-flow, .preview-summary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .preview-version-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 720px) {
       .preview-summary-bar, .preview-table-heading, .preview-footer-bar {
@@ -521,8 +631,121 @@
       }
       .summary-total-stack { text-align: left; }
       .preview-status-grid, .preview-blocker-list { grid-template-columns: 1fr; }
+      .preview-workspace-flow, .preview-summary-metrics, .preview-version-panel { grid-template-columns: 1fr; }
+      .preview-workspace-switcher .el-radio-group { display: grid; grid-template-columns: 1fr 1fr; }
       .preview-footer-actions { justify-content: stretch; }
       .preview-footer-actions .el-button { margin-left: 0; }
+    }
+
+    /* 对话报价只展示结果摘要，专业操作统一交给预算项目详细报价界面。 */
+    .quote-summary-dialog .el-dialog__body { padding: 8px 22px 18px; }
+    .quote-summary-dialog .el-dialog__footer {
+      padding: 16px 22px 20px;
+      border-top: 1px solid var(--steel);
+      background: #fbfcfd;
+    }
+    .quote-result-summary { display: grid; gap: 14px; }
+    .quote-result-summary__hero {
+      display: flex; align-items: center; justify-content: space-between; gap: 22px;
+      padding: 22px; border: 1px solid #dce5ec; border-radius: 18px;
+      background: linear-gradient(145deg, #f8fbff 0%, #ffffff 58%, #f5fbf3 100%);
+      box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07);
+    }
+    .quote-result-summary__identity { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+    .quote-result-summary__identity > div { display: grid; gap: 6px; min-width: 0; }
+    .quote-result-summary__identity h3 {
+      margin: 0; color: var(--dark); font-size: 20px; line-height: 1.35;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .quote-result-summary__identity p,
+    .quote-result-summary__hint {
+      margin: 0; color: var(--slate); font-size: 13px; line-height: 1.65;
+    }
+    .quote-result-summary__amount {
+      display: grid; gap: 4px; flex: 0 0 auto; text-align: right;
+    }
+    .quote-result-summary__amount span,
+    .quote-result-summary__amount small { color: var(--slate); font-size: 12px; }
+    .quote-result-summary__amount strong {
+      color: #111827; font-size: 28px; line-height: 1.2; letter-spacing: -0.02em;
+    }
+    .quote-result-summary__metrics {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+    }
+    .quote-result-summary__metrics article {
+      display: grid; gap: 5px; min-width: 0; padding: 14px;
+      border: 1px solid var(--steel); border-radius: 14px; background: var(--white);
+    }
+    .quote-result-summary__metrics span,
+    .quote-result-summary__metrics small { color: var(--slate); font-size: 12px; line-height: 1.4; }
+    .quote-result-summary__metrics strong { color: var(--dark); font-size: 21px; line-height: 1.25; }
+    .quote-result-summary__metrics .is-account { border-color: #b7d7ff; background: #f4f9ff; }
+    .quote-result-summary__metrics .is-enterprise { border-color: #bde7d0; background: #f3fbf6; }
+    .quote-result-summary__metrics .is-v2-review { border-color: #f1c27d; background: #fff9ef; }
+    .quote-result-summary__metrics .is-ai { border-color: #ead4ff; background: #fbf7ff; }
+    .quote-result-summary__route {
+      display: grid; gap: 10px; padding: 14px;
+      border: 1px solid var(--steel); border-radius: 14px; background: #fbfcfd;
+    }
+    .quote-result-summary__route-title {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .quote-result-summary__route-title strong { color: var(--dark); font-size: 14px; }
+    .quote-result-summary__route-title span { color: var(--slate); font-size: 12px; }
+    .quote-result-summary__route-track {
+      display: flex; gap: 4px; height: 28px; overflow: hidden; border-radius: 999px;
+      background: #eef2f6;
+    }
+    .quote-result-summary__route-track > div {
+      display: flex; align-items: center; justify-content: center; min-width: 32px;
+      color: #ffffff; font-size: 12px; font-weight: 700;
+    }
+    .quote-result-summary__route-track .is-account { background: #3b82f6; }
+    .quote-result-summary__route-track .is-enterprise { background: #22a06b; }
+    .quote-result-summary__route-track .is-v2-review { background: #f59e0b; }
+    .quote-result-summary__route-track .is-ai { background: #8b5cf6; }
+    .quote-result-summary__review {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      padding: 14px 16px; border: 1px solid; border-radius: 14px;
+    }
+    .quote-result-summary__review > div { display: grid; gap: 4px; }
+    .quote-result-summary__review strong { color: var(--dark); font-size: 15px; }
+    .quote-result-summary__review span { color: var(--slate); font-size: 12px; line-height: 1.45; }
+    .quote-result-summary__review.has-risk { border-color: #f1c27d; background: #fff9ef; }
+    .quote-result-summary__review.is-clear { border-color: #bde7d0; background: #f3fbf6; }
+    .quote-result-summary__attention {
+      display: grid; gap: 8px; padding: 14px 16px;
+      border: 1px solid #f1c27d; border-radius: 14px; background: #fffdf8;
+    }
+    .quote-result-summary__attention > strong { color: #8a5200; font-size: 13px; }
+    .quote-result-summary__attention ul {
+      display: grid; gap: 6px; margin: 0; padding-left: 18px; color: var(--slate);
+      font-size: 12px; line-height: 1.5;
+    }
+    .quote-result-summary__hint {
+      padding: 11px 13px; border-radius: 10px; background: #f1f5f9;
+    }
+    .quote-result-summary__footer {
+      display: flex; align-items: center; justify-content: space-between; gap: 18px; width: 100%;
+    }
+    .quote-result-summary__footer > div:first-child { display: grid; gap: 4px; text-align: left; }
+    .quote-result-summary__footer strong { color: var(--dark); font-size: 14px; }
+    .quote-result-summary__footer span { color: var(--slate); font-size: 12px; line-height: 1.45; }
+    .quote-result-summary__actions { display: flex; gap: 10px; flex: 0 0 auto; }
+    .quote-result-summary__actions .el-button + .el-button { margin-left: 0; }
+    @media (max-width: 760px) {
+      .quote-summary-dialog .el-dialog__body { padding: 6px 14px 14px; }
+      .quote-result-summary__hero,
+      .quote-result-summary__footer,
+      .quote-result-summary__review { display: grid; }
+      .quote-result-summary__amount { text-align: left; }
+      .quote-result-summary__metrics { grid-template-columns: 1fr 1fr; }
+      .quote-result-summary__route-title { display: grid; }
+      .quote-result-summary__actions { display: grid; grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      .quote-result-summary__metrics { grid-template-columns: 1fr; }
+      .quote-result-summary__identity { display: grid; }
     }
 
     .quote-evidence-dialog .el-dialog__body { padding-top: 8px; }
@@ -652,7 +875,7 @@
                   :loading="checkingJobId === latestRecoverableMessage.jobId"
                   @click="refreshQuoteJob(latestRecoverableMessage, latestRecoverableMessage.index)"
                 >
-                  查看任务状态
+                  查看处理结果
                 </el-button>
               </div>
             </section>
@@ -683,13 +906,22 @@
                 </div>
 
                 <div class="bubble">
-                  <!-- 优化2：阶段进度条（仅最后一条 AI 消息 & 正在处理时） -->
+                  <!-- 面向普通用户的报价进度（内部事件不会直接显示） -->
                   <div v-if="index === messageHistory.length - 1 && msg.role === 'assistant' && isTyping" class="stage-indicator">
+                    <div class="quote-progress-heading">
+                      <div>
+                        <strong>正在为您生成报价</strong>
+                        <span>系统会自动完成整理和计价，您无需重复提交</span>
+                      </div>
+                      <span class="quote-progress-percent">{{ Math.round(quoteProgressPercent) }}%</span>
+                    </div>
+                    <div class="quote-progress-bar" role="progressbar" aria-label="报价生成进度" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(quoteProgressPercent)">
+                      <div class="quote-progress-bar-fill" :style="{ width: `${quoteProgressPercent}%` }"></div>
+                    </div>
                     <div class="stage-track">
                       <div v-for="(stage, si) in stages" :key="si" :class="['stage-item', currentStage > si ? 'done' : currentStage === si ? 'active' : '']">
-                        <span>{{ currentStage > si ? '✓' : stage.icon }}</span>
+                        <span class="stage-item-icon">{{ currentStage > si ? '✓' : si + 1 }}</span>
                         <span>{{ stage.label }}</span>
-                        <span v-if="si < stages.length - 1" class="stage-sep">→</span>
                       </div>
                     </div>
                     <div :class="['progress-meta', quoteProgressTone]">
@@ -697,15 +929,13 @@
                         <span class="progress-dot"></span>
                         <span class="progress-status">{{ quoteProgressText }}</span>
                       </span>
-                      <span class="progress-elapsed" v-if="quoteElapsedSeconds > 0">已用 {{ quoteElapsedSeconds }} 秒</span>
+                      <span class="progress-elapsed" v-if="quoteElapsedSeconds > 0">已处理 {{ friendlyElapsedTime }}</span>
                     </div>
+                    <span class="progress-reassurance">清单较多时需要更长时间，页面会持续更新处理进度。</span>
                   </div>
 
                   <div v-if="msg.fileUrl" class="file-preview"><img :src="msg.fileUrl" class="preview-img" /></div>
-                  <div class="text-content">{{ msg.content }}<span v-if="index === messageHistory.length - 1 && isTyping" class="cursor"></span></div>
-                  <div v-if="msg.jobId || msg.traceId" class="quote-meta">
-                    <span v-if="msg.jobId" class="quote-meta-tag">任务 {{ msg.jobId }}</span>
-                  </div>
+                  <div v-if="msg.content && !(index === messageHistory.length - 1 && msg.role === 'assistant' && isTyping)" class="text-content">{{ msg.content }}</div>
                   <div v-if="msg.recoveryHint" class="recovery-hint-card">
                     <strong>下一步建议</strong>
                     <span>{{ msg.recoveryHint.reason }}</span>
@@ -949,19 +1179,56 @@
       <!-- 人在回路预审弹窗 -->
       <el-dialog
         v-model="showPreviewDialog"
-        title="报价明细预审 (成本库优先，人工确认)"
-        width="calc(100vw - 48px)"
-        class="quote-preview-dialog"
+        title="报价摘要"
+        width="min(920px, calc(100vw - 32px))"
+        class="quote-preview-dialog quote-summary-dialog"
         :close-on-click-modal="false"
         :close-on-press-escape="false"
         :before-close="handlePreviewDialogClose"
       >
 
+        <section class="quote-result-summary">
+          <header class="quote-result-summary__hero">
+            <div class="quote-result-summary__identity">
+              <el-tag :type="previewReadyForPush ? 'success' : 'warning'" effect="plain">
+                {{ previewReadyForPush ? '报价已完成' : '报价已生成，待详细核对' }}
+              </el-tag>
+              <div>
+                <h3>{{ previewSummaryProjectTitle }}</h3>
+                <p>系统已完成标准清单整理和三级计价，详细调整请进入报价明细界面。</p>
+              </div>
+            </div>
+            <div class="quote-result-summary__amount">
+              <span>当前报价合计</span>
+              <strong>¥ {{ finalTotalAmount }}</strong>
+              <small>{{ quoteTotalSourceText }}</small>
+            </div>
+          </header>
+
+          <div class="quote-result-summary__metrics">
+            <article class="is-enterprise">
+              <span>企业定额</span>
+              <strong>{{ previewPricingSourceSummary.enterpriseRecognized }} 项</strong>
+              <small>内部测试命中率 {{ previewPricingSourceSummary.enterpriseRecognitionRateText }}</small>
+            </article>
+            <article class="is-ai">
+              <span>AI 估价</span>
+              <strong>{{ previewPricingSourceSummary.ai }} 项</strong>
+              <small>企业定额未命中的项目</small>
+            </article>
+          </div>
+
+          <p class="quote-result-summary__hint">
+            对话窗口只保留报价结果和内部测试指标。工程量、单价、费用组成及版本记录，统一在详细报价界面查看。
+          </p>
+        </section>
+
+        <div v-if="false" aria-hidden="true">
         <section class="preview-command-center">
           <div class="preview-summary-bar">
             <div class="summary-left">
               <span class="summary-label">AI 预审与人工确认</span>
-              <span class="summary-subtle">共 {{ previewData.length }} 个施工项目，成本库参考合计：{{ quoteReferenceTotalAmount }}</span>
+              <span class="summary-subtle">共 {{ previewData.length }} 个施工项目，定额依据合计：{{ quoteReferenceTotalAmount }}</span>
             </div>
             <div class="summary-total-stack">
               <span class="summary-total">¥ {{ finalTotalAmount }}</span>
@@ -977,12 +1244,30 @@
           </div>
         </section>
 
+        <div class="preview-workspace-switcher">
+          <div class="preview-workspace-flow">
+            <span class="done">1 提交需求</span>
+            <span class="done">2 标准清单</span>
+            <span class="done">3 自动计价</span>
+            <span class="active">4 人工复核</span>
+            <span>5 费用汇总</span>
+            <span>6 导出下发</span>
+          </div>
+          <el-radio-group v-model="previewWorkspaceView" size="large">
+            <el-radio-button value="quick">快速审核</el-radio-button>
+            <el-radio-button value="professional">专业全字段</el-radio-button>
+            <el-radio-button value="summary">费用汇总</el-radio-button>
+            <el-radio-button value="basis">报价依据</el-radio-button>
+            <el-radio-button value="versions">版本记录</el-radio-button>
+          </el-radio-group>
+        </div>
+
         <div v-if="previewSubmittedDemandText" class="submitted-demand-panel">
           <strong>本次提交需求</strong>
           <span>{{ previewSubmittedDemandText }}</span>
         </div>
 
-        <el-alert class="preview-instruction-alert" title="请先处理阻断与复核项，再逐行核对工程量、成本库依据、人工确认价和人工确认合计。" type="warning" show-icon></el-alert>
+        <el-alert class="preview-instruction-alert" title="系统已按“账户定额 → 企业定额 → AI估价”自动填价；请处理阻断项，并核对工程量、报价依据和最终合计。" type="warning" show-icon></el-alert>
         <el-alert v-if="pushing" class="push-status" title="正在生成 Excel 并推送到钉钉，请勿关闭或重复提交。" type="info" show-icon></el-alert>
         <el-alert v-if="pushError" class="push-status" :title="pushError" type="error" show-icon :closable="false"></el-alert>
 
@@ -1022,7 +1307,7 @@
           </div>
           <el-alert
             v-if="reviewSummary.requirement_row_count"
-            :title="`确认清单 ${reviewSummary.requirement_row_count} 行，AI 预审返回 ${reviewSummary.preview_row_count || 0} 行；疑似未报价 ${reviewSummary.missing_count || 0} 行，无底价参考 ${reviewSummary.no_cost_reference_count || 0} 行，AI备注冲突 ${reviewSummary.ai_note_conflict_count || 0} 行，需复核 ${reviewSummary.review_required_count || 0} 项`"
+            :title="`确认清单 ${reviewSummary.requirement_row_count} 行，报价预审返回 ${reviewSummary.preview_row_count || 0} 行；疑似未报价 ${reviewSummary.missing_count || 0} 行，AI估价 ${reviewSummary.no_cost_reference_count || 0} 行，备注冲突 ${reviewSummary.ai_note_conflict_count || 0} 行，需复核 ${reviewSummary.review_required_count || 0} 项`"
             :type="reviewSummaryType"
             show-icon
             :closable="false"
@@ -1052,8 +1337,8 @@
         <div class="preview-table-shell">
           <div class="preview-table-heading">
             <div class="preview-table-title">
-              <strong>逐行预审明细</strong>
-              <span>重点检查红色或黄色风险行，确认成本库依据后填写人工确认价与合计。</span>
+              <strong>{{ previewWorkspaceTitle }}</strong>
+              <span>{{ previewWorkspaceHint }}</span>
             </div>
             <div class="preview-table-tags">
               <el-tag :type="previewReadyForPush ? 'success' : 'warning'" effect="plain">{{ previewReadyForPush ? '阻断已清' : '仍需处理' }}</el-tag>
@@ -1072,6 +1357,7 @@
             ></div>
           </div>
         <el-table
+          v-if="previewWorkspaceView === 'quick'"
           ref="previewTableRef"
           :data="previewData"
           border
@@ -1094,6 +1380,9 @@
                 <span>{{ submittedRequirementMeta(submittedRequirementForPreviewRow(scope.row, scope.$index)) }}</span>
                 <span v-if="submittedRequirementRawText(submittedRequirementForPreviewRow(scope.row, scope.$index))">
                   原始行：{{ submittedRequirementRawText(submittedRequirementForPreviewRow(scope.row, scope.$index)) }}
+                </span>
+                <span v-if="standardizationWarningText(scope.row)" class="cost-reference-no-cost">
+                  自动映射提醒：{{ standardizationWarningText(scope.row) }}
                 </span>
               </div>
               <span v-else class="submitted-demand-empty">未绑定确认清单</span>
@@ -1131,7 +1420,7 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="成本库依据" width="220">
+          <el-table-column label="报价依据" width="220">
             <template #default="scope">
               <div class="cost-reference-cell">
                 <el-tag :type="costReferenceTagType(scope.row)" size="small" effect="plain">
@@ -1159,13 +1448,30 @@
                 <span v-if="noCostNoticeText(scope.row)" class="cost-reference-no-cost">
                   {{ noCostNoticeText(scope.row) }}
                 </span>
+                <div
+                  v-if="enterpriseQuotaV2ReviewVisible(scope.row)"
+                  :class="['enterprise-quota-v2-review-card', { 'is-resolved': !needsEnterpriseQuotaV2Confirmation(scope.row) }]"
+                >
+                  <div class="enterprise-quota-v2-review-card__head">
+                    <el-tag :type="enterpriseQuotaV2ReviewTagType(scope.row)" size="small" effect="plain">
+                      {{ enterpriseQuotaV2ReviewLabel(scope.row) }}
+                    </el-tag>
+                    <strong>{{ enterpriseQuotaV2RecommendedText(scope.row) }}</strong>
+                  </div>
+                  <small>{{ enterpriseQuotaV2DetailText(scope.row) }}</small>
+                  <div v-if="needsEnterpriseQuotaV2Confirmation(scope.row)" class="enterprise-quota-v2-review-card__actions">
+                    <el-button type="success" link size="small" @click="confirmEnterpriseQuotaV2Recommended(scope.row, scope.$index)">采用推荐</el-button>
+                    <el-button type="warning" link size="small" @click="openCostSwitchDialog(scope.row, scope.$index)">查看/改选</el-button>
+                    <el-button type="info" link size="small" @click="rejectEnterpriseQuotaV2Recommendation(scope.row)">继续AI估价</el-button>
+                  </div>
+                </div>
                 <div class="cost-reference-actions">
                   <el-button type="primary" link size="small" @click="showCostReferenceEvidence(scope.row, scope.$index)">查看依据</el-button>
-                  <el-button v-if="costReference(scope.row).cost_item_id && canOpenFullCostDb" type="primary" link size="small" @click="openCostReferenceDetail(scope.row)">成本库详情</el-button>
+                  <el-button v-if="costReferenceDetailUrl(scope.row)" type="primary" link size="small" @click="openCostReferenceDetail(scope.row)">依据详情</el-button>
                   <el-button v-if="needsCostCandidateConfirmation(scope.row)" type="danger" link size="small" @click="confirmCurrentCostCandidate(scope.row)">确认当前依据</el-button>
                   <el-button v-if="needsAiRewriteConfirmation(scope.row)" type="danger" link size="small" @click="confirmAiRewriteCostReference(scope.row)">确认原始依据</el-button>
                   <el-button v-if="needsAiNoteConfirmation(scope.row)" type="danger" link size="small" @click="confirmAiNoteCostBasis(scope.row)">确认备注处理</el-button>
-                  <el-button type="warning" link size="small" @click="openCostSwitchDialog(scope.row, scope.$index)">切换条目</el-button>
+                  <el-button v-if="costReference(scope.row).reference_source !== 'account_quota.active'" type="warning" link size="small" @click="openCostSwitchDialog(scope.row, scope.$index)">切换企业定额</el-button>
                 </div>
               </div>
             </template>
@@ -1204,19 +1510,146 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="notes" label="工艺与避坑备注" min-width="320">
+          <el-table-column label="施工提示" min-width="250">
             <template #default="scope">
-              <el-input
-                v-model="scope.row.notes"
-                type="textarea"
-                :autosize="{ minRows: 4, maxRows: 8 }"
-                size="small"
-                :disabled="pushing"
-                @change="handleNotesChange(scope.row)"
-              ></el-input>
+              <div class="construction-note-cell">
+                <div class="construction-note-cell-head">
+                  <el-tag :type="(previewRowRisks[scope.$index] || {type:'success'}).type" size="small" effect="plain">
+                    {{ (previewRowRisks[scope.$index] || {label:'正常'}).label }}
+                  </el-tag>
+                  <el-button type="primary" link size="small" @click="openConstructionNoteDrawer(scope.row, scope.$index)">
+                    {{ constructionNoteText(scope.row) ? '查看/编辑' : '补充' }}
+                  </el-button>
+                </div>
+                <span :class="{ empty: !constructionNoteText(scope.row) }">{{ constructionNoteSummary(scope.row) }}</span>
+              </div>
             </template>
           </el-table-column>
         </el-table>
+        <el-table
+          v-else-if="previewWorkspaceView === 'professional'"
+          ref="previewTableRef"
+          :data="previewData"
+          border
+          stripe
+          class="preview-table preview-professional-table"
+          max-height="56vh"
+          style="width: 100%"
+        >
+          <el-table-column label="风险" width="90" align="center" fixed="left">
+            <template #default="scope">
+              <el-tag :type="(previewRowRisks[scope.$index] || {type:'success'}).type" size="small" effect="plain">
+                {{ (previewRowRisks[scope.$index] || {label:'正常'}).label }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="项目名称" width="180" fixed="left">
+            <template #default="scope"><el-input v-model="scope.row.project_name" size="small" :disabled="pushing" @change="schedulePreviewDraftSave"></el-input></template>
+          </el-table-column>
+          <el-table-column label="特征描述" min-width="240">
+            <template #default="scope"><el-input v-model="scope.row.project_feature" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" size="small" :disabled="pushing" @change="schedulePreviewDraftSave"></el-input></template>
+          </el-table-column>
+          <el-table-column label="区域" width="130">
+            <template #default="scope"><el-input v-model="scope.row.region" size="small" :disabled="pushing" @change="schedulePreviewDraftSave"></el-input></template>
+          </el-table-column>
+          <el-table-column label="主材采购方式" width="140">
+            <template #default="scope">
+              <el-select v-model="scope.row.material_supply_mode" size="small" :disabled="pushing" @change="schedulePreviewDraftSave">
+                <el-option label="乙供" value="乙供"></el-option>
+                <el-option label="甲供" value="甲供"></el-option>
+                <el-option label="无主材" value="无主材"></el-option>
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="工程量" width="110">
+            <template #default="scope"><el-input-number v-model="scope.row.quantity" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing" @change="handleQuantityChange(scope.row)"></el-input-number></template>
+          </el-table-column>
+          <el-table-column label="单位" width="85">
+            <template #default="scope"><el-input v-model="scope.row.unit" size="small" :disabled="pushing" @change="schedulePreviewDraftSave"></el-input></template>
+          </el-table-column>
+          <el-table-column label="不含税综合单价" width="145">
+            <template #default="scope"><el-input-number v-model="scope.row.manual_unit_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing" @change="handleManualPriceChange(scope.row)"></el-input-number></template>
+          </el-table-column>
+          <el-table-column label="不含税综合合价" width="150">
+            <template #default="scope"><el-input-number v-model="scope.row.total_price" :min="0" :precision="2" :controls="false" size="small" style="width:100%" :disabled="pushing" @change="handleManualTotalChange(scope.row)"></el-input-number></template>
+          </el-table-column>
+          <el-table-column
+            v-for="column in previewProfessionalBreakdownColumns"
+            :key="column.key"
+            :label="column.label"
+            :width="column.width"
+            align="right"
+          >
+            <template #default="scope">
+              <span v-if="column.readonly">{{ formatMoney(previewProfessionalFieldValue(scope.row, column.key)) }}</span>
+              <el-input-number
+                v-else
+                v-model="scope.row[column.key]"
+                :min="0"
+                :precision="column.rate ? 2 : 2"
+                :controls="false"
+                size="small"
+                style="width:100%"
+                :disabled="pushing"
+                @change="handlePreviewProfessionalChange(scope.row, column.key)"
+              ></el-input-number>
+            </template>
+          </el-table-column>
+          <el-table-column label="价格来源" width="160">
+            <template #default="scope"><div class="cost-reference-cell"><el-tag :type="costReferenceTagType(scope.row)" size="small" effect="plain">{{ previewUnitPriceSourceText(scope.row) }}</el-tag><span>{{ costReferenceLabel(scope.row) }}</span></div></template>
+          </el-table-column>
+          <el-table-column label="工艺与避坑备注" min-width="260">
+            <template #default="scope"><el-input v-model="scope.row.notes" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" size="small" :disabled="pushing" @change="handleNotesChange(scope.row)"></el-input></template>
+          </el-table-column>
+        </el-table>
+        <div v-else-if="previewWorkspaceView === 'summary'" class="preview-workspace-panel">
+          <div class="preview-summary-metrics">
+            <article v-for="item in previewProfessionalSummaryCards" :key="item.key">
+              <span>{{ item.label }}</span>
+              <strong>¥ {{ formatMoney(item.value) }}</strong>
+            </article>
+          </div>
+          <el-table :data="previewProfessionalSummaryRows" border stripe>
+            <el-table-column prop="label" label="费用项目" min-width="180"></el-table-column>
+            <el-table-column label="清单汇总(元)" min-width="160" align="right"><template #default="scope">{{ scope.row.rate ? scope.row.display : formatMoney(scope.row.value) }}</template></el-table-column>
+            <el-table-column prop="formula" label="口径" min-width="320"></el-table-column>
+          </el-table>
+        </div>
+        <el-table v-else-if="previewWorkspaceView === 'basis'" :data="previewData" border stripe class="preview-table" max-height="56vh">
+          <el-table-column prop="project_name" label="施工项目" min-width="200" fixed="left"></el-table-column>
+          <el-table-column label="工程量" width="120"><template #default="scope">{{ scope.row.quantity || 0 }} {{ scope.row.unit || '' }}</template></el-table-column>
+          <el-table-column label="报价来源" width="160"><template #default="scope"><el-tag :type="costReferenceTagType(scope.row)" effect="plain">{{ previewUnitPriceSourceText(scope.row) }}</el-tag></template></el-table-column>
+          <el-table-column label="报价依据" min-width="300"><template #default="scope"><div class="cost-reference-cell"><strong>{{ costReferenceLabel(scope.row) }}</strong><span>{{ costReferencePriceText(scope.row) }}</span><span>{{ noCostNoticeText(scope.row) }}</span></div></template></el-table-column>
+          <el-table-column label="企业定额人工确认" min-width="360">
+            <template #default="scope">
+              <div
+                v-if="enterpriseQuotaV2ReviewVisible(scope.row)"
+                :class="['enterprise-quota-v2-review-card', { 'is-resolved': !needsEnterpriseQuotaV2Confirmation(scope.row) }]"
+              >
+                <div class="enterprise-quota-v2-review-card__head">
+                  <el-tag :type="enterpriseQuotaV2ReviewTagType(scope.row)" size="small" effect="plain">{{ enterpriseQuotaV2ReviewLabel(scope.row) }}</el-tag>
+                  <strong>{{ enterpriseQuotaV2RecommendedText(scope.row) }}</strong>
+                </div>
+                <small>{{ enterpriseQuotaV2DetailText(scope.row) }}</small>
+                <div v-if="needsEnterpriseQuotaV2Confirmation(scope.row)" class="enterprise-quota-v2-review-card__actions">
+                  <el-button type="success" link size="small" @click="confirmEnterpriseQuotaV2Recommended(scope.row, scope.$index)">采用推荐</el-button>
+                  <el-button type="warning" link size="small" @click="openCostSwitchDialog(scope.row, scope.$index)">查看/改选</el-button>
+                  <el-button type="info" link size="small" @click="rejectEnterpriseQuotaV2Recommendation(scope.row)">继续AI估价</el-button>
+                </div>
+              </div>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="确认价" width="130" align="right"><template #default="scope">{{ formatMoney(scope.row.manual_unit_price) }}</template></el-table-column>
+          <el-table-column label="操作" width="120" fixed="right"><template #default="scope"><el-button type="primary" link @click="showCostReferenceEvidence(scope.row, scope.$index)">查看依据</el-button></template></el-table-column>
+        </el-table>
+        <div v-else class="preview-workspace-panel preview-version-panel">
+          <article><span>当前草稿状态</span><strong>{{ previewDraftStatusText }}</strong></article>
+          <article><span>草稿版本</span><strong>{{ previewDraftVersion || '尚未生成版本号' }}</strong></article>
+          <article><span>最近保存</span><strong>{{ previewDraftSavedAt || '尚未保存' }}</strong></article>
+          <article><span>恢复状态</span><strong>{{ previewDraftRestored ? '已从历史草稿恢复' : '当前会话草稿' }}</strong></article>
+          <el-button type="primary" plain @click="openHistory">打开我的报价历史</el-button>
+        </div>
         </div>
 
         <el-alert
@@ -1227,28 +1660,115 @@
           show-icon
           :closable="false"
         ></el-alert>
+        </div>
 
         <template #footer>
-          <div class="preview-footer-bar">
-            <div class="preview-footer-status">
-              <strong>{{ previewFooterTitle }}</strong>
-              <span>{{ previewFooterHint }}</span>
+          <div class="quote-result-summary__footer">
+            <div>
+              <strong>{{ previewNeedsReviewCount ? '详细界面中已为您保留待核对项目' : '报价明细已经准备好' }}</strong>
+              <span>进入后可查看完整字段、施工提示、费用汇总、报价依据和版本记录。</span>
             </div>
-            <div class="preview-footer-actions">
-              <el-button :loading="previewDraftSaving" :disabled="pushing || !previewContext.quoteJobId || !previewData.length || isPreviewDraftTerminal()" @click="savePreviewDraftNow()">
-                保存草稿
-              </el-button>
-              <el-button :loading="previewDraftSaving" :disabled="pushing" @click="closePreviewAndKeepDraft">
-                关闭
-              </el-button>
-              <el-button @click="cancelPreview" :disabled="pushing">打回重填</el-button>
-              <el-button type="success" :loading="pushing" :disabled="!previewData.length || previewCompletenessBlocked || placeholderPricingBlocked || manualPricingBlocked || costCandidateConfirmationBlocked || aiRewriteConfirmationBlocked || aiNoteConfirmationBlocked" @click="submitFinalQuote">
-                {{ pushing ? '正在推送钉钉' : '确认无误，下发生成 Excel 并推钉钉' }}
+            <div class="quote-result-summary__actions">
+              <el-button @click="closePreviewAndKeepDraft">稍后处理</el-button>
+              <el-button
+                type="primary"
+                size="large"
+                :loading="detailWorkspaceOpening"
+                :disabled="detailWorkspaceOpening"
+                @click="openDetailedQuoteWorkspace"
+              >
+                进入详细报价界面
               </el-button>
             </div>
           </div>
         </template>
       </el-dialog>
+
+      <el-drawer
+        v-model="constructionNoteDrawerVisible"
+        title="施工提示"
+        size="min(560px, 94vw)"
+        append-to-body
+        destroy-on-close
+      >
+        <div v-if="constructionNoteDrawerRow" class="construction-note-drawer">
+          <div class="construction-note-hero">
+            <div>
+              <strong>{{ constructionNoteDrawerRow.project_name || '未命名施工项目' }}</strong>
+              <span>{{ constructionNoteDrawerRow.project_feature || '无项目特征' }}</span>
+            </div>
+            <el-tag :type="(previewRowRisks[constructionNoteDrawerIndex] || {type:'success'}).type" effect="plain">
+              {{ (previewRowRisks[constructionNoteDrawerIndex] || {label:'正常'}).label }}
+            </el-tag>
+          </div>
+
+          <section class="construction-note-section">
+            <div class="construction-note-section-title">
+              <strong>工艺做法与施工避坑</strong>
+              <span>完整内容会随当前预审草稿保存，并保留在导出的“工艺与避坑备注”列中。</span>
+            </div>
+            <el-input
+              v-model="constructionNoteDrawerRow.notes"
+              type="textarea"
+              :autosize="{ minRows: 8, maxRows: 16 }"
+              maxlength="2000"
+              show-word-limit
+              placeholder="例如：施工步骤、材料要求、成品保护、交叉作业风险及容易漏报的内容"
+              :disabled="pushing"
+            ></el-input>
+          </section>
+
+          <section class="construction-note-section">
+            <div class="construction-note-section-title">
+              <strong>报价边界 / 不含项</strong>
+              <span>从现有备注中提取，便于快速核对报价范围。</span>
+            </div>
+            <p>{{ constructionBoundaryText(constructionNoteDrawerRow) }}</p>
+          </section>
+
+          <section class="construction-note-section">
+            <div class="construction-note-section-title">
+              <strong>需人工确认</strong>
+              <span>只展示与当前施工行直接相关的业务提醒。</span>
+            </div>
+            <div class="construction-note-review-list">
+              <el-tag
+                v-for="item in constructionNoteReviewItems(constructionNoteDrawerRow, constructionNoteDrawerIndex)"
+                :key="item"
+                :type="(previewRowRisks[constructionNoteDrawerIndex] || {type:'warning'}).type"
+                effect="plain"
+              >
+                {{ item }}
+              </el-tag>
+              <span
+                v-if="!constructionNoteReviewItems(constructionNoteDrawerRow, constructionNoteDrawerIndex).length"
+                class="construction-note-empty"
+              >
+                当前没有待确认事项
+              </span>
+            </div>
+          </section>
+
+          <section class="construction-note-section">
+            <div class="construction-note-section-title">
+              <strong>保存记录</strong>
+              <span>用于确认当前施工提示的草稿状态。</span>
+            </div>
+            <el-descriptions :column="1" border size="small">
+              <el-descriptions-item label="草稿版本">Revision {{ previewDraftVersion || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="最近保存">{{ previewDraftSavedAt || '本次预审尚未保存' }}</el-descriptions-item>
+            </el-descriptions>
+          </section>
+        </div>
+        <template #footer>
+          <div class="construction-note-footer">
+            <el-button @click="constructionNoteDrawerVisible = false">关闭</el-button>
+            <el-button type="primary" :disabled="pushing || !constructionNoteDrawerRow" @click="saveConstructionNote">
+              保存施工提示
+            </el-button>
+          </div>
+        </template>
+      </el-drawer>
 
       <el-dialog
         v-model="showEvidenceDialog"
@@ -1374,13 +1894,13 @@
 
       <el-dialog
         v-model="showCostSwitchDialog"
-        title="切换成本库条目"
+        title="确认或切换企业定额条目"
         width="920px"
         append-to-body
       >
         <div class="cost-switch-current">
           <strong>{{ costSwitchCurrentTitle }}</strong>
-          <span>请选择与当前施工项目规格最匹配的已启用成本条目。选用后会同步采用该条目的参考价重算本行单价和合计。</span>
+          <span>优先展示企业定额推荐 Top5，也可继续搜索全部已启用企业定额。只有点击“选用”后才会采用定额价格并重算本行。</span>
         </div>
         <div class="cost-switch-toolbar">
           <el-input
@@ -1403,13 +1923,21 @@
           <el-table-column label="条目" min-width="210" show-overflow-tooltip>
             <template #default="scope">
               <div class="cost-switch-price-stack">
-                <strong>#{{ scope.row.id }} {{ scope.row.item_name }}</strong>
+                <strong>#{{ scope.row.id }} {{ scope.row.quota_code || '' }} {{ scope.row.item_name }}</strong>
                 <small>{{ scope.row.category || '-' }} {{ scope.row.subcategory || '' }}</small>
               </div>
             </template>
           </el-table-column>
           <el-table-column prop="spec" label="规格/特征" min-width="220" show-overflow-tooltip></el-table-column>
           <el-table-column prop="unit" label="单位" width="80" align="center"></el-table-column>
+          <el-table-column label="匹配评分" width="100" align="center">
+            <template #default="scope">
+              <el-tag v-if="scope.row.enterprise_quota_v2_candidate" type="warning" effect="plain" size="small">
+                {{ formatEnterpriseQuotaV2Score(scope.row.v2_score) }}
+              </el-tag>
+              <span v-else>搜索结果</span>
+            </template>
+          </el-table-column>
           <el-table-column label="参考价" width="150">
             <template #default="scope">
               <div class="cost-switch-price-stack">
@@ -1444,19 +1972,28 @@
     const { ElMessage, ElMessageBox } = ElementPlus;
 
     const STAGES_WITH_IMAGE = [
-      { id: 'created', icon: '🧾', label: '创建任务' },
-      { id: 'vision', icon: '🖼', label: '图像识别' },
-      { id: 'knowledge', icon: '📚', label: '知识库检索' },
-      { id: 'quote', icon: '✏️', label: '生成报价' },
-      { id: 'review', icon: '🧐', label: '人工预审' }
+      { id: 'created', label: '接收需求' },
+      { id: 'vision', label: '读取图片' },
+      { id: 'standardize', label: '整理清单' },
+      { id: 'pricing', label: '计算报价' },
+      { id: 'review', label: '准备核对' }
     ];
     const STAGES_TEXT_ONLY = [
-      { id: 'created', icon: '🧾', label: '创建任务' },
-      { id: 'parse', icon: '📝', label: '需求解析' },
-      { id: 'knowledge', icon: '📚', label: '知识库检索' },
-      { id: 'quote', icon: '✏️', label: '生成报价' },
-      { id: 'review', icon: '🧐', label: '人工预审' }
+      { id: 'created', label: '接收需求' },
+      { id: 'parse', label: '读取内容' },
+      { id: 'standardize', label: '整理清单' },
+      { id: 'pricing', label: '计算报价' },
+      { id: 'review', label: '准备核对' }
     ];
+
+    const QUOTE_STAGE_PROGRESS = {
+      created: { floor: 5, ceiling: 18 },
+      parse: { floor: 20, ceiling: 38 },
+      vision: { floor: 20, ceiling: 38 },
+      standardize: { floor: 42, ceiling: 60 },
+      pricing: { floor: 64, ceiling: 94 },
+      review: { floor: 100, ceiling: 100 }
+    };
 
     const {
       apiBody,
@@ -1486,16 +2023,22 @@
         const lastInputFile = ref(null);
         const currentStage  = ref(-1);
         const stages        = ref(STAGES_WITH_IMAGE);
-        const quoteProgressText = ref('准备创建报价任务');
+        const quoteProgressText = ref('正在接收您的报价需求');
         const quoteProgressTone = ref('running');
+        const quoteProgressPercent = ref(0);
         const quoteElapsedSeconds = ref(0);
         const checkingJobId = ref('');
+        const detailWorkspaceOpening = ref(false);
         let quoteTimer = null;
+        let quoteStartedAt = 0;
         let delayedStageTimer = null;
 
         const showPreviewDialog = ref(false);
         const showEvidenceDialog = ref(false);
         const showCostSwitchDialog = ref(false);
+        const constructionNoteDrawerVisible = ref(false);
+        const constructionNoteDrawerRow = ref(null);
+        const constructionNoteDrawerIndex = ref(-1);
         const emptyEvidenceDialog = () => ({
           projectName: '-',
           quantityText: '-',
@@ -1581,6 +2124,36 @@
         const canOpenAdminShell = computed(() => Boolean(adminShellPath.value));
         const previewData       = ref([]);
         const previewOriginalData = ref([]);
+        const previewWorkspaceView = ref('quick');
+        const previewProfessionalBreakdownColumns = [
+          { key: 'labor_unit_cost', label: '人工费', width: 115 },
+          { key: 'main_material_unit_cost', label: '主材费', width: 115 },
+          { key: 'auxiliary_material_unit_cost', label: '辅材费', width: 115 },
+          { key: 'tax_amount', label: '税金', width: 105, readonly: true },
+          { key: 'main_material_without_loss', label: '主材费不含损耗', width: 150 },
+          { key: 'loss_rate', label: '损耗率(%)', width: 115, rate: true },
+          { key: 'machinery_unit_cost', label: '机械费', width: 115 },
+          { key: 'comprehensive_unit_cost', label: '综合费', width: 115 },
+          { key: 'management_unit_cost', label: '管理费', width: 115 },
+          { key: 'profit_unit_cost', label: '利润费', width: 115 },
+          { key: 'measure_unit_cost', label: '措施费', width: 115 },
+          { key: 'owner_material_unit_price', label: '甲供材单价', width: 130 },
+          { key: 'owner_material_loss_amount', label: '甲供材损耗金', width: 140 },
+        ];
+        const previewWorkspaceTitle = computed(() => ({
+          quick: '快速审核',
+          professional: '专业全字段',
+          summary: '费用汇总',
+          basis: '报价依据',
+          versions: '版本记录',
+        })[previewWorkspaceView.value] || '快速审核');
+        const previewWorkspaceHint = computed(() => ({
+          quick: '优先处理红色或黄色风险行，核对工程量、报价依据、人工确认价与合计。',
+          professional: '完整保留项目、工程量、综合价、13项成本组成、价格来源和备注。',
+          summary: '按当前草稿逐行汇总人工、主材、辅材、机械及其它费用组成。',
+          basis: '集中核对账户定额、企业定额、AI估价及人工调整的来源证据。',
+          versions: '查看当前草稿版本和最近保存状态；历史报价仍可恢复继续编辑。',
+        })[previewWorkspaceView.value] || '');
         const omissionSuggestions = ref([]);
         const omissionSummary = ref({});
         const globalNotes       = ref('');
@@ -1589,7 +2162,14 @@
         const rejectReason      = ref('');
         const knowledgeLearningEnabled = ref(true);
         const knowledgeLearningReason = ref('');
-        const previewContext    = ref({ quoteJobId: '', traceId: '', quoteId: '', rawPayload: null });
+        const previewContext    = ref({
+          quoteJobId: '',
+          traceId: '',
+          quoteId: '',
+          budgetProjectId: null,
+          budgetPricingDraftId: null,
+          rawPayload: null,
+        });
         const previewDraftSaving = ref(false);
         const previewDraftStatus = ref('');
         const previewDraftSavedAt = ref('');
@@ -1878,35 +2458,35 @@
         const buildActionAdvice = (detail = '', status = '') => {
           const text = `${detail || ''} ${status || ''}`.toLowerCase();
           if (text.includes('quota') || text.includes('额度')) {
-            return { reason: '当前账号额度不足', actions: ['联系管理员补充额度', '避免重复提交同一需求'] };
+            return { reason: '当前账号暂时无法继续生成报价', actions: ['请联系系统管理员处理', '处理完成后重新提交即可'] };
           }
           if (text.includes('401') || text.includes('认证') || text.includes('token')) {
-            return { reason: '登录状态已失效', actions: ['返回门户重新登录', '登录后从历史或任务状态恢复结果'] };
+            return { reason: '登录状态已经失效', actions: ['请重新登录', '登录后可从报价历史继续查看'] };
           }
           if (text.includes('timeout') || text.includes('timed_out') || text.includes('超时')) {
-            return { reason: '外部模型或工作流响应超时', actions: ['先点击查看任务状态确认是否已完成', '仍失败时重新提交一次'] };
+            return { reason: '本次处理时间较长，暂时没有返回结果', actions: ['先点击“查看处理结果”', '仍未完成时再重新提交一次'] };
           }
           if (text.includes('worker') || text.includes('celery') || text.includes('redis') || text.includes('队列')) {
-            return { reason: '后台任务队列或 Worker 异常', actions: ['不要连续重复提交', '把任务号和追踪ID发给管理员检查运维面板'] };
+            return { reason: '当前报价服务比较繁忙', actions: ['请稍后再试', '不要连续重复提交同一份需求'] };
           }
           if (text.includes('rag') || text.includes('知识库') || text.includes('milvus')) {
-            return { reason: '成本参考服务异常', actions: ['可先用更具体的项目名称重试', '通知管理员检查成本参考服务'] };
+            return { reason: '价格参考暂时不可用', actions: ['稍后重新生成报价', '也可以先补充更具体的项目名称和规格'] };
           }
           if (text.includes('n8n') || text.includes('dify') || text.includes('workflow') || text.includes('webhook')) {
-            return { reason: '报价工作流服务异常', actions: ['稍后重试', '把追踪ID发给管理员检查 n8n/Dify 流程'] };
+            return { reason: '报价服务暂时没有完成处理', actions: ['请稍后重试', '连续失败时联系系统管理员'] };
           }
           if (text.includes('file') || text.includes('minio') || text.includes('upload') || text.includes('附件')) {
-            return { reason: '附件读取或上传异常', actions: ['确认文件没有被占用后重新上传', '图片过大时先压缩或改传清晰截图'] };
+            return { reason: '上传的文件暂时无法读取', actions: ['确认文件可以正常打开后重新上传', '图片过大时可压缩后再试'] };
           }
-          return { reason: '报价链路未返回明确原因', actions: ['点击重试或查看任务状态', '连续失败时把任务号和追踪ID发给管理员'] };
+          return { reason: '本次报价没有顺利完成', actions: ['点击重试或查看处理结果', '连续失败时联系系统管理员'] };
         };
 
         const workflowSteps = computed(() => [
           { key: 'input', label: '输入需求', hint: '文字/图片/Excel' },
-          { key: 'parse', label: '解析建单', hint: '任务入队' },
-          { key: 'quote', label: 'AI 生成', hint: '成本库与报价' },
-          { key: 'review', label: '人工预审', hint: '改价与风险' },
-          { key: 'push', label: '确认下发', hint: 'Excel 与钉钉' },
+          { key: 'parse', label: '整理清单', hint: '自动识别内容' },
+          { key: 'quote', label: '自动报价', hint: '匹配可用价格' },
+          { key: 'review', label: '核对报价', hint: '确认价格与风险' },
+          { key: 'push', label: '导出下发', hint: '生成报价文件' },
         ]);
 
         const currentQuoteStageId = computed(() => stages.value[currentStage.value]?.id || '');
@@ -1927,7 +2507,7 @@
           if (sending.value) {
             const stageId = currentQuoteStageId.value;
             if (stageId === 'review') return 3;
-            if (['knowledge', 'quote'].includes(stageId)) return 2;
+            if (stageId === 'pricing') return 2;
             return 1;
           }
           if (inputText.value.trim() || selectedFile.value) return 0;
@@ -1940,7 +2520,7 @@
           if (pushing.value) return '正在下发报价';
           if (showPreviewDialog.value) return previewDraftRestored.value ? '草稿已恢复' : '人工预审中';
           if (sending.value) return '报价处理中';
-          if (latestRecoverableMessage.value) return '有任务待恢复';
+          if (latestRecoverableMessage.value) return '上次报价可继续';
           if (inputText.value.trim() || selectedFile.value) return '需求已就绪';
           return '等待需求';
         });
@@ -1950,7 +2530,7 @@
           if (pushing.value) return '正在生成 Excel 并推送到钉钉，请等待结果返回。';
           if (showPreviewDialog.value) return `当前预审 ${previewData.value.length || 0} 行，需完成风险处理、人工确认价和下发确认。`;
           if (sending.value) return quoteProgressText.value || '报价任务正在处理。';
-          if (latestRecoverableMessage.value) return `任务 ${latestRecoverableMessage.value.jobId} 可继续查看状态或重新提交。`;
+          if (latestRecoverableMessage.value) return '上一次报价尚未完成，可以继续查看处理结果或重新提交。';
           if (selectedFile.value) return `已挂载 ${selectedFile.value.name || '附件'}，可发送进入报价流程。`;
           if (inputText.value.trim()) return '文字需求已填写，可发送进入报价流程。';
           return '当前没有进行中的报价任务。';
@@ -1967,8 +2547,8 @@
           if (pushError.value) return '处理下发异常';
           if (pushing.value) return '等待下发完成';
           if (showPreviewDialog.value) return '复核预审明细';
-          if (sending.value) return '等待 AI 预审';
-          if (latestRecoverableMessage.value) return '恢复上次任务';
+          if (sending.value) return '等待自动报价';
+          if (latestRecoverableMessage.value) return '继续上次报价';
           if (inputText.value.trim() || selectedFile.value) return '发送需求';
           return '准备报价需求';
         });
@@ -1976,9 +2556,9 @@
         const workflowNextActionText = computed(() => {
           if (pushError.value) return '先查看错误原因，能保留草稿时优先保存草稿，避免丢失人工修改。';
           if (pushing.value) return '下发期间不要关闭页面或重复点击确认按钮。';
-          if (showPreviewDialog.value) return '逐行处理阻断、无底价、候选成本依据和人工确认价后，再确认下发。';
-          if (sending.value) return '任务完成后会自动打开预审弹窗；长时间未返回时可查看任务状态。';
-          if (latestRecoverableMessage.value) return '优先查看任务状态，确认是否已有预审结果；仍失败时再重新提交。';
+          if (showPreviewDialog.value) return '逐行核对异常提示、价格依据和最终确认价后，再确认下发。';
+          if (sending.value) return '处理完成后会自动打开报价核对窗口，请耐心等待。';
+          if (latestRecoverableMessage.value) return '先查看处理结果，确认是否已经生成报价；仍未完成时再重新提交。';
           if (inputText.value.trim() || selectedFile.value) return '确认客户信息和需求内容后点击发送。';
           return '录入文字需求，或上传图片、xlsx/xlsm 需求单。';
         });
@@ -1986,12 +2566,8 @@
         const showClearInput = computed(() => !sending.value && !pushing.value && (!!inputText.value.trim() || !!selectedFile.value));
 
         const formatApiError = (prefix, detail, traceId) => {
-          const parts = [`❌ ${prefix}`];
-          if (detail)  parts.push(String(detail));
-          if (traceId) parts.push(`追踪ID：${traceId}`);
           const advice = buildActionAdvice(detail, prefix);
-          parts.push(`可能原因：${advice.reason}`);
-          parts.push(`建议处理：${advice.actions.join('；')}`);
+          const parts = ['报价暂时没有完成', advice.reason, `您可以：${advice.actions.join('；')}`];
           return parts.join('\n');
         };
 
@@ -2006,8 +2582,19 @@
 
         const startQuoteTimer = () => {
           if (quoteTimer) clearInterval(quoteTimer);
+          quoteStartedAt = Date.now();
           quoteElapsedSeconds.value = 0;
-          quoteTimer = setInterval(() => { quoteElapsedSeconds.value += 1; }, 1000);
+          quoteProgressPercent.value = 3;
+          quoteTimer = setInterval(() => {
+            quoteElapsedSeconds.value = Math.max(0, Math.floor((Date.now() - quoteStartedAt) / 1000));
+            if (quoteProgressTone.value !== 'running') return;
+            const stageId = stages.value[currentStage.value]?.id || 'created';
+            const range = QUOTE_STAGE_PROGRESS[stageId] || QUOTE_STAGE_PROGRESS.created;
+            if (quoteProgressPercent.value >= range.ceiling) return;
+            const remaining = range.ceiling - quoteProgressPercent.value;
+            const increment = Math.max(0.15, Math.min(0.8, remaining * 0.035));
+            quoteProgressPercent.value = Math.min(range.ceiling, Number((quoteProgressPercent.value + increment).toFixed(1)));
+          }, 650);
         };
 
         const stopQuoteTimer = () => {
@@ -2020,16 +2607,27 @@
           if (stageId) {
             const stageIndex = getStageIndex(stageId);
             if (stageIndex >= 0) currentStage.value = stageIndex;
+            const range = QUOTE_STAGE_PROGRESS[stageId];
+            if (range) quoteProgressPercent.value = Math.max(quoteProgressPercent.value, range.floor);
           }
           quoteProgressText.value = text || quoteProgressText.value;
           quoteProgressTone.value = tone;
+          if (stageId === 'review' && tone === 'success') quoteProgressPercent.value = 100;
         };
+
+        const friendlyElapsedTime = computed(() => {
+          const seconds = Math.max(0, Number(quoteElapsedSeconds.value || 0));
+          if (seconds < 60) return `${seconds} 秒`;
+          const minutes = Math.floor(seconds / 60);
+          const remain = seconds % 60;
+          return remain ? `${minutes} 分 ${remain} 秒` : `${minutes} 分钟`;
+        });
 
         const scheduleQuoteGenerationHint = () => {
           clearDelayedStageTimer();
           delayedStageTimer = setTimeout(() => {
             if (!sending.value || quoteProgressTone.value !== 'running') return;
-            setQuoteProgress('quote', 'AI 正在生成报价明细，完成后会自动弹出预审面板');
+            setQuoteProgress('pricing', '正在逐项核对价格，缺少参考的项目会自动估算');
           }, 8000);
         };
 
@@ -2038,20 +2636,21 @@
           const message = String(data.message || '').toLowerCase();
           if (data.status === 'queued' || stage === 'queued' || stage === 'started' || stage === 'api_gateway') return 'created';
           if (stage === 'vision' || stage === 'file_load' || message.includes('vision') || message.includes('glm')) return hasImage ? 'vision' : 'parse';
-          if (stage === 'text' || message.includes('text module')) return 'parse';
-          if (stage === 'n8n' || message.includes('rag') || message.includes('workflow') || message.includes('知识库')) return 'knowledge';
+          if (stage === 'text' || stage === 'excel' || message.includes('text module')) return 'parse';
+          if (stage === 'standardization' || message.includes('标准清单')) return 'standardize';
+          if (stage === 'pricing_cascade' || stage === 'n8n' || message.includes('三级报价') || message.includes('workflow')) return 'pricing';
           if (stage === 'completed' || data.status === 'preview' || data.status === 'success') return 'review';
           return null;
         };
 
         const describeQuoteProgress = (stageId) => {
           const textByStage = {
-            created: '报价任务已创建，正在等待 Worker 接手',
-            parse: '正在解析文字需求并整理报价上下文',
-            vision: '正在识别附件内容并提取图纸/清单信息',
-            knowledge: '正在检索知识库并调用报价引擎，通常需要 15-30 秒',
-            quote: 'AI 正在生成报价明细，完成后会自动弹出预审面板',
-            review: 'AI 预审数据已就绪，等待人工复核'
+            created: '已收到您的需求，正在开始处理',
+            parse: '正在读取报价内容并识别项目、数量和单位',
+            vision: '正在读取图片中的项目、数量和单位',
+            standardize: '正在整理项目清单并检查工程量',
+            pricing: '正在逐项匹配价格并计算报价',
+            review: '报价明细已经准备好，请进行核对'
           };
           return textByStage[stageId] || quoteProgressText.value;
         };
@@ -2093,7 +2692,61 @@
           return 'info';
         });
 
-        const cloneRows = (rows) => JSON.parse(JSON.stringify(Array.isArray(rows) ? rows : []));
+        const PRICING_ONLY_NOTE_PATTERNS = [
+          /^(?:报价|价格|取价|计价)来源\s*[：:]/,
+          /^按[“"]?账户定额.*企业定额.*AI\s*估价.*命中/,
+          /账户定额与企业定额均未命中.*AI\s*估价/,
+          /^(?:已使用|采用|使用)\s*AI\s*(?:估价|报价)/,
+          /^未连接真实模型时的保守规则估价/,
+          /^缺少真实模型推理依据/,
+          /^未读取外部市场价或客户认可价格/,
+        ];
+        const sanitizeConstructionNote = (value, pricingPhrases = []) => {
+          const text = String(value || '').trim();
+          if (!text) return '';
+          const clauseKey = (item) => String(item || '')
+            .replace(/\s+/g, '')
+            .replace(/^[。；;，,:：]+|[。；;，,:：]+$/g, '');
+          const pricingClauseKeys = new Set(
+            pricingPhrases
+              .flatMap((item) => String(item || '').split(/[。；;\n]+/))
+              .map(clauseKey)
+              .filter(Boolean),
+          );
+          const clauses = text
+            .split(/[。；;\n]+/)
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .filter((item) => !PRICING_ONLY_NOTE_PATTERNS.some((pattern) => pattern.test(item)))
+            .filter((item) => !pricingClauseKeys.has(clauseKey(item)));
+          return clauses.length ? `${clauses.join('；')}。` : '';
+        };
+        const constructionPricingPhrases = (row = {}) => {
+          const estimate = row?.ai_estimate?.estimate || row?.ai_estimate || {};
+          const explanation = row?.quote_explanation || row?.pricing_explanation || {};
+          const reference = row?.cost_reference || {};
+          const snapshot = row?.pricing_source_snapshot || {};
+          return [
+            estimate?.basis,
+            explanation?.ai_basis,
+            explanation?.ai_price_source_reason,
+            explanation?.cost_context_basis,
+            reference?.ai_price_source_reason,
+            reference?.price_source_reason,
+            reference?.message,
+            snapshot?.basis,
+          ];
+        };
+        const constructionNoteText = (row = {}) => sanitizeConstructionNote(
+          row.notes || row.remark || '',
+          constructionPricingPhrases(row),
+        );
+        const cloneRows = (rows) => JSON.parse(JSON.stringify(
+          (Array.isArray(rows) ? rows : []).map((row) => ({
+            ...row,
+            notes: constructionNoteText(row),
+          })),
+        ));
 
         const parseMoney = (value) => {
           if (value === null || value === undefined || value === '') return null;
@@ -2148,6 +2801,8 @@
         };
 
         const AI_PRICE_SOURCE_LABELS = {
+          account_quota_adopted: '账户定额',
+          enterprise_quota_adopted: '企业定额',
           pre_quote_cost_adopted: '成本库依据价',
           pre_quote_cost_deviated: '偏离成本库依据',
           model_estimate: '无成本库参考，AI估价',
@@ -2156,7 +2811,7 @@
           unknown: '来源不足',
         };
 
-        const NO_COST_NOTICE = '无成本库参考价，AI 估价，仅供参考，请人工确认价格依据';
+        const NO_COST_NOTICE = '账户定额与企业定额均未命中，已使用 AI 估价，请在整单预审时确认';
 
         const totalSourceLabel = (source) => TOTAL_SOURCE_LABELS[source] || '-';
         const aiPriceSourceLabel = (source) => AI_PRICE_SOURCE_LABELS[source] || AI_PRICE_SOURCE_LABELS.unknown;
@@ -2339,8 +2994,91 @@
           return row;
         };
 
+        const previewProfessionalCompositeKeys = [
+          'labor_unit_cost',
+          'main_material_unit_cost',
+          'auxiliary_material_unit_cost',
+          'machinery_unit_cost',
+          'comprehensive_unit_cost',
+          'management_unit_cost',
+          'profit_unit_cost',
+          'measure_unit_cost',
+        ];
+
+        const previewProfessionalFieldValue = (row = {}, key = '') => {
+          if (key === 'tax_amount') {
+            const explicitTax = parseMoney(row.tax_amount);
+            if (explicitTax !== null) return explicitTax;
+            const unitPrice = parseMoney(row.manual_unit_price) ?? parseMoney(row.unit_price);
+            return unitPrice === null ? 0 : roundMoney(unitPrice * 0.09) ?? 0;
+          }
+          return parseMoney(row[key]) ?? 0;
+        };
+
+        const handlePreviewProfessionalChange = (row = {}, key = '') => {
+          if (previewProfessionalCompositeKeys.includes(key)) {
+            const compositePrice = previewProfessionalCompositeKeys.reduce(
+              (sum, field) => sum + (parseMoney(row[field]) ?? 0),
+              0,
+            );
+            if (compositePrice > 0) {
+              row.manual_unit_price = roundMoney(compositePrice);
+              row.manual_price_source = 'professional_breakdown';
+              row.manual_price_action = 'manual_override';
+              applyManualPricingToRow(row, { keepExistingTotalWhenNoQuantity: true });
+            }
+          }
+          schedulePreviewDraftSave();
+        };
+
+        const previewProfessionalFieldTotal = (key = '') => (Array.isArray(previewData.value) ? previewData.value : []).reduce((sum, row) => {
+          const quantity = rowQuantityValue(row);
+          if (quantity === null || quantity <= 0 || key === 'loss_rate') return sum;
+          return sum + previewProfessionalFieldValue(row, key) * quantity;
+        }, 0);
+
+        const previewProfessionalSummaryRows = computed(() => previewProfessionalBreakdownColumns.map((column) => {
+          if (column.key === 'loss_rate') {
+            const values = (Array.isArray(previewData.value) ? previewData.value : [])
+              .map((row) => parseMoney(row.loss_rate))
+              .filter((value) => value !== null);
+            const average = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+            return {
+              key: column.key,
+              label: column.label,
+              value: average,
+              display: `${average.toFixed(2)}%`,
+              formula: '展示当前清单已填写损耗率的平均值',
+              rate: true,
+            };
+          }
+          return {
+            key: column.key,
+            label: column.label,
+            value: previewProfessionalFieldTotal(column.key),
+            formula: column.key === 'tax_amount' ? '逐行不含税综合单价×9%×工程量' : '逐行单位费用×工程量汇总',
+          };
+        }));
+
+        const previewProfessionalSummaryCards = computed(() => [
+          { key: 'labor', label: '人工费', value: previewProfessionalFieldTotal('labor_unit_cost') },
+          { key: 'main_material', label: '主材费', value: previewProfessionalFieldTotal('main_material_unit_cost') },
+          { key: 'auxiliary_material', label: '辅材费', value: previewProfessionalFieldTotal('auxiliary_material_unit_cost') },
+          { key: 'machinery', label: '机械费', value: previewProfessionalFieldTotal('machinery_unit_cost') },
+          { key: 'tax', label: '税金', value: previewProfessionalFieldTotal('tax_amount') },
+          { key: 'quote', label: '当前报价', value: Number(finalTotalAmount.value || 0) },
+        ]);
+
         const normalizeManualPricingRow = (row = {}) => {
           const normalized = { ...row };
+          normalized.project_feature = row.project_feature || row.spec || row.features || row.item_features || '';
+          normalized.region = row.region || row.area || row.work_region || '';
+          normalized.material_supply_mode = row.material_supply_mode || row.main_material_supply_mode || row.purchase_mode || '';
+          previewProfessionalBreakdownColumns.forEach((column) => {
+            if (column.readonly) return;
+            const value = parseMoney(row[column.key]);
+            normalized[column.key] = value;
+          });
           normalized.ai_suggested_unit_price = aiSuggestedUnitPrice(row);
           normalized.ai_suggested_total_price = aiSuggestedTotalPrice(row);
           const existingManualPrice = parseMoney(row.manual_unit_price);
@@ -2407,6 +3145,7 @@
 
         const normalizeFinalQuoteRow = (row = {}) => {
           const normalized = { ...row };
+          normalized.notes = constructionNoteText(normalized);
           const manualPrice = roundMoney(normalized.manual_unit_price);
           if (manualPrice !== null) {
             normalized.unit_price = manualPrice > 0 ? manualPrice : 0;
@@ -2671,7 +3410,7 @@
         const placeholderPricingMessage = computed(() => {
           const count = placeholderRowsNeedManualPricing.value.length;
           if (!count) return '';
-          return `AI 未返回 ${count} 行确认清单，系统已生成占位行。请先人工填写这些行的人工改价和系统合计后再下发。`;
+          return `当前有 ${count} 行待补价占位行。请先人工填写这些行的人工改价和系统合计后再下发。`;
         });
 
         const manualPricingRowsNeedReview = computed(() => {
@@ -2714,6 +3453,144 @@
           if (!needsCostCandidateConfirmation(row)) return '';
           const reference = costReference(row);
           return `多候选 ${reference.candidate_count || 2} 条，需确认`;
+        };
+
+        const enterpriseQuotaV2Review = (row = {}) => {
+          const review = row.enterprise_quota_v2_review || row.enterpriseQuotaV2Review || {};
+          return review && typeof review === 'object' ? review : {};
+        };
+
+        const enterpriseQuotaV2Candidates = (row = {}) => {
+          const candidates = enterpriseQuotaV2Review(row).candidates;
+          return Array.isArray(candidates) ? candidates.filter((item) => item && item.id) : [];
+        };
+
+        const enterpriseQuotaV2ReviewVisible = (row = {}) => (
+          enterpriseQuotaV2Candidates(row).length > 0
+        );
+
+        const needsEnterpriseQuotaV2Confirmation = (row = {}) => {
+          const review = enterpriseQuotaV2Review(row);
+          return Boolean(
+            review.requires_manual_confirmation
+            && String(review.manual_confirmation_status || 'pending') === 'pending'
+            && enterpriseQuotaV2Candidates(row).length
+          );
+        };
+
+        const enterpriseQuotaV2RowsNeedReview = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          return rows.filter(needsEnterpriseQuotaV2Confirmation);
+        });
+
+        const enterpriseQuotaV2ConfirmationBlocked = computed(() => (
+          enterpriseQuotaV2RowsNeedReview.value.length > 0
+        ));
+
+        const enterpriseQuotaV2ConfirmationMessage = computed(() => {
+          const count = enterpriseQuotaV2RowsNeedReview.value.length;
+          if (!count) return '';
+          return `还有 ${count} 行企业定额命中结果待人工确认，请采用推荐、改选其他企业定额，或明确继续使用 AI 估价。`;
+        });
+
+        const formatEnterpriseQuotaV2Score = (value) => {
+          const score = Number(value);
+          return Number.isFinite(score) ? `${(score * 100).toFixed(1)}分` : '-';
+        };
+
+        const enterpriseQuotaV2ReviewLabel = (row = {}) => {
+          const review = enterpriseQuotaV2Review(row);
+          const status = String(review.manual_confirmation_status || '');
+          if (status === 'confirmed_adopted') return '已人工采用企业定额';
+          if (status === 'confirmed_rejected') return '已确认继续AI估价';
+          return review.decision === 'shadow_auto' ? '企业定额高置信命中待确认' : '企业定额命中待确认';
+        };
+
+        const enterpriseQuotaV2ReviewTagType = (row = {}) => {
+          const review = enterpriseQuotaV2Review(row);
+          const status = String(review.manual_confirmation_status || '');
+          if (status === 'confirmed_adopted') return 'success';
+          if (status === 'confirmed_rejected') return 'info';
+          return review.decision === 'shadow_auto' ? 'success' : 'warning';
+        };
+
+        const enterpriseQuotaV2RecommendedText = (row = {}) => {
+          const review = enterpriseQuotaV2Review(row);
+          const item = review.recommended_candidate || enterpriseQuotaV2Candidates(row)[0] || {};
+          if (!item.id) return '暂无企业定额候选';
+          const code = String(item.quota_code || '').trim();
+          const name = String(item.item_name || '').trim();
+          return [code, name].filter(Boolean).join(' / ') || `企业定额 #${item.id}`;
+        };
+
+        const enterpriseQuotaV2DetailText = (row = {}) => {
+          const review = enterpriseQuotaV2Review(row);
+          const item = review.recommended_candidate || enterpriseQuotaV2Candidates(row)[0] || {};
+          const status = String(review.manual_confirmation_status || '');
+          if (status === 'confirmed_adopted') {
+            return `已人工选用企业定额 #${review.selected_candidate_id || item.id || '-'}，价格和合计已按所选条目重算。`;
+          }
+          if (status === 'confirmed_rejected') {
+            return '已人工确认不采用本次企业定额命中结果，继续使用当前 AI 估价。';
+          }
+          const price = parseMoney(item.price ?? item.unit_price);
+          return [
+            `评分 ${formatEnterpriseQuotaV2Score(item.v2_score ?? review.top_score)}`,
+            item.unit ? `单位 ${item.unit}` : '',
+            price !== null ? `定额价 ¥${formatMoney(price)}` : '',
+            `Top${enterpriseQuotaV2Candidates(row).length} 可选`,
+          ].filter(Boolean).join('；');
+        };
+
+        const markEnterpriseQuotaV2Review = (row = {}, {
+          status,
+          action,
+          item = null,
+        } = {}) => {
+          const review = enterpriseQuotaV2Review(row);
+          if (!Object.keys(review).length) return;
+          review.requires_manual_confirmation = false;
+          review.manual_confirmation_status = status;
+          review.manual_action = action;
+          review.selected_candidate_id = item?.id || null;
+          review.selected_quota_code = item?.quota_code || null;
+          review.selected_item_name = item?.item_name || null;
+          review.confirmed_at = new Date().toISOString();
+          row.enterprise_quota_v2_review = review;
+        };
+
+        const confirmEnterpriseQuotaV2Recommended = (row = {}, index = 0) => {
+          const review = enterpriseQuotaV2Review(row);
+          const item = review.recommended_candidate || enterpriseQuotaV2Candidates(row)[0];
+          if (!item?.id) {
+            ElMessage.warning('当前行没有可采用的企业定额命中结果');
+            return;
+          }
+          costSwitchRowIndex.value = index;
+          applyCostSwitch(item);
+        };
+
+        const rejectEnterpriseQuotaV2Recommendation = (row = {}) => {
+          if (!needsEnterpriseQuotaV2Confirmation(row)) return;
+          const aiPrice = aiSuggestedUnitPrice(row);
+          if (aiPrice !== null && aiPrice > 0) {
+            row.manual_unit_price = roundMoney(aiPrice);
+            row.manual_price_source = 'v2_candidate_rejected_ai_confirmed';
+            row.manual_price_action = 'accepted_ai_suggestion';
+            applyManualPricingToRow(row, { keepExistingTotalWhenNoQuantity: true });
+          }
+          row.pricing_tier = 'ai_estimate';
+          row.price_source = 'ai_estimate';
+          markEnterpriseQuotaV2Review(row, {
+            status: 'confirmed_rejected',
+            action: 'keep_ai_estimate',
+          });
+          row.quote_explanation = {
+            ...(row.quote_explanation || {}),
+            enterprise_quota_v2_confirmation: '业务员已人工确认不采用本次企业定额命中结果，继续使用当前 AI 估价。',
+          };
+          schedulePreviewDraftSave();
+          ElMessage.success('已确认继续使用当前 AI 估价');
         };
 
         const needsAiRewriteConfirmation = (row = {}) => {
@@ -2788,6 +3665,7 @@
         };
 
         const handleNotesChange = (row = {}) => {
+          row.notes = constructionNoteText(row);
           const reference = costReference(row);
           if (reference.requires_manual_ai_note_confirmation) {
             reference.manual_ai_note_confirmed = true;
@@ -2802,6 +3680,42 @@
             ElMessage.success('已确认备注处理');
           }
           schedulePreviewDraftSave();
+        };
+
+        const constructionNoteSummary = (row = {}, limit = 52) => {
+          const text = constructionNoteText(row).replace(/\s+/g, ' ').trim();
+          if (!text) return '暂无施工提示，建议补充施工做法、避坑要点和报价边界';
+          return text.length > limit ? `${text.slice(0, limit)}…` : text;
+        };
+
+        const constructionBoundaryText = (row = {}) => {
+          const text = constructionNoteText(row);
+          if (!text) return '暂无单独标注。可在上方完整备注中补充不含项、甲供范围、另计内容等边界。';
+          const parts = text
+            .split(/[。；;\n]+/)
+            .map(item => item.trim())
+            .filter(item => item && /(不含|不包含|除外|另计|未含|甲供|暂定|范围|边界)/.test(item));
+          return parts.length ? parts.join('；') : '现有备注中未发现单独的报价边界说明，请结合项目特征人工核对。';
+        };
+
+        const constructionNoteReviewItems = (row = {}, index = -1) => {
+          const risk = previewRowRisks.value[index] || rowRisk(row, index);
+          const items = Array.isArray(risk?.reasons) ? risk.reasons.slice() : [];
+          if (!constructionNoteText(row)) items.push('缺少工艺与避坑备注');
+          return [...new Set(items.filter(Boolean))].slice(0, 8);
+        };
+
+        const openConstructionNoteDrawer = (row = {}, index = -1) => {
+          constructionNoteDrawerRow.value = row;
+          constructionNoteDrawerIndex.value = index;
+          constructionNoteDrawerVisible.value = true;
+        };
+
+        const saveConstructionNote = () => {
+          if (!constructionNoteDrawerRow.value) return;
+          handleNotesChange(constructionNoteDrawerRow.value);
+          constructionNoteDrawerVisible.value = false;
+          ElMessage.success('施工提示已保存到当前预审草稿');
         };
 
         const confirmCurrentCostCandidate = (row = {}) => {
@@ -2937,6 +3851,26 @@
           return rawText;
         };
 
+        const STANDARDIZATION_WARNING_LABELS = {
+          MISSING_ITEM_NAME: '缺少项目名称',
+          MISSING_QUANTITY: '缺少工程量',
+          MISSING_UNIT: '缺少单位',
+          INVALID_QUANTITY: '工程量无效',
+          RANGE_QUANTITY: '工程量为范围值',
+          APPROXIMATE_QUANTITY: '工程量为约数',
+          MULTIPLE_NUMBERS: '存在多个数字',
+          MULTIPLE_QUANTITY_CANDIDATES: '存在多个工程量候选',
+          AMBIGUOUS_HEADER: '表头映射不明确',
+          LOW_CONFIDENCE: '自动映射置信度较低',
+          PRICE_COLUMN_PRESENT: '原表价格列未采用',
+        };
+
+        const standardizationWarningText = (row = {}) => {
+          const warnings = row.standardization_warnings || row.standardization?.warnings || [];
+          if (!Array.isArray(warnings) || !warnings.length) return '';
+          return warnings.map((code) => STANDARDIZATION_WARNING_LABELS[code] || code).join('；');
+        };
+
         const omissionSummaryText = computed(() => {
           const count = omissionSuggestions.value.length;
           if (!count) return '';
@@ -2947,7 +3881,9 @@
 
         const costReferenceLabel = (row = {}) => {
           const reference = costReference(row);
-          if (!reference.matched) return '无底价参考';
+          if (!reference.matched) return 'AI估价';
+          if (reference.reference_source === 'account_quota.active') return '账户定额';
+          if (reference.reference_source === 'enterprise_quota.active') return '企业定额';
           if (reference.match_type === 'manual_selected') return '人工选择';
           return reference.match_type === 'exact_item_spec' ? '精确匹配' : '名称匹配';
         };
@@ -2976,10 +3912,17 @@
           if (!canOpenFullCostDb.value) return '';
           const reference = costReference(row);
           if (!reference.cost_item_id) return '';
+          if (reference.reference_source === 'account_quota.active') {
+            return `/admin/account-quotas?item_id=${reference.account_quota_item_id || reference.cost_item_id}`;
+          }
+          if (reference.reference_source === 'enterprise_quota.active') {
+            return `/admin/cost-db?enterprise_quota_item_id=${reference.enterprise_quota_item_id || reference.cost_item_id}`;
+          }
           return reference.evidence_url || reference.cost_item_url || `/admin/cost-db?cost_item_id=${reference.cost_item_id}`;
         };
 
         const COST_PRICE_SOURCE_LABELS = {
+          account_quota_unit_price: '账户定额单价',
           enterprise_quota_unit_price: '企业定额综合单价',
           price: '主参考价',
           subcontract_composite_price: '劳务发包综合单价',
@@ -2999,6 +3942,7 @@
 
         const costItemPriceSource = (item = {}) => {
           if (item.reference_price_source) return item.reference_price_source;
+          if (item.reference_source === 'account_quota.active') return 'account_quota_unit_price';
           if (item.reference_source === 'enterprise_quota.active') return 'enterprise_quota_unit_price';
           const reference = roundMoneyValue(item.price);
           const fields = ['subcontract_composite_price', 'crew_benchmark_price', 'client_tax_excluded_price'];
@@ -3159,10 +4103,11 @@
           costSwitchKeyword.value = costSwitchKeywordForRow(row);
           const quantity = row.quantity ?? row.quote_explanation?.quantity ?? '-';
           const unit = row.unit || row.quote_explanation?.unit || '-';
-          costSwitchCurrentTitle.value = `${row.project_name || row.item || '-'}｜数量 ${quantity} ${unit}`;
-          costSwitchRows.value = [];
+          const v2Candidates = enterpriseQuotaV2Candidates(row);
+          costSwitchCurrentTitle.value = `${row.project_name || row.item || '-'}｜数量 ${quantity} ${unit}${v2Candidates.length ? `｜企业定额命中 ${v2Candidates.length} 条` : ''}`;
+          costSwitchRows.value = v2Candidates;
           showCostSwitchDialog.value = true;
-          await loadCostSwitchCandidates();
+          if (!v2Candidates.length) await loadCostSwitchCandidates();
         };
 
         const applyCostSwitch = (item = {}) => {
@@ -3180,6 +4125,7 @@
           if (referencePrice !== null && referencePrice > 0) {
             row.manual_unit_price = referencePrice;
             row.manual_price_source = 'manual_selected_cost_reference';
+            row.manual_price_action = 'manual_existing';
             applyManualPricingToRow(row, { keepExistingTotalWhenNoQuantity: true });
           }
 
@@ -3190,6 +4136,18 @@
           reference.switch_price_after = roundMoneyValue(row.unit_price);
           reference.switch_total_after = roundMoneyValue(row.total_price);
           row.cost_reference = reference;
+          if (reference.reference_source === 'enterprise_quota.active') {
+            row.pricing_tier = 'enterprise_quota';
+            row.price_source = 'enterprise_quota';
+            row.pricing_source_snapshot = reference.source_cost_item || item;
+          }
+          if (needsEnterpriseQuotaV2Confirmation(row)) {
+            markEnterpriseQuotaV2Review(row, {
+              status: 'confirmed_adopted',
+              action: item.enterprise_quota_v2_candidate ? 'adopt_v2_candidate' : 'select_enterprise_quota',
+              item,
+            });
+          }
           row.quote_explanation = {
             ...(row.quote_explanation || {}),
             ai_price_source: 'manual_selected',
@@ -3200,6 +4158,9 @@
               ? '已切换成本库参考条目，请人工复核报价与规格是否一致。'
               : `当前报价单价与手动选择的成本库参考价差为 ${reference.price_delta >= 0 ? '+' : ''}${formatMoney(reference.price_delta)} 元/${item.unit || '-'}。`,
             cost_item_url: reference.cost_item_url,
+            enterprise_quota_v2_confirmation: item.enterprise_quota_v2_candidate
+              ? `业务员已人工采用企业定额命中结果 ${item.quota_code || `#${item.id}`} “${item.item_name}”。`
+              : '业务员已人工改选其他已启用企业定额条目。',
           };
           showCostSwitchDialog.value = false;
           schedulePreviewDraftSave();
@@ -3329,11 +4290,13 @@
           }
           const reference = costReference(row);
           const refRate = Math.abs(Number(reference.price_delta_rate));
-          if (!reference.matched) risks.push('无底价参考');
+          if (standardizationWarningText(row)) risks.push('自动映射待核对');
+          if (!reference.matched) risks.push('AI估价');
           if (reference.matched && Number.isFinite(refRate) && refRate >= 0.2) risks.push('偏离底价');
           if (reference.fallback_applied) risks.push('成本库兜底');
           const reviewRow = reviewPreviewRows.value[index] || {};
           if (needsCostCandidateConfirmation(row)) risks.push('成本候选未确认');
+          if (needsEnterpriseQuotaV2Confirmation(row)) risks.push('企业定额命中待确认');
           if (needsAiRewriteConfirmation(row)) risks.push('AI改写待确认');
           if (needsAiNoteConfirmation(row)) risks.push('AI备注待确认');
           const reviewReasons = reviewRow.risk?.reasons || [];
@@ -3341,7 +4304,7 @@
             if (reason && !risks.includes(reason)) risks.push(reason);
           }
           if (!risks.length) return { label: '正常', type: 'success', reasons: [] };
-          const high = risks.some(item => ['AI 未返回，需人工补价', '缺少项目', '单价异常', '合计异常', '成本候选未确认', 'AI备注待确认'].includes(item));
+          const high = risks.some(item => ['AI 未返回，需人工补价', '缺少项目', '单价异常', '合计异常', '成本候选未确认', '企业定额命中待确认', 'AI备注待确认'].includes(item));
           return { label: high ? '高风险' : '需复核', type: high ? 'danger' : 'warning', reasons: risks };
         };
 
@@ -3370,15 +4333,17 @@
             && !placeholderPricingBlocked.value
             && !manualPricingBlocked.value
             && !costCandidateConfirmationBlocked.value
+            && !enterpriseQuotaV2ConfirmationBlocked.value
             && !aiRewriteConfirmationBlocked.value
             && !aiNoteConfirmationBlocked.value;
         });
 
         const previewSummaryCards = computed(() => {
           const totalRows = previewData.value.length || 0;
-          const matchedRows = Number(costReferenceSummary.value.matched || 0);
           const costTotalRows = Number(costReferenceSummary.value.total || totalRows || 0);
-          const unmatchedRows = Number(costReferenceSummary.value.unmatched || 0);
+          const enterpriseMatchedRows = Number(previewPricingSourceSummary.value.enterpriseRecognized || 0);
+          const v2PendingRows = Number(previewPricingSourceSummary.value.v2Pending || 0);
+          const pureAiRows = Number(previewPricingSourceSummary.value.ai || 0);
           const changedRows = Number(previewChangeSummary.value.changedRows || 0);
           const riskRows = previewRiskItems.value.length;
           return [
@@ -3388,7 +4353,7 @@
               value: `${totalRows} 行`,
               detail: reviewSummary.value.requirement_row_count
                 ? `确认清单 ${reviewSummary.value.requirement_row_count} 行`
-                : '来自本次 AI 预审',
+                : '来自本次自动标准清单',
               tone: totalRows ? 'is-success' : 'is-warning'
             },
             {
@@ -3400,10 +4365,12 @@
             },
             {
               key: 'cost',
-              label: '成本依据',
-              value: costTotalRows ? `${matchedRows}/${costTotalRows}` : '-',
-              detail: unmatchedRows ? `${unmatchedRows} 行无底价参考` : '已匹配行均有依据',
-              tone: unmatchedRows ? 'is-warning' : 'is-success'
+              label: '企业定额命中',
+              value: costTotalRows ? `${enterpriseMatchedRows}/${costTotalRows}` : '-',
+              detail: v2PendingRows
+                ? `${v2PendingRows} 行企业定额命中待确认；${pureAiRows} 行纯AI估价`
+                : (pureAiRows ? `${pureAiRows} 行纯AI估价` : '全部命中定额'),
+              tone: (v2PendingRows || pureAiRows) ? 'is-warning' : 'is-success'
             },
             {
               key: 'changes',
@@ -3450,9 +4417,17 @@
           addCard(
             costCandidateConfirmationBlocked.value,
             'cost-candidate',
-            '成本候选未确认',
+            '定额候选未确认',
             costCandidateConfirmationMessage.value,
-            '在成本库依据列确认当前依据或切换条目。',
+            '在报价依据列确认当前依据或切换企业定额。',
+            'is-danger'
+          );
+          addCard(
+            enterpriseQuotaV2ConfirmationBlocked.value,
+            'enterprise-quota-v2-review',
+            '企业定额命中待确认',
+            enterpriseQuotaV2ConfirmationMessage.value,
+            '在报价依据列采用推荐、改选企业定额，或明确继续使用AI估价。',
             'is-danger'
           );
           addCard(
@@ -3480,11 +4455,11 @@
             'is-danger'
           );
           addCard(
-            Number(costReferenceSummary.value.unmatched || 0) > 0,
+            Number(previewPricingSourceSummary.value.ai || 0) > 0,
             'no-cost',
-            '无底价参考',
-            `${costReferenceSummary.value.unmatched || 0} 行没有已启用的成本库底价。`,
-            '允许 AI 估价，但必须人工确认价格。',
+            '纯AI估价行',
+            `${previewPricingSourceSummary.value.ai || 0} 行未命中账户定额或企业定额。`,
+            '系统已自动估价，请在整单预审中重点核对价格。',
             'is-warning'
           );
           addCard(
@@ -3527,6 +4502,166 @@
           const firstBlocker = previewBlockerCards.value[0];
           return firstBlocker ? `优先处理：${firstBlocker.title}。${firstBlocker.action}` : '请处理预审表格中的异常项。';
         });
+
+        const previewSummaryProjectTitle = computed(() => {
+          const context = previewContext.value || {};
+          const sourceName = String(context.sourceFileName || '').trim();
+          if (sourceName) return sourceName.replace(/\.(xlsx|xlsm|xls|png|jpe?g|webp)$/i, '');
+          const requestSummary = String(context.requestSummary || context.requestText || '').trim();
+          if (requestSummary) return requestSummary.split(/\r?\n/)[0].slice(0, 72);
+          const firstProject = String(previewData.value[0]?.project_name || '').trim();
+          return firstProject ? `${firstProject}等项目报价` : '本次项目报价';
+        });
+
+        const previewPricingSourceSummary = computed(() => {
+          const rows = Array.isArray(previewData.value) ? previewData.value : [];
+          const summary = {
+            total: rows.length,
+            account: 0,
+            enterprise: 0,
+            enterpriseAuto: 0,
+            v2Recognized: 0,
+            v2Pending: 0,
+            ai: 0,
+            enterpriseRecognized: 0,
+            enterpriseRecognitionRate: 0,
+            enterpriseRecognitionRateText: '0.0%',
+          };
+          rows.forEach((row) => {
+            const tier = String(row?.pricing_tier || '').trim();
+            const referenceSource = String(costReference(row).reference_source || '').trim();
+            const hasV2Candidate = enterpriseQuotaV2ReviewVisible(row);
+            if (hasV2Candidate) summary.v2Recognized += 1;
+            if (tier === 'account_quota' || referenceSource === 'account_quota.active') {
+              summary.account += 1;
+            } else if (tier === 'enterprise_quota' || referenceSource === 'enterprise_quota.active') {
+              summary.enterprise += 1;
+              if (!hasV2Candidate && String(row?.manual_price_action || '') !== 'manual_existing') {
+                summary.enterpriseAuto += 1;
+              }
+            } else if (needsEnterpriseQuotaV2Confirmation(row)) {
+              summary.v2Pending += 1;
+            } else {
+              summary.ai += 1;
+            }
+          });
+          summary.enterpriseRecognized = summary.enterpriseAuto + summary.v2Recognized;
+          summary.enterpriseRecognitionRate = summary.total
+            ? (summary.enterpriseRecognized / summary.total) * 100
+            : 0;
+          summary.enterpriseRecognitionRateText = `${summary.enterpriseRecognitionRate.toFixed(1)}%`;
+          return summary;
+        });
+
+        const previewQuantityCompleteCount = computed(() => (
+          (Array.isArray(previewData.value) ? previewData.value : []).filter((row) => {
+            const quantity = Number(row?.quantity);
+            return Number.isFinite(quantity) && quantity > 0;
+          }).length
+        ));
+
+        const previewConstructionNoteCount = computed(() => (
+          (Array.isArray(previewData.value) ? previewData.value : []).filter((row) => (
+            constructionNoteText(row).length > 0
+          )).length
+        ));
+
+        const previewNeedsReviewCount = computed(() => {
+          const reviewCount = Number(reviewSummary.value.review_required_count || 0);
+          const riskCount = Number(previewRiskItems.value.length || 0);
+          const missingCount = Number(reviewSummary.value.missing_count || 0);
+          return Math.max(reviewCount, riskCount, missingCount);
+        });
+
+        const previewSummaryAttentionItems = computed(() => {
+          const items = [];
+          const append = (value) => {
+            const text = String(value || '').trim();
+            if (text && !items.includes(text)) items.push(text);
+          };
+          previewBlockerCards.value.slice(0, 3).forEach((card) => {
+            append(`${card.title}：${card.message}`);
+          });
+          if (!items.length && previewPricingSourceSummary.value.ai > 0) {
+            append(`${previewPricingSourceSummary.value.ai} 项采用 AI 估价，请在明细中重点核对价格与施工边界。`);
+          }
+          if (!items.length && previewConstructionNoteCount.value > 0) {
+            append(`${previewConstructionNoteCount.value} 项包含施工提示，可在明细中查看完整工艺与避坑备注。`);
+          }
+          return items.slice(0, 3);
+        });
+
+        const detailedBudgetProjectId = computed(() => {
+          const context = previewContext.value || {};
+          const candidates = [
+            context.budgetProjectId,
+            context.rawPayload?.budget_project_id,
+            context.rawPayload?.budget_project?.project_id,
+            new URLSearchParams(window.location.search).get('budget_project_id'),
+          ];
+          for (const candidate of candidates) {
+            const projectId = Number(candidate);
+            if (Number.isInteger(projectId) && projectId > 0) return projectId;
+          }
+          return null;
+        });
+
+        const openDetailedQuoteWorkspace = async () => {
+          if (detailWorkspaceOpening.value) return;
+          const quoteJobId = previewContext.value.quoteJobId;
+          if (!quoteJobId && !detailedBudgetProjectId.value) {
+            ElMessage.warning('当前报价缺少任务关联，请从报价历史重新打开后再进入明细。');
+            return;
+          }
+          detailWorkspaceOpening.value = true;
+          try {
+            if (quoteJobId) {
+              const saveResult = await savePreviewDraftNow({ silent: true });
+              if (!saveResult && !isPreviewDraftTerminal()) {
+                throw new Error('PREVIEW_DRAFT_SAVE_FAILED');
+              }
+              const response = await axios.post(
+                `${API_BASE_URL}/quote/jobs/${quoteJobId}/budget-workspace`,
+                {},
+                { headers: authHeaders() },
+              );
+              const workspace = apiData(response, {});
+              const projectId = Number(workspace.budget_project_id);
+              if (!Number.isInteger(projectId) || projectId <= 0) {
+                throw new Error('BUDGET_PROJECT_ID_MISSING');
+              }
+              previewContext.value = {
+                ...previewContext.value,
+                budgetProjectId: projectId,
+                budgetPricingDraftId: workspace.budget_pricing_draft_id || null,
+              };
+            }
+            const projectId = detailedBudgetProjectId.value;
+            if (!projectId) throw new Error('BUDGET_PROJECT_ID_MISSING');
+            try {
+              window.sessionStorage.setItem('aimo_quote_detail_handoff', JSON.stringify({
+                quote_job_id: quoteJobId || '',
+                quote_id: previewContext.value.quoteId || '',
+                budget_project_id: projectId,
+                budget_pricing_draft_id: previewContext.value.budgetPricingDraftId || null,
+                source_file_name: previewContext.value.sourceFileName || '',
+                created_at: new Date().toISOString(),
+              }));
+            } catch (storageError) {
+              console.warn('quote detail handoff cache unavailable', storageError);
+            }
+            window.location.href = `/admin/budget-projects/${projectId}`;
+          } catch (error) {
+            if (error.response?.status === 401) handleUnauthorized();
+            console.warn('quote detail workspace handoff failed', error);
+            ElMessage.error(apiErrorMessage(
+              error,
+              '详细报价工作台准备失败，当前报价草稿未被覆盖，请稍后重试。',
+            ));
+          } finally {
+            detailWorkspaceOpening.value = false;
+          }
+        };
 
         const canSubmit = computed(() => {
           return !sending.value && !pushing.value && (!!inputText.value.trim() || !!selectedFile.value);
@@ -3751,6 +4886,18 @@
             requestText: context.requestText || rawData?.request_text || '',
             requestSummary: context.requestSummary || rawData?.request_summary || '',
             sourceFileName: context.sourceFileName || rawData?.source_file_name || rawData?.file_name || '',
+            budgetProjectId:
+              context.budgetProjectId
+              || parsed.payload?.budget_project_id
+              || parsed.payload?.project_id
+              || rawData?.budget_project_id
+              || rawData?.budget_project?.project_id
+              || null,
+            budgetPricingDraftId:
+              context.budgetPricingDraftId
+              || parsed.payload?.budget_pricing_draft_id
+              || rawData?.budget_pricing_draft_id
+              || null,
             rawPayload: rawData || null,
           };
           previewDraftStatus.value = '';
@@ -3832,13 +4979,15 @@
             requestText: message.sourceText || fallback.requestText || '',
             requestSummary: job.request_summary || fallback.requestSummary || job.message_preview || '',
             sourceFileName: job.source_file_name || job.file_name || message.sourceFile?.name || message.sourceFileName || fallback.sourceFileName || '',
+            budgetProjectId: job.budget_project_id || job.result?.budget_project_id || fallback.budgetProjectId || null,
+            budgetPricingDraftId: job.budget_pricing_draft_id || job.result?.budget_pricing_draft_id || fallback.budgetPricingDraftId || null,
           };
         };
 
         const applyRecoveredJobResult = (job, msgIndex) => {
           if (!job || typeof job !== 'object') {
             markRecoverable(msgIndex);
-            appendAssistantContent(msgIndex, '\n任务状态返回异常，请重新提交或联系管理员。');
+            appendAssistantContent(msgIndex, '\n暂时无法读取报价结果，请稍后重试。');
             return false;
           }
 
@@ -3850,12 +4999,15 @@
 
           if (job.status === 'succeeded' && job.result) {
             if (openPreviewFromPayload(job.result, quoteJobRequestContext(job, msgIndex))) {
-              updateAssistantMessage(msgIndex, { canRetry: false, canCheckStatus: false });
-              appendAssistantContent(msgIndex, '\n✅ 已重新拉取任务结果，预审明细已恢复。');
+              updateAssistantMessage(msgIndex, {
+                canRetry: false,
+                canCheckStatus: false,
+                content: '报价明细已经恢复，请继续核对。'
+              });
               return true;
             }
             markRecoverable(msgIndex, { jobId: job.job_id, traceId: job.trace_id });
-            appendAssistantContent(msgIndex, '\n报价任务已完成，但没有解析出可预审的明细。请重试，或把任务号发给管理员排查。');
+            appendAssistantContent(msgIndex, '\n报价已经处理完成，但暂时无法打开明细。请重试或联系系统管理员。');
             return false;
           }
 
@@ -3866,7 +5018,7 @@
           }
 
           updateAssistantMessage(msgIndex, { canRetry: false, canCheckStatus: !!job.job_id });
-          appendAssistantContent(msgIndex, `\n任务状态：${quoteJobStatusLabel(job.status)}${job.stage ? `（${job.stage}）` : ''}。稍后可再次查看。`);
+          updateAssistantMessage(msgIndex, { content: '报价仍在处理中，请稍候。' });
           return false;
         };
 
@@ -3964,7 +5116,7 @@
               const traceId = res.headers.get('X-Trace-Id') || msg.traceId;
               const errorData = await res.json().catch(() => ({}));
               markRecoverable(msgIndex, { jobId: msg.jobId, traceId });
-              appendAssistantContent(msgIndex, `\n任务状态查询失败：${errorData.detail || res.statusText || res.status}`);
+              appendAssistantContent(msgIndex, `\n${formatApiError('查看处理结果失败', errorData.detail || res.statusText, traceId)}`);
               return;
             }
             const body = await res.json();
@@ -3973,11 +5125,11 @@
             if (recovered) {
               ElMessage.success('已恢复报价预审明细');
             } else if (job.status === 'running' || job.status === 'queued') {
-              ElMessage.info('任务仍在处理中');
+              ElMessage.info('报价仍在处理中，请稍候');
             }
           } catch (error) {
             markRecoverable(msgIndex, { jobId: msg.jobId, traceId: msg.traceId });
-            appendAssistantContent(msgIndex, `\n任务状态查询异常：${error.message}`);
+            appendAssistantContent(msgIndex, `\n${formatApiError('查看处理结果失败', error.message, msg.traceId)}`);
           } finally {
             checkingJobId.value = '';
           }
@@ -4016,7 +5168,7 @@
             const traceId = eventResponse.headers.get('X-Trace-Id') || job.trace_id;
             const errorData = await eventResponse.json().catch(() => ({}));
             if (eventResponse.status === 401) handleUnauthorized();
-            setQuoteProgress(null, `任务订阅失败：${errorData.detail || eventResponse.statusText}`, 'error');
+            setQuoteProgress(null, '处理进度暂时中断，请稍后重试', 'error');
             stopQuoteTimer();
             appendAssistantContent(msgIndex, '\n' + formatApiError(`任务订阅失败 (${eventResponse.status})`, errorData.detail || eventResponse.statusText, traceId));
             markRecoverable(msgIndex, { jobId: job.job_id, traceId });
@@ -4028,39 +5180,39 @@
           await readSseStream(eventResponse, (data) => {
             const nextStage = resolveQuoteStage(data, false);
             if (nextStage) setQuoteProgress(nextStage, describeQuoteProgress(nextStage));
-            if (nextStage === 'knowledge') scheduleQuoteGenerationHint();
-            if (nextStage && nextStage !== 'knowledge') clearDelayedStageTimer();
+            if (nextStage === 'pricing') scheduleQuoteGenerationHint();
+            if (nextStage && nextStage !== 'pricing') clearDelayedStageTimer();
 
             if (data.status === 'queued' || data.status === 'processing') {
-              appendAssistantContent(msgIndex, `${data.message || '报价任务处理中'}\n\n`);
+              updateAssistantMessage(msgIndex, { content: '' });
             } else if (data.status === 'preview') {
               clearDelayedStageTimer();
-              setQuoteProgress('review', '收到 AI 预审完成信号，正在整理明细', 'success');
-              appendAssistantContent(msgIndex, data.message || 'AI 预审数据已就绪');
+              setQuoteProgress('review', '报价明细已经准备好，请进行核对', 'success');
+              updateAssistantMessage(msgIndex, { content: '报价明细已经准备好，请进行核对。' });
               previewOpened = openPreviewFromPayload(
                 data.data || data,
                 quoteJobRequestContext(job, msgIndex, { traceId: data.trace_id || job.trace_id })
               );
               if (previewOpened) {
-                setQuoteProgress('review', 'AI 预审数据已就绪，等待人工复核', 'success');
+                setQuoteProgress('review', '报价明细已经准备好，请进行核对', 'success');
                 stopQuoteTimer();
                 sending.value = false;
               } else {
-                setQuoteProgress('review', '预审信号已收到，正在拉取完整任务结果', 'running');
-                appendAssistantContent(msgIndex, '\n正在拉取完整任务结果...\n');
+                setQuoteProgress('review', '报价已生成，正在整理核对明细', 'running');
+                updateAssistantMessage(msgIndex, { content: '' });
               }
             } else if (data.status === 'error') {
               clearDelayedStageTimer();
-              setQuoteProgress(null, data.message || '报价任务失败，请重试', 'error');
+              setQuoteProgress(null, '报价暂时没有完成，请按提示重试', 'error');
               stopQuoteTimer();
               appendAssistantContent(msgIndex, formatApiError('报价任务失败', data.message, data.trace_id || job.trace_id));
               markRecoverable(msgIndex, { jobId: job.job_id, traceId: data.trace_id || job.trace_id });
               sending.value = false;
             } else if (data.status === 'success') {
               clearDelayedStageTimer();
-              setQuoteProgress('review', '报价结果已生成', 'success');
+              setQuoteProgress('review', '报价已经生成，请进行核对', 'success');
               stopQuoteTimer();
-              appendAssistantContent(msgIndex, data.message || '报价结果已生成');
+              updateAssistantMessage(msgIndex, { content: '报价已经生成，请进行核对。' });
               sending.value = false;
             }
           });
@@ -4074,7 +5226,7 @@
             const latest = apiPayloadData(statusBody, statusBody);
             if (latest.status === 'failed' && latest.error_message && !messageHistory.value[msgIndex].canRetry) {
               clearDelayedStageTimer();
-              setQuoteProgress(null, latest.error_message, 'error');
+              setQuoteProgress(null, '报价暂时没有完成，请按提示重试', 'error');
               stopQuoteTimer();
               applyRecoveredJobResult(latest, msgIndex);
               sending.value = false;
@@ -4082,10 +5234,10 @@
               clearDelayedStageTimer();
               stopQuoteTimer();
               if (previewOpened) {
-                setQuoteProgress('review', '报价结果已生成，等待人工复核', 'success');
+                setQuoteProgress('review', '报价已经生成，请进行核对', 'success');
               } else {
                 const recovered = applyRecoveredJobResult(latest, msgIndex);
-                setQuoteProgress(recovered ? 'review' : null, recovered ? '报价结果已生成，等待人工复核' : '报价结果已返回，但没有解析出明细', recovered ? 'success' : 'error');
+                setQuoteProgress(recovered ? 'review' : null, recovered ? '报价已经生成，请进行核对' : '报价已完成，但暂时无法打开明细', recovered ? 'success' : 'error');
               }
               sending.value = false;
             }
@@ -4093,9 +5245,9 @@
 
           if (sending.value && !messageHistory.value[msgIndex].canRetry) {
             clearDelayedStageTimer();
-            setQuoteProgress(null, '任务事件流已结束，但未收到完成状态', 'error');
+            setQuoteProgress(null, '处理进度暂时中断，请查看处理结果', 'error');
             stopQuoteTimer();
-            appendAssistantContent(msgIndex, '\n任务事件流已结束，但未收到完成状态。您可以点击查看任务状态拉取结果，或重新提交。');
+            appendAssistantContent(msgIndex, '\n处理进度暂时中断。您可以点击“查看处理结果”，或重新提交。');
             markRecoverable(msgIndex, { jobId: job.job_id, traceId: job.trace_id });
             sending.value = false;
           }
@@ -4109,12 +5261,12 @@
           incomingQuoteJobHandled = true;
 
           const sourceText = incoming.source === 'requirement_standardization'
-            ? `需求单标准化确认清单已发起报价${incoming.sourceFileName ? `：${incoming.sourceFileName}` : ''}`
-            : '继续查看报价任务';
+            ? `已提交报价清单${incoming.sourceFileName ? `：${incoming.sourceFileName}` : ''}`
+            : '继续查看报价';
           messageHistory.value.push({ role: 'user', content: sourceText });
           messageHistory.value.push({
             role: 'assistant',
-            content: `⏳ 已接管报价任务\n任务号：${incoming.jobNumber || incoming.jobId}\n\n`,
+            content: '',
             canRetry: false,
             canCheckStatus: true,
             jobId: incoming.jobId,
@@ -4130,7 +5282,7 @@
           isTyping.value = true;
           clearDelayedStageTimer();
           startQuoteTimer();
-          setQuoteProgress('created', '已接管报价任务，正在读取进度');
+          setQuoteProgress('created', '正在继续处理您的报价');
           scrollToBottom();
 
           try {
@@ -4142,7 +5294,7 @@
               const traceId = statusResponse.headers.get('X-Trace-Id') || incoming.traceId;
               const errorData = await statusResponse.json().catch(() => ({}));
               if (statusResponse.status === 401) handleUnauthorized();
-              setQuoteProgress(null, `任务读取失败：${errorData.detail || statusResponse.statusText}`, 'error');
+              setQuoteProgress(null, '暂时无法读取报价结果，请稍后重试', 'error');
               stopQuoteTimer();
               appendAssistantContent(msgIndex, '\n' + formatApiError(`任务读取失败 (${statusResponse.status})`, errorData.detail || statusResponse.statusText, traceId));
               markRecoverable(msgIndex, { jobId: incoming.jobId, traceId });
@@ -4164,7 +5316,7 @@
               clearDelayedStageTimer();
               stopQuoteTimer();
               const recovered = applyRecoveredJobResult(job, msgIndex);
-              setQuoteProgress(recovered ? 'review' : null, recovered ? '报价结果已生成，等待人工复核' : '报价结果已返回，但没有解析出明细', recovered ? 'success' : 'error');
+              setQuoteProgress(recovered ? 'review' : null, recovered ? '报价已经生成，请进行核对' : '报价已完成，但暂时无法打开明细', recovered ? 'success' : 'error');
               sending.value = false;
               isTyping.value = false;
               return;
@@ -4179,11 +5331,11 @@
               return;
             }
 
-            appendAssistantContent(msgIndex, `任务状态：${quoteJobStatusLabel(job.status)}${job.stage ? `，阶段：${job.stage}` : ''}\n\n`);
+            updateAssistantMessage(msgIndex, { content: '' });
             await followExistingQuoteJobEvents(job, msgIndex);
           } catch (error) {
             clearDelayedStageTimer();
-            setQuoteProgress(null, `网络异常：${error.message}`, 'error');
+            setQuoteProgress(null, '网络连接暂时不稳定，请稍后重试', 'error');
             stopQuoteTimer();
             appendAssistantContent(msgIndex, '\n' + formatApiError('网络异常', error.message));
             markRecoverable(msgIndex, { jobId: incoming.jobId, traceId: incoming.traceId });
@@ -4210,7 +5362,7 @@
           formData.append('inquiry_time', clientForm.value.inquiryTime || formatShanghaiNow());
           formData.append('time_source', clientTimeManual.value ? 'manual' : 'default');
 
-          const userMsg = { role: 'user', content: text || '发起多模态文件解析请求' };
+          const userMsg = { role: 'user', content: text || '已上传报价资料' };
           if (selectedFile.value && selectedFile.value.type.startsWith('image/'))
             userMsg.fileUrl = URL.createObjectURL(selectedFile.value);
           messageHistory.value.push(userMsg);
@@ -4236,26 +5388,10 @@
           isTyping.value = true;
           clearDelayedStageTimer();
           startQuoteTimer();
-          setQuoteProgress('created', '正在创建异步报价任务，请稍候');
+          setQuoteProgress('created', '已收到您的需求，正在开始处理');
           scrollToBottom();
 
-          let charQueue  = Array.from('⏳ 正在创建异步报价任务...\n\n');
-          let streamEnded = false;
           let createdJob = null;
-
-          const typeNextChar = () => {
-            if (charQueue.length > 0) {
-              const n = charQueue.length > 60 ? 4 : charQueue.length > 20 ? 2 : 1;
-              for (let i = 0; i < n; i++) {
-                if (charQueue.length > 0) messageHistory.value[msgIndex].content += charQueue.shift();
-              }
-              scrollToBottom();
-              setTimeout(typeNextChar, 25);
-            } else {
-              if (streamEnded) { isTyping.value = false; } else { setTimeout(typeNextChar, 50); }
-            }
-          };
-          typeNextChar();
 
           try {
             const createResponse = await fetch(`${API_BASE_URL}/quote/jobs`, {
@@ -4268,11 +5404,13 @@
               const traceId   = createResponse.headers.get('X-Trace-Id');
               const errorData = await createResponse.json().catch(() => ({}));
               if (createResponse.status === 401) handleUnauthorized();
-              setQuoteProgress(null, `任务创建失败：${errorData.detail || createResponse.statusText}`, 'error');
+              setQuoteProgress(null, '暂时无法开始生成报价，请按提示重试', 'error');
               stopQuoteTimer();
-              charQueue.push(...('\n' + formatApiError(`任务创建失败 (${createResponse.status})`, errorData.detail || createResponse.statusText, traceId)).split(''));
+              updateAssistantMessage(msgIndex, { content: formatApiError('开始报价失败', errorData.detail || createResponse.statusText, traceId) });
               markRecoverable(msgIndex, { traceId });
-              streamEnded = true; sending.value = false; return;
+              isTyping.value = false;
+              sending.value = false;
+              return;
             }
 
             const createBody = await createResponse.json();
@@ -4284,7 +5422,6 @@
               traceId: job.trace_id || '',
               canCheckStatus: !!job.job_id,
             });
-            charQueue.push(...(`✅ 异步报价任务已创建\n任务号：${displayQuoteJobNumber(job)}\n\n`).split(''));
 
             const eventResponse = await fetch(`${API_BASE_URL}/quote/jobs/${job.job_id}/events`, {
               method: 'GET',
@@ -4295,52 +5432,55 @@
               const traceId   = eventResponse.headers.get('X-Trace-Id') || job.trace_id;
               const errorData = await eventResponse.json().catch(() => ({}));
               if (eventResponse.status === 401) handleUnauthorized();
-              setQuoteProgress(null, `任务订阅失败：${errorData.detail || eventResponse.statusText}`, 'error');
+              setQuoteProgress(null, '处理进度暂时中断，请稍后重试', 'error');
               stopQuoteTimer();
-              charQueue.push(...('\n' + formatApiError(`任务订阅失败 (${eventResponse.status})`, errorData.detail || eventResponse.statusText, traceId)).split(''));
+              updateAssistantMessage(msgIndex, { content: formatApiError('读取处理进度失败', errorData.detail || eventResponse.statusText, traceId) });
               markRecoverable(msgIndex, { jobId: job.job_id, traceId });
-              streamEnded = true; sending.value = false; return;
+              isTyping.value = false;
+              sending.value = false;
+              return;
             }
 
             await readSseStream(eventResponse, (data) => {
               const nextStage = resolveQuoteStage(data, hasImage);
               if (nextStage) setQuoteProgress(nextStage, describeQuoteProgress(nextStage));
-              if (nextStage === 'knowledge') scheduleQuoteGenerationHint();
-              if (nextStage && nextStage !== 'knowledge') clearDelayedStageTimer();
+              if (nextStage === 'pricing') scheduleQuoteGenerationHint();
+              if (nextStage && nextStage !== 'pricing') clearDelayedStageTimer();
 
-              if (data.status === 'queued') {
-                charQueue.push(...(`${data.message}\n\n`).split(''));
-              } else if (data.status === 'processing') {
-                charQueue.push(...(`${data.message}\n\n`).split(''));
+              if (data.status === 'queued' || data.status === 'processing') {
+                updateAssistantMessage(msgIndex, { content: '' });
               } else if (data.status === 'preview') {
                 clearDelayedStageTimer();
-                setQuoteProgress('review', '收到 AI 预审完成信号，正在整理明细', 'success');
-                charQueue.push(...(data.message).split(''));
+                setQuoteProgress('review', '报价明细已经准备好，请进行核对', 'success');
+                updateAssistantMessage(msgIndex, { content: '报价明细已经准备好，请进行核对。' });
                 if (openPreviewFromPayload(
                   data.data || data,
                   quoteJobRequestContext(job, msgIndex, { traceId: data.trace_id || job.trace_id })
                 )) {
-                  setQuoteProgress('review', 'AI 预审数据已就绪，等待人工复核', 'success');
+                  setQuoteProgress('review', '报价明细已经准备好，请进行核对', 'success');
                   stopQuoteTimer();
                   sending.value = false;
+                  isTyping.value = false;
                 } else {
-                  setQuoteProgress('review', '预审信号已收到，正在拉取完整任务结果', 'running');
-                  charQueue.push(...('\n正在拉取完整任务结果...\n').split(''));
+                  setQuoteProgress('review', '报价已生成，正在整理核对明细', 'running');
+                  updateAssistantMessage(msgIndex, { content: '' });
                 }
               } else if (data.status === 'error') {
                 clearDelayedStageTimer();
-                setQuoteProgress(null, data.message || '报价任务失败，请重试', 'error');
+                setQuoteProgress(null, '报价暂时没有完成，请按提示重试', 'error');
                 stopQuoteTimer();
                 const msg = formatApiError('报价任务失败', data.message, data.trace_id || job.trace_id);
-                charQueue.push(...msg.split(''));
+                updateAssistantMessage(msgIndex, { content: msg });
                 markRecoverable(msgIndex, { jobId: job.job_id, traceId: data.trace_id || job.trace_id });
                 sending.value = false;
+                isTyping.value = false;
               } else if (data.status === 'success') {
                 clearDelayedStageTimer();
-                setQuoteProgress('review', '报价结果已生成', 'success');
+                setQuoteProgress('review', '报价已经生成，请进行核对', 'success');
                 stopQuoteTimer();
-                charQueue.push(...(data.message).split(''));
+                updateAssistantMessage(msgIndex, { content: '报价已经生成，请进行核对。' });
                 sending.value = false;
+                isTyping.value = false;
               }
             });
 
@@ -4353,7 +5493,7 @@
               const latest = apiPayloadData(statusBody, statusBody);
               if (latest.status === 'failed' && latest.error_message && !messageHistory.value[msgIndex].canRetry) {
                 clearDelayedStageTimer();
-                setQuoteProgress(null, latest.error_message, 'error');
+                setQuoteProgress(null, '报价暂时没有完成，请按提示重试', 'error');
                 stopQuoteTimer();
                 applyRecoveredJobResult(latest, msgIndex);
                 sending.value = false;
@@ -4361,28 +5501,29 @@
                 clearDelayedStageTimer();
                 stopQuoteTimer();
                 const recovered = applyRecoveredJobResult(latest, msgIndex);
-                setQuoteProgress(recovered ? 'review' : null, recovered ? '报价结果已生成，等待人工复核' : '报价结果已返回，但没有解析出明细', recovered ? 'success' : 'error');
+                setQuoteProgress(recovered ? 'review' : null, recovered ? '报价已经生成，请进行核对' : '报价已完成，但暂时无法打开明细', recovered ? 'success' : 'error');
                 sending.value = false;
+                isTyping.value = false;
               }
             }
 
             if (sending.value && !messageHistory.value[msgIndex].canRetry) {
               clearDelayedStageTimer();
-              setQuoteProgress(null, '任务事件流已结束，但未收到完成状态', 'error');
+              setQuoteProgress(null, '处理进度暂时中断，请查看处理结果', 'error');
               stopQuoteTimer();
-              charQueue.push(...('\n任务事件流已结束，但未收到完成状态。您可以点击查看任务状态拉取结果，或重新提交。').split(''));
+              updateAssistantMessage(msgIndex, { content: '处理进度暂时中断。您可以点击“查看处理结果”，或重新提交。' });
               markRecoverable(msgIndex, { jobId: job.job_id, traceId: job.trace_id });
               sending.value = false;
+              isTyping.value = false;
             }
-
-            streamEnded = true;
           } catch (error) {
             clearDelayedStageTimer();
-            setQuoteProgress(null, `网络异常：${error.message}`, 'error');
+            setQuoteProgress(null, '网络连接暂时不稳定，请稍后重试', 'error');
             stopQuoteTimer();
-            charQueue.push(...('\n' + formatApiError('网络异常', error.message)).split(''));
+            updateAssistantMessage(msgIndex, { content: formatApiError('网络连接异常', error.message) });
             markRecoverable(msgIndex, { jobId: createdJob?.job_id || '', traceId: createdJob?.trace_id || '' });
-            streamEnded = true; sending.value = false;
+            isTyping.value = false;
+            sending.value = false;
           }
         };
 
@@ -4481,7 +5622,7 @@
             return;
           }
           if (placeholderPricingBlocked.value) {
-            ElMessage.error(placeholderPricingMessage.value || '仍有 AI 未返回的占位行需要人工补价');
+            ElMessage.error(placeholderPricingMessage.value || '仍有待补价占位行需要人工补价');
             return;
           }
           if (manualPricingBlocked.value) {
@@ -4490,6 +5631,10 @@
           }
           if (costCandidateConfirmationBlocked.value) {
             ElMessage.error(costCandidateConfirmationMessage.value || '存在多条已启用成本候选，请先人工确认成本依据');
+            return;
+          }
+          if (enterpriseQuotaV2ConfirmationBlocked.value) {
+            ElMessage.error(enterpriseQuotaV2ConfirmationMessage.value || '存在企业定额命中结果，请先人工确认采用、改选或继续使用 AI 估价');
             return;
           }
           if (aiRewriteConfirmationBlocked.value) {
@@ -4532,7 +5677,14 @@
             previewDraftSavedAt.value = '';
             previewDraftError.value = '';
             previewDraftRestored.value = false;
-            previewContext.value = { quoteJobId: '', traceId: '', quoteId: '', rawPayload: null };
+            previewContext.value = {
+              quoteJobId: '',
+              traceId: '',
+              quoteId: '',
+              budgetProjectId: null,
+              budgetPricingDraftId: null,
+              rawPayload: null,
+            };
             previewOriginalData.value = [];
             reviewDetail.value = null;
             omissionSuggestions.value = [];
@@ -4644,6 +5796,9 @@
         return {
           isLoggedIn, currentUser, activeTab, loading, sending, isTyping,
           showPreviewDialog, previewData, previewOriginalData, previewContext, pushing, pushError, finalTotalAmount,
+          previewWorkspaceView, previewWorkspaceTitle, previewWorkspaceHint,
+          previewProfessionalBreakdownColumns, previewProfessionalSummaryCards, previewProfessionalSummaryRows,
+          previewProfessionalFieldValue, handlePreviewProfessionalChange,
           canOpenFullCostDb, adminShellPath, canOpenAdminShell,
           showEvidenceDialog, evidenceDialogData, openEvidenceCostDetail,
           showCostSwitchDialog, costSwitchRows, costSwitchLoading, costSwitchKeyword, costSwitchCurrentTitle,
@@ -4652,25 +5807,37 @@
           previewTableRef, previewTopScrollRef, previewTableScrollWidth, syncPreviewHorizontalScroll,
           rejectReason, knowledgeLearningEnabled, knowledgeLearningReason,
           reviewDetail, reviewDetailLoading, reviewSummary, reviewSummaryType, reviewMissingRows, reviewExtraRows, reviewPreviewRows,
-          previewSubmittedDemandText, submittedRequirementForPreviewRow, submittedRequirementTitle, submittedRequirementMeta, submittedRequirementRawText,
+          previewSubmittedDemandText, submittedRequirementForPreviewRow, submittedRequirementTitle, submittedRequirementMeta, submittedRequirementRawText, standardizationWarningText,
           previewCompletenessBlocked, previewCompletenessMessage, placeholderPricingBlocked, placeholderPricingMessage,
           manualPricingBlocked, manualPricingMessage, handleManualPriceChange, handleQuantityChange, handleManualTotalChange, manualPriceHint, aiSuggestedUnitPriceText,
           previewUnitPriceSourceText, acceptSuggestedPriceButtonText,
           costCandidateConfirmationBlocked, costCandidateConfirmationMessage, needsCostCandidateConfirmation, costCandidateWarningText, confirmCurrentCostCandidate,
+          enterpriseQuotaV2ConfirmationBlocked, enterpriseQuotaV2ConfirmationMessage,
+          enterpriseQuotaV2ReviewVisible, needsEnterpriseQuotaV2Confirmation,
+          enterpriseQuotaV2ReviewLabel, enterpriseQuotaV2ReviewTagType,
+          enterpriseQuotaV2RecommendedText, enterpriseQuotaV2DetailText,
+          confirmEnterpriseQuotaV2Recommended, rejectEnterpriseQuotaV2Recommendation,
+          formatEnterpriseQuotaV2Score,
           aiRewriteConfirmationBlocked, aiRewriteConfirmationMessage, needsAiRewriteConfirmation, aiRewriteWarningText, confirmAiRewriteCostReference,
           aiNoteConfirmationBlocked, aiNoteConfirmationMessage, needsAiNoteConfirmation, aiNoteConflictWarningText, confirmAiNoteCostBasis, handleNotesChange,
+          constructionNoteDrawerVisible, constructionNoteDrawerRow, constructionNoteDrawerIndex,
+          constructionNoteText, constructionNoteSummary, constructionBoundaryText, constructionNoteReviewItems, openConstructionNoteDrawer, saveConstructionNote,
           acceptAiSuggestedPrice, canAcceptAiSuggestedPrice,
-          previewDraftSaving, previewDraftStatusText, previewDraftAlertType, savePreviewDraftNow, schedulePreviewDraftSave, isPreviewDraftTerminal,
+          previewDraftSaving, previewDraftStatusText, previewDraftAlertType, previewDraftVersion, previewDraftSavedAt, previewDraftRestored,
+          savePreviewDraftNow, schedulePreviewDraftSave, isPreviewDraftTerminal,
           previewChangeSummary, previewHasChanges, previewRowRisks, previewRiskItems, highRiskCount, riskSummaryText, rowRisk,
           previewReadyForPush, previewSummaryCards, previewBlockerCards, previewBlockerSummaryText, previewFooterTitle, previewFooterHint,
+          previewSummaryProjectTitle, previewPricingSourceSummary, previewQuantityCompleteCount,
+          previewConstructionNoteCount, previewNeedsReviewCount, previewSummaryAttentionItems,
+          detailedBudgetProjectId, detailWorkspaceOpening, openDetailedQuoteWorkspace,
           omissionSuggestions, omissionSummary, omissionSummaryText,
           costReference, costReferenceSummary, costReferenceLabel, costReferencePriceText, costReferenceDeltaText,
-          costReferenceFallbackText, costReferenceTotalText, noCostNoticeText, costReferenceTagType, showCostReferenceEvidence, openCostReferenceDetail,
+          costReferenceFallbackText, costReferenceTotalText, noCostNoticeText, costReferenceTagType, costReferenceDetailUrl, showCostReferenceEvidence, openCostReferenceDetail,
           authForm, inputText, selectedFile, messageHistory, scrollbarRef,
           workflowSteps, workflowStepIndex, workflowStatusTitle, workflowStatusDetail,
           workflowStatusTagType, workflowNextActionTitle, workflowNextActionText,
           latestRecoverableMessage, showClearInput, clearQuoteInput,
-          stages, currentStage, quoteProgressText, quoteProgressTone, quoteElapsedSeconds,
+          stages, currentStage, quoteProgressText, quoteProgressTone, quoteProgressPercent, quoteElapsedSeconds, friendlyElapsedTime,
           canSubmit, selectedFileSummary,
           clientSourceOptions, showClientInfo, clientForm, clientInfoSummary,
           toggleClientInfo, resetClientInfoDefaults, markClientTimeManual,

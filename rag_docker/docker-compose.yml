@@ -58,8 +58,8 @@ services:
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
-      MINIO_ACCESS_KEY: ${MILVUS_MINIO_ACCESS_KEY:-milvus-minio}
-      MINIO_SECRET_KEY: ${MILVUS_MINIO_SECRET_KEY:-change-this-password}
+      MINIO_ACCESS_KEY_ID: ${MILVUS_MINIO_ACCESS_KEY:-milvus-minio}
+      MINIO_SECRET_ACCESS_KEY: ${MILVUS_MINIO_SECRET_KEY:-change-this-password}
     volumes:
       - /opt/rag_service/volumes/milvus:/var/lib/milvus
     ports:
@@ -78,6 +78,7 @@ services:
         max-file: "3"
 
   rag-service:
+    image: rag_service-rag-service-tender:phase3c
     build:
       context: .
       dockerfile: Dockerfile
@@ -104,10 +105,17 @@ services:
       - MILVUS_HOST=standalone
       - MILVUS_PORT=19530
       - RELOAD_SECRET=${RELOAD_SECRET:-change-me-rag-reload-secret}
+      - TENDER_EVIDENCE_INDEX_SECRET=${TENDER_EVIDENCE_INDEX_SECRET:-}
+      - TENDER_EVIDENCE_INDEX_SECRET_FILE=/run/secrets/tender_evidence_index.secret
+      - TENDER_EVIDENCE_COLLECTION=tender_evidence_blocks_v1
+      - TENDER_EVIDENCE_VECTOR_DIMENSION=768
+      - TENDER_EVIDENCE_MAX_BLOCKS=10000
+      - TENDER_EVIDENCE_EMBED_CHUNK_SIZE=128
     volumes:
       - /opt/rag_service/model_cache:/model_cache
       - /opt/rag_service/hybrid_searcher.py:/app/hybrid_searcher.py:ro
       - /opt/rag_service/rag_materials.json:/app/rag_materials.json:ro
+      - /opt/rag_service/tender_evidence_index.secret:/run/secrets/tender_evidence_index.secret:ro
     depends_on:
       - standalone
     networks:

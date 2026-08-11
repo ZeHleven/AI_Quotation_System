@@ -11,10 +11,7 @@ RUN npm run build
 
 FROM public.ecr.aws/docker/library/python:3.11-alpine3.23@sha256:f73754c398b259dfbbe482361dca8b464dea57da74efe5214966ca2ee767ee12 AS runtime
 
-ARG APP_VERSION=candidate
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
-LABEL org.opencontainers.image.title="AI Middle Office App Node" \
-      org.opencontainers.image.version="${APP_VERSION}"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -56,6 +53,10 @@ COPY --from=web-build --chown=root:root /build/ai-web/dist ./ai-web/dist
 RUN find /opt/ai-middle-office -type d -exec chmod 0755 {} + \
     && find /opt/ai-middle-office -type f -exec chmod 0644 {} + \
     && python -c "from app.main import app; import mcp_servers.tender_evidence.hybrid_client; assert app"
+
+ARG APP_VERSION=candidate
+LABEL org.opencontainers.image.title="AI Middle Office App Node" \
+      org.opencontainers.image.version="${APP_VERSION}"
 
 USER 10001:10001
 WORKDIR /opt/ai-middle-office/AI_Middle_Office

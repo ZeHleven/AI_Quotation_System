@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "production_commit": "52ccdc12c36bf69265a6d49abbe506b6f0d9c351",
+  "image_tag": "20260811-nonagent-52ccdc1",
+  "image_id": "sha256:3d96b0f2ad187676793c005740a663c8195aaaaf09c568146cf807b77a7f7dac",
+  "database_head": "20260808_0082",
+  "deployed_at": "2026-08-11T21:09:02+08:00",
+  "agent_runtime_deployed": false
+}

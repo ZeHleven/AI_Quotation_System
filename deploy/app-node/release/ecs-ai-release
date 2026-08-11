@@ -1,0 +1,800 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+readonly API_CONTAINER="ai-middle-office-app-api-1"
+readonly WORKER_CONTAINER="ai-middle-office-app-worker-1"
+readonly MYSQL_CONTAINER="ai-middle-office-mysql"
+readonly MYSQL_IMAGE="mysql:8.0.39"
+readonly APP_ROOT="/opt/ai-middle-office/app-node"
+readonly APP_COMPOSE="${APP_ROOT}/compose.yaml"
+readonly APP_DOTENV="${APP_ROOT}/.env"
+readonly APP_ENV="/etc/ai-middle-office/app.env"
+readonly APP_NETWORK="ai-middle-office-app-net"
+readonly MYSQL_CA="/etc/ai-middle-office/mysql-ca.pem"
+readonly MIGRATION_ENV="/root/.quote-consistency-phase1-migration.env"
+readonly RELEASE_ROOT="/root/ai-middle-office-releases"
+readonly BACKUP_ROOT="/data/ai-middle-office/backups/application-releases"
+readonly LOCK_FILE="/run/lock/ai-middle-office-release.lock"
+
+log() { printf '%s\n' "$*"; }
+fail() { log "ERROR|$*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+Usage:
+  sudo ai-release status
+  sudo ai-release deploy <release-id> [--approve-agent]
+  sudo ai-release purge <release-id>
+  sudo ai-release rollback <release-id>
+
+Normal releases intentionally reject database-head changes. A migration release
+still requires a dedicated migration runbook and explicit user approval.
+EOF
+}
+
+container_running() {
+  [[ "$(docker inspect "$1" --format '{{.State.Running}}' 2>/dev/null || true)" == "true" ]]
+}
+
+wait_ready() {
+  local attempt state health
+  for attempt in $(seq 1 90); do
+    state="$(docker inspect "${API_CONTAINER}" --format '{{.State.Status}}' 2>/dev/null || true)"
+    health="$(docker inspect "${API_CONTAINER}" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || true)"
+    if [[ "${state}" == "running" && "${health}" == "healthy" ]] && \
+       curl --fail --silent --show-error --max-time 8 http://127.0.0.1:9000/health/ready >/dev/null; then
+      return 0
+    fi
+    if [[ "${state}" == "exited" || "${state}" == "dead" ]]; then
+      return 1
+    fi
+    sleep 3
+  done
+  return 1
+}
+
+validate_release_id() {
+  [[ "$1" =~ ^rel-[0-9]{8}-[0-9]{6}-[0-9a-f]{7,12}$ ]] || fail "invalid_release_id=$1"
+}
+
+compose_up() {
+  local tag="$1"
+  AI_APP_IMAGE_TAG="${tag}" \
+  AI_APP_ENV_FILE="${APP_ENV}" \
+    docker compose \
+      --project-directory "${APP_ROOT}" \
+      -f "${APP_COMPOSE}" \
+      --profile worker \
+      up -d --no-build --force-recreate api worker
+}
+
+database_head() {
+  docker exec -i "${API_CONTAINER}" python - <<'PY'
+from sqlalchemy import text
+from app.core.database import engine
+with engine.connect() as connection:
+    print(connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one())
+PY
+}
+
+idle_gate() {
+  timeout 60 docker exec -i "${API_CONTAINER}" python - <<'PY'
+import os
+import redis
+from app.tasks.celery_app import celery_app
+
+def count(mapping):
+    return sum(len(items or []) for items in (mapping or {}).values())
+
+inspector = celery_app.control.inspect(timeout=5)
+ping = inspector.ping() or {}
+active = count(inspector.active())
+reserved = count(inspector.reserved())
+scheduled = count(inspector.scheduled())
+client = redis.Redis.from_url(os.environ["CELERY_BROKER_URL"], socket_connect_timeout=5, socket_timeout=5)
+queue_name = celery_app.conf.task_default_queue or "celery"
+queued = client.llen(queue_name)
+unacked = client.hlen("unacked")
+unacked_index = client.zcard("unacked_index")
+print(f"RESULT|idle_gate=workers={len(ping)}|active={active}|reserved={reserved}|scheduled={scheduled}|queued={queued}|unacked={unacked}|unacked_index={unacked_index}")
+if len(ping) != 1 or any((active, reserved, scheduled, queued, unacked, unacked_index)):
+    raise SystemExit("ERROR|application_not_idle")
+PY
+}
+
+fetch_release_file() {
+  local purpose="$1"
+  local filename="$2"
+  local output="$3"
+  local uploader="${4:-}"
+  docker exec -i "${API_CONTAINER}" python - "${purpose}" "${filename}" "${uploader}" > "${output}" <<'PY'
+import shutil
+import sys
+
+from app.main import app as _application
+from app.core.database import SessionLocal
+from app.models.file_object import FileObject
+from app.services.file_storage import get_storage_client
+
+purpose, filename, expected_uploader = sys.argv[1:]
+db = SessionLocal()
+try:
+    rows = (
+        db.query(FileObject)
+        .filter(
+            FileObject.purpose == purpose,
+            FileObject.original_filename == filename,
+        )
+        .all()
+    )
+    if len(rows) != 1:
+        raise SystemExit(f"ERROR|release_file_count={filename}:{len(rows)}")
+    row = rows[0]
+    if expected_uploader and str(row.username) != expected_uploader:
+        raise SystemExit(f"ERROR|release_file_uploader_mismatch={filename}:{row.username}")
+    client = get_storage_client()
+    response = client.get_object(row.bucket, row.object_name)
+    try:
+        shutil.copyfileobj(response, sys.stdout.buffer, length=1024 * 1024)
+    finally:
+        response.close()
+        response.release_conn()
+finally:
+    db.close()
+PY
+}
+
+validate_release_uploader() {
+  local purpose="$1"
+  local uploader="$2"
+  docker exec -i "${API_CONTAINER}" python - "${purpose}" "${uploader}" <<'PY'
+import sys
+
+from sqlalchemy.orm import selectinload
+
+from app.main import app as _application
+from app.core.database import SessionLocal
+from app.models.file_object import FileObject
+from app.models.user import User
+from app.services.rbac import get_effective_roles
+
+purpose, expected_uploader = sys.argv[1:]
+db = SessionLocal()
+try:
+    rows = (
+        db.query(FileObject)
+        .filter(
+            FileObject.purpose == purpose,
+            FileObject.original_filename == "release-manifest.json",
+        )
+        .all()
+    )
+    if len(rows) != 1 or str(rows[0].username) != expected_uploader:
+        raise SystemExit("ERROR|release_manifest_database_uploader_mismatch")
+    user = (
+        db.query(User)
+        .options(selectinload(User.role_assignments))
+        .filter(User.username == expected_uploader)
+        .first()
+    )
+    roles = set(get_effective_roles(user)) if user else set()
+    if not ({"system_admin", "admin"} & roles):
+        raise SystemExit("ERROR|release_uploader_is_not_current_admin")
+    print(f"PASS|release_uploader_verified={expected_uploader}")
+finally:
+    db.close()
+PY
+}
+
+cleanup_transfer() {
+  local manifest_path="$1"
+  local manifest_base64
+  manifest_base64="$(base64 -w0 "${manifest_path}")"
+  docker exec -i "${API_CONTAINER}" python - "${manifest_base64}" <<'PY'
+import base64
+import json
+import sys
+
+from app.main import app as _application
+from app.core.config import settings
+from app.core.database import SessionLocal
+from app.models.file_object import FileObject
+from app.services.file_storage import get_storage_client
+
+manifest = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8-sig"))
+purpose = manifest["transfer"]["purpose"]
+uploader = manifest["upload"]["username"]
+expected = {item["filename"]: int(item["size_bytes"]) for item in manifest["transfer"]["parts"]}
+expected["release-manifest.json"] = None
+
+db = SessionLocal()
+client = get_storage_client()
+try:
+    rows = db.query(FileObject).filter(FileObject.purpose == purpose).order_by(FileObject.id.asc()).all()
+    if not rows:
+        objects = list(client.list_objects(settings.minio_bucket, prefix=f"{purpose}/", recursive=True))
+        if objects:
+            raise SystemExit("ERROR|transfer_objects_exist_without_database_rows")
+        print("PASS|release_transfer_cleanup=already_complete")
+        raise SystemExit(0)
+    if len(rows) != len(expected):
+        raise SystemExit(f"ERROR|transfer_file_count={len(rows)}|expected={len(expected)}")
+    row_by_key = {}
+    seen = {}
+    for row in rows:
+        filename = str(row.original_filename)
+        if filename not in expected or filename in seen:
+            raise SystemExit(f"ERROR|unexpected_or_duplicate_transfer_file={filename}")
+        if str(row.username) != uploader:
+            raise SystemExit(f"ERROR|transfer_uploader_mismatch={filename}")
+        if not str(row.object_name).startswith(f"{purpose}/{uploader}/"):
+            raise SystemExit(f"ERROR|transfer_key_out_of_scope={row.object_name}")
+        expected_size = expected[filename]
+        if expected_size is not None and int(row.size_bytes) != expected_size:
+            raise SystemExit(f"ERROR|transfer_size_mismatch={filename}")
+        seen[filename] = row
+        row_by_key[str(row.object_name)] = row
+    if set(seen) != set(expected):
+        raise SystemExit("ERROR|transfer_filename_set_mismatch")
+
+    objects = list(client.list_objects(settings.minio_bucket, prefix=f"{purpose}/", recursive=True))
+    object_names = {str(item.object_name) for item in objects}
+    if not object_names.issubset(set(row_by_key)):
+        raise SystemExit("ERROR|unexpected_objects_under_transfer_prefix")
+    for item in objects:
+        row = row_by_key[str(item.object_name)]
+        if int(item.size) != int(row.size_bytes):
+            raise SystemExit(f"ERROR|transfer_object_size_mismatch={item.object_name}")
+    for object_name in sorted(object_names):
+        client.remove_object(settings.minio_bucket, object_name)
+    if list(client.list_objects(settings.minio_bucket, prefix=f"{purpose}/", recursive=True)):
+        raise SystemExit("ERROR|transfer_objects_remain")
+    for row in rows:
+        db.delete(row)
+    db.commit()
+    print(f"PASS|release_transfer_cleanup=objects={len(object_names)}|db_rows={len(rows)}")
+except Exception:
+    db.rollback()
+    raise
+finally:
+    db.close()
+PY
+}
+
+create_mysql_client_config() {
+  local target="$1"
+  python3 - "${MIGRATION_ENV}" "${target}" <<'PY'
+import os
+import sys
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+source, target = sys.argv[1:]
+url = next(
+    (
+        line.split("=", 1)[1].strip()
+        for line in Path(source).read_text(encoding="utf-8").splitlines()
+        if line.startswith("MIGRATION_DATABASE_URL=")
+    ),
+    "",
+)
+parsed = urlsplit(url)
+if unquote(parsed.username or "") != "ai_migrator" or parsed.hostname != "ai-mysql" or parsed.path != "/ai_quotation":
+    raise SystemExit("ERROR|migration_database_url_contract_invalid")
+password = unquote(parsed.password or "")
+if not password:
+    raise SystemExit("ERROR|migration_password_missing")
+def quote(value):
+    return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"') + '"'
+content = "\n".join((
+    "[client]",
+    'user="ai_migrator"',
+    f"password={quote(password)}",
+    'host="ai-mysql"',
+    "port=3306",
+    "protocol=tcp",
+    "default-character-set=utf8mb4",
+    "ssl-mode=VERIFY_CA",
+    'ssl-ca="/run/secrets/mysql-ca.pem"',
+    "",
+))
+Path(target).write_text(content, encoding="utf-8", newline="\n")
+os.chmod(target, 0o600)
+PY
+}
+
+create_backup() {
+  local release_id="$1"
+  local expected_head="$2"
+  local release_dir="$3"
+  local stamp backup_dir backup_file temp_dir backup_sha backup_size
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  backup_dir="${BACKUP_ROOT}/${release_id}/pre-cutover-${stamp}"
+  backup_file="${backup_dir}/ai_quotation-pre-cutover.sql.gz"
+  temp_dir="$(mktemp -d /root/ai-release-backup.XXXXXXXX)"
+  backup_temp_dir="${temp_dir}"
+  chmod 0700 "${temp_dir}"
+  mkdir -p "${backup_dir}"
+  chmod 0700 "${backup_dir}"
+  create_mysql_client_config "${temp_dir}/migrator.cnf"
+
+  old_app_stopped=true
+  docker stop --time 90 "${WORKER_CONTAINER}" "${API_CONTAINER}" >/dev/null
+  docker run --rm \
+    --user root \
+    --network "${APP_NETWORK}" \
+    --ip 10.240.10.10 \
+    --volume "${temp_dir}/migrator.cnf:/run/secrets/mysql-client.cnf:ro" \
+    --volume "${MYSQL_CA}:/run/secrets/mysql-ca.pem:ro" \
+    "${MYSQL_IMAGE}" \
+    mysqldump \
+      --defaults-extra-file=/run/secrets/mysql-client.cnf \
+      --single-transaction \
+      --quick \
+      --skip-lock-tables \
+      --skip-triggers \
+      --skip-routines \
+      --skip-events \
+      --no-tablespaces \
+      --set-gtid-purged=OFF \
+      --databases ai_quotation \
+    | gzip -1 > "${backup_file}"
+
+  gzip -t "${backup_file}"
+  gzip -cd "${backup_file}" | tail -n 12 | grep -Fq -- '-- Dump completed on'
+  python3 - "${backup_file}" "${expected_head}" <<'PY'
+import gzip
+import sys
+
+path, expected_head = sys.argv[1:]
+markers = {
+    f"INSERT INTO `alembic_version` VALUES ('{expected_head}')": False,
+    "Table structure for table `users`": False,
+    "Table structure for table `budget_project_profiles`": False,
+    "Table structure for table `quote_jobs`": False,
+    "Table structure for table `file_objects`": False,
+}
+with gzip.open(path, "rt", encoding="utf-8", errors="replace") as handle:
+    for line in handle:
+        for marker in tuple(markers):
+            if not markers[marker] and marker in line:
+                markers[marker] = True
+        if all(markers.values()):
+            break
+missing = [marker for marker, found in markers.items() if not found]
+if missing:
+    raise SystemExit("ERROR|backup_structure_missing=" + ",".join(missing))
+PY
+  backup_sha="$(sha256sum "${backup_file}" | awk '{print $1}')"
+  backup_size="$(stat -c '%s' "${backup_file}")"
+  [[ "${backup_size}" -gt 0 ]] || fail "backup_empty"
+  printf '%s  %s\n' "${backup_sha}" "$(basename "${backup_file}")" > "${backup_dir}/SHA256SUMS"
+  printf 'backup=%s\nbackup_sha256=%s\nbackup_size=%s\n' "${backup_file}" "${backup_sha}" "${backup_size}" >> "${release_dir}/release-state.txt"
+  rm -f -- "${temp_dir}/migrator.cnf"
+  rmdir -- "${temp_dir}"
+  backup_temp_dir=""
+
+  docker start "${API_CONTAINER}" "${WORKER_CONTAINER}" >/dev/null
+  if ! wait_ready; then
+    fail "current_application_failed_to_restart_after_backup"
+  fi
+  old_app_stopped=false
+  log "RESULT|database_backup=${backup_file}|sha256=${backup_sha}|size=${backup_size}|restore_drill=not_required_no_migration"
+}
+
+write_image_tag() {
+  local tag="$1"
+  local temp
+  temp="$(mktemp "${APP_ROOT}/.env.ai-release.XXXXXXXX")"
+  python3 - "${APP_DOTENV}" "${temp}" "${tag}" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+source, target, value = sys.argv[1:]
+path = Path(source)
+lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+key = "AI_APP_IMAGE_TAG"
+matches = [
+    line for line in lines
+    if line.strip() and not line.lstrip().startswith("#") and "=" in line
+    and line.split("=", 1)[0].strip() == key
+]
+if len(matches) > 1:
+    raise SystemExit("ERROR|compose_image_tag_duplicate")
+rendered = []
+updated = False
+for line in lines:
+    if line.strip() and not line.lstrip().startswith("#") and "=" in line and line.split("=", 1)[0].strip() == key:
+        rendered.append(f"{key}={value}")
+        updated = True
+    else:
+        rendered.append(line)
+if not updated:
+    rendered.append(f"{key}={value}")
+Path(target).write_text("\n".join(rendered) + "\n", encoding="utf-8", newline="\n")
+os.chmod(target, 0o600)
+PY
+  chown --reference="${APP_DOTENV}" "${temp}"
+  chmod 0600 "${temp}"
+  mv -f -- "${temp}" "${APP_DOTENV}"
+}
+
+show_status() {
+  local api_id worker_id version head ready last_state
+  api_id="$(docker inspect "${API_CONTAINER}" --format '{{.Image}}' 2>/dev/null || true)"
+  worker_id="$(docker inspect "${WORKER_CONTAINER}" --format '{{.Image}}' 2>/dev/null || true)"
+  version="$(docker image inspect "${api_id}" --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || true)"
+  head="$(database_head 2>/dev/null || true)"
+  ready="$(curl --silent --max-time 8 http://127.0.0.1:9000/health/ready 2>/dev/null || true)"
+  last_state="$(find "${RELEASE_ROOT}" -mindepth 2 -maxdepth 2 -name release-state.txt -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2- || true)"
+  log "STATUS|version=${version}|api_image=${api_id}|worker_image=${worker_id}|database_head=${head}|ready_payload=${ready}|last_state=${last_state}"
+}
+
+deploy_release() {
+  local release_id="$1"
+  local approve_agent="$2"
+  local purpose release_dir manifest_path uploader archive_name archive_path image_ref image_tag image_id image_user image_version archive_size archive_sha from_head target_head contains_agent agent_runtime_allowed contains_migration part_count
+  local current_id current_tag state_file
+  release_dir="${RELEASE_ROOT}/${release_id}"
+  purpose="release-transfer-${release_id}"
+  manifest_path="${release_dir}/release-manifest.json"
+  archive_path=""
+  state_file="${release_dir}/release-state.txt"
+
+  [[ ! -e "${release_dir}" ]] || fail "release_directory_already_exists=${release_dir}"
+  mkdir -p "${release_dir}/parts"
+  chmod 0700 "${release_dir}" "${release_dir}/parts"
+  fetch_release_file "${purpose}" "release-manifest.json" "${manifest_path}"
+
+  mapfile -t manifest_values < <(python3 - "${manifest_path}" "${release_id}" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+path, expected_release_id = sys.argv[1:]
+data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+if data.get("schema_version") != 1 or data.get("release_id") != expected_release_id:
+    raise SystemExit("ERROR|release_manifest_identity_invalid")
+purpose = data.get("transfer", {}).get("purpose")
+if purpose != f"release-transfer-{expected_release_id}":
+    raise SystemExit("ERROR|release_manifest_purpose_invalid")
+uploader = data.get("upload", {}).get("username", "")
+roles = data.get("upload", {}).get("roles", [])
+if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", uploader) or not ({"system_admin", "admin"} & set(roles)):
+    raise SystemExit("ERROR|release_manifest_uploader_invalid")
+image = data.get("image", {})
+database = data.get("database", {})
+gates = data.get("gates", {})
+source = data.get("source", {})
+if not re.fullmatch(r"[0-9a-f]{40}", source.get("commit", "")):
+    raise SystemExit("ERROR|release_source_commit_invalid")
+tag = image.get("tag", "")
+reference = image.get("reference", "")
+if not re.fullmatch(r"[0-9]{8}-[0-9]{6}-[0-9a-f]{7,12}", tag):
+    raise SystemExit("ERROR|release_image_tag_invalid")
+if reference != f"ai-middle-office-app:{tag}":
+    raise SystemExit("ERROR|release_image_reference_invalid")
+if image.get("user") != "10001:10001" or image.get("version") != tag:
+    raise SystemExit("ERROR|release_image_metadata_invalid")
+if not re.fullmatch(r"sha256:[0-9a-f]{64}", image.get("id", "")):
+    raise SystemExit("ERROR|release_image_id_invalid")
+if not re.fullmatch(r"[0-9a-f]{64}", image.get("archive_sha256", "")):
+    raise SystemExit("ERROR|release_archive_sha_invalid")
+archive_filename = image.get("archive_filename", "")
+if not re.fullmatch(r"[A-Za-z0-9._-]{1,180}\.tar", archive_filename):
+    raise SystemExit("ERROR|release_archive_filename_invalid")
+archive_size = image.get("archive_size_bytes")
+if isinstance(archive_size, bool) or not isinstance(archive_size, int) or archive_size <= 0:
+    raise SystemExit("ERROR|release_archive_size_invalid")
+parts = data.get("transfer", {}).get("parts", [])
+if not parts or len(parts) > 20:
+    raise SystemExit("ERROR|release_part_count_invalid")
+seen = set()
+for index, part in enumerate(parts, start=1):
+    filename = part.get("filename", "")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,220}\.part[0-9]{3}", filename) or filename in seen:
+        raise SystemExit("ERROR|release_part_filename_invalid")
+    if filename != f"{archive_filename}.part{index:03d}":
+        raise SystemExit("ERROR|release_part_sequence_invalid")
+    if not isinstance(part.get("size_bytes"), int) or not (0 < part["size_bytes"] <= 50 * 1024 * 1024):
+        raise SystemExit("ERROR|release_part_size_invalid")
+    if not re.fullmatch(r"[0-9a-f]{64}", part.get("sha256", "")):
+        raise SystemExit("ERROR|release_part_sha_invalid")
+    seen.add(filename)
+if sum(part["size_bytes"] for part in parts) != archive_size:
+    raise SystemExit("ERROR|release_part_total_size_invalid")
+for value in (database.get("from_head", ""), database.get("target_head", "")):
+    if not re.fullmatch(r"[0-9A-Za-z_]+", value):
+        raise SystemExit("ERROR|release_database_head_invalid")
+print(uploader)
+print(image["archive_filename"])
+print(reference)
+print(tag)
+print(image["id"])
+print(image["user"])
+print(image["version"])
+print(int(image["archive_size_bytes"]))
+print(image["archive_sha256"])
+print(database["from_head"])
+print(database["target_head"])
+print("true" if gates.get("contains_agent_changes") else "false")
+print("true" if gates.get("agent_runtime_allowed") else "false")
+print("true" if gates.get("contains_migration") else "false")
+print(len(parts))
+PY
+  )
+  [[ "${#manifest_values[@]}" == "15" ]] || fail "release_manifest_value_count=${#manifest_values[@]}"
+  uploader="${manifest_values[0]}"
+  archive_name="${manifest_values[1]}"
+  image_ref="${manifest_values[2]}"
+  image_tag="${manifest_values[3]}"
+  image_id="${manifest_values[4]}"
+  image_user="${manifest_values[5]}"
+  image_version="${manifest_values[6]}"
+  archive_size="${manifest_values[7]}"
+  archive_sha="${manifest_values[8]}"
+  from_head="${manifest_values[9]}"
+  target_head="${manifest_values[10]}"
+  contains_agent="${manifest_values[11]}"
+  agent_runtime_allowed="${manifest_values[12]}"
+  contains_migration="${manifest_values[13]}"
+  part_count="${manifest_values[14]}"
+  archive_path="${release_dir}/${archive_name}"
+
+  validate_release_uploader "${purpose}" "${uploader}"
+
+  [[ "${contains_migration}" == "false" && "${from_head}" == "${target_head}" ]] || fail "migration_release_requires_dedicated_runbook|from=${from_head}|target=${target_head}"
+  if [[ "${contains_agent}" == "true" && "${approve_agent}" != "true" ]]; then
+    fail "agent_release_requires_explicit_approval"
+  fi
+
+  local production_head
+  production_head="$(database_head)"
+  [[ "${production_head}" == "${from_head}" ]] || fail "production_database_head=${production_head}|expected=${from_head}"
+
+  python3 - "${manifest_path}" > "${release_dir}/parts.tsv" <<'PY'
+import json
+import sys
+from pathlib import Path
+data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8-sig"))
+for part in data["transfer"]["parts"]:
+    print(f"{part['filename']}\t{part['size_bytes']}\t{part['sha256']}")
+PY
+  while IFS=$'\t' read -r filename expected_size expected_sha; do
+    local part_path actual_size actual_sha
+    part_path="${release_dir}/parts/${filename}"
+    fetch_release_file "${purpose}" "${filename}" "${part_path}" "${uploader}"
+    actual_size="$(stat -c '%s' "${part_path}")"
+    actual_sha="$(sha256sum "${part_path}" | awk '{print $1}')"
+    [[ "${actual_size}" == "${expected_size}" ]] || fail "release_part_size_mismatch=${filename}"
+    [[ "${actual_sha}" == "${expected_sha}" ]] || fail "release_part_sha_mismatch=${filename}"
+  done < "${release_dir}/parts.tsv"
+
+  : > "${archive_path}"
+  while IFS=$'\t' read -r filename _ _; do
+    cat -- "${release_dir}/parts/${filename}" >> "${archive_path}"
+  done < "${release_dir}/parts.tsv"
+  [[ "$(stat -c '%s' "${archive_path}")" == "${archive_size}" ]] || fail "release_archive_size_mismatch"
+  [[ "$(sha256sum "${archive_path}" | awk '{print $1}')" == "${archive_sha}" ]] || fail "release_archive_sha_mismatch"
+  log "PASS|release_bundle_downloaded=parts=${part_count}|sha256=${archive_sha}"
+
+  docker load --input "${archive_path}"
+  [[ "$(docker image inspect "${image_ref}" --format '{{.Id}}')" == "${image_id}" ]] || fail "loaded_image_id_mismatch"
+  [[ "$(docker image inspect "${image_ref}" --format '{{.Config.User}}')" == "${image_user}" ]] || fail "loaded_image_user_mismatch"
+  [[ "$(docker image inspect "${image_ref}" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" == "${image_version}" ]] || fail "loaded_image_version_mismatch"
+  log "PASS|release_image_loaded=${image_ref}|image_id=${image_id}"
+
+  current_id="$(docker inspect "${API_CONTAINER}" --format '{{.Image}}')"
+  [[ "$(docker inspect "${WORKER_CONTAINER}" --format '{{.Image}}')" == "${current_id}" ]] || fail "api_worker_image_mismatch_before_cutover"
+  current_tag="$(awk -F= '$1 == "AI_APP_IMAGE_TAG" {print $2}' "${APP_DOTENV}" | tail -n1)"
+  [[ -n "${current_tag}" ]] || fail "current_image_tag_missing"
+  [[ "$(docker image inspect "ai-middle-office-app:${current_tag}" --format '{{.Id}}')" == "${current_id}" ]] || fail "current_image_tag_does_not_match_running_image"
+
+  local source_commit
+  source_commit="$(python3 - "${manifest_path}" <<'PY'
+import json
+import sys
+from pathlib import Path
+print(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8-sig"))["source"]["commit"])
+PY
+  )"
+  printf 'release_id=%s\nstatus=preparing\nsource_commit=%s\nold_image_id=%s\nold_image_tag=%s\nnew_image_id=%s\nnew_image_tag=%s\ndatabase_head=%s\n' \
+    "${release_id}" "${source_commit}" \
+    "${current_id}" "${current_tag}" "${image_id}" "${image_tag}" "${production_head}" > "${state_file}"
+
+  idle_gate
+  create_backup "${release_id}" "${production_head}" "${release_dir}"
+  idle_gate
+
+  cp -a -- "${APP_DOTENV}" "${release_dir}/app-dotenv.before"
+  cp -a -- "${APP_COMPOSE}" "${release_dir}/compose.yaml.before"
+  rollback_old_tag="${current_tag}"
+  rollback_release_dir="${release_dir}"
+  switch_started=true
+  write_image_tag "${image_tag}"
+  AI_APP_IMAGE_TAG="${image_tag}" AI_APP_ENV_FILE="${APP_ENV}" \
+    docker compose --project-directory "${APP_ROOT}" -f "${APP_COMPOSE}" --profile worker config --quiet
+
+  compose_up "${image_tag}"
+  if ! wait_ready; then
+    docker logs --tail 180 "${API_CONTAINER}" >&2 || true
+    docker logs --tail 180 "${WORKER_CONTAINER}" >&2 || true
+    fail "new_application_health_timeout"
+  fi
+
+  for container in "${API_CONTAINER}" "${WORKER_CONTAINER}"; do
+    [[ "$(docker inspect "${container}" --format '{{.Image}}')" == "${image_id}" ]] || fail "new_container_image_mismatch=${container}"
+    [[ "$(docker inspect "${container}" --format '{{.Config.User}}')" == "10001:10001" ]] || fail "new_container_user_mismatch=${container}"
+    [[ "$(docker inspect "${container}" --format '{{.HostConfig.ReadonlyRootfs}}')" == "true" ]] || fail "new_container_rootfs_not_readonly=${container}"
+    [[ "$(docker inspect "${container}" --format '{{json .HostConfig.CapDrop}}')" == '["ALL"]' ]] || fail "new_container_cap_drop_mismatch=${container}"
+    [[ "$(docker inspect "${container}" --format '{{json .HostConfig.SecurityOpt}}')" == '["no-new-privileges:true"]' ]] || fail "new_container_security_opt_mismatch=${container}"
+  done
+
+  timeout 150 docker exec -i "${API_CONTAINER}" python - "${target_head}" "${agent_runtime_allowed}" <<'PY'
+import json
+import sys
+import time
+import urllib.request
+from sqlalchemy import text
+from app.core.config import settings
+from app.core.database import engine
+from app.main import app
+from app.tasks.celery_app import celery_app
+
+expected_head, agent_runtime_allowed = sys.argv[1:]
+with urllib.request.urlopen("http://127.0.0.1:9000/health/ready", timeout=20) as response:
+    ready = json.loads(response.read())
+if response.status != 200 or ready.get("status") != "ready":
+    raise SystemExit("ERROR|ready_payload_invalid")
+ping = {}
+for _ in range(15):
+    ping = celery_app.control.inspect(timeout=5).ping() or {}
+    if len(ping) == 1:
+        break
+    time.sleep(2)
+if len(ping) != 1:
+    raise SystemExit(f"ERROR|worker_count={len(ping)}")
+with engine.connect() as connection:
+    head = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+if head != expected_head:
+    raise SystemExit(f"ERROR|database_head={head}")
+if settings.auto_run_db_migrations:
+    raise SystemExit("ERROR|auto_migrations_enabled")
+routes = [getattr(route, "path", "") for route in app.routes if "/bid-assessment" in getattr(route, "path", "")]
+if agent_runtime_allowed == "false" and routes:
+    raise SystemExit(f"ERROR|unexpected_bid_assessment_routes={routes}")
+print(f"RESULT|new_application=ready|worker_count=1|database_head={head}|auto_migrations=false|bid_assessment_routes={len(routes)}")
+PY
+
+  cat > "${release_dir}/rollback.sh" <<EOF
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+cp -a -- '${release_dir}/app-dotenv.before' '${APP_DOTENV}'
+AI_APP_IMAGE_TAG='${current_tag}' AI_APP_ENV_FILE='${APP_ENV}' docker compose --project-directory '${APP_ROOT}' -f '${APP_COMPOSE}' --profile worker up -d --no-build --force-recreate api worker
+for attempt in \$(seq 1 90); do
+  if curl --fail --silent --max-time 8 http://127.0.0.1:9000/health/ready >/dev/null; then
+    echo 'PASS|manual_rollback=old_application_ready'
+    exit 0
+  fi
+  sleep 3
+done
+echo 'ERROR|manual_rollback_health_timeout' >&2
+exit 1
+EOF
+  chmod 0700 "${release_dir}/rollback.sh"
+  printf 'status=active_pending_manual_acceptance\ncutover_completed_utc=%s\n' "$(date -u +%Y%m%dT%H%M%SZ)" >> "${state_file}"
+  success=true
+
+  if cleanup_transfer "${manifest_path}"; then
+    rm -rf -- "${release_dir}/parts"
+    printf 'transfer_cleanup=complete\n' >> "${state_file}"
+  else
+    log "WARNING|release_transfer_cleanup_failed|retry=sudo ai-release purge ${release_id}"
+    printf 'transfer_cleanup=pending\n' >> "${state_file}"
+  fi
+  chmod 0600 "${state_file}"
+  log "PASS|production_deploy=complete|release_id=${release_id}|image=${image_ref}|rollback=${release_dir}/rollback.sh"
+}
+
+purge_release() {
+  local release_id="$1"
+  local manifest="${RELEASE_ROOT}/${release_id}/release-manifest.json"
+  [[ -f "${manifest}" ]] || fail "release_manifest_missing=${manifest}"
+  cleanup_transfer "${manifest}"
+  log "PASS|release_purge=complete|release_id=${release_id}"
+}
+
+rollback_release() {
+  local release_id="$1"
+  local rollback="${RELEASE_ROOT}/${release_id}/rollback.sh"
+  local state_file="${RELEASE_ROOT}/${release_id}/release-state.txt"
+  local release_status expected_new_image expected_head current_image current_head
+  [[ -x "${rollback}" ]] || fail "rollback_script_missing=${rollback}"
+  [[ -f "${state_file}" ]] || fail "release_state_missing=${state_file}"
+  release_status="$(awk -F= '$1 == "status" {value=$2} END {print value}' "${state_file}")"
+  [[ "${release_status}" == "active_pending_manual_acceptance" || "${release_status}" == "active_accepted" ]] || fail "release_not_active=${release_status}"
+  expected_new_image="$(awk -F= '$1 == "new_image_id" {print $2}' "${state_file}" | tail -n1)"
+  expected_head="$(awk -F= '$1 == "database_head" {print $2}' "${state_file}" | tail -n1)"
+  current_image="$(docker inspect "${API_CONTAINER}" --format '{{.Image}}')"
+  current_head="$(database_head)"
+  [[ "${current_image}" == "${expected_new_image}" ]] || fail "rollback_release_is_not_current_image"
+  [[ "${current_head}" == "${expected_head}" ]] || fail "rollback_database_head_mismatch=${current_head}|expected=${expected_head}"
+  bash "${rollback}"
+  printf 'manual_rollback_completed_utc=%s\nstatus=rolled_back\n' "$(date -u +%Y%m%dT%H%M%SZ)" >> "${state_file}"
+}
+
+[[ "$(id -u)" == "0" ]] || fail "run_as_root_required"
+for command in base64 docker python3 curl gzip sha256sum flock; do
+  command -v "${command}" >/dev/null || fail "required_command_missing=${command}"
+done
+for path in "${APP_COMPOSE}" "${APP_DOTENV}" "${APP_ENV}" "${MYSQL_CA}" "${MIGRATION_ENV}"; do
+  [[ -f "${path}" ]] || fail "required_file_missing=${path}"
+done
+mkdir -p "${RELEASE_ROOT}" "${BACKUP_ROOT}"
+chmod 0700 "${RELEASE_ROOT}" "${BACKUP_ROOT}"
+exec 9>"${LOCK_FILE}"
+flock -n 9 || fail "another_release_operation_is_running"
+
+old_app_stopped=false
+switch_started=false
+success=false
+rollback_old_tag=""
+rollback_release_dir=""
+backup_temp_dir=""
+
+on_exit() {
+  local rc=$?
+  if [[ "${old_app_stopped}" == "true" ]]; then
+    docker start "${API_CONTAINER}" "${WORKER_CONTAINER}" >/dev/null 2>&1 || true
+    wait_ready || true
+  fi
+  if [[ -n "${backup_temp_dir}" && "${backup_temp_dir}" == /root/ai-release-backup.* ]]; then
+    rm -f -- "${backup_temp_dir}/migrator.cnf" || true
+    rmdir -- "${backup_temp_dir}" >/dev/null 2>&1 || true
+  fi
+  if [[ "${switch_started}" == "true" && "${success}" != "true" && -n "${rollback_old_tag}" && -n "${rollback_release_dir}" ]]; then
+    log "WARNING|automatic_application_rollback=starting"
+    cp -a -- "${rollback_release_dir}/app-dotenv.before" "${APP_DOTENV}" || true
+    compose_up "${rollback_old_tag}" || true
+    if wait_ready; then
+      log "PASS|automatic_application_rollback=ready"
+    else
+      log "ERROR|automatic_application_rollback_needs_attention"
+    fi
+  fi
+  exit "${rc}"
+}
+trap on_exit EXIT
+
+command_name="${1:-}"
+case "${command_name}" in
+  status)
+    show_status
+    ;;
+  deploy)
+    release_id="${2:-}"
+    validate_release_id "${release_id}"
+    approve_agent=false
+    [[ "${3:-}" == "--approve-agent" ]] && approve_agent=true
+    [[ -z "${3:-}" || "${3:-}" == "--approve-agent" ]] || fail "unknown_deploy_option=${3:-}"
+    deploy_release "${release_id}" "${approve_agent}"
+    ;;
+  purge)
+    release_id="${2:-}"
+    validate_release_id "${release_id}"
+    purge_release "${release_id}"
+    ;;
+  rollback)
+    release_id="${2:-}"
+    validate_release_id "${release_id}"
+    rollback_release "${release_id}"
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

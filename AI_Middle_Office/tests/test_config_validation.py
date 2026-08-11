@@ -317,7 +317,8 @@ def test_public_app_does_not_mount_internal_experimental_routes():
             "-c",
             (
                 "from app.main import app; "
-                "paths={route.path for route in app.routes}; "
+                "paths={route.path for route in app.routes "
+                "if getattr(route, 'path', None)}; "
                 "print(any('/admin/codex-worker/' in path for path in paths), "
                 "any('/admin/dwg-quantity-trial/' in path for path in paths))"
             ),
@@ -378,7 +379,8 @@ def test_public_app_disables_interactive_api_documentation():
             "-c",
             (
                 "from app.main import app; "
-                "paths={route.path for route in app.routes}; "
+                "paths={route.path for route in app.routes "
+                "if getattr(route, 'path', None)}; "
                 "print('/docs' in paths, '/redoc' in paths, '/openapi.json' in paths)"
             ),
         ],

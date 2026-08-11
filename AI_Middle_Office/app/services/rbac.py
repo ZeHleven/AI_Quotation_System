@@ -113,8 +113,6 @@ def _roles_with_implications(user: User) -> set[str]:
         roles.update({"quote_operator", "quote_user"})
         roles.update({"cost_viewer", "cost_editor", "cost_approver"})
         roles.update({"enterprise_profile_viewer", "enterprise_profile_editor", "enterprise_profile_approver"})
-    if "staff" in roles:
-        roles.add("quote_user")
     if "cost_approver" in roles:
         roles.update({"cost_viewer", "cost_editor"})
     if "cost_editor" in roles:
@@ -127,8 +125,6 @@ def _roles_with_implications(user: User) -> set[str]:
         roles.update({"project_viewer", "project_member", "project_manager"})
     if "manager" in roles:
         roles.update({"project_viewer", "project_member", "project_manager"})
-    if "staff" in roles:
-        roles.update({"project_viewer", "project_member"})
     if "project_manager" in roles:
         roles.update({"project_viewer", "project_member"})
     if "project_member" in roles:
@@ -186,6 +182,8 @@ def bump_role_version(user: User) -> None:
 
 
 def get_available_modules(user: User) -> list[dict]:
+    assigned_roles = set(get_effective_roles(user))
+    staff_only = assigned_roles == {"staff"}
     roles = set(_roles_with_implications(user))
     modules: list[dict] = []
 
@@ -231,7 +229,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available",
             }
         )
-    if {"system_admin", "admin", "staff", "manager", "project_viewer", "project_member", "project_manager"} & roles:
+    if {"system_admin", "admin", "manager", "project_viewer", "project_member", "project_manager"} & roles:
         modules.append(
             {
                 "key": "project_progress",
@@ -240,7 +238,10 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_project_progress else "pending",
             }
         )
-    if BUDGET_PROJECT_ACCESS_ROLES & roles:
+    # A staff-only account reaches budget projects through the unified
+    # "project quotation" workspace. Do not expose a fourth standalone
+    # module for the same workflow.
+    if BUDGET_PROJECT_ACCESS_ROLES & roles and not staff_only:
         modules.append(
             {
                 "key": "budget_projects",
@@ -249,7 +250,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_budget_projects else "pending",
             }
         )
-    if {"system_admin", "admin", "staff", "quote_user", "quote_operator"} & roles:
+    if {"system_admin", "admin", "quote_user", "quote_operator"} & roles:
         modules.append(
             {
                 "key": "pricing_agent",
@@ -259,7 +260,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "stage": "trial",
             }
         )
-    if (BUDGET_PRICING_VIEW_ROLES | BUDGET_PROJECT_ACCESS_ROLES) & roles:
+    if (BUDGET_PRICING_VIEW_ROLES | BUDGET_PROJECT_ACCESS_ROLES) & roles and not staff_only:
         budget_pricing_enabled = settings.feature_budget_projects and settings.feature_budget_pricing
         can_reach_budget_project = bool(BUDGET_PROJECT_ACCESS_ROLES & roles)
         can_view_pricing = bool(BUDGET_PRICING_VIEW_ROLES & roles)
@@ -276,7 +277,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "stage": "trial",
             }
         )
-    if {"system_admin", "admin"} & roles:
+    if {"system_admin", "admin", "staff"} & roles:
         modules.append(
             {
                 "key": "account_quotas",
@@ -286,7 +287,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "stage": "trial",
             }
         )
-    if {"system_admin", "admin", "cost_viewer", "cost_editor", "cost_approver", "cost_exporter"} & roles:
+    if {"system_admin", "admin", "staff", "cost_viewer", "cost_editor", "cost_approver", "cost_exporter"} & roles:
         modules.append(
             {
                 "key": "cost_db",
@@ -295,7 +296,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_cost_db else "pending",
             }
         )
-    if {"system_admin", "admin", "staff", "quote_user"} & roles:
+    if {"system_admin", "admin", "quote_user"} & roles:
         modules.append(
             {
                 "key": "requirement_standardization",
@@ -304,7 +305,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_requirement_standardization else "pending",
             }
         )
-    if {"system_admin", "admin", "staff", "quote_user"} & roles:
+    if {"system_admin", "admin", "quote_user"} & roles:
         modules.append(
             {
                 "key": "dwg_trial",
@@ -333,7 +334,7 @@ def get_available_modules(user: User) -> list[dict]:
                 "status": "available" if settings.feature_enterprise_profile else "pending",
             }
         )
-    if {"system_admin", "admin", "staff", "quote_user", "quote_operator"} & roles:
+    if {"system_admin", "admin", "quote_user", "quote_operator"} & roles:
         modules.append(
             {
                 "key": "agent_center",
@@ -387,6 +388,7 @@ def get_default_home_path(user: User) -> str:
 
 def serialize_user_for_rbac(user: User) -> dict:
     roles = get_effective_roles(user)
+    quota_reserved = int(getattr(user, "quota_reserved", 0) or 0)
     return {
         "id": user.id,
         "username": user.username,
@@ -394,6 +396,8 @@ def serialize_user_for_rbac(user: User) -> dict:
         "roles": roles,
         "role_version": int(user.role_version or 1),
         "quota": user.quota,
+        "quota_reserved": quota_reserved,
+        "quota_available": max(0, int(user.quota or 0) - quota_reserved),
         "is_active": bool(user.is_active),
         "must_change_password": bool(user.must_change_password),
         "dingtalk_bound": bool(user.dingtalk_user_id),
@@ -491,6 +495,78 @@ def grant_role(
         # transaction boundary.  Flush role/event state without exposing a
         # partially-created user if a later step fails.
         db.flush()
+    return get_effective_roles(target_user)
+
+
+def replace_roles(
+    db: Session,
+    *,
+    target_user: User,
+    roles: Iterable[str],
+    operator: User,
+    note: str | None,
+    request: Request | None = None,
+) -> list[str]:
+    """Atomically replace a user's assigned role set and audit the real changes."""
+    note = _require_note(note)
+    desired_roles = _sort_roles(normalize_role(role) for role in roles)
+    desired_set = set(desired_roles)
+    current_roles = set(get_effective_roles(target_user))
+    if desired_set == current_roles:
+        return _sort_roles(current_roles)
+
+    if (
+        "system_admin" in current_roles
+        and "system_admin" not in desired_set
+        and _active_system_admin_count(db) <= 1
+    ):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="不能撤销最后一个 system_admin")
+
+    assignments = {
+        assignment.role: assignment
+        for assignment in (getattr(target_user, "role_assignments", None) or [])
+    }
+    removed_roles = _sort_roles(current_roles - desired_set)
+    added_roles = _sort_roles(desired_set - current_roles)
+
+    for role, assignment in assignments.items():
+        if role not in desired_set:
+            db.delete(assignment)
+    # A legacy-only role has no UserRole row. When the requested set changes,
+    # materialize every retained role so sync_legacy_role cannot restore a
+    # removed permission from User.role.
+    for role in desired_roles:
+        if role not in assignments:
+            db.add(UserRole(user_id=target_user.id, role=role, created_by=operator.id, note=note))
+
+    bump_role_version(target_user)
+    db.flush()
+    db.expire(target_user, ["role_assignments"])
+    sync_legacy_role(target_user)
+
+    for role in removed_roles:
+        _write_role_event(
+            db,
+            target_user=target_user,
+            role=role,
+            action="revoked",
+            operator=operator,
+            note=note,
+            request=request,
+        )
+    for role in added_roles:
+        _write_role_event(
+            db,
+            target_user=target_user,
+            role=role,
+            action="granted",
+            operator=operator,
+            note=note,
+            request=request,
+        )
+
+    db.commit()
+    db.refresh(target_user)
     return get_effective_roles(target_user)
 
 

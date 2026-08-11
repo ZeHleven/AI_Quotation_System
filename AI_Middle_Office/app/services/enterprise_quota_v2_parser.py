@@ -80,6 +80,7 @@ VALIDATION_HEADERS = (
 _MAJOR_SECTION_RE = re.compile(r"^[一二三四五六七八九十]+、")
 _FORMULA_ERROR_PREFIX = "#"
 _SHEET_NAME_RE = re.compile(r"(?:'([^']+)'|([\w\u4e00-\u9fff]+))!")
+_COMPONENT_ROW_TYPES = frozenset({"人工", "主材", "辅材", "机械"})
 
 
 class EnterpriseQuotaV2ParseError(ValueError):
@@ -368,12 +369,16 @@ def _classify_row(
 
     first_value = _clean(values.get("A"))
     row_type = _clean(values.get("B"))
-    if outline_level > 0:
-        return "component", parent_context.get("quota_item")
     if row_type == "定额":
         parent = parent_context.get("chapter") or parent_context.get("major_section")
         parent_context["quota_item"] = row_number
         return "quota_item", parent
+    if parent_context.get("quota_item") and (
+        outline_level > 0 or row_type in _COMPONENT_ROW_TYPES
+    ):
+        return "component", parent_context.get("quota_item")
+    if outline_level > 0:
+        return "component", parent_context.get("quota_item")
     parent_context["quota_item"] = None
     if first_value and _MAJOR_SECTION_RE.match(first_value):
         parent_context["major_section"] = row_number

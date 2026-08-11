@@ -4,6 +4,7 @@ import uuid
 from io import BytesIO
 
 import pytest
+import xlwt
 from openpyxl import Workbook
 from sqlalchemy import event
 
@@ -32,6 +33,7 @@ from app.services.requirement_standardizer import standardize_requirement_excel_
 
 PASSWORD = "secret123"
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+XLS_CONTENT_TYPE = "application/vnd.ms-excel"
 
 
 def _set_flag(name: str, value: bool) -> bool:
@@ -91,6 +93,17 @@ def _workbook_bytes(rows: list[list[object]], *, title: str = "清单") -> bytes
     sheet.title = title
     for row in rows:
         sheet.append(row)
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def _legacy_workbook_bytes(rows: list[list[object]], *, title: str = "清单") -> bytes:
+    workbook = xlwt.Workbook()
+    sheet = workbook.add_sheet(title)
+    for row_index, row in enumerate(rows):
+        for column_index, value in enumerate(row):
+            sheet.write(row_index, column_index, value)
     output = BytesIO()
     workbook.save(output)
     return output.getvalue()
@@ -247,6 +260,33 @@ def test_budget_project_feature_flag_and_role_module(client):
     assert response.json()["detail"] == "NOT_FOUND"
     assert module["path"] == "/admin/budget-projects"
     assert module["status"] == "pending"
+
+
+def test_budget_project_upload_accepts_legacy_xls(client):
+    quote_user = _create_user(roles=["quote_user"])
+    headers = _login(client, quote_user)
+    old_flag = _set_flag("feature_budget_projects", True)
+    try:
+        project = _create_project(client, headers)
+        content = _legacy_workbook_bytes(
+            [
+                ["序号", "项目名称", "项目特征", "工程量", "单位"],
+                [1, "一楼墙面拆除", "含垃圾清运", 18, "㎡"],
+                [2, "二楼墙面拆除", "含垃圾清运", 20, "㎡"],
+            ]
+        )
+        response = client.post(
+            f"/api/v1/admin/budget-projects/{project['id']}/imports",
+            headers=headers,
+            files={"file": ("旧版清单.xls", content, XLS_CONTENT_TYPE)},
+        )
+    finally:
+        _set_flag("feature_budget_projects", old_flag)
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["source_file"]["filename"] == "旧版清单.xls"
+    assert data["summary"]["standard_item_count"] == 2
 
 
 def test_budget_quantity_safe_zero_keeps_items_and_does_not_compare_other_column_values(client):

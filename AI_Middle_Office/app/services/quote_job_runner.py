@@ -25,6 +25,14 @@ from app.services.quote_cost_context import (
     safe_append_quote_cost_context,
 )
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
+from app.services.quote_consistency import (
+    QuoteConsistencyError,
+    QuoteQuotaUnavailable,
+    claim_quote_job,
+    consume_quote_quota,
+    ensure_quote_quota_reservation,
+    release_quote_quota,
+)
 from app.services.quote_excel_parser import (
     QuoteExcelParseError,
     is_legacy_excel_file,
@@ -191,12 +199,35 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
     return value.astimezone(timezone.utc)
 
 
+def _claimed_job_for_update(db: Session, *, job_id: str, attempt_id: str) -> QuoteJob | None:
+    return (
+        db.query(QuoteJob)
+        .filter(
+            QuoteJob.job_id == job_id,
+            QuoteJob.status == "running",
+            QuoteJob.attempt_id == attempt_id,
+        )
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+
+
 def mark_stale_quote_jobs(db, timeout_minutes: int) -> list[QuoteJob]:
     cutoff = _utcnow() - timedelta(minutes=timeout_minutes)
     stale_jobs = []
-    candidates = db.query(QuoteJob).filter(QuoteJob.status.in_(ACTIVE_STATUSES)).all()
+    candidate_ids = [row[0] for row in db.query(QuoteJob.id).filter(QuoteJob.status.in_(ACTIVE_STATUSES)).all()]
 
-    for job in candidates:
+    for candidate_id in candidate_ids:
+        job = (
+            db.query(QuoteJob)
+            .filter(QuoteJob.id == candidate_id, QuoteJob.status.in_(ACTIVE_STATUSES))
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        if not job:
+            continue
         last_seen = _as_utc(job.updated_at) or _as_utc(job.created_at)
         if not last_seen or last_seen > cutoff:
             continue
@@ -208,6 +239,7 @@ def mark_stale_quote_jobs(db, timeout_minutes: int) -> list[QuoteJob]:
         apply_job_failure(job, "timeout")
         apply_job_duration(job)
         append_job_event(job, "error", f"❌ {job.error_message}", trace_id=job.trace_id, stage="timeout")
+        release_quote_quota(db, quote_job_id=job.job_id, reason="timed_out")
         stale_jobs.append(job)
 
     if stale_jobs:
@@ -796,8 +828,15 @@ async def run_quote_job_async(job_id: str) -> None:
     trace_token = None
     run_started_at = time.perf_counter()
     try:
-        job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).first()
-        if not job or job.status in TERMINAL_STATUSES:
+        attempt_id = str(uuid.uuid4())
+        if not claim_quote_job(db, job_id=job_id, attempt_id=attempt_id):
+            db.rollback()
+            return
+        db.commit()
+
+        job = _claimed_job_for_update(db, job_id=job_id, attempt_id=attempt_id)
+        if not job:
+            db.rollback()
             return
 
         trace_token = set_trace_id(job.trace_id or uuid.uuid4().hex)
@@ -810,10 +849,13 @@ async def run_quote_job_async(job_id: str) -> None:
             apply_job_failure(job, "auth")
             _apply_runtime_duration(job, run_started_at)
             append_job_event(job, "error", "❌ 登录状态已失效，请重新登录", trace_id=job.trace_id, stage="auth")
+            release_quote_quota(db, quote_job_id=job.job_id, reason="auth_failed")
             db.commit()
             return
 
-        if user.quota <= 0:
+        try:
+            ensure_quote_quota_reservation(db, user_id=user.id, quote_job_id=job.job_id)
+        except (QuoteQuotaUnavailable, QuoteConsistencyError):
             job.status = "failed"
             job.stage = "quota"
             job.error_message = "AI 调用额度已耗尽"
@@ -824,8 +866,6 @@ async def run_quote_job_async(job_id: str) -> None:
             db.commit()
             return
 
-        job.status = "running"
-        job.stage = "started"
         append_job_event(job, "processing", "异步报价任务已开始执行", trace_id=job.trace_id, stage="started")
         db.commit()
 
@@ -833,6 +873,10 @@ async def run_quote_job_async(job_id: str) -> None:
             file_content = await _load_job_file_content(job, db)
         except Exception as exc:
             logger.exception("quote_job_file_load_failed", extra={"job_id": job.job_id, "event": "quote_job_file_load_failed"})
+            job = _claimed_job_for_update(db, job_id=job_id, attempt_id=attempt_id)
+            if not job:
+                db.rollback()
+                return
             job.status = "failed"
             job.stage = "file_load"
             job.error_message = f"报价附件读取失败: {str(exc)}"
@@ -840,6 +884,7 @@ async def run_quote_job_async(job_id: str) -> None:
             apply_job_failure(job, "file_load")
             _apply_runtime_duration(job, run_started_at)
             append_job_event(job, "error", f"❌ {job.error_message}", trace_id=job.trace_id, stage="file_load")
+            release_quote_quota(db, quote_job_id=job.job_id, reason="file_load_failed")
             db.commit()
             return
 
@@ -856,8 +901,9 @@ async def run_quote_job_async(job_id: str) -> None:
             quote_job_id=job.job_id,
             current_user=user,
         ):
-            db.refresh(job)
-            if job.status in TERMINAL_STATUSES:
+            job = _claimed_job_for_update(db, job_id=job_id, attempt_id=attempt_id)
+            if not job:
+                db.rollback()
                 return
 
             job.stage = extra.get("stage", job.stage)
@@ -885,7 +931,7 @@ async def run_quote_job_async(job_id: str) -> None:
                 job.finished_at = _utcnow()
                 apply_job_result_summary(job, result_payload)
                 _apply_runtime_duration(job, run_started_at)
-                user.quota -= 1
+                consume_quote_quota(db, quote_job_id=job.job_id)
                 db.commit()
                 safe_record_ai_preview(
                     db,
@@ -901,6 +947,7 @@ async def run_quote_job_async(job_id: str) -> None:
                 job.finished_at = _utcnow()
                 apply_job_failure(job, extra.get("stage"))
                 _apply_runtime_duration(job, run_started_at)
+                release_quote_quota(db, quote_job_id=job.job_id, reason=str(extra.get("stage") or "quote_failed"))
 
             db.commit()
             if job.status in TERMINAL_STATUSES:
@@ -909,7 +956,7 @@ async def run_quote_job_async(job_id: str) -> None:
         logger.exception("quote_job_crashed", extra={"job_id": job_id, "event": "quote_job_crashed"})
         try:
             db.rollback()
-            job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).first()
+            job = _claimed_job_for_update(db, job_id=job_id, attempt_id=attempt_id)
             if job:
                 job.status = "failed"
                 job.stage = "crashed"
@@ -918,7 +965,10 @@ async def run_quote_job_async(job_id: str) -> None:
                 apply_job_failure(job, "crashed")
                 _apply_runtime_duration(job, run_started_at)
                 append_job_event(job, "error", f"❌ [API Gateway] 异步任务崩溃: {str(exc)}", trace_id=job.trace_id, stage="crashed")
+                release_quote_quota(db, quote_job_id=job.job_id, reason="crashed")
                 db.commit()
+            else:
+                db.rollback()
         except Exception:
             db.rollback()
     finally:

@@ -28,6 +28,14 @@ from app.services.quote_cost_context import (
     safe_append_quote_cost_context,
 )
 from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
+from app.services.quote_consistency import (
+    lock_quote_push_for_finalize,
+    mark_quote_push_delivered,
+    mark_quote_push_external_delivered,
+    mark_quote_push_failed,
+    quote_push_result,
+    start_quote_push_attempt,
+)
 from app.services.quote_excel_parser import (
     QuoteExcelParseError,
     is_legacy_excel_file,
@@ -442,75 +450,127 @@ async def confirm_and_push(
         payload = dict(payload)
         payload["excel_base64"] = excel_b64
         logger.info("confirm_push_payload_keys", extra={"keys": list(payload.keys())})
-        response = await post_json_via_gateway(
-            provider="n8n",
-            model="dingtalk-export",
-            endpoint_type="quote_push",
-            url=N8N_WEBHOOK_URL_PUSH,
-            json_payload=payload,
-            headers=sign_payload(payload),
-            timeout=60,
+        push_start = start_quote_push_attempt(
+            db,
             username=current_user.username,
-            trace_id=get_trace_id(),
+            quote_job_id=quote_job_id,
+            payload=payload,
         )
-        if response.status_code == 200:
-            quote_history_id = None
-            no_cost_draft_summary = None
-            try:
-                record = create_quote_history_record(
-                    db,
-                    username=current_user.username,
-                    payload=payload,
-                    confirmed_by=current_user.username,
-                )
-                db.commit()
-                db.refresh(record)
-                quote_history_id = record.id
-            except Exception:
-                db.rollback()
-                logger.exception("quote_history_record_failed", extra={"event": "quote_history_record_failed"})
-            try:
-                record_confirmed_quote(
-                    db,
-                    username=current_user.username,
-                    final_payload=payload,
-                    quote_history_id=quote_history_id,
-                    allow_cross_user=has_admin_role(current_user),
-                )
-                db.commit()
-            except Exception:
-                db.rollback()
-                logger.exception("quote_feedback_confirm_record_failed", extra={"event": "quote_feedback_confirm_record_failed"})
-            if _no_cost_draft_capture_enabled():
-                try:
-                    no_cost_draft_summary = create_no_cost_draft_items(
-                        db,
-                        current_user,
-                        payload,
-                        quote_job_id=quote_job_id,
-                        quote_history_id=quote_history_id,
-                    )
-                    db.commit()
-                except Exception:
-                    db.rollback()
-                    logger.exception("no_cost_draft_capture_failed", extra={"event": "no_cost_draft_capture_failed"})
-                    no_cost_draft_summary = {
-                        "enabled": True,
-                        "success": False,
-                        "error": "NO_COST_DRAFT_CAPTURE_FAILED",
-                    }
-            if quote_job_id:
-                try:
-                    mark_preview_draft_pushed(db, quote_job_id=quote_job_id)
-                    db.commit()
-                except Exception:
-                    db.rollback()
-                    logger.exception("quote_preview_draft_mark_pushed_failed", extra={"event": "quote_preview_draft_mark_pushed_failed"})
+        push_attempt_id = push_start.attempt.id
+        idempotency_key = push_start.attempt.idempotency_key
+
+        if push_start.action == "delivered":
+            db.commit()
+            result = quote_push_result(push_start.attempt)
+            result["idempotent"] = True
             message = "✅ 最终报价单已成功投递至钉钉群！"
-            if no_cost_draft_summary and no_cost_draft_summary.get("created_count"):
-                message += f" 已生成 {no_cost_draft_summary['created_count']} 条成本库待审核草稿。"
-            return api_ok({"no_cost_draft_summary": no_cost_draft_summary}, message=message)
-        raise HTTPException(status_code=500, detail="底层推送流水线异常")
+            summary = result.get("no_cost_draft_summary") or {}
+            if summary.get("created_count"):
+                message += f" 已生成 {summary['created_count']} 条成本库待审核草稿。"
+            return api_ok(result, message=message)
+        if push_start.action == "in_progress":
+            db.commit()
+            raise HTTPException(status_code=409, detail="报价单正在推送中，请勿重复提交")
+
+        payload["idempotency_key"] = idempotency_key
+        if push_start.action == "send":
+            db.commit()
+            try:
+                response = await post_json_via_gateway(
+                    provider="n8n",
+                    model="dingtalk-export",
+                    endpoint_type="quote_push",
+                    url=N8N_WEBHOOK_URL_PUSH,
+                    json_payload=payload,
+                    headers=sign_payload(payload),
+                    timeout=60,
+                    username=current_user.username,
+                    trace_id=get_trace_id(),
+                )
+            except Exception as exc:
+                db.rollback()
+                mark_quote_push_failed(db, attempt_id=push_attempt_id, error_message=str(exc))
+                db.commit()
+                raise
+            if response.status_code != 200:
+                mark_quote_push_failed(
+                    db,
+                    attempt_id=push_attempt_id,
+                    error_message=f"N8N_PUSH_HTTP_{response.status_code}",
+                )
+                db.commit()
+                raise HTTPException(status_code=500, detail="底层推送流水线异常")
+            mark_quote_push_external_delivered(
+                db,
+                attempt_id=push_attempt_id,
+                status_code=response.status_code,
+                response_text=getattr(response, "text", ""),
+            )
+            db.commit()
+            finalize_attempt = lock_quote_push_for_finalize(db, attempt_id=push_attempt_id)
+            if finalize_attempt.status == "delivered":
+                result = quote_push_result(finalize_attempt)
+                db.commit()
+                result["idempotent"] = True
+                message = "✅ 最终报价单已成功投递至钉钉群！"
+                summary = result.get("no_cost_draft_summary") or {}
+                if summary.get("created_count"):
+                    message += f" 已生成 {summary['created_count']} 条成本库待审核草稿。"
+                return api_ok(result, message=message)
+
+        try:
+            record = create_quote_history_record(
+                db,
+                username=current_user.username,
+                payload=payload,
+                confirmed_by=current_user.username,
+            )
+            quote_history_id = record.id
+            record_confirmed_quote(
+                db,
+                username=current_user.username,
+                final_payload=payload,
+                quote_history_id=quote_history_id,
+                allow_cross_user=has_admin_role(current_user),
+            )
+            no_cost_draft_summary = None
+            if _no_cost_draft_capture_enabled():
+                no_cost_draft_summary = create_no_cost_draft_items(
+                    db,
+                    current_user,
+                    payload,
+                    quote_job_id=quote_job_id,
+                    quote_history_id=quote_history_id,
+                )
+            if quote_job_id:
+                mark_preview_draft_pushed(db, quote_job_id=quote_job_id)
+            result = {
+                "no_cost_draft_summary": no_cost_draft_summary,
+                "idempotent": push_start.action == "finalize",
+                "idempotency_key": idempotency_key,
+            }
+            mark_quote_push_delivered(
+                db,
+                attempt_id=push_attempt_id,
+                quote_history_id=quote_history_id,
+                result=result,
+            )
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.exception(
+                "quote_push_local_finalize_failed",
+                extra={"event": "quote_push_local_finalize_failed", "idempotency_key": idempotency_key},
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="报价已送达外部推送链路，但本地记录尚未完成；请使用原报价重新提交以自动补账",
+            ) from exc
+
+        message = "✅ 最终报价单已成功投递至钉钉群！"
+        if no_cost_draft_summary and no_cost_draft_summary.get("created_count"):
+            message += f" 已生成 {no_cost_draft_summary['created_count']} 条成本库待审核草稿。"
+        return api_ok(result, message=message)
     except HTTPException:
         raise
     except Exception as e:

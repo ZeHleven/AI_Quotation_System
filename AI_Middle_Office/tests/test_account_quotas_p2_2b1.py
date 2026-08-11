@@ -186,7 +186,7 @@ def _block_model_calls(monkeypatch):
                 monkeypatch.setattr(model_gateway, name, forbidden_model_call)
 
 
-def test_feature_gate_non_admin_positive_decimal_and_account_id_injection(db):
+def test_feature_gate_staff_account_scope_positive_decimal_and_account_id_injection(db):
     admin, _ = _seed_user_account(db, suffix="guard-admin", role="admin")
     staff, _ = _seed_user_account(db, suffix="guard-staff", role="user")
 
@@ -198,13 +198,13 @@ def test_feature_gate_non_admin_positive_decimal_and_account_id_injection(db):
 
         with _account_quota_feature(True):
             state.user = staff
-            denied_read = client.get("/api/v1/admin/account-quotas")
-            denied_write = client.post(
+            staff_read = client.get("/api/v1/admin/account-quotas")
+            staff_write = client.post(
                 "/api/v1/admin/account-quotas",
-                json=_payload(quota_code="STAFF-DENIED"),
+                json=_payload(quota_code="STAFF-OWN-ACCOUNT"),
             )
-            assert denied_read.status_code == 403
-            assert denied_write.status_code == 403
+            assert staff_read.status_code == 200, staff_read.text
+            assert staff_write.status_code == 200, staff_write.text
 
             state.user = admin
             injected = client.post(

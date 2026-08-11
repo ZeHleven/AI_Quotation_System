@@ -1,6 +1,10 @@
 # 系统升级路线图
 
-> 最后更新：2026-08-03
+> 最后更新：2026-08-11
+
+> 报价资料研判 Agent 新数据域已完成 API-20 `GET /api/v1/bid-assessments/{assessment_id}/documents` 代码与本地隔离验证：默认选择当前 Manifest，显式参数可读同一 Assessment 的历史 Manifest；响应区分所选不可变版本和当前 Manifest 版本，替换链与版本展开严格限制在本 Assessment 可见关系内。过滤发生在稳定分页前，支持私有强制重验证 ETag/304；Phase 1 尚无解析运行表时只投影 `not_requested`，且不暴露 FileObject ID、对象 key、存储 ETag/状态、完整哈希、parser hint 或 source metadata。接口纯读取，不访问对象存储、不写 Outbox/审计/幂等，也不新增迁移。机器合同全量 `59 passed, 1 warning`，API-20 运行时专项 `5 passed, 1 warning`；代码 Alembic 唯一 head 仍为 `20260811_0091`，目标 ECS 仍停在只读确认的 `20260808_0082`，本阶段未连接 MinIO/Redis/CentOS/ECS。下一项为 API-21 DocumentVersion 元数据权威读取，须先冻结版本可见性、解析/页/Sheet/OCR 质量来源、上传来源脱敏、版本 ETag 和 API-22 下载授权边界。详见 `AI_Middle_Office/docs/bid-assessment-runtime-services-phase1-20260810.md` 和 `AI_Middle_Office/docs/bid-assessment-api20-document-list-protocol-20260811.md`。
+
+> 公网安全整改第一阶段已于 2026-08-03 完成当前内网环境止血和 MySQL 加固：公网模式不再挂载 Codex Worker / DWG Quantity Trial 试验路由；RAG reload 对缺失、弱口令和错密钥默认拒绝；Milvus 取消宿主机端口，RAG/Redis/报价 MinIO 只绑定 CentOS 私网地址，systemd 持久化主机防火墙只允许 Windows 应用机访问受保护端口；报价 MinIO 与 Milvus 对象存储凭据已轮换。备份 `/opt/rag_service/backups/20260803_164452` 与 MySQL 切换前冷全量备份 `/opt/rag_service/backups/20260803_210859` 均完成内容和哈希校验且不含 `.env`；旧钉钉 Webhook 已脱敏、禁用并在平台删除，新机器人已完成官方 HTTPS、HMAC-SHA256 加签及真实收信验证；临时 SSH 公钥、私钥和明文暂存已删除。MySQL 已拆分 `ai_runtime` 最小 DML 与 `ai_migrator` 受限 DDL 账号，启用固定来源、随机强密码、`caching_sha2_password`、`REQUIRE SSL` 和 CA 校验，旧 `ai_app` 已删除。原安全聚焦回归 `93 passed`、MySQL 专项 `43 passed`，`/health/ready`、数据库、Celery、MinIO、真实 RAG 检索和 Alembic `20260801_0081 (head)` 均通过，当前 `PUBLIC_ACCESS_ENABLED=false`。本阶段不等于可开放公网：云安全组、HTTPS/WAF、异机加密备份及非白名单外部阻断测试仍是后续上线门槛。详见 `AI_Middle_Office/docs/security-phase1-containment-runbook-20260803.md`。
 
 > 组价 Agent v1.1“准确＋近似混合检索”已完成代码层、真实数据检索、重启后运行态和登录后业务验收（2026-08-01，用户确认通过）：准确模式保持纯精准规则；近似模式在精准结果后调用 BM25 + BCEmbedding + Milvus + RRF，按存档文件和企业定额版本隔离索引，候选价格从 MySQL 权威源重新读取。近似结果必须人工采用，单位不兼容、安装/拆除等动作冲突和低分候选会被过滤；已有存档/企业候选时行业 AI 不覆盖。真实存档与企业定额均已命中验证，固定回归门为准确率 `1.0`、近似 `Recall@5=1.0`、自动采用 `0`、无关候选/自动计价 `0`；专项 `29 passed`、相邻报价/RAG `63 passed`，Vite build 通过。功能自身无新增 Alembic，当前 MySQL 为 `20260801_0081`；0081 属于预算计价草稿快照能力，不改变 v1.1 业务口径。9000 健康状态 ready，新版静态包和能力鉴权路由均已加载。v1.1 口径冻结，下一阶段为 v1.2“行业数据 AI 估价”：只在存档/企业均无候选时触发，基于城市、行业/业态和装修程度生成可审计建议，仍须人工确认。详见 `AI_Middle_Office/docs/pricing-agent-v1.md`。
 

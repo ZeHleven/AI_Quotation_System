@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import BASE_DIR, settings
 from app.core.database import engine
 from app.models.quote_job import QuoteJob
+from app.services.dingtalk_webhook import build_signed_dingtalk_webhook
 from app.services.file_storage import check_storage_health
 from app.services.queue_health import check_task_queue
 
@@ -730,14 +731,23 @@ def _mark_sent(alert: dict) -> None:
     _rate_window.append(now)
 
 
-def send_dingtalk_alerts(alerts: List[dict]) -> None:
+def send_dingtalk_alerts(alerts: List[dict]) -> bool:
     """过滤并推送告警到钉钉。webhook 未配置或无需发送时直接返回。"""
     if not settings.alert_dingtalk_webhook:
-        return
+        return False
 
     to_send = [a for a in alerts if _should_send_alert(a)]
     if not to_send:
-        return
+        return False
+
+    try:
+        signed_webhook = build_signed_dingtalk_webhook(
+            settings.alert_dingtalk_webhook,
+            settings.alert_dingtalk_secret,
+        )
+    except (TypeError, ValueError):
+        _logger.warning("dingtalk_alert_configuration_invalid")
+        return False
 
     has_critical = any(a.get("level") == "critical" for a in to_send)
     lines = ["## AI 中台运维告警\n"]
@@ -757,14 +767,16 @@ def send_dingtalk_alerts(alerts: List[dict]) -> None:
 
     try:
         with httpx.Client(timeout=10) as client:
-            response = client.post(settings.alert_dingtalk_webhook, json=payload)
+            response = client.post(signed_webhook, json=payload)
         response.raise_for_status()
         result = response.json()
         if result.get("errcode", 0) != 0:
             _logger.warning("dingtalk_alert_rejected", extra={"response": result})
-            return
+            return False
         for alert in to_send:
             _mark_sent(alert)
         _logger.info("dingtalk_alerts_sent", extra={"count": len(to_send)})
+        return True
     except Exception:
         _logger.warning("dingtalk_alert_send_failed", exc_info=True)
+        return False

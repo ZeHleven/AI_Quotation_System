@@ -6,23 +6,26 @@ from pathlib import Path
 from app.api.v1 import codex_worker
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
-from app.models.user import User
+from app.models.user import User, UserRole
 
 
 PASSWORD = "secret123"
 
 
-def _create_user(role: str = "staff") -> User:
+def _create_user(role: str = "quote_user") -> User:
     db = SessionLocal()
     try:
+        legacy_role = role if role in {"admin", "system_admin", "staff", "manager", "viewer"} else "user"
         user = User(
             username=f"codexworker_{role}_{uuid.uuid4().hex[:8]}",
             hashed_password=get_password_hash(PASSWORD),
-            role=role,
+            role=legacy_role,
             role_version=1,
             quota=20,
         )
         db.add(user)
+        db.flush()
+        db.add(UserRole(user_id=user.id, role=role, created_by=None, note="codex worker test seed"))
         db.commit()
         db.refresh(user)
         return user
@@ -34,6 +37,20 @@ def _login(client, user: User) -> dict:
     response = client.post("/api/v1/auth/login", data={"username": user.username, "password": PASSWORD})
     assert response.status_code == 200
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+def test_codex_worker_rejects_staff_access(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(codex_worker, "JOB_ROOT", tmp_path / "codex_worker_jobs")
+    headers = _login(client, _create_user("staff"))
+
+    response = client.post(
+        "/api/v1/admin/codex-worker/jobs/fake",
+        headers=headers,
+        files=[("pdf_files", ("source.pdf", b"%PDF-1.4 fake", "application/pdf"))],
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "PERMISSION_DENIED"
 
 
 def test_codex_worker_fake_job_upload_query_and_downloads_excel(client, tmp_path, monkeypatch):

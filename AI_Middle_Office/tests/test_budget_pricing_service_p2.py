@@ -133,8 +133,8 @@ def test_feature_defaults_and_rbac_module_are_fail_closed():
         object.__setattr__(settings, "feature_budget_pricing", True)
         module = next(item for item in get_available_modules(admin) if item["key"] == "budget_pricing")
         assert module["status"] == "available"
-        staff_module = next(item for item in get_available_modules(staff) if item["key"] == "budget_pricing")
-        assert staff_module["status"] == "forbidden"
+        staff_module_keys = {item["key"] for item in get_available_modules(staff)}
+        assert "budget_pricing" not in staff_module_keys
     finally:
         object.__setattr__(settings, "feature_budget_projects", old_budget)
         object.__setattr__(settings, "feature_budget_pricing", old_pricing)
@@ -413,3 +413,12 @@ def test_pricing_service_has_no_legacy_or_external_chain_imports():
     for token in blocked:
         assert token not in source
         assert token not in api_source
+
+
+def test_pricing_draft_line_api_reports_project_quota_presence_after_delete():
+    root = Path(__file__).resolve().parents[1]
+    api_source = (root / "app" / "api" / "v1" / "budget_pricing.py").read_text(encoding="utf-8")
+
+    assert "BudgetProjectQuotaSnapshot.draft_line_id" in api_source
+    assert 'payload["has_project_quota"] = line.id in project_quota_line_ids' in api_source
+    assert '"has_project_quota": False' in api_source

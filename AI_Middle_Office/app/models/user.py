@@ -20,6 +20,7 @@ class User(Base):
 
     # 额度管控：限制员工调用 AI 的次数，默认 10 次
     quota = Column(Integer, default=10)
+    quota_reserved = Column(Integer, nullable=False, default=0, server_default="0")
 
     is_active = Column(Boolean, default=True)
     must_change_password = Column(Boolean, default=False)

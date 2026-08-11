@@ -2,6 +2,7 @@
 
 本文件补齐根目录 `AGENTS.md` 的引用，记录当前后端、异步任务、RAG 与部署约定。根目录摘要用于快速进入项目，本文件用于后续开发交接。
 
+- 报价资料研判 Agent 新数据域 Phase 1 已于 2026-08-11 完成 `20260810_0083`—`20260811_0091`、首批运行服务及 API-01/API-03/API-10/API-11/API-12/API-13/API-14/API-15/API-16/API-20。API-20 已按 v0.1-r12 冻结并实现默认/显式历史 Manifest 选择、所选不可变版本与当前 Manifest 版本双投影、Assessment 范围替换链、过滤前稳定分页、私有强制重验证 ETag/304 和存储内部字段防泄漏；Phase 1 无解析运行表时只投影 `not_requested`，接口纯读取、不访问对象存储、不写 Outbox/审计/幂等，也不新增迁移。新入口继续由 `FEATURE_BID_ASSESSMENT_V1_RUNTIME=false` 默认关闭，不修改旧 `bid_intake_*`。代码 head 为 `20260811_0091`，目标 ECS 实际 head 仍为只读确认的 `20260808_0082`，本阶段未连接 MinIO/Redis/CentOS/ECS，未备份或升级 ECS；机器合同全量 `59 passed, 1 warning`，API-20 运行时专项 `5 passed, 1 warning`，此前核心组合 `176 passed, 2 warnings`，含相邻回归 `208 passed, 24 warnings`。下一项是 API-21 DocumentVersion 元数据权威读取，须先冻结版本可见性、解析/页/Sheet/OCR 质量来源、上传来源脱敏、版本 ETag 和 API-22 下载授权边界。详见 `docs/bid-assessment-runtime-services-phase1-20260810.md` 与 `docs/bid-assessment-api20-document-list-protocol-20260811.md`。
 - 执行系统已按产品决定完整退役（2026-07-31）：移除执行任务、会议纪要、执行速度看板的前端入口、API、服务、模型、RBAC 模块和功能开关；新增 Alembic `20260731_0078` 仅删除专用表 `task_drafts`、`meeting_note_revisions`、`meeting_notes`、`execution_task_events`、`execution_tasks`。历史迁移 `20260514_0013` 至 `0015` 保留以维持迁移链；`project_*` 项目进度与项目任务是独立功能，继续保留。应用迁移前必须按环境规范备份数据库。
 - 商务台账已按产品决定完整退役（2026-07-31）：移除 Vite 入口、商务台账 API/service/schema、事件模型、RBAC 模块和 `FEATURE_BUSINESS_LEDGER`；Alembic `20260731_0079` 删除 outbound 台账记录、`client_inquiry_events` 及 `direction/stage/next_followup_at/cancelled_*` 专用字段，并将保留的 `client_inquiries` 恢复为 Phase 2 响应速度追踪的纯 inbound 模型。迁移会清除台账历史数据，应用前必须备份数据库。
 - 成本测算闭环已按产品决定完整退役（2026-07-31）：仅移除 `cost_measurement*` Vite 页面、API/service/model、RBAC 模块和 `FEATURE_COST_MEASUREMENT`；Alembic `20260731_0080` 删除 `cost_measurements`、`cost_measurement_lines`、`cost_measurement_events` 三张专属表。项目/对话报价、成本库、企业/账户定额、预算计价、报价资料研判 Agent 和智能助手不在本次范围内。迁移会清除测算历史数据，应用前必须备份数据库。
@@ -18,23 +19,19 @@
 ## 架构总览
 
 ```
-用户前端 (Vue.js 3 + Element Plus CDN)
-      ↓
-FastAPI 主网关 (Windows, http://localhost:9000)
-      ↓                       ↓
-异步报价任务 / Celery Worker   GLM-4V 图像识别 (智谱 AI)
-      ↓
-n8n budget-calc / budget-push
-      ↓
-Dify + DeepSeek-R1 报价优化
-      ↓
-RAG 检索服务 (CentOS 192.168.88.128:8001)
-      ↓
-Milvus 向量数据库 (192.168.88.128:19530)
+公网用户 → ECS Nginx (HTTPS 443)
+              ↓
+      FastAPI API + Celery Worker
+              ↓
+ MySQL / Redis / MinIO / n8n / Dify / RAG / Milvus
+      （同一 ECS 私有 Docker 网络）
 ```
 
 ## 当前运行基线
 
+- 单 ECS 正式切换已于 2026-08-07 完成：应用与全部正式依赖已从 Windows/CentOS 双机拓扑收敛到当前 ECS，正式运行不再依赖本机 CentOS 开机。API/Worker 固定为 `10.240.10.10/.11`，n8n 固定为 `10.240.10.12`；应用只使用 `ai-mysql`、`quote-redis`、`quote-minio`、`rag-service`、`n8n` 等内部别名。最终 `/health/ready=ready`，数据库、Redis、MinIO、RAG、n8n 和唯一 Celery Worker 全部正常，Dify Worker/Beat 正常，公网登录页 HTTP 200；内存可用约 10 GiB，系统盘/数据盘使用率约 13%/42%。源 CentOS 最终冷备份为 `/opt/rag_service/backups/single-ecs-migration/20260807_111606`，ECS 暗迁移数据回滚点为 `/data/ai-middle-office-dark-before-final-20260807T121943Z`；截至 2026-08-09 20:34（Asia/Shanghai）保持 48 小时回滚观察，期间源服务继续停止且不得删除源数据。临时 SSH 授权、传输私钥、IPsec 和 ECS 主机 UDP 500/4500 已清理；阿里云安全组临时 UDP 规则须同步删除。迁移资产见根目录 `deploy/single-ecs/`。
+- 安全上云第五阶段已于 2026-08-05 完成 ECS 暗部署、认证只读业务冒烟、受控重启恢复和真实异步报价闭环：最终镜像为 `ai-middle-office-app:20260805_161737`（非 root `10001:10001`，Trivy 漏洞/秘密均为 0，CycloneDX SBOM 109 组件）；API/Worker 固定使用 `10.240.10.10/.11`，API 只发布 `127.0.0.1:9000`，`PUBLIC_ACCESS_ENABLED=false`、自动迁移和 ECS 日审调度保持关闭。MySQL TLS、Redis、RAG、N8N、MinIO、Celery 与 `/health/ready` 均通过，9001/19530 继续阻断；认证读链路在受控重启前后均通过，真实 RAG 返回证据。真实报价任务 `7023d2d1-290c-4393-8ed9-d1150e0551d6` 在临时隔离旧 Windows Worker 后由 ECS Worker 独占完成，生成 1 条预审、额度只扣减 1 次，未确认下发/未推送钉钉，旧 Worker 已恢复。Nginx 仍 inactive、SELinux 仍 permissive、broker 当前 `worker_count=2` 属迁移重叠；正式切换 Windows Worker、HTTPS/WAF/仅 443、异机加密备份、监控外扫和恢复演练仍未完成。详见 `docs/security-cloud-phase5-dark-runtime-gate-20260805.md`。
+- 公网安全整改第一阶段已于 2026-08-03 完成当前内网环境止血和 MySQL 加固：公网模式隐藏 Codex Worker / DWG Quantity Trial 试验路由，RAG reload 鉴权 fail-closed，Milvus 不再发布宿主机端口，RAG/Redis/报价 MinIO 仅绑定 `192.168.88.128`，主机防火墙仅允许 Windows 应用机 `192.168.88.1/32` 访问受保护端口；报价 MinIO 与 Milvus 对象存储凭据已轮换，备份 `/opt/rag_service/backups/20260803_164452` 及 MySQL 切换前冷全量备份 `/opt/rag_service/backups/20260803_210859` 均完成内容/哈希校验且不含 `.env`；历史日志中的旧钉钉 Webhook 已脱敏并在平台删除，新机器人已通过官方 HTTPS 端点、HMAC-SHA256 加签和真实收信验证；临时 SSH 授权和明文暂存已删除。MySQL 已拆分 `ai_runtime` 最小 DML 账号与 `ai_migrator` 受限 DDL 账号，两者来源固定为 `192.168.88.1`、使用随机 43 字符密码、`caching_sha2_password`、`REQUIRE SSL` 和固定 CA 校验；旧 `ai_app` 已锁定、清空连接、验证拒绝后删除。安全聚焦回归原 `93 passed`，MySQL 专项 `43 passed`；当前 `/health/ready=ready`、数据库、Celery、MinIO 与真实 RAG 检索正常，Alembic `20260801_0081 (head)`，`PUBLIC_ACCESS_ENABLED=false`。尚未达到公网生产条件：云安全组、HTTPS 入口/WAF、异机加密备份和非白名单外部阻断测试仍待完成。详见 `docs/security-phase1-containment-runbook-20260803.md`。
 - 报价资料研判 Agent `DATA-CHALLENGE-001` 新项目接入、通用 XLSX 安全解析和唯一一次盲测已完成（2026-07-29）：针对约 43.5 MB、25 Sheet 的真实工程量清单，将解析改为按 OOXML 真实单元格流式读取并计算有效区域，增加通用资源上限、异常诊断、重复 Sheet 隔离和期次冲突隔离；24 个 Sheet 进入证据链、1 个“一期零星工程”冲突 Sheet 隔离，三份资料共形成 3,202 个有效证据块并完成 manifest v7 索引。10 题 Challenge 经业务复核后冻结，`RET-EXP-003B` 唯一一次盲测为 Hit@5 88.89%、Recall@5 47.59%、MRR 68.52%、nDCG@5 49.73%、路由与 Query 数量准确率 100%、负样本准确率 0%、P95 1677ms、错误 0；完整门槛未通过。Challenge 已锁定，不重跑、不据此调参；后续必须用全新 Development 项目验证拒答门、长表结构召回和 Top5 多事实覆盖。详见 `docs/bid-intake-agent-data-challenge-001-ingestion.md` 与 `evals/bid_intake/retrieval/v1/data_challenge_001_blind_summary.md`。
 - 对话报价摘要到预算项目详细工作台的同草稿数据闭环已完成（2026-07-29）：新增 `POST /api/v1/quote/jobs/{job_id}/budget-workspace` 和 Alembic `20260729_0073`；进入明细前保存当前预审，按原 Excel SHA-256 复用有权限的预算项目，否则自动建立项目/正式导入，并把项目名、特征、工程量、单位、确认价、三级价格来源、费用拆分和工艺备注写入现有 `enterprise_ai` 计价草稿。任务持久化项目/草稿关联与内容哈希，相同内容重复进入不重建、不增加 revision；对话页已移除固定项目 21 兜底。28 行联昇真实联调复用项目 21 / 草稿 12，总额两端均为 `¥1,133,009.73`，账户定额 1 / 企业定额 0 / AI 估价 27；详细页快速审核、专业全字段和工艺备注已完成浏览器验收。当前数据库为 `20260729_0073 (head)`；9000 高权限旧进程仍需管理员重启后加载新路由。详见 `docs/unified-quotation-chat-entry-correction-20260728.md`。
 - 报价资料研判 Agent 自适应 Tool 预算已完成代码层验证（2026-07-28）：ReAct 不再按静态上限每轮连续调用 3 个 Tool，改为“首轮 1 次主检索 → 检索后最多读取 2 条关键证据 → 上下文读取后最多 1 次定向补查”；Runtime 会按阶段优先级确定性裁剪模型的冗余 Tool 请求，同时保留总调用预算、重复参数预算与白名单保护。运行图谱新增动态预算阶段、上限、原因、模型原始请求数、实际保留数和裁剪数，仍不展示模型私有思维链。Agent/MCP/持久化/前端契约联合回归 `67 passed`，Query Planner 回归 `9 passed`，compileall 与 diff check 通过；不新增 Alembic，不改变 MCP Tool 契约、证据门或人工审核。详见 `docs/bid-intake-agent-adaptive-tool-budget.md`。

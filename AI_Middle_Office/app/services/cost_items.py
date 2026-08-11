@@ -95,7 +95,15 @@ class ImportBatch:
     result: dict[str, Any] | None = None
 
 
-FULL_COST_DB_VIEW_ROLES = {"system_admin", "admin", "cost_viewer", "cost_editor", "cost_approver", "cost_exporter"}
+FULL_COST_DB_VIEW_ROLES = {
+    "system_admin",
+    "admin",
+    "staff",
+    "cost_viewer",
+    "cost_editor",
+    "cost_approver",
+    "cost_exporter",
+}
 FULL_COST_DB_EDIT_ROLES = {"system_admin", "admin", "cost_editor", "cost_approver"}
 FULL_COST_DB_APPROVE_ROLES = {"system_admin", "admin", "cost_approver"}
 FULL_COST_DB_EXPORT_ROLES = {"system_admin", "admin", "cost_exporter"}

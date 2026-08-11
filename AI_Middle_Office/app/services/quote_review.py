@@ -165,6 +165,37 @@ def quote_requirement_rows(db: Session, quote_job_id: str) -> list[QuoteRequirem
     )
 
 
+def clone_quote_requirement_rows(
+    db: Session,
+    *,
+    source_quote_job_id: str,
+    target_quote_job_id: str,
+) -> list[QuoteRequirementRow]:
+    source_rows = quote_requirement_rows(db, source_quote_job_id)
+    cloned_rows: list[QuoteRequirementRow] = []
+    for row in source_rows:
+        cloned = QuoteRequirementRow(
+            quote_job_id=target_quote_job_id,
+            requirement_row_key=row.requirement_row_key,
+            source_sheet=row.source_sheet,
+            raw_row_index=row.raw_row_index,
+            item_name=row.item_name,
+            spec=row.spec,
+            quantity=row.quantity,
+            unit=row.unit,
+            remark=row.remark,
+            raw_text=row.raw_text,
+            raw_cells_json=row.raw_cells_json,
+            row_json=row.row_json,
+            sort_order=row.sort_order,
+        )
+        db.add(cloned)
+        cloned_rows.append(cloned)
+    if cloned_rows:
+        db.flush()
+    return cloned_rows
+
+
 def requirement_rows_as_source_rows(requirement_rows: list[QuoteRequirementRow]) -> list[dict[str, Any]]:
     return [
         {

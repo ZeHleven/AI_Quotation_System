@@ -1,0 +1,80 @@
+name: ai-middle-office-app
+
+services:
+  api:
+    image: ai-middle-office-app:${AI_APP_IMAGE_TAG:-20260805_161737}
+    restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    env_file:
+      - ${AI_APP_ENV_FILE:-/etc/ai-middle-office/app.env}
+    volumes:
+      - ${AI_APP_MYSQL_CA_FILE:-/etc/ai-middle-office/mysql-ca.pem}:/run/secrets/mysql-ca.pem:ro
+    ports:
+      - "127.0.0.1:9000:9000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=268435456
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 4g
+    cpus: 2.0
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health/live', timeout=3).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      app_net:
+        ipv4_address: 10.240.10.10
+
+  worker:
+    image: ai-middle-office-app:${AI_APP_IMAGE_TAG:-20260805_161737}
+    profiles:
+      - worker
+    restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    env_file:
+      - ${AI_APP_ENV_FILE:-/etc/ai-middle-office/app.env}
+    volumes:
+      - ${AI_APP_MYSQL_CA_FILE:-/etc/ai-middle-office/mysql-ca.pem}:/run/secrets/mysql-ca.pem:ro
+    command:
+      - python
+      - -m
+      - celery
+      - -A
+      - app.tasks.celery_app.celery_app
+      - worker
+      - --loglevel=INFO
+      - --pool=threads
+      - --concurrency=2
+      - --hostname=quote-worker@%h
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=1073741824
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
+    mem_limit: 6g
+    cpus: 2.0
+    stop_grace_period: 60s
+    networks:
+      app_net:
+        ipv4_address: 10.240.10.11
+
+networks:
+  app_net:
+    external: true
+    name: ai-middle-office-app-net

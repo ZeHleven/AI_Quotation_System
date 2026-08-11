@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { clearAuth, getToken } from './authStorage'
+import { clearAuth, getToken, isPasswordChangeRequiredError, redirectToPasswordChange } from './authStorage'
 
 const accountQuotaApiClient = axios.create({ baseURL: '/api/v1' })
 
@@ -12,6 +12,10 @@ accountQuotaApiClient.interceptors.request.use((config) => {
 accountQuotaApiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (isPasswordChangeRequiredError(error)) {
+      redirectToPasswordChange()
+      return Promise.reject(error)
+    }
     if (error.response?.status === 401) {
       clearAuth()
       window.location.href = '/login'

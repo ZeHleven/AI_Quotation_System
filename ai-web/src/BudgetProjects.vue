@@ -48,7 +48,7 @@
 
   <div v-else>
     <div class="content-heading">
-      <div><p class="eyebrow">预算项目 / {{ projectCode(detail) }}</p><h2>{{ projectName(detail) }}</h2></div>
+      <div><h2>{{ projectName(detail) }}</h2></div>
       <div class="heading-actions">
         <el-button :icon="ArrowLeft" plain @click="emit('navigate', '/admin/budget-projects')">返回列表</el-button>
         <el-button v-if="canUpdateCurrentProject" plain @click="openProjectDialog(detail)">修改项目</el-button>

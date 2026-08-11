@@ -1,21 +1,31 @@
+import hashlib
 import json
 from io import BytesIO
 from types import SimpleNamespace
 
+import pytest
+import xlwt
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, PatternFill, Side
 
+from app.services import budget_pricing_original_export as export_service
+from app.services.budget_pricing import BudgetPricingError
 from app.services.budget_pricing_original_export import (
     BudgetPricingOriginalExportSource,
+    load_budget_pricing_original_source_content,
     render_budget_pricing_original_export,
 )
 
 
-def _source(*, line, header_row_index=1):
+def _source(*, line, header_row_index=1, source_filename="甲方清单.xlsx", source_file=None, source_sha256=""):
     return BudgetPricingOriginalExportSource(
         draft=SimpleNamespace(pricing_mode="enterprise_ai", revision=3),
-        batch=SimpleNamespace(source_filename="甲方清单.xlsx", batch_uuid="batch-1"),
-        source_file=SimpleNamespace(),
+        batch=SimpleNamespace(
+            source_filename=source_filename,
+            source_file_sha256=source_sha256,
+            batch_uuid="batch-1",
+        ),
+        source_file=source_file,
         sheet_mappings=(SimpleNamespace(sheet_name="清单", header_row_index=header_row_index),),
         lines=(line,),
     )
@@ -66,11 +76,71 @@ def _workbook_bytes(headers):
     return output.getvalue()
 
 
+def _legacy_workbook_bytes(headers):
+    workbook = xlwt.Workbook()
+    sheet = workbook.add_sheet("清单")
+    for column_index, value in enumerate(headers):
+        sheet.write(0, column_index, value)
+    sheet.write(1, 0, "客户原项目")
+    sheet.write(1, 1, 12.5)
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 def _headers(sheet):
     return [sheet.cell(row=1, column=index).value for index in range(1, sheet.max_column + 1)]
 
 
-def test_export_appends_missing_system_fields_at_the_far_right_without_moving_original_columns():
+def test_local_source_fallback_reads_hash_matched_workbook(tmp_path, monkeypatch):
+    content = _workbook_bytes(["项目名称", "工程量", "综合单价"])
+    source_path = tmp_path / "甲方清单.xlsx"
+    source_path.write_bytes(content)
+    monkeypatch.setattr(
+        export_service,
+        "settings",
+        SimpleNamespace(app_env="development", budget_pricing_local_source_root=str(tmp_path)),
+    )
+    source = _source(
+        line=_line(),
+        source_filename=source_path.name,
+        source_sha256=hashlib.sha256(content).hexdigest(),
+    )
+
+    assert load_budget_pricing_original_source_content(source) == content
+
+
+def test_local_source_fallback_rejects_hash_mismatch(tmp_path, monkeypatch):
+    source_path = tmp_path / "甲方清单.xlsx"
+    source_path.write_bytes(_workbook_bytes(["项目名称", "工程量"]))
+    monkeypatch.setattr(
+        export_service,
+        "settings",
+        SimpleNamespace(app_env="development", budget_pricing_local_source_root=str(tmp_path)),
+    )
+    source = _source(line=_line(), source_filename=source_path.name, source_sha256="0" * 64)
+
+    with pytest.raises(BudgetPricingError) as exc_info:
+        load_budget_pricing_original_source_content(source)
+
+    assert exc_info.value.code == "BUDGET_PRICING_EXPORT_LOCAL_SOURCE_HASH_MISMATCH"
+
+
+def test_local_source_fallback_is_disabled_in_production(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        export_service,
+        "settings",
+        SimpleNamespace(app_env="production", budget_pricing_local_source_root=str(tmp_path)),
+    )
+    source = _source(line=_line(), source_filename="甲方清单.xlsx", source_sha256="0" * 64)
+
+    with pytest.raises(BudgetPricingError) as exc_info:
+        load_budget_pricing_original_source_content(source)
+
+    assert exc_info.value.code == "BUDGET_PRICING_EXPORT_SOURCE_FILE_NOT_RETAINED"
+
+
+def test_export_appends_only_missing_primary_price_fields_without_moving_original_columns():
     result = render_budget_pricing_original_export(
         _workbook_bytes(["项目名称", "工程量"]),
         _source(line=_line()),
@@ -82,13 +152,11 @@ def test_export_appends_missing_system_fields_at_the_far_right_without_moving_or
     headers = _headers(sheet)
 
     assert headers[:2] == ["项目名称", "工程量"]
-    assert headers[2:7] == ["特征描述", "区域", "主材采购方式", "不含税综合单价", "不含税综合合价"]
+    assert headers == ["项目名称", "工程量", "不含税综合单价", "不含税综合合价"]
     assert sheet.cell(row=2, column=1).value == "客户原项目"
     assert sheet.cell(row=2, column=2).value == 12.5
-    assert sheet.cell(row=2, column=6).value == 88.8
-    assert sheet.cell(row=2, column=7).value == 1110
-    loss_rate_column = headers.index("损耗率") + 1
-    assert sheet.cell(row=2, column=loss_rate_column).number_format == "0.00%"
+    assert sheet.cell(row=2, column=3).value == 88.8
+    assert sheet.cell(row=2, column=4).value == 1110
     assert sheet.cell(row=2, column=3).fill.fgColor.rgb == sheet.cell(row=2, column=2).fill.fgColor.rgb
     assert "系统估算说明" in workbook.sheetnames
 
@@ -108,7 +176,76 @@ def test_export_fills_existing_unit_price_alias_instead_of_adding_a_duplicate_co
     assert sheet.cell(row=2, column=3).value == 88.8
 
 
-def test_export_uses_real_table_edge_and_preserves_two_level_header_styles():
+def test_export_converts_legacy_xls_source_to_openxml_before_writing_prices():
+    result = render_budget_pricing_original_export(
+        _legacy_workbook_bytes(["项目名称", "工程量", "综合单价"]),
+        _source(line=_line(), source_filename="甲方旧版清单.xls"),
+        project_name="测试项目",
+    )
+
+    workbook = load_workbook(BytesIO(result.content), data_only=False)
+    sheet = workbook["清单"]
+    assert result.filename.endswith(".xlsx")
+    assert sheet.cell(row=2, column=3).value == 88.8
+
+
+def test_export_matches_source_sheet_when_original_title_has_trailing_whitespace():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "清单 "
+    sheet.append(["项目名称", "工程量", "综合单价"])
+    sheet.append(["客户原项目", 12.5, None])
+    output = BytesIO()
+    workbook.save(output)
+
+    result = render_budget_pricing_original_export(
+        output.getvalue(),
+        _source(line=_line()),
+        project_name="测试项目",
+    )
+
+    rendered = load_workbook(BytesIO(result.content), data_only=False)
+    assert rendered["清单 "]["C2"].value == 88.8
+    assert not any(item["reason"] == "WORKSHEET_NOT_FOUND" for item in result.summary["unresolved"])
+
+
+def test_export_preserves_existing_formats_and_fills_combined_cost_columns_without_extending_layout():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "清单"
+    sheet.append(["项目名称", "项目特征", "单位", "工程量", "人工费", "主材费", "辅材及机械费", "综合取费", "综合单价", "金额"])
+    sheet.append(["客户原项目", "矿棉板吊顶", "㎡", 12.5, None, None, None, None, "=SUM(E2:H2)", "=I2*D2"])
+    sheet["E2"].number_format = "General"
+    sheet["I2"].number_format = "¥#,##0.000"
+    sheet["J2"].number_format = "¥#,##0.000"
+    output = BytesIO()
+    workbook.save(output)
+    line = _line()
+    line.effective_unit_price = "82"
+    line.line_total = "1025"
+
+    result = render_budget_pricing_original_export(
+        output.getvalue(),
+        _source(line=line),
+        project_name="测试项目",
+    )
+
+    rendered = load_workbook(BytesIO(result.content), data_only=False)
+    sheet = rendered["清单"]
+    assert sheet["E2"].value == 20
+    assert sheet["F2"].value == 40
+    assert sheet["G2"].value == 10
+    assert sheet["H2"].value == 12
+    assert sheet["I2"].value == 82
+    assert sheet["J2"].value == 1025
+    assert sheet["E2"].number_format == "General"
+    assert sheet["I2"].number_format == "¥#,##0.000"
+    assert sheet["J2"].number_format == "¥#,##0.000"
+    assert sheet.max_column == 10
+    assert result.summary["sheets"][0]["appended_fields"] == []
+
+
+def test_export_preserves_two_level_header_styles_without_appending_optional_audit_columns():
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "清单"
@@ -154,21 +291,11 @@ def test_export_uses_real_table_edge_and_preserves_two_level_header_styles():
 
     rendered = load_workbook(BytesIO(result.content), data_only=False)
     sheet = rendered["清单"]
-    appended_start = 7  # G: the first truly empty column after original F, not styled G:H's far edge.
-
-    assert sheet.cell(row=1, column=appended_start).value == "系统报价补充"
-    assert sheet.cell(row=2, column=appended_start).value == "区域"
-    assert any(
-        merged_range.min_row == 1
-        and merged_range.min_col == appended_start
-        and merged_range.max_col > appended_start
-        for merged_range in sheet.merged_cells.ranges
-    )
-    assert sheet.cell(row=1, column=appended_start).fill.fgColor.rgb == sheet["D1"].fill.fgColor.rgb
-    assert sheet.cell(row=2, column=appended_start).border.left.style == sheet["D2"].border.left.style
-    assert sheet.cell(row=3, column=appended_start).border.left.style == sheet["B3"].border.left.style
-    assert sheet.cell(row=3, column=appended_start).value == "一层"
+    assert sheet.max_column == 8
+    assert {str(item) for item in sheet.merged_cells.ranges} == {"A1:A2", "B1:B2", "C1:C2", "D1:E1", "F1:F2"}
+    assert sheet["D1"].fill.fgColor.rgb == header_fill.fgColor.rgb
+    assert sheet["D2"].border.left.style == formal_border.left.style
     assert sheet["D3"].value == 88.8
     assert sheet["E3"].value == 1110
     assert sheet["D3"].number_format == "¥#,##0.000"
-    assert sheet.cell(row=2, column=appended_start + 3).value != "不含税综合单价"
+    assert result.summary["sheets"][0]["appended_fields"] == []

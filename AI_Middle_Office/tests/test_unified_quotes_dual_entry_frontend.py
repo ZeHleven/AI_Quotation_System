@@ -38,6 +38,17 @@ def test_project_quote_workspace_supports_list_create_and_chat_handoff():
     assert "createBudgetProject" in api_source
 
 
+def test_excel_upload_entries_accept_legacy_xls_without_old_rejection_hint():
+    unified = UNIFIED_QUOTES.read_text(encoding="utf-8")
+    app = APP_VUE.read_text(encoding="utf-8")
+
+    assert 'accept="image/*,.xls,.xlsx,.xlsm"' in unified
+    assert "/\\.(xls|xlsx|xlsm)$/i" in unified
+    assert "暂不支持旧 .xls 文件" not in unified
+    assert 'accept=".xls,.xlsx,.xlsm"' in app
+    assert "请先选择 .xls/.xlsx/.xlsm 需求单" in app
+
+
 def test_chat_quote_uses_summary_and_budget_detail_keeps_workspace_views():
     pricing = BUDGET_PRICING.read_text(encoding="utf-8")
     legacy = LEGACY_QUOTE.read_text(encoding="utf-8")
@@ -46,7 +57,8 @@ def test_chat_quote_uses_summary_and_budget_detail_keeps_workspace_views():
         assert label in pricing
 
     assert "pricingWorkspaceView" in pricing
-    assert "quoteWorkflowSteps" in pricing
+    assert "quoteWorkflowSteps" not in pricing
+    assert 'class="quote-workbench-flow"' not in pricing
     assert "<span>当前报价合计</span>" in pricing
     assert "<span>账户定额</span>" in pricing
     assert "<span>企业定额</span>" in pricing

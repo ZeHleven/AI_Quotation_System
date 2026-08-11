@@ -187,7 +187,7 @@
               <span>企业资料库</span>
             </button>
           </div>
-          <div class="nav-group" v-if="canViewDwgTrial || canViewAgentCenter || canViewBidding || canViewPricingAgent">
+          <div class="nav-group" v-if="canViewDwgTrial || canViewAgentCenter || canViewStandaloneBidIntakeAgent || canViewPricingAgent">
             <p class="nav-group-label">智能工具</p>
             <button
               v-if="canViewPricingAgent"
@@ -199,7 +199,7 @@
               <span>智能组价实验室</span>
             </button>
             <button
-              v-if="canViewBidding"
+              v-if="canViewStandaloneBidIntakeAgent"
               :class="['nav-item', { active: routeName === 'bidIntakeAgent' }]"
               type="button"
               @click="navigate('/admin/bid-intake-agent')"
@@ -1359,7 +1359,7 @@
               <div class="quote-entry-card-icon"><el-icon><Tickets /></el-icon></div>
               <div>
                 <h3>标准需求单报价</h3>
-                <p>上传 .xlsx / .xlsm，人工确认字段和报价行后，再发起报价。</p>
+                <p>上传 .xls / .xlsx / .xlsm，人工确认字段和报价行后，再发起报价。</p>
               </div>
               <ul>
                 <li>适合多 Sheet、列不固定或需要逐行复核的清单</li>
@@ -6937,7 +6937,7 @@
                 :auto-upload="false"
                 :show-file-list="true"
                 :limit="1"
-                accept=".xlsx,.xlsm"
+                accept=".xls,.xlsx,.xlsm"
                 :on-change="handleRequirementFileChange"
                 :on-remove="clearRequirementFile"
               >
@@ -7387,7 +7387,7 @@
           <div class="content-heading">
             <div>
               <p class="eyebrow">账号与权限</p>
-              <h2>用户角色</h2>
+              <h2>账号功能权限</h2>
             </div>
             <div class="row-actions">
               <el-button :icon="Refresh" plain @click="loadUsers">刷新</el-button>
@@ -7395,12 +7395,13 @@
             </div>
           </div>
 
-          <div class="role-hints">
-            <div v-for="role in roleOptions" :key="role.value" class="role-hint">
-              <strong>{{ role.label }}</strong>
-              <span>{{ role.hint }}</span>
-            </div>
-          </div>
+          <el-alert
+            class="permission-page-guide"
+            type="info"
+            :closable="false"
+            show-icon
+            title="点击“管理功能”可直接勾选新增功能、取消勾选移除功能；保存前会分别列出实际新增和实际移除的功能。"
+          />
 
           <el-table
             :data="users"
@@ -7409,7 +7410,7 @@
             empty-text="暂无用户"
           >
             <el-table-column prop="username" label="用户" min-width="150" />
-            <el-table-column label="角色" min-width="240">
+            <el-table-column label="已授权权限包" min-width="260">
               <template #default="{ row }">
                 <div class="role-tags">
                   <el-tag
@@ -7418,7 +7419,7 @@
                     :type="roleTagType(role)"
                     effect="light"
                   >
-                    {{ role }}
+                    <span :title="role">{{ roleLabel(role) }}</span>
                   </el-tag>
                   <el-tag v-if="!row.roles?.length" type="info" effect="plain">未分配</el-tag>
                 </div>
@@ -7432,7 +7433,7 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="当前模块" min-width="220">
+            <el-table-column label="实际可用功能" min-width="240">
               <template #default="{ row }">
                 <div class="module-list">
                   <span
@@ -7449,7 +7450,7 @@
               <template #default="{ row }">
                 <div class="row-actions">
                   <el-button :icon="Plus" plain @click="openGrant(row)" :disabled="!canMutateRoles">
-                    授权
+                    管理功能
                   </el-button>
                   <el-button :icon="Clock" plain @click="openEvents(row)">历史</el-button>
                 </div>
@@ -8265,28 +8266,111 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="grantDialog.visible" title="授予角色" width="420px">
-      <el-form label-position="top" :model="grantDialog">
-        <el-form-item label="用户">
-          <el-input :model-value="grantDialog.user?.username" disabled />
-        </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="grantDialog.role" class="full-width">
-            <el-option
-              v-for="role in roleOptions"
-              :key="role.value"
-              :label="role.label"
-              :value="role.value"
+    <el-dialog v-model="grantDialog.visible" title="管理功能权限" width="min(960px, 94vw)" class="permission-dialog">
+      <template v-if="grantDialog.user">
+        <div class="permission-dialog-user">
+          <div>
+            <small>当前账号</small>
+            <strong>{{ grantDialog.user.username }}</strong>
+          </div>
+          <el-tag type="info" effect="plain">已分配 {{ grantDialog.originalRoles.length }} 个权限包</el-tag>
+        </div>
+
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="勾选表示保留或新增；取消勾选表示移除。高级权限包含的功能不会因取消低级权限包而误删。"
+        />
+
+        <div class="permission-current-modules">
+          <span>当前实际可用功能</span>
+          <div>
+            <el-tag
+              v-for="module in grantCurrentModules"
+              :key="module.key"
+              size="small"
+              effect="plain"
+            >
+              {{ module.name }}
+            </el-tag>
+            <span v-if="!grantCurrentModules.length" class="permission-empty-text">暂无可用功能</span>
+          </div>
+        </div>
+
+        <el-checkbox-group v-model="grantDialog.selectedRoles" class="permission-role-groups">
+          <section v-for="group in roleGroups" :key="group.key" class="permission-role-group">
+            <h4>{{ group.label }}</h4>
+            <div class="permission-role-grid">
+              <el-checkbox
+                v-for="role in roleOptionsByGroup(group.key)"
+                :key="role.value"
+                :value="role.value"
+                :class="['permission-role-option', `is-${grantRoleStatus(role.value)}`]"
+              >
+                <span class="permission-role-card">
+                  <span class="permission-role-card-heading">
+                    <strong>{{ role.label }}</strong>
+                    <el-tag :type="grantRoleStatusType(role.value)" size="small" effect="plain">
+                      {{ grantRoleStatusLabel(role.value) }}
+                    </el-tag>
+                  </span>
+                  <span class="permission-role-hint">{{ role.hint }}</span>
+                  <span class="permission-role-functions">包含：{{ role.functions.join('、') }}</span>
+                </span>
+              </el-checkbox>
+            </div>
+          </section>
+        </el-checkbox-group>
+
+        <div class="permission-change-summary">
+          <section class="permission-change-card is-add">
+            <header>
+              <strong>将新增的功能</strong>
+              <span>{{ grantAddedFunctions.length }} 项</span>
+            </header>
+            <div v-if="grantAddedFunctions.length" class="permission-change-tags">
+              <el-tag v-for="item in grantAddedFunctions" :key="item" type="success" effect="plain">{{ item }}</el-tag>
+            </div>
+            <p v-else>本次不会新增实际功能。</p>
+            <small v-if="grantAddedRoleOptions.length">新增权限包：{{ grantAddedRoleOptions.map((item) => item.label).join('、') }}</small>
+          </section>
+          <section class="permission-change-card is-remove">
+            <header>
+              <strong>将移除的功能</strong>
+              <span>{{ grantRemovedFunctions.length }} 项</span>
+            </header>
+            <div v-if="grantRemovedFunctions.length" class="permission-change-tags">
+              <el-tag v-for="item in grantRemovedFunctions" :key="item" type="danger" effect="plain">{{ item }}</el-tag>
+            </div>
+            <p v-else>本次不会移除实际功能。</p>
+            <small v-if="grantRemovedRoleOptions.length">移除权限包：{{ grantRemovedRoleOptions.map((item) => item.label).join('、') }}</small>
+          </section>
+        </div>
+
+        <el-form label-position="top" :model="grantDialog" class="permission-note-form">
+          <el-form-item label="变更备注（必填）">
+            <el-input
+              v-model="grantDialog.note"
+              type="textarea"
+              :rows="2"
+              maxlength="120"
+              show-word-limit
+              placeholder="说明为什么新增或移除这些功能"
             />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="grantDialog.note" type="textarea" :rows="3" maxlength="120" show-word-limit />
-        </el-form-item>
-      </el-form>
+          </el-form-item>
+        </el-form>
+      </template>
       <template #footer>
         <el-button @click="grantDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="state.submitting" @click="grantSelectedRole">确认授权</el-button>
+        <el-button
+          type="primary"
+          :loading="state.submitting"
+          :disabled="!grantHasRoleChanges"
+          @click="saveFunctionalPermissions"
+        >
+          保存功能授权
+        </el-button>
       </template>
     </el-dialog>
 
@@ -8317,7 +8401,7 @@
             <el-option
               v-for="role in eventsDrawer.user.roles"
               :key="role"
-              :label="role"
+              :label="roleLabel(role)"
               :value="role"
             />
           </el-select>
@@ -8987,16 +9071,17 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import axios from 'axios'
-import BidIntakeAssessment from './BidIntakeAssessment.vue'
-import BidIntakeWorkbench from './BidIntakeWorkbench.vue'
-import BudgetProjects from './BudgetProjects.vue'
-import AccountQuotaLibrary from './AccountQuotaLibrary.vue'
-import EnterpriseQuotaWorkbench from './EnterpriseQuotaWorkbench.vue'
-import PricingAgentLab from './PricingAgentLab.vue'
-import UnifiedQuotes from './UnifiedQuotes.vue'
-import { cleanupSharedAuthStorage, clearAuth, getToken, setToken, setUserInfo } from './authStorage'
+import {
+  cleanupSharedAuthStorage,
+  clearAuth,
+  getToken,
+  isPasswordChangeRequiredError,
+  redirectToPasswordChange,
+  setToken,
+  setUserInfo,
+} from './authStorage'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
@@ -9022,6 +9107,14 @@ import {
   Warning,
 } from '@element-plus/icons-vue'
 
+const BidIntakeAssessment = defineAsyncComponent(() => import('./BidIntakeAssessment.vue'))
+const BidIntakeWorkbench = defineAsyncComponent(() => import('./BidIntakeWorkbench.vue'))
+const BudgetProjects = defineAsyncComponent(() => import('./BudgetProjects.vue'))
+const AccountQuotaLibrary = defineAsyncComponent(() => import('./AccountQuotaLibrary.vue'))
+const EnterpriseQuotaWorkbench = defineAsyncComponent(() => import('./EnterpriseQuotaWorkbench.vue'))
+const PricingAgentLab = defineAsyncComponent(() => import('./PricingAgentLab.vue'))
+const UnifiedQuotes = defineAsyncComponent(() => import('./UnifiedQuotes.vue'))
+
 const REQUIREMENT_HISTORY_DB_NAME = 'ai_requirement_standardization_history'
 const REQUIREMENT_HISTORY_DB_VERSION = 1
 const REQUIREMENT_HISTORY_RECORD_STORE = 'records'
@@ -9041,6 +9134,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (isPasswordChangeRequiredError(error)) {
+      redirectToPasswordChange()
+      return Promise.reject(error)
+    }
     if (error.response?.status === 401) {
       clearAuth()
     }
@@ -9048,25 +9145,123 @@ api.interceptors.response.use(
   },
 )
 
-const roleOptions = [
-  { value: 'system_admin', label: '系统管理员', hint: '权限与系统配置' },
-  { value: 'admin', label: '管理人员', hint: '报价与知识库管理' },
-  { value: 'quote_operator', label: '报价复核人员', hint: '报价运营只读复核' },
-  { value: 'quote_user', label: '报价专员', hint: '报价工作台与需求单标准化' },
-  { value: 'cost_viewer', label: '成本库查看人员', hint: '完整成本库只读' },
-  { value: 'cost_editor', label: '成本库维护人员', hint: '维护成本库待核定条目' },
-  { value: 'cost_approver', label: '成本库核定人员', hint: '启用或归档成本价' },
-  { value: 'cost_exporter', label: '成本库导出人员', hint: '导出成本数据' },
-  { value: 'enterprise_profile_viewer', label: '企业资料查看人员', hint: '查看企业资料库' },
-  { value: 'enterprise_profile_editor', label: '企业资料维护人员', hint: '维护企业资料草稿' },
-  { value: 'enterprise_profile_approver', label: '企业资料核定人员', hint: '启用或归档企业资料' },
-  { value: 'project_viewer', label: '项目查看人员', hint: '查看参与项目' },
-  { value: 'project_member', label: 'project_member', hint: '更新本人项目任务' },
-  { value: 'project_manager', label: 'project_manager', hint: '管理项目进度' },
-  { value: 'staff', label: 'staff', hint: '旧报价工作台' },
-  { value: 'manager', label: 'manager', hint: '项目管理兼容角色' },
-  { value: 'viewer', label: 'viewer', hint: '看板开启后生效' },
+const roleGroups = [
+  { key: 'system', label: '系统与管理' },
+  { key: 'quote', label: '报价业务' },
+  { key: 'cost', label: '企业定额与成本' },
+  { key: 'profile', label: '企业资料' },
+  { key: 'project', label: '项目协作' },
+  { key: 'compatibility', label: '兼容权限包' },
 ]
+
+const roleOptions = [
+  {
+    value: 'system_admin', label: '系统管理员', group: 'system', hint: '最高权限，可管理其他账号的功能授权与系统配置',
+    functions: ['管理账号与功能授权', '系统配置', '全部后台业务功能', '成本数据导出'],
+  },
+  {
+    value: 'admin', label: '管理人员', group: 'system', hint: '查看账号权限并管理报价、项目、成本和企业资料',
+    functions: ['查看账号与权限', '兼容管理页', '账户定额库', '管理报价与业务数据'],
+  },
+  {
+    value: 'quote_operator', label: '报价复核人员', group: 'quote', hint: '面向报价运营、审核和经营看板，不负责维护成本库',
+    functions: ['报价运营复核', '经营总览', '智能组价实验室', 'AI 助手中心', '智能投标'],
+  },
+  {
+    value: 'quote_user', label: '报价专员', group: 'quote', hint: '执行报价、需求单整理、识图和智能组价',
+    functions: ['报价工作台', 'AI 报价', '预算项目', '需求单标准化', '图纸识图', '智能组价实验室', 'AI 助手中心', '智能投标'],
+  },
+  {
+    value: 'cost_viewer', label: '企业定额/成本查看', group: 'cost', hint: '只读查看企业定额主库、成本主库和项目成本计价',
+    functions: ['查看企业定额主库/成本主库', '查看项目成本计价'],
+  },
+  {
+    value: 'cost_editor', label: '企业定额/成本维护', group: 'cost', hint: '包含查看权限，可维护待核定条目和项目计价明细',
+    functions: ['维护企业定额/成本待核定条目', '创建和编辑项目成本计价'],
+  },
+  {
+    value: 'cost_approver', label: '企业定额/成本核定', group: 'cost', hint: '包含查看和维护权限，可启用、撤回或归档成本数据',
+    functions: ['启用、撤回或归档成本数据'],
+  },
+  {
+    value: 'cost_exporter', label: '成本数据导出', group: 'cost', hint: '允许导出企业定额和成本数据',
+    functions: ['成本数据导出'],
+  },
+  {
+    value: 'enterprise_profile_viewer', label: '企业资料查看', group: 'profile', hint: '只读查看企业资料库',
+    functions: ['查看企业资料库'],
+  },
+  {
+    value: 'enterprise_profile_editor', label: '企业资料维护', group: 'profile', hint: '包含查看权限，可新建和编辑企业资料草稿',
+    functions: ['新建和编辑企业资料草稿'],
+  },
+  {
+    value: 'enterprise_profile_approver', label: '企业资料核定', group: 'profile', hint: '包含查看和维护权限，可启用或归档企业资料',
+    functions: ['启用或归档企业资料'],
+  },
+  {
+    value: 'project_viewer', label: '项目查看', group: 'project', hint: '查看本人参与的项目和进度',
+    functions: ['查看参与项目与进度'],
+  },
+  {
+    value: 'project_member', label: '项目成员', group: 'project', hint: '包含项目查看权限，可更新本人负责的任务',
+    functions: ['更新本人项目任务'],
+  },
+  {
+    value: 'project_manager', label: '项目经理', group: 'project', hint: '包含项目成员权限，可管理项目进度、成员和任务',
+    functions: ['管理项目进度、成员和任务'],
+  },
+  {
+    value: 'staff', label: '基础报价人员（兼容）', group: 'compatibility', hint: '保留旧报价工作流，并提供部分业务库只读入口',
+    functions: ['报价工作台', 'AI 报价', '预算项目入口', '账户定额库', '企业定额/成本库只读', '智能投标'],
+  },
+  {
+    value: 'manager', label: '项目管理人员（兼容）', group: 'compatibility', hint: '兼容旧项目管理账号，包含完整项目管理能力',
+    functions: ['预算项目', '项目进度管理', '智能投标'],
+  },
+  {
+    value: 'viewer', label: '经营看板查看（兼容）', group: 'compatibility', hint: '查看经营总览和预算项目，不含项目成本计价权限',
+    functions: ['经营总览', '预算项目只读'],
+  },
+]
+
+const roleImplications = {
+  system_admin: ['admin', 'quote_operator', 'quote_user', 'cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter', 'enterprise_profile_viewer', 'enterprise_profile_editor', 'enterprise_profile_approver', 'project_viewer', 'project_member', 'project_manager'],
+  admin: ['quote_operator', 'quote_user', 'cost_viewer', 'cost_editor', 'cost_approver', 'enterprise_profile_viewer', 'enterprise_profile_editor', 'enterprise_profile_approver', 'project_viewer', 'project_member', 'project_manager'],
+  cost_approver: ['cost_viewer', 'cost_editor'],
+  cost_editor: ['cost_viewer'],
+  enterprise_profile_approver: ['enterprise_profile_viewer', 'enterprise_profile_editor'],
+  enterprise_profile_editor: ['enterprise_profile_viewer'],
+  manager: ['project_viewer', 'project_member', 'project_manager'],
+  project_manager: ['project_viewer', 'project_member'],
+  project_member: ['project_viewer'],
+}
+
+const roleOptionMap = new Map(roleOptions.map((role) => [role.value, role]))
+const roleOptionsByGroup = (group) => roleOptions.filter((role) => role.group === group)
+const roleLabel = (role) => roleOptionMap.get(role)?.label || role
+
+function expandedRoleValues(roles) {
+  const expanded = new Set(roles || [])
+  const pending = [...expanded]
+  while (pending.length) {
+    const role = pending.shift()
+    for (const implied of roleImplications[role] || []) {
+      if (expanded.has(implied)) continue
+      expanded.add(implied)
+      pending.push(implied)
+    }
+  }
+  return expanded
+}
+
+function functionLabelsForRoles(roles) {
+  const labels = new Set()
+  for (const role of expandedRoleValues(roles)) {
+    for (const label of roleOptionMap.get(role)?.functions || []) labels.add(label)
+  }
+  return labels
+}
 
 const rangeOptions = [
   { value: 'today', label: '今日' },
@@ -9832,9 +10027,59 @@ const routeName = ref(routeFromPath(`${window.location.pathname}${window.locatio
 const grantDialog = reactive({
   visible: false,
   user: null,
-  role: 'staff',
+  originalRoles: [],
+  selectedRoles: [],
   note: '',
 })
+
+const grantOriginalRoleSet = computed(() => new Set(grantDialog.originalRoles || []))
+const grantSelectedRoleSet = computed(() => new Set(grantDialog.selectedRoles || []))
+const grantAddedRoleOptions = computed(() => roleOptions.filter(
+  (role) => grantSelectedRoleSet.value.has(role.value) && !grantOriginalRoleSet.value.has(role.value),
+))
+const grantRemovedRoleOptions = computed(() => roleOptions.filter(
+  (role) => grantOriginalRoleSet.value.has(role.value) && !grantSelectedRoleSet.value.has(role.value),
+))
+const grantHasRoleChanges = computed(() => (
+  grantAddedRoleOptions.value.length > 0 || grantRemovedRoleOptions.value.length > 0
+))
+const grantAddedFunctions = computed(() => {
+  const before = functionLabelsForRoles(grantDialog.originalRoles)
+  return [...functionLabelsForRoles(grantDialog.selectedRoles)].filter((item) => !before.has(item)).sort()
+})
+const grantRemovedFunctions = computed(() => {
+  const after = functionLabelsForRoles(grantDialog.selectedRoles)
+  return [...functionLabelsForRoles(grantDialog.originalRoles)].filter((item) => !after.has(item)).sort()
+})
+const grantCurrentModules = computed(() => (
+  (grantDialog.user?.available_modules || []).filter((module) => module.status === 'available')
+))
+
+function grantRoleStatus(role) {
+  const hadRole = grantOriginalRoleSet.value.has(role)
+  const hasRole = grantSelectedRoleSet.value.has(role)
+  if (!hadRole && hasRole) return 'added'
+  if (hadRole && !hasRole) return 'removed'
+  return hadRole ? 'retained' : 'none'
+}
+
+function grantRoleStatusLabel(role) {
+  return {
+    added: '将新增',
+    removed: '将移除',
+    retained: '已授权',
+    none: '未授权',
+  }[grantRoleStatus(role)]
+}
+
+function grantRoleStatusType(role) {
+  return {
+    added: 'success',
+    removed: 'danger',
+    retained: 'primary',
+    none: 'info',
+  }[grantRoleStatus(role)]
+}
 
 const createUserDialog = reactive({
   visible: false,
@@ -10100,24 +10345,30 @@ const costAuditFilters = reactive({
 
 const roles = computed(() => session.user?.roles || [])
 const hasRole = (...roleNames) => roles.value.some((role) => roleNames.includes(role))
+const availableModuleKeys = computed(() => new Set(
+  (session.user?.available_modules || [])
+    .filter((module) => module.status === 'available')
+    .map((module) => module.key),
+))
+const hasAvailableModule = (...moduleKeys) => moduleKeys.some((key) => availableModuleKeys.value.has(key))
 const canMutateRoles = computed(() => roles.value.includes('system_admin'))
 const canAccessPermissions = computed(() => roles.value.includes('system_admin') || roles.value.includes('admin'))
 const canViewDashboardMetrics = computed(() => canAccessPermissions.value || roles.value.includes('viewer'))
 const canViewDashboard = computed(() => canViewDashboardMetrics.value || roles.value.includes('quote_operator'))
 const canViewQuoteOperations = computed(() => canAccessPermissions.value || roles.value.includes('quote_operator'))
 const canManageQuoteOperations = computed(() => canAccessPermissions.value)
-const canViewProjectProgress = computed(() => canAccessPermissions.value || hasRole('staff', 'manager', 'project_viewer', 'project_member', 'project_manager'))
-const canViewMyProjectTasks = computed(() => hasRole('staff', 'manager', 'project_member', 'project_manager'))
+const canViewProjectProgress = computed(() => hasAvailableModule('project_progress'))
+const canViewMyProjectTasks = computed(() => canViewProjectProgress.value && hasRole('manager', 'project_member', 'project_manager'))
 const canManageProjectProgress = computed(() => canAccessPermissions.value || hasRole('manager', 'project_manager'))
 const canViewEnterpriseProfile = computed(() => canAccessPermissions.value || hasRole('enterprise_profile_viewer', 'enterprise_profile_editor', 'enterprise_profile_approver'))
 const canEditEnterpriseProfile = computed(() => canAccessPermissions.value || hasRole('enterprise_profile_editor', 'enterprise_profile_approver'))
 const canApproveEnterpriseProfile = computed(() => canAccessPermissions.value || roles.value.includes('enterprise_profile_approver'))
-const canViewCostDb = computed(() => canAccessPermissions.value || hasRole('cost_viewer', 'cost_editor', 'cost_approver', 'cost_exporter'))
+const canViewCostDb = computed(() => hasAvailableModule('cost_db'))
 const canEditCostDb = computed(() => canAccessPermissions.value || hasRole('cost_editor', 'cost_approver'))
 const canApproveCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
 const canExportCostDb = computed(() => canAccessPermissions.value || roles.value.includes('cost_exporter'))
 const canViewCostAudit = computed(() => canAccessPermissions.value || roles.value.includes('cost_approver'))
-const canViewRequirementStandardization = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
+const canViewRequirementStandardization = computed(() => hasAvailableModule('requirement_standardization'))
 const unifiedQuotesModule = computed(() => (session.user?.available_modules || []).find(
   (module) => module.key === 'unified_quotes',
 ))
@@ -10125,7 +10376,10 @@ const unifiedQuotesFeatureAvailable = computed(() => unifiedQuotesModule.value?.
 const budgetProjectsModule = computed(() => (session.user?.available_modules || []).find(
   (module) => module.key === 'budget_projects' || module.path === '/admin/budget-projects',
 ))
-const budgetProjectsFeatureAvailable = computed(() => budgetProjectsModule.value?.status === 'available')
+const budgetProjectsFeatureAvailable = computed(() => (
+  budgetProjectsModule.value?.status === 'available'
+  || (hasRole('staff') && unifiedQuotesFeatureAvailable.value)
+))
 const budgetPricingModule = computed(() => (session.user?.available_modules || []).find(
   (module) => module.key === 'budget_pricing',
 ))
@@ -10134,7 +10388,7 @@ const accountQuotasModule = computed(() => (session.user?.available_modules || [
   (module) => module.key === 'account_quotas' || module.path === '/admin/account-quotas',
 ))
 const accountQuotasFeatureAvailable = computed(() => accountQuotasModule.value?.status === 'available')
-const canViewAccountQuotas = computed(() => accountQuotasFeatureAvailable.value && canAccessPermissions.value)
+const canViewAccountQuotas = computed(() => accountQuotasFeatureAvailable.value)
 const pricingAgentModule = computed(() => (session.user?.available_modules || []).find(
   (module) => module.key === 'pricing_agent' || module.path === '/admin/pricing-agent',
 ))
@@ -10151,12 +10405,16 @@ const canEditBudgetProjectsByRole = computed(() => canAccessPermissions.value ||
   'staff', 'quote_user', 'quote_operator', 'manager', 'project_manager',
 ))
 const canEditBudgetProjects = computed(() => budgetProjectsFeatureAvailable.value && canEditBudgetProjectsByRole.value)
-const canViewDwgTrial = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
-const canViewBidding = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user', 'quote_operator', 'manager'))
+const canViewDwgTrial = computed(() => hasAvailableModule('dwg_trial'))
+const canViewBidding = computed(() => hasAvailableModule('bidding'))
+const canViewStandaloneBidIntakeAgent = computed(() => (
+  canViewBidding.value
+  && (canAccessPermissions.value || hasRole('quote_user', 'quote_operator', 'manager'))
+))
 const canManageBidIntakePolicy = computed(() => canAccessPermissions.value || hasRole('manager'))
-const canViewAgentCenter = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user', 'quote_operator'))
+const canViewAgentCenter = computed(() => hasAvailableModule('agent_center'))
 const canManageAgentDailyReview = computed(() => canAccessPermissions.value || hasRole('quote_operator'))
-const canOpenLegacyQuote = computed(() => canAccessPermissions.value || hasRole('staff', 'quote_user'))
+const canOpenLegacyQuote = computed(() => hasAvailableModule('legacy_quote'))
 const canUseUnifiedQuotes = computed(() => (
   unifiedQuotesFeatureAvailable.value
   && (canOpenLegacyQuote.value || canViewBudgetProjects.value)
@@ -12947,7 +13205,7 @@ function meaningfulRequirementCell(value) {
 
 async function previewRequirementStandardization() {
   if (!requirementFile.value) {
-    ElMessage.warning('请先选择 .xlsx/.xlsm 需求单')
+    ElMessage.warning('请先选择 .xls/.xlsx/.xlsm 需求单')
     return
   }
   requirementLoading.value = true
@@ -19527,7 +19785,11 @@ async function bootstrap() {
   state.loading = true
   state.error = ''
   try {
-    await loadMe()
+    const me = await loadMe()
+    if (me.must_change_password) {
+      redirectToPasswordChange()
+      return
+    }
     if (routeName.value === 'noAccess') return
     if (routeName.value === 'unifiedQuotes' || routeName.value === 'unifiedQuoteNew') {
       if (!canUseUnifiedQuotes.value) state.error = 'forbidden'
@@ -19591,7 +19853,7 @@ async function bootstrap() {
       return
     }
     if (routeName.value === 'bidIntakeAgent') {
-      if (!canViewBidding.value) {
+      if (!canViewStandaloneBidIntakeAgent.value) {
         state.error = 'forbidden'
         return
       }
@@ -19667,7 +19929,8 @@ async function bootstrap() {
 
 function openGrant(user) {
   grantDialog.user = user
-  grantDialog.role = 'staff'
+  grantDialog.originalRoles = [...(user.roles || [])]
+  grantDialog.selectedRoles = [...(user.roles || [])]
   grantDialog.note = ''
   grantDialog.visible = true
 }
@@ -19709,22 +19972,31 @@ async function createUser() {
   }
 }
 
-async function grantSelectedRole() {
-  if (!grantDialog.user || !grantDialog.note.trim()) {
-    ElMessage.warning('请填写授权备注')
+async function saveFunctionalPermissions() {
+  if (!grantDialog.user || !grantHasRoleChanges.value) {
+    ElMessage.warning('请先勾选要新增的功能，或取消勾选要移除的功能')
+    return
+  }
+  if (!grantDialog.note.trim()) {
+    ElMessage.warning('请填写功能授权变更备注')
     return
   }
   state.submitting = true
   try {
-    await api.post(`/admin/users/${grantDialog.user.id}/roles`, {
-      role: grantDialog.role,
-      note: grantDialog.note,
+    const roles = roleOptions
+      .filter((role) => grantSelectedRoleSet.value.has(role.value))
+      .map((role) => role.value)
+    await api.put(`/admin/users/${grantDialog.user.id}/roles`, {
+      roles,
+      note: grantDialog.note.trim(),
     })
+    const addedCount = grantAddedFunctions.value.length
+    const removedCount = grantRemovedFunctions.value.length
     grantDialog.visible = false
     await loadUsers()
-    ElMessage.success('已授权')
+    ElMessage.success(`功能授权已更新：新增 ${addedCount} 项，移除 ${removedCount} 项`)
   } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '授权失败'))
+    ElMessage.error(apiErrorMessage(error, '功能授权更新失败'))
   } finally {
     state.submitting = false
   }

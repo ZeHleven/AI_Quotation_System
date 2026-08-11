@@ -3,6 +3,7 @@ FROM rag_service-rag-service:phase3c-base
 WORKDIR /app
 
 COPY rag_api_service.py .
+COPY reload_auth.py .
 COPY tender_evidence_search.py .
 
 CMD ["uvicorn", "rag_api_service:app", "--host", "0.0.0.0", "--port", "8001"]

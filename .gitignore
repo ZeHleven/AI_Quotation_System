@@ -81,3 +81,9 @@ Thumbs.db
 
 .codex-pet-runs/
 hatch_runs/
+
+# Local release/test scratch files are never part of an application release.
+/AI_Middle_Office/.tmp/
+
+# Separate video-production workspace and browser capture profiles.
+/video-promo-qisheng/

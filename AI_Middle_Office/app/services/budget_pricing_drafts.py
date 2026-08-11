@@ -417,7 +417,7 @@ def _line_pricing_breakdown(line: BudgetProjectPricingDraftLine) -> dict[str, An
 def _source_component_unit(line: BudgetProjectPricingDraftLine, key: str) -> Decimal:
     breakdown = _line_pricing_breakdown(line)
     value = _decimal(breakdown.get(key)) if isinstance(breakdown, dict) else None
-    if value is not None:
+    if value is not None and not (key == "tax_amount" and value <= 0):
         return value
     selected = _json_load(line.selected_source_snapshot_json, {})
     alias = {
@@ -428,7 +428,18 @@ def _source_component_unit(line: BudgetProjectPricingDraftLine, key: str) -> Dec
         "subcontract_unit_cost": "subcontract_fee",
     }.get(key)
     value = _decimal(selected.get(alias)) if alias and isinstance(selected, dict) else None
-    return value or Decimal("0")
+    if value is not None:
+        return value
+    if key == "tax_amount":
+        # Older pricing drafts can contain a valid component breakdown that
+        # predates ``tax_amount``.  Once one newly edited line has tax data,
+        # summing only the explicit values would silently drop tax from every
+        # legacy line.  Fall back per line so mixed old/new drafts remain
+        # internally consistent after add/delete/replace operations.
+        effective = _decimal(line.effective_unit_price)
+        if effective is not None and effective > 0:
+            return effective * _BREAKDOWN_TAX_RATE
+    return Decimal("0")
 
 
 def _line_summary_multiplier(line: BudgetProjectPricingDraftLine) -> Decimal:

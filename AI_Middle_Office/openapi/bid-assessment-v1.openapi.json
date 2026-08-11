@@ -1,0 +1,530 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "旗胜投标机会研判 Agent API",
+    "version": "1.0.0-draft.1",
+    "description": "Phase 0 机器合同。尚未注册运行时路由，不代表接口已经上线。"
+  },
+  "servers": [{"url": "/api/v1"}],
+  "security": [{"bearerAuth": []}],
+  "tags": [
+    {"name": "assessments"},
+    {"name": "uploads"},
+    {"name": "documents"},
+    {"name": "lots"},
+    {"name": "runs"},
+    {"name": "questions"},
+    {"name": "reports"},
+    {"name": "evidence"},
+    {"name": "versions"}
+  ],
+  "paths": {
+    "/bid-assessments": {
+      "post": {
+        "x-api-id": "API-01",
+        "operationId": "createBidAssessment",
+        "tags": ["assessments"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateAssessmentRequest"}}}},
+        "responses": {"201": {"$ref": "#/components/responses/AssessmentCreated"}, "default": {"$ref": "#/components/responses/Error"}}
+      },
+      "get": {
+        "x-api-id": "API-02",
+        "operationId": "listBidAssessments",
+        "tags": ["assessments"],
+        "parameters": [{"$ref": "#/components/parameters/Page"}, {"$ref": "#/components/parameters/PageSize"}],
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "get": {
+        "x-api-id": "API-03",
+        "operationId": "getBidAssessment",
+        "tags": ["assessments"],
+        "responses": {"200": {"$ref": "#/components/responses/AssessmentOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
+      },
+      "patch": {
+        "x-api-id": "API-04",
+        "operationId": "patchBidAssessment",
+        "tags": ["assessments"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PatchAssessmentRequest"}}}},
+        "responses": {"200": {"$ref": "#/components/responses/AssessmentOk"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/upload-batches": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "post": {
+        "x-api-id": "API-10",
+        "operationId": "createBidUploadBatch",
+        "tags": ["uploads"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateUploadBatchRequest"}}}},
+        "responses": {"201": {"$ref": "#/components/responses/UploadBatchCreated"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-upload-batches/{batch_id}": {
+      "parameters": [{"$ref": "#/components/parameters/BatchId"}],
+      "get": {
+        "x-api-id": "API-11",
+        "operationId": "getBidUploadBatch",
+        "tags": ["uploads"],
+        "responses": {"200": {"$ref": "#/components/responses/UploadBatchOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-upload-batches/{batch_id}/files": {
+      "parameters": [{"$ref": "#/components/parameters/BatchId"}],
+      "post": {
+        "x-api-id": "API-12",
+        "operationId": "uploadBidBatchFile",
+        "tags": ["uploads"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/XContentSha256"}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["file", "client_file_id", "operation"],
+                "properties": {
+                  "file": {"type": "string", "format": "binary"},
+                  "client_file_id": {"type": "string", "minLength": 1, "maxLength": 80},
+                  "operation": {"type": "string", "enum": ["add", "replace"]},
+                  "replace_document_id": {"type": ["string", "null"], "maxLength": 80},
+                  "relative_path": {"type": ["string", "null"], "maxLength": 1000}
+                }
+              }
+            }
+          }
+        },
+        "responses": {"201": {"$ref": "#/components/responses/UploadFileCreated"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-upload-batches/{batch_id}/files/{file_id}": {
+      "parameters": [{"$ref": "#/components/parameters/BatchId"}, {"$ref": "#/components/parameters/FileId"}],
+      "delete": {
+        "x-api-id": "API-13",
+        "operationId": "deleteBidBatchFile",
+        "tags": ["uploads"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "responses": {"204": {"$ref": "#/components/responses/UploadFileDeleted"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-upload-batches/{batch_id}/deactivations": {
+      "parameters": [{"$ref": "#/components/parameters/BatchId"}],
+      "post": {
+        "x-api-id": "API-14",
+        "operationId": "addBidDocumentDeactivation",
+        "tags": ["uploads"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DeactivationRequest"}}}},
+        "responses": {"201": {"$ref": "#/components/responses/UploadBatchDeactivationCreated"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-upload-batches/{batch_id}/commit": {
+      "parameters": [{"$ref": "#/components/parameters/BatchId"}],
+      "post": {
+        "x-api-id": "API-15",
+        "operationId": "commitBidUploadBatch",
+        "tags": ["uploads"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CommitUploadBatchRequest"}}}},
+        "responses": {"202": {"$ref": "#/components/responses/UploadBatchCommitted"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-upload-batches/{batch_id}/abandon": {
+      "parameters": [{"$ref": "#/components/parameters/BatchId"}],
+      "post": {
+        "x-api-id": "API-16",
+        "operationId": "abandonBidUploadBatch",
+        "tags": ["uploads"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AbandonUploadBatchRequest"}}}},
+        "responses": {"200": {"$ref": "#/components/responses/UploadBatchAbandoned"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/documents": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "get": {
+        "x-api-id": "API-20",
+        "operationId": "listBidDocuments",
+        "tags": ["documents"],
+        "parameters": [
+          {"$ref": "#/components/parameters/ManifestIdQuery"},
+          {"$ref": "#/components/parameters/DocumentTypeQuery"},
+          {"$ref": "#/components/parameters/DocumentParseStatusQuery"},
+          {"$ref": "#/components/parameters/IncludeDocumentVersions"},
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/PageSize"},
+          {"$ref": "#/components/parameters/IfNoneMatch"}
+        ],
+        "responses": {"200": {"$ref": "#/components/responses/DocumentPageOk"}, "304": {"description": "私有投影 ETag 未变化，无响应体"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-document-versions/{version_id}": {
+      "parameters": [{"$ref": "#/components/parameters/VersionId"}],
+      "get": {
+        "x-api-id": "API-21",
+        "operationId": "getBidDocumentVersion",
+        "tags": ["documents"],
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-document-versions/{version_id}/download": {
+      "parameters": [{"$ref": "#/components/parameters/VersionId"}],
+      "get": {
+        "x-api-id": "API-22",
+        "operationId": "downloadBidDocumentVersion",
+        "tags": ["documents"],
+        "responses": {"200": {"description": "受控文件流", "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/lots": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "get": {
+        "x-api-id": "API-30",
+        "operationId": "listBidLotCandidates",
+        "tags": ["lots"],
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/lot-selection": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "post": {
+        "x-api-id": "API-31",
+        "operationId": "selectBidLot",
+        "tags": ["lots"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LotSelectionRequest"}}}},
+        "responses": {"202": {"$ref": "#/components/responses/GenericAccepted"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/clone-for-lot": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "post": {
+        "x-api-id": "API-32",
+        "operationId": "cloneBidAssessmentForLot",
+        "tags": ["lots"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CloneForLotRequest"}}}},
+        "responses": {"201": {"$ref": "#/components/responses/AssessmentCreated"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/runs": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "post": {
+        "x-api-id": "API-40",
+        "operationId": "createBidAnalysisRun",
+        "tags": ["runs"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateRunRequest"}}}},
+        "responses": {"202": {"$ref": "#/components/responses/RunAccepted"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/runs/{run_id}": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}, {"$ref": "#/components/parameters/RunId"}],
+      "get": {
+        "x-api-id": "API-41",
+        "operationId": "getBidAnalysisRun",
+        "tags": ["runs"],
+        "responses": {"200": {"$ref": "#/components/responses/RunOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/runs/{run_id}/cancel": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}, {"$ref": "#/components/parameters/RunId"}],
+      "post": {
+        "x-api-id": "API-42",
+        "operationId": "cancelBidAnalysisRun",
+        "tags": ["runs"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CancelRunRequest"}}}},
+        "responses": {"202": {"$ref": "#/components/responses/RunAccepted"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/runs/{run_id}/retry": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}, {"$ref": "#/components/parameters/RunId"}],
+      "post": {
+        "x-api-id": "API-43",
+        "operationId": "retryBidAnalysisRun",
+        "tags": ["runs"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RetryRunRequest"}}}},
+        "responses": {"202": {"$ref": "#/components/responses/RunAccepted"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/events": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "get": {
+        "x-api-id": "API-44",
+        "operationId": "streamBidAssessmentEvents",
+        "tags": ["runs"],
+        "parameters": [{"$ref": "#/components/parameters/LastEventId"}],
+        "responses": {"200": {"description": "SSE 公共事件流", "content": {"text/event-stream": {"schema": {"type": "string"}}}}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/questions": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "get": {
+        "x-api-id": "API-50",
+        "operationId": "listBidQuestionRounds",
+        "tags": ["questions"],
+        "parameters": [{"$ref": "#/components/parameters/Page"}, {"$ref": "#/components/parameters/PageSize"}],
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/question-rounds/{round_id}": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}, {"$ref": "#/components/parameters/RoundId"}],
+      "get": {
+        "x-api-id": "API-51",
+        "operationId": "getBidQuestionRound",
+        "tags": ["questions"],
+        "responses": {"200": {"$ref": "#/components/responses/QuestionRoundOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/question-rounds/{round_id}/draft": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}, {"$ref": "#/components/parameters/RoundId"}],
+      "put": {
+        "x-api-id": "API-52",
+        "operationId": "saveBidAnswerDraft",
+        "tags": ["questions"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SaveAnswerDraftRequest"}}}},
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/question-rounds/{round_id}/answers": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}, {"$ref": "#/components/parameters/RoundId"}],
+      "post": {
+        "x-api-id": "API-53",
+        "operationId": "submitBidAnswers",
+        "tags": ["questions"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SubmitAnswersRequest"}}}},
+        "responses": {"202": {"$ref": "#/components/responses/GenericAccepted"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/reports": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "get": {
+        "x-api-id": "API-60",
+        "operationId": "listBidReports",
+        "tags": ["reports"],
+        "parameters": [{"$ref": "#/components/parameters/Page"}, {"$ref": "#/components/parameters/PageSize"}],
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-reports/{report_id}": {
+      "parameters": [{"$ref": "#/components/parameters/ReportId"}],
+      "get": {
+        "x-api-id": "API-61",
+        "operationId": "getBidReport",
+        "tags": ["reports"],
+        "responses": {"200": {"$ref": "#/components/responses/ReportOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-reports/{report_id}/download": {
+      "parameters": [{"$ref": "#/components/parameters/ReportId"}],
+      "get": {
+        "x-api-id": "API-62",
+        "operationId": "downloadBidReport",
+        "tags": ["reports"],
+        "responses": {"200": {"description": "PDF 文件流", "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}}, "202": {"$ref": "#/components/responses/GenericAccepted"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-evidence/{evidence_id}": {
+      "parameters": [{"$ref": "#/components/parameters/EvidenceId"}],
+      "get": {
+        "x-api-id": "API-63",
+        "operationId": "getBidEvidence",
+        "tags": ["evidence"],
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/versions": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "get": {
+        "x-api-id": "API-70",
+        "operationId": "getBidVersionGraph",
+        "tags": ["versions"],
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/deltas": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "get": {
+        "x-api-id": "API-71",
+        "operationId": "listBidReportDeltas",
+        "tags": ["versions"],
+        "parameters": [{"$ref": "#/components/parameters/Page"}, {"$ref": "#/components/parameters/PageSize"}],
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/report-deltas": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "post": {
+        "x-api-id": "API-72",
+        "operationId": "createBidReportDelta",
+        "tags": ["versions"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReportDeltaRequest"}}}},
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "202": {"$ref": "#/components/responses/GenericAccepted"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-report-deltas/{delta_id}": {
+      "parameters": [{"$ref": "#/components/parameters/DeltaId"}],
+      "get": {
+        "x-api-id": "API-73",
+        "operationId": "getBidReportDelta",
+        "tags": ["versions"],
+        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/bid-assessments/{assessment_id}/owner-overrides": {
+      "parameters": [{"$ref": "#/components/parameters/AssessmentId"}],
+      "post": {
+        "x-api-id": "API-80",
+        "operationId": "createBidOwnerOverride",
+        "tags": ["assessments"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OwnerOverrideRequest"}}}},
+        "responses": {"201": {"$ref": "#/components/responses/GenericCreated"}, "default": {"$ref": "#/components/responses/Error"}}
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+    },
+    "parameters": {
+      "IdempotencyKey": {"name": "Idempotency-Key", "in": "header", "required": true, "schema": {"type": "string", "minLength": 16, "maxLength": 128}},
+      "XContentSha256": {"name": "X-Content-SHA256", "in": "header", "required": false, "schema": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}},
+      "IfMatch": {"name": "If-Match", "in": "header", "required": true, "schema": {"type": "string", "minLength": 1}},
+      "IfNoneMatch": {"name": "If-None-Match", "in": "header", "required": false, "schema": {"type": "string", "minLength": 1}},
+      "LastEventId": {"name": "Last-Event-ID", "in": "header", "required": false, "schema": {"type": "string", "maxLength": 80}},
+      "Page": {"name": "page", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "default": 1}},
+      "PageSize": {"name": "page_size", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
+      "ManifestIdQuery": {"name": "manifest_id", "in": "query", "required": false, "description": "省略时选择 Assessment 当前 Manifest；显式值只能属于该 Assessment", "schema": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"}},
+      "DocumentTypeQuery": {"name": "document_type", "in": "query", "required": false, "schema": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"}},
+      "DocumentParseStatusQuery": {"name": "parse_status", "in": "query", "required": false, "schema": {"type": "string", "enum": ["not_requested", "queued", "running", "succeeded", "partial", "failed"]}},
+      "IncludeDocumentVersions": {"name": "include_versions", "in": "query", "required": false, "schema": {"type": "boolean", "default": false}},
+      "AssessmentId": {"name": "assessment_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 80}},
+      "BatchId": {"name": "batch_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 80}},
+      "FileId": {"name": "file_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 80}},
+      "VersionId": {"name": "version_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 80}},
+      "RunId": {"name": "run_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 80}},
+      "RoundId": {"name": "round_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 80}},
+      "ReportId": {"name": "report_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 80}},
+      "EvidenceId": {"name": "evidence_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 80}},
+      "DeltaId": {"name": "delta_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 80}}
+    },
+    "schemas": {
+      "CreateAssessmentRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/CreateAssessmentRequest"},
+      "PatchAssessmentRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/PatchAssessmentRequest"},
+      "CreateUploadBatchRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/CreateUploadBatchRequest"},
+      "DeactivationRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/DeactivationRequest"},
+      "CommitUploadBatchRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/CommitUploadBatchRequest"},
+      "AbandonUploadBatchRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/AbandonUploadBatchRequest"},
+      "LotSelectionRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/LotSelectionRequest"},
+      "CloneForLotRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/CloneForLotRequest"},
+      "CreateRunRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/CreateRunRequest"},
+      "CancelRunRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/CancelRunRequest"},
+      "RetryRunRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/RetryRunRequest"},
+      "SaveAnswerDraftRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/SaveAnswerDraftRequest"},
+      "SubmitAnswersRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/SubmitAnswersRequest"},
+      "ReportDeltaRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/ReportDeltaRequest"},
+      "OwnerOverrideRequest": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/OwnerOverrideRequest"},
+      "SuccessEnvelope": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/SuccessEnvelope"},
+      "AssessmentResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/AssessmentResponse"},
+      "UploadBatchResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/UploadBatchResponse"},
+      "CommitUploadBatchResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/CommitUploadBatchResponse"},
+      "UploadFileResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/UploadFileResponse"},
+      "DocumentPageResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/DocumentPageResponse"},
+      "RunResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/RunResponse"},
+      "QuestionRoundResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/QuestionRoundResponse"},
+      "ReportResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/ReportResponse"},
+      "ErrorEnvelope": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/ErrorEnvelope"}
+    },
+    "responses": {
+      "GenericOk": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SuccessEnvelope"}}}},
+      "GenericCreated": {"description": "资源已创建", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SuccessEnvelope"}}}},
+      "GenericAccepted": {"description": "命令已持久化并异步处理", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SuccessEnvelope"}}}},
+      "AssessmentOk": {"description": "Assessment 快照", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AssessmentResponse"}}}},
+      "AssessmentCreated": {"description": "Assessment 已创建", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AssessmentResponse"}}}},
+      "UploadBatchOk": {"description": "上传批次快照", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadBatchResponse"}}}},
+      "UploadBatchCreated": {"description": "上传批次已创建或更新", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadBatchResponse"}}}},
+      "UploadBatchDeactivationCreated": {
+        "description": "基线文档停用操作已登记；返回更新后的上传批次快照",
+        "headers": {
+          "Location": {"required": true, "schema": {"type": "string"}},
+          "ETag": {"required": true, "schema": {"type": "string"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "Idempotent-Replay": {"schema": {"type": "boolean"}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-store"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadBatchResponse"}}}
+      },
+      "UploadBatchCommitted": {
+        "description": "上传批次、不可变 Manifest、Assessment 指针和调度事件已原子提交",
+        "headers": {
+          "Location": {"required": true, "schema": {"type": "string", "pattern": "^/api/v1/bid-assessments/"}},
+          "ETag": {"required": true, "schema": {"type": "string"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "X-Batch-ETag": {"required": true, "schema": {"type": "string"}},
+          "X-Batch-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 2}},
+          "Idempotent-Replay": {"schema": {"type": "boolean"}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-store"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CommitUploadBatchResponse"}}}
+      },
+      "UploadBatchAbandoned": {
+        "description": "未提交上传批次已终态放弃；对象引用将在冻结宽限期后清理",
+        "headers": {
+          "Location": {"required": true, "schema": {"type": "string"}},
+          "ETag": {"required": true, "schema": {"type": "string"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 2}},
+          "Idempotent-Replay": {"schema": {"type": "boolean"}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-store"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadBatchResponse"}}}
+      },
+      "UploadFileCreated": {
+        "description": "单文件已流式接收并登记",
+        "headers": {
+          "Location": {"schema": {"type": "string"}},
+          "ETag": {"schema": {"type": "string"}},
+          "X-Resource-Version": {"schema": {"type": "integer", "minimum": 1}},
+          "X-Batch-ETag": {"schema": {"type": "string"}},
+          "X-Batch-Resource-Version": {"schema": {"type": "integer", "minimum": 1}},
+          "Idempotent-Replay": {"schema": {"type": "boolean"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadFileResponse"}}}
+      },
+      "UploadFileDeleted": {
+        "description": "草稿批次文件已逻辑移除；响应体为空",
+        "headers": {
+          "X-Batch-ETag": {"required": true, "schema": {"type": "string"}},
+          "X-Batch-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "Idempotent-Replay": {"schema": {"type": "boolean"}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-store"}}
+        }
+      },
+      "DocumentPageOk": {
+        "description": "Assessment Manifest 权威文件页；仅允许私有缓存并强制重验证",
+        "headers": {
+          "ETag": {"required": true, "schema": {"type": "string", "pattern": "^\"bid-document-page:"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-cache, max-age=0, must-revalidate"}},
+          "Vary": {"required": true, "schema": {"type": "string", "const": "Authorization"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DocumentPageResponse"}}}
+      },
+      "RunOk": {"description": "Run 进度快照", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RunResponse"}}}},
+      "RunAccepted": {"description": "Run 命令已接受", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RunResponse"}}}},
+      "QuestionRoundOk": {"description": "问题轮次快照", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/QuestionRoundResponse"}}}},
+      "ReportOk": {"description": "已发布报告", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReportResponse"}}}},
+      "Error": {"description": "稳定业务错误", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}}}
+    }
+  }
+}

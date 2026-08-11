@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import text
 from app.core.config import settings
 from app.core.rate_limit import limiter
@@ -21,6 +22,8 @@ from app.api.v1 import (
     account_quotas,
     agents,
     auth,
+    bid_assessments,
+    bid_assessment_events,
     bid_intake_runtime,
     bidding,
     budget_pricing,
@@ -35,6 +38,7 @@ from app.api.v1 import (
     enterprise_quota_v2,
     files,
     history,
+    internal_n8n,
     knowledge_candidates,
     materials,
     model_gateway,
@@ -79,10 +83,15 @@ from app.models import bidding as bidding_model  # noqa: F401
 from app.models import tender_evidence as tender_evidence_model  # noqa: F401
 from app.models import tender_evidence_index as tender_evidence_index_model  # noqa: F401
 from app.models import tender_parse_pipeline as tender_parse_pipeline_model  # noqa: F401
+from app.models import bid_assessment as bid_assessment_model  # noqa: F401
+from app.models import bid_assessment_config as bid_assessment_config_model  # noqa: F401
+from app.models import bid_assessment_runtime as bid_assessment_runtime_model  # noqa: F401
+from app.models import bid_assessment_eventing as bid_assessment_eventing_model  # noqa: F401
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
 from app.services.agent_daily_scheduler import quote_review_daily_scheduler_loop
+from app.services.bid_assessment_outbox import bid_outbox_dispatcher_loop
 
 
 configure_logging()
@@ -174,6 +183,8 @@ async def _alert_loop() -> None:
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(_run_startup_database_tasks)
     tasks = [asyncio.create_task(_alert_loop())]
+    if settings.feature_bid_assessment_v1_runtime:
+        tasks.append(asyncio.create_task(bid_outbox_dispatcher_loop()))
     if settings.feature_agent_assistants and settings.feature_agent_daily_review:
         tasks.append(asyncio.create_task(quote_review_daily_scheduler_loop()))
     try:
@@ -188,10 +199,19 @@ async def lifespan(app: FastAPI):
                 pass
 
 
-app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+_API_DOCS_ENABLED = not settings.public_access_enabled
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan,
+    docs_url="/docs" if _API_DOCS_ENABLED else None,
+    redoc_url="/redoc" if _API_DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _API_DOCS_ENABLED else None,
+)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -202,6 +222,16 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
 app.include_router(account_quotas.router, prefix="/api/v1", tags=["Account Quotas"])
+app.include_router(
+    bid_assessments.router,
+    prefix="/api/v1",
+    tags=["Bid Assessment v1"],
+)
+app.include_router(
+    bid_assessment_events.router,
+    prefix="/api/v1",
+    tags=["Bid Assessment v1 Events"],
+)
 app.include_router(bidding.router, prefix="/api/v1", tags=["Bidding"])
 app.include_router(
     bid_intake_runtime.router,
@@ -216,17 +246,20 @@ app.include_router(
 app.include_router(budget_pricing.router, prefix="/api/v1", tags=["Budget Pricing"])
 app.include_router(budget_projects.router, prefix="/api/v1", tags=["Budget Projects"])
 app.include_router(client_inquiries.router, prefix="/api/v1", tags=["Client Inquiries"])
-app.include_router(codex_worker.router, prefix="/api/v1", tags=["Codex Worker POC"])
+if settings.internal_experimental_routes_enabled:
+    app.include_router(codex_worker.router, prefix="/api/v1", tags=["Codex Worker POC"])
 app.include_router(cost_items.router, prefix="/api/v1", tags=["Cost Items"])
 app.include_router(project_cost_imports.router, prefix="/api/v1", tags=["Project Cost Imports"])
 app.include_router(quote.router, prefix="/api/v1", tags=["Quote"])
 app.include_router(materials.router, prefix="/api/v1", tags=["Materials"])
 app.include_router(users.router, prefix="/api/v1", tags=["Users"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
-app.include_router(dwg_quantity_trial.router, prefix="/api/v1", tags=["DWG Quantity Trial"])
+if settings.internal_experimental_routes_enabled:
+    app.include_router(dwg_quantity_trial.router, prefix="/api/v1", tags=["DWG Quantity Trial"])
 app.include_router(enterprise_profile.router, prefix="/api/v1", tags=["Enterprise Profile"])
 app.include_router(enterprise_quota_v2.router, prefix="/api/v1", tags=["Enterprise Quota V2"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
+app.include_router(internal_n8n.router, prefix="/api/v1", tags=["Internal N8N"])
 app.include_router(quote_jobs.router, prefix="/api/v1", tags=["Async Quote Jobs"])
 app.include_router(quote_feedback.router, prefix="/api/v1", tags=["Quote Feedback"])
 app.include_router(prompt_regression.router, prefix="/api/v1", tags=["Prompt Regression"])
@@ -259,6 +292,13 @@ async def trace_request(request: Request, call_next):
         raise
     duration_ms = round((time.perf_counter() - started) * 1000, 2)
     response.headers["X-Trace-Id"] = trace_id
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=()",
+    )
     logger.info(
         "request_finished",
         extra={
@@ -295,7 +335,6 @@ def health_ready():
     result = {
         "status": "ready",
         "database": "unknown",
-        "rag_service_url": settings.rag_service_url,
         "task_queue_mode": settings.task_queue_mode,
         "external_dependencies": {
             "enabled": settings.ready_check_external_services,
@@ -309,7 +348,17 @@ def health_ready():
         result["database"] = "ok"
     except Exception as exc:
         logger.exception("health_ready_failed")
-        result.update({"status": "degraded", "database": "error", "detail": str(exc)})
+        result.update(
+            {
+                "status": "degraded",
+                "database": "error",
+                "detail": (
+                    "database unavailable"
+                    if settings.public_access_enabled
+                    else str(exc)
+                ),
+            }
+        )
 
     queue_status = check_task_queue()
     result["task_queue"] = queue_status

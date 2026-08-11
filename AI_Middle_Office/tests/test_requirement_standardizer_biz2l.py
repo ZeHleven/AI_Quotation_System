@@ -4,6 +4,7 @@ import json
 from io import BytesIO
 
 import pytest
+import xlwt
 from openpyxl import Workbook
 
 from app.services.requirement_standardizer import (
@@ -27,6 +28,18 @@ def _workbook_bytes(rows, *, sheet_title="需求单", merges=None, extra_sheets=
         extra = workbook.create_sheet(title)
         for row in sheet_rows:
             extra.append(row)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def _legacy_workbook_bytes(rows, *, sheet_title="需求单") -> bytes:
+    workbook = xlwt.Workbook()
+    sheet = workbook.add_sheet(sheet_title)
+    for row_index, row in enumerate(rows):
+        for column_index, value in enumerate(row):
+            if value is not None:
+                sheet.write(row_index, column_index, value)
     buffer = BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()
@@ -66,6 +79,23 @@ def test_standardizer_reads_standard_headers_and_keeps_price_read_only():
     assert rows[0]["requires_confirmation"] is True
     assert any(issue["code"] == "PRICE_COLUMN_PRESENT" for issue in result["issues"])
     assert any(row["row_type"] == "summary_row" for row in result["rows"])
+
+
+def test_standardizer_reads_legacy_xls_through_the_same_mapping_pipeline():
+    content = _legacy_workbook_bytes(
+        [
+            ["区域", "项目名称", "工程量", "单位"],
+            ["一楼", "旧版清单地面拆除", 28, "㎡"],
+        ]
+    )
+
+    result = standardize_requirement_excel_bytes(content, filename="legacy-requirement.xls")
+    rows = _data_rows(result)
+
+    assert result["source"]["file_type"] == "xls"
+    assert result["summary"]["standard_row_count"] == 1
+    assert rows[0]["item_name"] == "旧版清单地面拆除"
+    assert rows[0]["quantity"] == 28
 
 
 def test_standardizer_keeps_instruction_and_calculation_rule_sheets_as_reference_rows():
@@ -381,6 +411,6 @@ def test_standardizer_outputs_markdown_csv_and_json_files(tmp_path):
     assert loaded["summary"]["standard_row_count"] == 1
 
 
-def test_standardizer_rejects_legacy_xls_suffix():
-    with pytest.raises(RequirementStandardizationError, match="只支持 .xlsx/.xlsm"):
+def test_standardizer_reports_corrupt_legacy_xls():
+    with pytest.raises(RequirementStandardizationError, match="Excel"):
         standardize_requirement_excel_bytes(b"not-really-excel", filename="legacy.xls")

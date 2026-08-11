@@ -42,3 +42,19 @@ export function clearAuth() {
   storage().removeItem(USER_INFO_KEY)
   cleanupSharedAuthStorage()
 }
+
+let passwordChangeRedirectInProgress = false
+
+export function isPasswordChangeRequiredError(error) {
+  const detail = error?.response?.data?.detail
+  const code = typeof detail === 'string' ? detail : detail?.code
+  return error?.response?.status === 403 && code === 'PASSWORD_CHANGE_REQUIRED'
+}
+
+export function redirectToPasswordChange() {
+  if (window.location.pathname === '/login' || passwordChangeRedirectInProgress) return
+  passwordChangeRedirectInProgress = true
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  const params = new URLSearchParams({ redirect: currentPath })
+  window.location.replace(`/login?${params.toString()}`)
+}

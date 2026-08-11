@@ -10,25 +10,21 @@
 ## 系统架构
 
 ```
-用户前端 (Vue.js)
-      ↓
-FastAPI 主网关 (Windows, Port 9000)
-      ↓              ↓
-   N8N 工作流      GLM-4V 图像识别 (智谱 AI)
-      ↓
-  Dify + DeepSeek-R1（报价优化）
-      ↓
-RAG 检索服务 (CentOS 192.168.88.128, Port 8001)
-      ↓
-Milvus 向量数据库 (CentOS, Port 19530)
+公网用户 → ECS Nginx (HTTPS 443)
+              ↓
+      FastAPI API + Celery Worker
+              ↓
+ MySQL / Redis / MinIO / n8n / Dify / RAG / Milvus
+      （同一 ECS 私有 Docker 网络，无依赖宿主机端口）
 ```
 
-## 双机部署
+## 单 ECS 正式部署
 
 | 机器 | 角色 | 运行方式 |
 |------|------|---------|
-| Windows | FastAPI 主网关、Vue.js 前端 | `C:\Users\12521\miniconda3\python.exe` + uvicorn |
-| CentOS 7.9 (192.168.88.128) | N8N、Dify、RAGFlow、Milvus、RAG服务 | Docker Compose `/opt/rag_service/` |
+| 当前 ECS | Nginx、FastAPI、Celery、MySQL、Redis/MinIO、n8n、Dify、Milvus、RAG | Docker Compose；持久化数据位于 `/data/ai-middle-office` |
+| Windows | 本地开发与维护，不再承载正式运行依赖 | 本地源码/测试环境 |
+| 原 CentOS 7.9 (`192.168.88.128`) | 48 小时回滚源，正式服务保持停止 | 最终冷备份 `20260807_111606`，观察期内不得删除 |
 
 ## 关键文件
 
@@ -50,7 +46,7 @@ Clear_test/
 │   ├── app/api/v1/auth.py           # 登录接口
 │   └── .env                        # ZHIPU_API_KEY（不提交 git）
 └── rag_docker/
-    ├── docker-compose.yml           # CentOS 端服务编排
+    ├── docker-compose.yml           # RAG 镜像构建/旧环境参考编排
     ├── Dockerfile                   # python:3.10-slim + jieba
     ├── hybrid_searcher.py           # 混合检索（向量+BM25+RRF）
     └── rag_api_service.py           # RAG 服务入口
@@ -58,13 +54,17 @@ Clear_test/
 
 ## 核心配置
 
-- N8N: `http://192.168.88.128:5678/webhook/budget-calc` / `budget-push`
-- Milvus: `192.168.88.128:19530`，集合别名 `enterprise_quotation_rag`（蓝绿：`quotation_blue` / `quotation_green`）
+- 应用 API / Worker：`10.240.10.10` / `10.240.10.11`；API 仅发布 `127.0.0.1:9000`
+- N8N：`http://n8n:5678/webhook/budget-calc-no-rag` / `budget-push`，固定容器地址 `10.240.10.12`
+- MySQL / Redis / MinIO / RAG：`ai-mysql` / `quote-redis` / `quote-minio` / `rag-service`
+- Milvus：只在内部 Docker 网络提供服务，集合别名 `enterprise_quotation_rag`（蓝绿：`quotation_blue` / `quotation_green`）
 - 向量模型：`maidalun1020/bce-embedding-base_v1`，768维，COSINE，HNSW
-- RAG 服务: `http://192.168.88.128:8001`
+- 正式依赖不得重新写回 `192.168.88.128`；原 CentOS 仅用于观察期回滚
 
 ## 当前完成状态
 
+- 单 ECS 正式切换已于 2026-08-07 完成：源 CentOS 在应用入口与队列冻结后生成最终冷备份 `/opt/rag_service/backups/single-ecs-migration/20260807_111606`（约 2.5 GiB，源端与 ECS 端 `SHA256SUMS` 全量通过），正式服务保持停止；ECS 最终数据位于 `/data/ai-middle-office`，旧暗迁移数据回滚点为 `/data/ai-middle-office-dark-before-final-20260807T121943Z`，旧密钥目录回滚点为 `/etc/ai-middle-office-before-final-20260807T121943Z`。应用环境已原子切换为内部别名，API/Worker 固定 `10.240.10.10/.11`、n8n 固定 `10.240.10.12`；`/health/ready=ready`，数据库、唯一 Celery Worker、Redis、MinIO、RAG、n8n 全部正常，公网登录页 HTTP 200。当前进入截至 2026-08-09 20:34（Asia/Shanghai）的 48 小时回滚观察期；期间不得启动或删除 CentOS 正式数据。临时 ECS/CentOS SSH 授权、传输私钥、IPsec 会话和主机 UDP 500/4500 已清理，阿里云安全组临时 UDP 规则须同步删除。
+- 公网安全整改第一阶段已于 2026-08-03 完成当前内网环境止血和 MySQL 加固：公网模式隐藏 Codex Worker / DWG Quantity Trial 试验路由，RAG reload 鉴权 fail-closed，Milvus 不再发布宿主机端口，RAG/Redis/报价 MinIO 仅绑定 `192.168.88.128`，主机防火墙仅允许 Windows 应用机 `192.168.88.1/32` 访问受保护端口；报价 MinIO 与 Milvus 对象存储凭据已轮换，备份 `/opt/rag_service/backups/20260803_164452` 及 MySQL 切换前冷全量备份 `/opt/rag_service/backups/20260803_210859` 均完成内容/哈希校验且不含 `.env`；历史日志中的旧钉钉 Webhook 已脱敏并在平台删除，新机器人已通过官方 HTTPS 端点、HMAC-SHA256 加签和真实收信验证；临时 SSH 授权和明文暂存已删除。MySQL 已拆分 `ai_runtime` 最小 DML 账号与 `ai_migrator` 受限 DDL 账号，两者来源固定为 `192.168.88.1`、使用随机 43 字符密码、`caching_sha2_password`、`REQUIRE SSL` 和固定 CA 校验；旧 `ai_app` 已锁定、清空连接、验证拒绝后删除。安全聚焦回归原 `93 passed`，MySQL 专项 `43 passed`；当前 `/health/ready=ready`、数据库、Celery、MinIO 与真实 RAG 检索正常，Alembic `20260801_0081 (head)`，`PUBLIC_ACCESS_ENABLED=false`。尚未达到公网生产条件：云安全组、HTTPS 入口/WAF、异机加密备份和非白名单外部阻断测试仍待完成。详见 `AI_Middle_Office/docs/security-phase1-containment-runbook-20260803.md`。
 - 后端重构 P0-P3、补充一致性优化、运维告警收敛已完成并冻结；后续仅按真实问题增量维护。
 - 前端优化 P0-P3 已完成：验收清单、共享浏览器逻辑、admin 模块拆分、报价进度/失败恢复/上传推送状态均已落地并手工验证。
 - 业务优化 P0-P4 已完成到代码层：报价反馈闭环、Admin 反馈分析、Prompt 回归、知识候选治理、真实用户体验优化均已落地。
@@ -99,9 +99,9 @@ Clear_test/
 - 产品边界：系统完善前不正式投入生产使用；后续阶段先按内网开发/验证推进，最后统一准备正式生产 Runbook。
 - 当前未完成/暂缓项：P2 候选 prompt 自动重跑、P5 LangGraph 触发评估。
 - 架构升级路线按 `docs/superpowers/specs/2026-05-14-ai-platform-upgrade-design.md` 和 `ROADMAP.md` 的 BIZ Track 分阶段执行；当前 BIZ-2 报价系统增强主链路已推进到 BIZ-2w-6，BIZ-2l-0/BIZ-2l-1/BIZ-2l-2 已完成，BIZ-2l-3/BIZ-2l-4/BIZ-2l-5/BIZ-2l-6 已通过当前环境业务验收，BIZ-2k、BIZ-2m、BIZ-2n、BIZ-2o、BIZ-2p、BIZ-2q、BIZ-2q-2、BIZ-2r、BIZ-2s、BIZ-2v-1、BIZ-2v-2、BIZ-2v-3、BIZ-2w-1、BIZ-2w-2、BIZ-2w-4、BIZ-2w-6 均已通过当前环境手工验收，BIZ-2w-3 和 BIZ-2w-5 已完成代码层验证并待当前环境手工验收，BIZ-2t 成本库数据治理执行包已生成当前环境只读治理基线，BIZ-2t-1 高风险整改交接清单已形成，BIZ-2t-2 高风险整改结果复核包已完成且结论为 `ready_with_known_risks`，BIZ-2u 小范围内网试运行准备包已完成文档层准备，BIZ-2u-1 小范围内网试运行执行模板包已形成，BIZ-2u-2 小范围内网试运行启动前登记与检查包已形成；不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。
-- 当前代码迁移 head：`20260801_0081`；`0081` 只新增预算计价运行的不可变草稿快照表 `budget_project_pricing_run_draft_snapshots`。正式报价成本与 RAG 源仍为 MySQL `cost_items.active`，旧 `materials` 已清空退役、`material_snapshots` 仅作旧审计回溯；执行系统专用表由 `20260731_0078` 退役，商务台账由 `20260731_0079` 退役，成本测算闭环三张专属表由 `20260731_0080` 退役，其他报价、成本库、项目进度、企业/账户定额、预算项目与 Agent 数据结构继续保留。
-- 当前内网数据库已于 2026-08-01 在全量备份后升级到 `20260801_0081 (head)`；0081 前备份为 `AI_Middle_Office/backups/pre_0081_pricing_snapshot_recovery_20260801_092701.sql`（809,317,170 bytes / 771.82 MiB，SHA-256 `64DC1AA14C68DBB474B1C02031C051551FFE1EB4991CB88AFD3CCADF891580A3`，包含 dump 完成标记）。`budget_project_pricing_run_draft_snapshots` 已存在，2026-08-03 复核时为 2 条记录；`/health/ready=ready`，数据库和 Celery 正常。0078—0080 前备份 `AI_Middle_Office/backups/retired_modules_pre_0080_20260731_182547.sql` 继续保留。
-- 任何环境升级到当前 head 前必须先备份；低于 `20260731_0080` 的环境会依次删除执行系统 5 张专用表、商务台账 outbound 记录/事件表/专用字段，以及成本测算闭环 3 张专属表，`20260801_0081` 只新增预算计价草稿快照表。当前内网环境已经在 head，不得重复执行迁移；迁移不影响 inbound 客户咨询、响应速度、项目/对话报价、成本库、企业/账户定额、预算计价、Agent 或 `project_*` 项目进度表。
+- 当前仓库代码迁移唯一 head：`20260811_0091`。`20260808_0082` 保留为报价一致性修正和新研判数据域正式前驱；`20260810_0083`—`0086` 新增研判输入、配置版本、运行骨架及事件/幂等/审计，`0087`—`0089` 分别追加文件接收、文件移除和基线文档停用 Outbox 事件约束，`0090` 固化 API-15 批次到不可变 Manifest 血缘，`0091` 固化 API-16 放弃与延迟清理时间轴。首批运行服务以及 API-01、API-03、API-10、API-11、API-12、API-13、API-14、API-15、API-16、API-20 已完成代码与本地隔离验证。API-20 按 v0.1-r12 提供当前/历史 Manifest 权威文件页、所选与当前版本双投影、Assessment 范围版本链、过滤前稳定分页、私有强制重验证 ETag/304 和存储内部字段防泄漏；当前无解析运行表时只投影 `not_requested`，纯读取、不访问对象存储、不写事件/审计/幂等，也不新增迁移。机器合同全量为 `59 passed, 1 warning`，API-20 运行时专项为 `5 passed, 1 warning`；此前专项 API 为 `63 passed, 1 warning`，核心组合 `176 passed, 2 warnings`，含相邻回归为 `208 passed, 24 warnings`。下一项是 API-21 DocumentVersion 元数据权威读取，须先冻结版本可见性、解析与 OCR 质量来源、上传来源脱敏、版本 ETag 和 API-22 下载授权边界。新运行时继续由 `FEATURE_BID_ASSESSMENT_V1_RUNTIME=false` 默认关闭，不修改旧 `bid_intake_*`。
+- 目标 ECS 数据库实际 Alembic head 已于 2026-08-10 只读确认为 `20260808_0082`；尚未应用 `0083`—`0091`，本阶段也未连接、备份或升级 ECS。历史 `0081` 前备份 `AI_Middle_Office/backups/pre_0081_pricing_snapshot_recovery_20260801_092701.sql`（809,317,170 bytes / 771.82 MiB，SHA-256 `64DC1AA14C68DBB474B1C02031C051551FFE1EB4991CB88AFD3CCADF891580A3`）与 0078—0080 前备份继续保留。
+- 任何环境升级到代码 head 前必须先重新确认实际 head、完成全量备份、SHA-256 和恢复演练，再以同一版本发布 API/Worker；应用自动迁移保持关闭。低于 `20260731_0080` 的环境仍会依次执行三项退役删除迁移；`0083`—`0091` 是隔离的 `bid_` 新域增量，不复用或改写旧研判运行表。`0091` 离线升级 SQL 可生成；降级必须在线核验放弃血缘，离线降级按设计拒绝。
 - 新增数据库字段/表必须走 Alembic revision，不能退回依赖 `AUTO_CREATE_TABLES` 或启动兼容迁移。
 - `LEGACY_MATERIALS_FILE` / `MATERIALS_FILE` 不再自动导入旧 `rag_materials.json`；RAG 评测报告目录由 `RAG_EVAL_REPORT_DIR` 控制。
 - 最新验证（2026-05-21，BIZ-2f/BIZ-2g 报价需求单 Excel 解析 + 成本库底价兜底填价）：`python -m alembic current` 显示 `20260520_0019 (head)`；`FEATURE_COST_DB=true`、`PUBLIC_ACCESS_ENABLED=false`；成本库当前 `total=197 / active=190 / archived=7`；`.xlsx/.xlsm` 需求单解析不新增数据库结构，上传 Excel 会先转成报价清单文本再进入现有报价、成本库参考、底价兜底和漏项检测链路；旧 `.xls` 提示另存为 `.xlsx`；底价兜底仅在 AI 单价空/0、成本库命中且有数量时生效；`python -m pytest` 为 `168 passed`，`ai-web` 的 `npm run build` 通过。当前不启动 Phase 4b/4c/6，不启动 BIZ-1b/BIZ-1c/BIZ-1d。

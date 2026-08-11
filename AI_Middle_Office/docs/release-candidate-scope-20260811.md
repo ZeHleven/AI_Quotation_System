@@ -50,7 +50,7 @@
 - `CVE-2025-60876`：`busybox`、`busybox-binsh`、`ssl_client 1.37.0-r30` 三个包匹配，实质为同一基础包漏洞。
 - Alpine v3.23 stable 当前仍只提供上述版本，尚无可直接升级的修复包。正式部署配置使用 MySQL，应用代码没有接收并打开用户 SQLite 数据库的业务路径，因此 FTS5 漏洞在当前生产路径不可达；但在 Alpine stable 提供修复前，不能把镜像扫描结果记录为零漏洞。
 
-安全门禁状态：在发布负责人明确接受上述基础镜像已知风险，或改用含修复版本且重新通过专项回归的稳定基础镜像之前，不执行 ECS 部署。
+安全门禁状态：发布负责人已于 2026-08-11 明确接受上述基础镜像已知风险，允许本候选继续进入 ECS 只读预检。该接受仅适用于镜像 `ai-middle-office-app:20260811-nonagent-candidate`，并以正式环境继续使用 MySQL、不接收或打开用户 SQLite 数据库、API/Worker 保持非 root、只读根文件系统、丢弃全部 capabilities 和 `no-new-privileges` 为前提。Alpine stable 提供修复版本后仍须重建镜像并复扫；本次风险接受不授权研判 Agent 上线、数据库迁移或绕过后续部署门禁。
 
 ## 本轮门禁
 

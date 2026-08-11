@@ -16,7 +16,6 @@ else:
         include=[
             "app.tasks.quote_tasks",
             "app.tasks.tender_evidence_tasks",
-            "app.tasks.bid_assessment_tasks",
         ],
     )
     celery_app.conf.update(
@@ -30,11 +29,4 @@ else:
             "visibility_timeout": max(300, settings.quote_task_time_limit_seconds + 60),
         },
         result_expires=24 * 60 * 60,
-        beat_schedule={
-            "bid-cleanup-abandoned-upload-batches": {
-                "task": "bid.cleanup_abandoned_upload_batches",
-                "schedule": 300.0,
-                "options": {"expires": 240},
-            }
-        },
     )

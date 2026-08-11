@@ -95,8 +95,8 @@ PyJWT==2.13.0 \
     --hash=sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728
 PyMySQL==1.1.2 \
     --hash=sha256:e6b1d89711dd51f8f74b1631fe08f039e7d76cf67a42a323d3178f0f25762ed9
-pypdf==6.14.2 \
-    --hash=sha256:3f07891af76dc002657e04993ab9b4de81de29f9013b9761d0b7968bff12e946
+pypdf==6.15.0 \
+    --hash=sha256:14e001d6504822cb1ca9c7ed9a69bccb320f59b320730f55af804361abe4d5ee
 pypdfium2==5.10.1 \
     --hash=sha256:f2803020952afa57e1e148adc19369b835154e1fa251a1ca85008ab6466a710f
 python-dateutil==2.9.0.post0 \

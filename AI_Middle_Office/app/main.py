@@ -22,8 +22,6 @@ from app.api.v1 import (
     account_quotas,
     agents,
     auth,
-    bid_assessments,
-    bid_assessment_events,
     bid_intake_runtime,
     bidding,
     budget_pricing,
@@ -83,15 +81,10 @@ from app.models import bidding as bidding_model  # noqa: F401
 from app.models import tender_evidence as tender_evidence_model  # noqa: F401
 from app.models import tender_evidence_index as tender_evidence_index_model  # noqa: F401
 from app.models import tender_parse_pipeline as tender_parse_pipeline_model  # noqa: F401
-from app.models import bid_assessment as bid_assessment_model  # noqa: F401
-from app.models import bid_assessment_config as bid_assessment_config_model  # noqa: F401
-from app.models import bid_assessment_runtime as bid_assessment_runtime_model  # noqa: F401
-from app.models import bid_assessment_eventing as bid_assessment_eventing_model  # noqa: F401
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
 from app.services.agent_daily_scheduler import quote_review_daily_scheduler_loop
-from app.services.bid_assessment_outbox import bid_outbox_dispatcher_loop
 
 
 configure_logging()
@@ -183,8 +176,6 @@ async def _alert_loop() -> None:
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(_run_startup_database_tasks)
     tasks = [asyncio.create_task(_alert_loop())]
-    if settings.feature_bid_assessment_v1_runtime:
-        tasks.append(asyncio.create_task(bid_outbox_dispatcher_loop()))
     if settings.feature_agent_assistants and settings.feature_agent_daily_review:
         tasks.append(asyncio.create_task(quote_review_daily_scheduler_loop()))
     try:
@@ -222,16 +213,6 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["权限认证"])
 app.include_router(account_quotas.router, prefix="/api/v1", tags=["Account Quotas"])
-app.include_router(
-    bid_assessments.router,
-    prefix="/api/v1",
-    tags=["Bid Assessment v1"],
-)
-app.include_router(
-    bid_assessment_events.router,
-    prefix="/api/v1",
-    tags=["Bid Assessment v1 Events"],
-)
 app.include_router(bidding.router, prefix="/api/v1", tags=["Bidding"])
 app.include_router(
     bid_intake_runtime.router,

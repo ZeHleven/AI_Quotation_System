@@ -123,52 +123,6 @@ class Settings:
     pricing_agent_archive_max_indexed_rows: int = _env_int("PRICING_AGENT_ARCHIVE_MAX_INDEXED_ROWS", 100000)
     feature_bidding_mvp: bool = _env_bool("FEATURE_BIDDING_MVP", False)
     feature_bidding_llm_review: bool = _env_bool("FEATURE_BIDDING_LLM_REVIEW", False)
-    # New bid-assessment v1 runtime. It stays fail-closed until 0083-0086 are
-    # migrated and the dedicated API/worker rollout gate is approved.
-    feature_bid_assessment_v1_runtime: bool = _env_bool(
-        "FEATURE_BID_ASSESSMENT_V1_RUNTIME",
-        False,
-    )
-    bid_outbox_poll_seconds: float = _env_float("BID_OUTBOX_POLL_SECONDS", 1.0)
-    bid_outbox_batch_size: int = _env_int("BID_OUTBOX_BATCH_SIZE", 20)
-    bid_outbox_lease_seconds: int = _env_int("BID_OUTBOX_LEASE_SECONDS", 60)
-    bid_outbox_max_attempts: int = _env_int("BID_OUTBOX_MAX_ATTEMPTS", 10)
-    bid_public_event_retention_days: int = _env_int(
-        "BID_PUBLIC_EVENT_RETENTION_DAYS",
-        7,
-    )
-    bid_sse_poll_seconds: float = _env_float("BID_SSE_POLL_SECONDS", 1.0)
-    bid_sse_keepalive_seconds: int = _env_int("BID_SSE_KEEPALIVE_SECONDS", 15)
-    bid_upload_batch_ttl_days: int = _env_int("BID_UPLOAD_BATCH_TTL_DAYS", 7)
-    bid_upload_max_files: int = _env_int("BID_UPLOAD_MAX_FILES", 100)
-    bid_upload_max_file_bytes: int = _env_int("BID_UPLOAD_MAX_FILE_BYTES", 209715200)
-    bid_upload_max_batch_bytes: int = _env_int("BID_UPLOAD_MAX_BATCH_BYTES", 1073741824)
-    bid_upload_read_chunk_bytes: int = _env_int(
-        "BID_UPLOAD_READ_CHUNK_BYTES",
-        1048576,
-    )
-    bid_upload_minio_part_size_bytes: int = _env_int(
-        "BID_UPLOAD_MINIO_PART_SIZE_BYTES",
-        10485760,
-    )
-    bid_upload_processing_timeout_seconds: int = _env_int(
-        "BID_UPLOAD_PROCESSING_TIMEOUT_SECONDS",
-        3600,
-    )
-    bid_upload_object_prefix: str = _env(
-        "BID_UPLOAD_OBJECT_PREFIX",
-        "bid-assessment/uploading/v1",
-    )
-    bid_upload_orphan_grace_seconds: int = _env_int(
-        "BID_UPLOAD_ORPHAN_GRACE_SECONDS",
-        86400,
-    )
-    bid_upload_accepted_extensions: List[str] = field(
-        default_factory=lambda: _env_list(
-            "BID_UPLOAD_ACCEPTED_EXTENSIONS",
-            "pdf,docx,xlsx,xlsm,png,jpg,jpeg,txt,md",
-        )
-    )
     feature_enterprise_profile: bool = _env_bool("FEATURE_ENTERPRISE_PROFILE", False)
     feature_no_cost_draft_capture: bool = _env_bool("FEATURE_NO_COST_DRAFT_CAPTURE", False)
     feature_project_progress: bool = _env_bool("FEATURE_PROJECT_PROGRESS", False)
@@ -463,22 +417,6 @@ class Settings:
         if self.minio_enabled:
             require_secret("MINIO_ACCESS_KEY", self.minio_access_key)
             require_secret("MINIO_SECRET_KEY", self.minio_secret_key, {"change-this-password"})
-        if not 65536 <= int(self.bid_upload_read_chunk_bytes) <= 8 * 1024 * 1024:
-            errors.append(
-                "BID_UPLOAD_READ_CHUNK_BYTES must be between 65536 and 8388608"
-            )
-        if not 5 * 1024 * 1024 <= int(self.bid_upload_minio_part_size_bytes) <= 64 * 1024 * 1024:
-            errors.append(
-                "BID_UPLOAD_MINIO_PART_SIZE_BYTES must be between 5242880 and 67108864"
-            )
-        upload_prefix = self.bid_upload_object_prefix.strip().strip("/")
-        if (
-            not upload_prefix
-            or ".." in upload_prefix.split("/")
-            or any(not segment.replace("-", "").replace("_", "").isalnum() for segment in upload_prefix.split("/"))
-        ):
-            errors.append("BID_UPLOAD_OBJECT_PREFIX must contain safe path segments only")
-
         if errors:
             raise RuntimeError("Invalid production configuration: " + "; ".join(errors))
 

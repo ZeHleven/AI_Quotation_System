@@ -15,10 +15,6 @@ from app.core.database import Base  # noqa: E402
 from app.models import (  # noqa: F401,E402
     account,
     account_quota,
-    bid_assessment,
-    bid_assessment_config,
-    bid_assessment_eventing,
-    bid_assessment_runtime,
     budget_pricing,
     budget_pricing_draft,
     budget_project,

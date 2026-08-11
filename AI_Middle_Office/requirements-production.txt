@@ -19,7 +19,7 @@ aiofiles==25.1.0
 slowapi==0.1.9
 openpyxl==3.1.5
 xlrd==2.0.1
-pypdf==6.14.2
+pypdf==6.15.0
 pdfplumber==0.11.10
 numpy==2.3.5
 Pillow==12.3.0

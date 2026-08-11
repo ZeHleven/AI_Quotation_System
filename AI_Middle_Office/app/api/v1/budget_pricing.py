@@ -23,10 +23,15 @@ from app.models.budget_pricing_draft import (
     BudgetProjectPricingDraft,
     BudgetProjectPricingDraftLine,
 )
+from app.models.budget_project_quota import BudgetProjectQuotaSnapshot
+from app.models.enterprise_quota import EnterpriseQuotaItem, EnterpriseQuotaSection
 from app.models.user import User
 from app.schemas.budget_pricing import (
+    BudgetProjectQuotaAddIn,
     BudgetProjectQuotaEnterpriseSyncIn,
+    BudgetProjectQuotaDeleteIn,
     BudgetProjectQuotaMaterializeIn,
+    BudgetProjectQuotaReplaceIn,
     BudgetProjectQuotaResourceCreateIn,
     BudgetProjectQuotaResourceDeleteIn,
     BudgetProjectQuotaResourceUpdateIn,
@@ -52,6 +57,7 @@ from app.services.budget_pricing import (
     serialize_budget_pricing_event,
     serialize_budget_pricing_line,
     serialize_budget_pricing_run,
+    strict_active_quota_version,
 )
 from app.services.budget_pricing_drafts import (
     capture_budget_pricing_run_draft_snapshot,
@@ -67,6 +73,7 @@ from app.services.budget_pricing_drafts import (
 )
 from app.services.budget_pricing_ai_estimates import estimate_budget_pricing_draft_line
 from app.services.budget_pricing_original_export import (
+    load_budget_pricing_original_source_content,
     prepare_budget_pricing_original_export,
     render_budget_pricing_original_export,
 )
@@ -78,9 +85,12 @@ from app.services.budget_pricing_statistics_export import (
     render_budget_pricing_statistics_export,
 )
 from app.services.budget_project_quotas import (
+    add_project_quotas,
     create_project_quota_resource,
+    delete_project_quota,
     delete_project_quota_resource,
     materialize_project_quota,
+    replace_project_quota,
     serialize_project_quota,
     sync_project_quota_to_enterprise,
     update_project_quota_resource,
@@ -98,7 +108,10 @@ from app.services.account_quota_draft_sync import (
     preview_account_quota_sync,
 )
 from app.services.budget_projects import get_budget_profile
-from app.services.file_storage import get_object_bytes
+from app.services.enterprise_quota_master import (
+    serialize_enterprise_quota_item,
+    serialize_enterprise_quota_version,
+)
 from app.services.rbac import (
     can_create_budget_pricing,
     has_any_role,
@@ -218,6 +231,70 @@ async def get_current_pricing_draft_endpoint(
 
 
 @router.get(
+    "/admin/budget-projects/{project_id}/pricing-draft/enterprise-quota-items",
+    summary="List replacement items from the current active enterprise quota version",
+)
+async def list_pricing_draft_enterprise_quota_items_endpoint(
+    project_id: int,
+    pricing_mode: Optional[str] = Query(default=None),
+    keyword: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    try:
+        draft = get_current_budget_pricing_draft(
+            db,
+            profile,
+            current_user,
+            pricing_mode=pricing_mode,
+        )
+        active_version = strict_active_quota_version(db)
+    except BudgetPricingError as exc:
+        raise _http_error(exc) from exc
+    if draft is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BUDGET_PRICING_DRAFT_NOT_FOUND")
+
+    query = (
+        db.query(EnterpriseQuotaItem, EnterpriseQuotaSection)
+        .outerjoin(EnterpriseQuotaSection, EnterpriseQuotaItem.section_id == EnterpriseQuotaSection.id)
+        .filter(EnterpriseQuotaItem.version_id == active_version.id)
+    )
+    keyword_text = (keyword or "").strip()[:128]
+    if keyword_text:
+        pattern = f"%{keyword_text}%"
+        query = query.filter(
+            or_(
+                EnterpriseQuotaItem.quota_code.like(pattern),
+                EnterpriseQuotaItem.item_name.like(pattern),
+                EnterpriseQuotaItem.work_content.like(pattern),
+                EnterpriseQuotaItem.worker_or_subtype.like(pattern),
+                EnterpriseQuotaItem.specification.like(pattern),
+                EnterpriseQuotaItem.brand.like(pattern),
+                EnterpriseQuotaSection.section_code.like(pattern),
+                EnterpriseQuotaSection.section_name.like(pattern),
+            )
+        )
+    total = query.count()
+    rows = (
+        query.order_by(EnterpriseQuotaItem.sort_order.asc(), EnterpriseQuotaItem.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return api_page(
+        [serialize_enterprise_quota_item(item, section) for item, section in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+        active_version=serialize_enterprise_quota_version(active_version),
+    )
+
+
+@router.get(
     "/admin/budget-projects/{project_id}/pricing-draft/original-format-export",
     summary="Export the current pricing draft into the original workbook format",
 )
@@ -237,9 +314,8 @@ async def export_original_format_pricing_draft_endpoint(
             pricing_mode=pricing_mode,
         )
         source_content = await asyncio.to_thread(
-            get_object_bytes,
-            source.source_file.object_name,
-            source.source_file.bucket,
+            load_budget_pricing_original_source_content,
+            source,
         )
         result = render_budget_pricing_original_export(
             source_content,
@@ -440,8 +516,24 @@ async def list_pricing_draft_lines_endpoint(
         .limit(page_size)
         .all()
     )
+    line_ids = [line.id for line in lines]
+    project_quota_line_ids = {
+        int(line_id)
+        for (line_id,) in (
+            db.query(BudgetProjectQuotaSnapshot.draft_line_id)
+            .filter(BudgetProjectQuotaSnapshot.draft_line_id.in_(line_ids))
+            .all()
+            if line_ids
+            else []
+        )
+    }
+    serialized_lines = []
+    for line in lines:
+        payload = serialize_budget_pricing_draft_line(line)
+        payload["has_project_quota"] = line.id in project_quota_line_ids
+        serialized_lines.append(payload)
     return api_page(
-        [serialize_budget_pricing_draft_line(line) for line in lines],
+        serialized_lines,
         total=total,
         page=page,
         page_size=page_size,
@@ -572,6 +664,142 @@ async def materialize_project_quota_endpoint(
 
 
 @router.post(
+    "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/project-quota/add",
+    summary="Append one or more items from the active enterprise quota version",
+)
+async def add_project_quota_endpoint(
+    project_id: int,
+    line_identifier: str,
+    payload: BudgetProjectQuotaAddIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    try:
+        snapshot = add_project_quotas(
+            db,
+            profile,
+            current_user,
+            pricing_mode=payload.pricing_mode,
+            line_identifier=line_identifier,
+            enterprise_quota_item_ids=payload.item_ids(),
+            expected_snapshot_revision=payload.expected_snapshot_revision,
+            reason=payload.reason,
+        )
+        snapshot_id = snapshot.id
+        db.commit()
+        db.expire_all()
+        snapshot = db.query(BudgetProjectQuotaSnapshot).filter_by(id=snapshot_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(_project_quota_payload(snapshot, current_user), message="项目定额已新增并重算")
+
+
+@router.post(
+    "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/project-quota/replace",
+    summary="Replace the project quota with one item from the current active enterprise version",
+)
+async def replace_project_quota_endpoint(
+    project_id: int,
+    line_identifier: str,
+    payload: BudgetProjectQuotaReplaceIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    try:
+        snapshot = replace_project_quota(
+            db,
+            profile,
+            current_user,
+            line_identifier=line_identifier,
+            expected_snapshot_revision=payload.expected_snapshot_revision,
+            enterprise_quota_item_id=payload.enterprise_quota_item_id,
+            quota_entry_key=payload.quota_entry_key,
+            reason=payload.reason,
+        )
+        snapshot_id = snapshot.id
+        db.commit()
+        db.expire_all()
+        from app.models.budget_project_quota import BudgetProjectQuotaSnapshot
+
+        snapshot = db.query(BudgetProjectQuotaSnapshot).filter_by(id=snapshot_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(_project_quota_payload(snapshot, current_user), message="项目定额已替换并重算")
+
+
+@router.delete(
+    "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/project-quota",
+    summary="Delete the project quota and clear its selected source",
+)
+async def delete_project_quota_endpoint(
+    project_id: int,
+    line_identifier: str,
+    payload: BudgetProjectQuotaDeleteIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_draft_feature_enabled()
+    profile = _accessible_profile(db, project_id, current_user)
+    require_budget_pricing_create(current_user)
+    try:
+        result = delete_project_quota(
+            db,
+            profile,
+            current_user,
+            line_identifier=line_identifier,
+            expected_snapshot_revision=payload.expected_snapshot_revision,
+            quota_entry_key=payload.quota_entry_key,
+            reason=payload.reason,
+        )
+        if isinstance(result, BudgetProjectQuotaSnapshot):
+            snapshot_id = result.id
+            db.commit()
+            db.expire_all()
+            snapshot = db.query(BudgetProjectQuotaSnapshot).filter_by(id=snapshot_id).one()
+            return api_ok(
+                {"snapshot": _project_quota_payload(snapshot, current_user)},
+                message="定额项已删除并重算",
+            )
+        draft, line = result
+        draft_id = draft.id
+        line_id = line.id
+        db.commit()
+        db.expire_all()
+        draft = db.query(BudgetProjectPricingDraft).filter_by(id=draft_id).one()
+        line = db.query(BudgetProjectPricingDraftLine).filter_by(id=line_id).one()
+    except BudgetPricingError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return api_ok(
+        {
+            "draft": serialize_budget_pricing_draft(draft),
+            "line": {
+                **serialize_budget_pricing_draft_line(line),
+                "has_project_quota": False,
+            },
+        },
+        message="项目定额已删除",
+    )
+
+
+@router.post(
     "/admin/budget-projects/{project_id}/pricing-draft/lines/{line_identifier}/project-quota/resources",
     summary="Add a labor/material/machinery row to the project quota",
 )
@@ -587,7 +815,7 @@ async def create_project_quota_resource_endpoint(
     require_budget_pricing_create(current_user)
     data = payload.model_dump(
         mode="json",
-        exclude={"expected_snapshot_revision", "reason"},
+        exclude={"expected_snapshot_revision", "quota_entry_key", "reason"},
         exclude_none=True,
     )
     try:
@@ -597,6 +825,7 @@ async def create_project_quota_resource_endpoint(
             current_user,
             line_identifier=line_identifier,
             expected_snapshot_revision=payload.expected_snapshot_revision,
+            quota_entry_key=payload.quota_entry_key,
             payload=data,
             reason=payload.reason,
         )

@@ -38,6 +38,13 @@ from app.services.enterprise_quota_v2_parser import (
     MATERIAL_SHEET,
     VALIDATION_HEADERS,
     VALIDATION_SHEET,
+    _assign_row_entity_keys,
+    _classify_row,
+    _parse_enterprise_rows,
+    _parse_labor_resources,
+    _parse_material_resources,
+    _parse_validation_rows,
+    _resource_lookup,
     compact_json,
     parse_enterprise_quota_v2_bytes,
 )
@@ -345,6 +352,289 @@ def import_v2_workbook_as_draft(
     db.flush()
     recalculate_version(db, version.id, actor_id=actor_id, reason="导入后首次公式重算", record_event=False)
     return version
+
+
+def reparse_draft_version_from_stored_rows(
+    db: Session,
+    version_id: int,
+    *,
+    actor_id: int | None,
+    expected_revision: int | None,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Rebuild a draft's hierarchy from its preserved workbook rows."""
+
+    version = get_version(db, version_id, lock=True)
+    _require_draft(version)
+    _check_revision(version, expected_revision)
+
+    stored_rows = (
+        db.query(EnterpriseQuotaSheetRow)
+        .filter(EnterpriseQuotaSheetRow.version_id == version.id)
+        .order_by(
+            EnterpriseQuotaSheetRow.sheet_order,
+            EnterpriseQuotaSheetRow.row_number,
+            EnterpriseQuotaSheetRow.id,
+        )
+        .all()
+    )
+    if not stored_rows:
+        raise EnterpriseQuotaV2WorkbenchError(
+            "STORED_ROWS_NOT_FOUND",
+            "当前草稿没有可重新解析的工作表行数据",
+            status_code=409,
+        )
+
+    workbook_rows: list[dict[str, Any]] = []
+    parent_context_by_sheet: dict[str, dict[str, int | None]] = {}
+    for stored_row in stored_rows:
+        values = _json_load(stored_row.values_json)
+        parent_context = parent_context_by_sheet.setdefault(
+            stored_row.sheet_name,
+            {"major_section": None, "chapter": None, "quota_item": None},
+        )
+        row_kind, parent_row_number = _classify_row(
+            stored_row.sheet_name,
+            int(stored_row.row_number),
+            values,
+            int(stored_row.outline_level or 0),
+            parent_context,
+        )
+        workbook_rows.append(
+            {
+                "sheet_name": stored_row.sheet_name,
+                "sheet_order": int(stored_row.sheet_order or 0),
+                "row_number": int(stored_row.row_number),
+                "row_kind": row_kind,
+                "outline_level": int(stored_row.outline_level or 0),
+                "parent_row_number": parent_row_number,
+                "values": values,
+                "formulas": _json_load(stored_row.formulas_json),
+                "styles": _json_load(stored_row.styles_json),
+                "merge_ranges": _json_list(stored_row.merge_ranges_json),
+                "row_height": stored_row.row_height,
+                "hidden": bool(stored_row.hidden),
+                "collapsed": bool(stored_row.collapsed),
+                "entity_type": None,
+                "entity_key": None,
+            }
+        )
+
+    labor_resources = _parse_labor_resources(workbook_rows)
+    material_resources = _parse_material_resources(workbook_rows)
+    parsed_resources = labor_resources + material_resources
+    parsed_resource_by_key = {resource["key"]: resource for resource in parsed_resources}
+    lookup = _resource_lookup(parsed_resources)
+    sections, items, components = _parse_enterprise_rows(workbook_rows, lookup)
+    validation_rows = _parse_validation_rows(workbook_rows)
+    _assign_row_entity_keys(workbook_rows, sections, items, components, parsed_resources)
+
+    existing_resources = (
+        db.query(EnterpriseCostResource)
+        .filter(EnterpriseCostResource.version_id == version.id)
+        .order_by(EnterpriseCostResource.sort_order, EnterpriseCostResource.id)
+        .all()
+    )
+    existing_resource_by_position = {
+        (resource.source_sheet, int(resource.source_row_index)): resource
+        for resource in existing_resources
+        if resource.source_sheet and resource.source_row_index is not None
+    }
+
+    for stored_row in stored_rows:
+        stored_row.entity_type = None
+        stored_row.entity_id = None
+    db.query(EnterpriseQuotaComponent).filter(
+        EnterpriseQuotaComponent.version_id == version.id
+    ).delete(synchronize_session=False)
+    db.query(EnterpriseQuotaItem).filter(
+        EnterpriseQuotaItem.version_id == version.id
+    ).delete(synchronize_session=False)
+    old_sections = (
+        db.query(EnterpriseQuotaSection)
+        .filter(EnterpriseQuotaSection.version_id == version.id)
+        .order_by(EnterpriseQuotaSection.level.desc(), EnterpriseQuotaSection.id.desc())
+        .all()
+    )
+    for old_section in old_sections:
+        db.delete(old_section)
+    db.flush()
+
+    section_by_key: dict[str, EnterpriseQuotaSection] = {}
+    for source_row in sections:
+        section = EnterpriseQuotaSection(
+            version_id=version.id,
+            parent=section_by_key.get(source_row.get("parent_key")),
+            section_code=source_row["section_code"],
+            section_name=source_row["section_name"],
+            level=int(source_row["level"]),
+            outline_level=int(source_row.get("outline_level") or 0),
+            source_sheet=source_row["source_sheet"],
+            source_row_index=source_row["source_row_index"],
+            sort_order=source_row["sort_order"],
+            raw_row_json=compact_json(
+                {"values": source_row["raw_values"], "source_key": source_row["key"]}
+            ),
+        )
+        db.add(section)
+        section_by_key[source_row["key"]] = section
+    db.flush()
+
+    item_by_key: dict[str, EnterpriseQuotaItem] = {}
+    for source_row in items:
+        item = EnterpriseQuotaItem(
+            version_id=version.id,
+            section=section_by_key.get(source_row.get("section_key")),
+            quota_code=source_row.get("quota_code"),
+            row_type=source_row.get("row_type"),
+            item_name=source_row.get("item_name"),
+            work_content=source_row.get("work_content"),
+            specification=source_row.get("specification"),
+            brand=source_row.get("brand"),
+            unit=source_row.get("unit"),
+            quantity=source_row.get("quantity"),
+            unit_price=source_row.get("unit_price"),
+            labor_fee=source_row.get("labor_fee"),
+            main_material_fee=source_row.get("main_material_fee"),
+            auxiliary_material_fee=source_row.get("auxiliary_material_fee"),
+            machinery_fee=source_row.get("machinery_fee"),
+            outline_level=int(source_row.get("outline_level") or 0),
+            source_sheet=source_row["source_sheet"],
+            source_row_index=source_row["source_row_index"],
+            sort_order=source_row["sort_order"],
+            formulas_json=compact_json(source_row.get("formulas") or {}),
+            raw_row_json=compact_json(
+                {"values": source_row["raw_values"], "source_key": source_row["key"]}
+            ),
+        )
+        db.add(item)
+        item_by_key[source_row["key"]] = item
+    db.flush()
+
+    component_by_key: dict[str, EnterpriseQuotaComponent] = {}
+    for source_row in components:
+        parsed_resource = parsed_resource_by_key.get(source_row.get("resource_key"))
+        linked_resource = None
+        if parsed_resource:
+            linked_resource = existing_resource_by_position.get(
+                (parsed_resource["source_sheet"], int(parsed_resource["source_row_index"]))
+            )
+        component = EnterpriseQuotaComponent(
+            version_id=version.id,
+            quota_item=item_by_key.get(source_row.get("item_key")),
+            resource=linked_resource,
+            parent_quota_code=source_row.get("parent_quota_code"),
+            component_type=source_row.get("component_type"),
+            resource_code=source_row.get("resource_code"),
+            resource_name=source_row.get("resource_name"),
+            work_content=source_row.get("work_content"),
+            specification=source_row.get("specification"),
+            brand=source_row.get("brand"),
+            unit=source_row.get("unit"),
+            quantity=source_row.get("quantity"),
+            unit_price=source_row.get("unit_price"),
+            amount=source_row.get("amount"),
+            fee_bucket=source_row.get("fee_bucket"),
+            outline_level=int(source_row.get("outline_level") or 1),
+            formulas_json=compact_json(source_row.get("formulas") or {}),
+            formula_library_kind=source_row.get("formula_library_kind"),
+            formula_link_status=source_row.get("formula_link_status"),
+            source_sheet=source_row["source_sheet"],
+            source_row_index=source_row["source_row_index"],
+            sort_order=source_row["sort_order"],
+            raw_row_json=compact_json(
+                {"values": source_row["raw_values"], "source_key": source_row["key"]}
+            ),
+        )
+        db.add(component)
+        component_by_key[source_row["key"]] = component
+    db.flush()
+
+    entity_maps: dict[str, dict[str, Any]] = {
+        "section": section_by_key,
+        "quota_item": item_by_key,
+        "component": component_by_key,
+    }
+    workbook_row_by_position = {
+        (row["sheet_name"], row["row_number"]): row for row in workbook_rows
+    }
+    for stored_row in stored_rows:
+        parsed_row = workbook_row_by_position[(stored_row.sheet_name, int(stored_row.row_number))]
+        entity = entity_maps.get(parsed_row.get("entity_type") or "", {}).get(
+            parsed_row.get("entity_key")
+        )
+        if parsed_row.get("entity_type") == "resource":
+            entity = existing_resource_by_position.get(
+                (stored_row.sheet_name, int(stored_row.row_number))
+            )
+        stored_row.row_kind = parsed_row["row_kind"]
+        stored_row.parent_row_number = parsed_row.get("parent_row_number")
+        stored_row.entity_type = parsed_row.get("entity_type")
+        stored_row.entity_id = getattr(entity, "id", None)
+
+    previous_summary = _json_load(version.summary_json)
+    summary = {
+        "schema_version": ENTERPRISE_QUOTA_V2_SCHEMA,
+        "sheet_count": len({row["sheet_name"] for row in workbook_rows}),
+        "major_section_count": sum(section["level"] == 1 for section in sections),
+        "chapter_count": sum(section["level"] == 2 for section in sections),
+        "section_count": len(sections),
+        "quota_item_count": len(items),
+        "component_count": len(components),
+        "labor_resource_count": len(labor_resources),
+        "material_resource_count": len(material_resources),
+        "resource_count": len(existing_resources),
+        "validation_row_count": len(validation_rows),
+        "formula_count": int(version.formula_count or 0),
+        "formula_error_cell_count": int(previous_summary.get("formula_error_cell_count") or 0),
+        "unresolved_component_count": sum(
+            component.get("formula_link_status") == "unresolved" for component in components
+        ),
+        "ambiguous_component_count": sum(
+            component.get("formula_link_status") == "ambiguous" for component in components
+        ),
+        "error_count": 0,
+        "warning_count": 0,
+    }
+    version.summary_json = compact_json(summary)
+    version.revision = int(version.revision or 1) + 1
+    db.flush()
+    recalculation = recalculate_version(
+        db,
+        version.id,
+        actor_id=actor_id,
+        reason=reason or "按当前解析规则重新解析已上传工作簿",
+        record_event=False,
+    )
+    quality = _json_load(version.quality_summary_json)
+    summary["error_count"] = int(quality.get("blocker_count") or 0)
+    summary["warning_count"] = int(quality.get("warning_count") or 0)
+    summary["unresolved_component_count"] = int(
+        recalculation.get("unresolved_component_count") or 0
+    )
+    summary["ambiguous_component_count"] = int(
+        recalculation.get("ambiguous_component_count") or 0
+    )
+    version.summary_json = compact_json(summary)
+    if version.import_batch:
+        version.import_batch.summary_json = version.summary_json
+        version.import_batch.issues_json = compact_json(quality.get("issues") or [])
+        version.import_batch.error_count = summary["error_count"]
+        version.import_batch.warning_count = summary["warning_count"]
+    _add_event(
+        db,
+        version,
+        "reparsed_from_stored_rows",
+        actor_id=actor_id,
+        reason=reason,
+        details={"summary": summary, "recalculation": recalculation},
+    )
+    db.flush()
+    return {
+        "version": serialize_version(db, version),
+        "summary": summary,
+        "recalculation": recalculation,
+    }
 
 
 def list_versions(db: Session) -> list[dict[str, Any]]:

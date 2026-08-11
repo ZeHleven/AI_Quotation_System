@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/fact.schema.json",
+  "title": "Bid Assessment Fact Contracts v1",
+  "description": "Fact assertion, slot coverage and resolved fact contracts derived from master spec sections 5.3-5.14.",
+  "$defs": {
+    "FactValueType": {
+      "type": "string",
+      "enum": [
+        "string",
+        "text",
+        "boolean",
+        "enum",
+        "integer",
+        "money",
+        "percentage",
+        "datetime",
+        "date",
+        "duration",
+        "location",
+        "endpoint",
+        "requirement_list",
+        "clause_list",
+        "scoring_item_list",
+        "deliverable_list",
+        "payment_milestone_list",
+        "security"
+      ]
+    },
+    "FactValue": {
+      "oneOf": [
+        {"type": "string"},
+        {"type": "boolean"},
+        {"type": "integer"},
+        {"type": "object"},
+        {"type": "array"}
+      ]
+    },
+    "TypedValueRules": {
+      "allOf": [
+        {
+          "if": {"properties": {"value_type": {"enum": ["string", "text", "enum"]}}, "required": ["value_type"]},
+          "then": {"properties": {"value": {"type": "string"}}}
+        },
+        {
+          "if": {"properties": {"value_type": {"const": "boolean"}}, "required": ["value_type"]},
+          "then": {"properties": {"value": {"type": "boolean"}}}
+        },
+        {
+          "if": {"properties": {"value_type": {"const": "integer"}}, "required": ["value_type"]},
+          "then": {"properties": {"value": {"type": "integer"}}}
+        },
+        {
+          "if": {"properties": {"value_type": {"const": "money"}}, "required": ["value_type"]},
+          "then": {"properties": {"value": {"$ref": "contracts.schema.json#/$defs/Money"}}}
+        },
+        {
+          "if": {"properties": {"value_type": {"const": "percentage"}}, "required": ["value_type"]},
+          "then": {"properties": {"value": {"$ref": "contracts.schema.json#/$defs/RatioDecimalString"}}}
+        },
+        {
+          "if": {"properties": {"value_type": {"const": "datetime"}}, "required": ["value_type"]},
+          "then": {"properties": {"value": {"$ref": "contracts.schema.json#/$defs/UtcDateTime"}}}
+        },
+        {
+          "if": {"properties": {"value_type": {"const": "date"}}, "required": ["value_type"]},
+          "then": {"properties": {"value": {"type": "string", "format": "date"}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "value_type": {
+                "enum": ["requirement_list", "clause_list", "scoring_item_list", "deliverable_list", "payment_milestone_list"]
+              }
+            },
+            "required": ["value_type"]
+          },
+          "then": {"properties": {"value": {"type": "array"}}}
+        },
+        {
+          "if": {"properties": {"value_type": {"enum": ["duration", "location", "endpoint", "security"]}}, "required": ["value_type"]},
+          "then": {"properties": {"value": {"type": "object"}}}
+        }
+      ]
+    },
+    "FactScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {"type": "string", "enum": ["assessment", "lot"]},
+        "id": {"$ref": "contracts.schema.json#/$defs/Id"}
+      }
+    },
+    "FactAssertionFields": {
+      "type": "object",
+      "properties": {
+        "fact_slot": {"type": "string", "minLength": 1, "maxLength": 160},
+        "value": {"$ref": "#/$defs/FactValue"},
+        "value_type": {"$ref": "#/$defs/FactValueType"},
+        "scope": {"$ref": "#/$defs/FactScope"},
+        "source_type": {
+          "type": "string",
+          "enum": ["document", "enterprise", "owner_answer", "system", "system_scope"]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        },
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "asserted_at": {"$ref": "contracts.schema.json#/$defs/UtcDateTime"}
+      }
+    },
+    "FactAssertionCandidate": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": [
+        "fact_slot",
+        "value",
+        "value_type",
+        "scope",
+        "source_type",
+        "evidence_ids",
+        "confidence",
+        "asserted_at"
+      ],
+      "allOf": [
+        {"$ref": "#/$defs/FactAssertionFields"},
+        {"$ref": "#/$defs/TypedValueRules"},
+        {
+          "if": {"properties": {"source_type": {"const": "document"}}, "required": ["source_type"]},
+          "then": {"properties": {"evidence_ids": {"minItems": 1}}}
+        }
+      ]
+    },
+    "FactAssertion": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": [
+        "assertion_id",
+        "run_id",
+        "assertion_hash",
+        "fact_slot",
+        "value",
+        "value_type",
+        "scope",
+        "source_type",
+        "evidence_ids",
+        "confidence",
+        "asserted_at"
+      ],
+      "properties": {
+        "assertion_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "run_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "assertion_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"}
+      },
+      "allOf": [
+        {"$ref": "#/$defs/FactAssertionFields"},
+        {"$ref": "#/$defs/TypedValueRules"},
+        {
+          "if": {"properties": {"source_type": {"const": "document"}}, "required": ["source_type"]},
+          "then": {"properties": {"evidence_ids": {"minItems": 1}}}
+        }
+      ]
+    },
+    "SlotCoverageState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage_id",
+        "run_id",
+        "fact_slot",
+        "scope",
+        "status",
+        "reason_codes",
+        "version",
+        "current_resolved_fact_id"
+      ],
+      "properties": {
+        "coverage_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "run_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "fact_slot": {"type": "string", "minLength": 1, "maxLength": 160},
+        "scope": {"$ref": "#/$defs/FactScope"},
+        "status": {"$ref": "contracts.schema.json#/$defs/SlotCoverageStatus"},
+        "reason_codes": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,79}$"}
+        },
+        "search_coverage_refs": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        },
+        "version": {"type": "integer", "minimum": 1},
+        "current_resolved_fact_id": {
+          "oneOf": [
+            {"$ref": "contracts.schema.json#/$defs/Id"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "resolved"}}, "required": ["status"]},
+          "then": {"properties": {"current_resolved_fact_id": {"$ref": "contracts.schema.json#/$defs/Id"}}},
+          "else": {"properties": {"current_resolved_fact_id": {"type": "null"}}}
+        }
+      ]
+    },
+    "ResolvedAssertionLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assertion_id", "disposition"],
+      "properties": {
+        "assertion_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "disposition": {"type": "string", "enum": ["accepted", "rejected", "conflicting"]}
+      }
+    },
+    "ResolvedFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resolved_fact_id",
+        "run_id",
+        "fact_slot",
+        "scope",
+        "status",
+        "value",
+        "value_type",
+        "assertions",
+        "resolution_rule",
+        "version"
+      ],
+      "properties": {
+        "resolved_fact_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "run_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "fact_slot": {"type": "string", "minLength": 1, "maxLength": 160},
+        "scope": {"$ref": "#/$defs/FactScope"},
+        "status": {"$ref": "contracts.schema.json#/$defs/ResolvedFactStatus"},
+        "value": {"$ref": "#/$defs/FactValue"},
+        "value_type": {"$ref": "#/$defs/FactValueType"},
+        "assertions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/ResolvedAssertionLink"}
+        },
+        "resolution_rule": {"type": "string", "pattern": "^CR[1-8]_[A-Z_]+$"},
+        "version": {"type": "integer", "minimum": 1}
+      }
+    },
+    "FactSlotResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverage", "resolved_fact"],
+      "properties": {
+        "coverage": {"$ref": "#/$defs/SlotCoverageState"},
+        "resolved_fact": {
+          "oneOf": [
+            {"$ref": "#/$defs/ResolvedFact"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "coverage": {
+                "properties": {"status": {"const": "resolved"}},
+                "required": ["status"]
+              }
+            },
+            "required": ["coverage"]
+          },
+          "then": {"properties": {"resolved_fact": {"$ref": "#/$defs/ResolvedFact"}}},
+          "else": {"properties": {"resolved_fact": {"type": "null"}}}
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/FactAssertionCandidate"},
+    {"$ref": "#/$defs/FactAssertion"},
+    {"$ref": "#/$defs/SlotCoverageState"},
+    {"$ref": "#/$defs/ResolvedFact"},
+    {"$ref": "#/$defs/FactSlotResolution"}
+  ]
+}

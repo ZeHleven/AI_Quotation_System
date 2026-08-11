@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/task.schema.json",
+  "title": "Bid Assessment Task Contracts v1",
+  "description": "Derived from master spec sections 7.5-7.7.",
+  "$defs": {
+    "TaskType": {
+      "type": "string",
+      "enum": [
+        "bind_assessment_snapshot",
+        "inventory_documents",
+        "classify_documents",
+        "parse_primary_document",
+        "parse_auxiliary_documents",
+        "detect_lots",
+        "bind_selected_lot",
+        "build_coverage_baseline",
+        "compare_document_versions",
+        "resolve_fact_conflicts",
+        "extract_tender_overview",
+        "extract_critical_dates",
+        "extract_qualification_requirements",
+        "extract_rejection_clauses",
+        "extract_guarantees_and_fees",
+        "extract_evaluation_method",
+        "extract_scope_and_quantities",
+        "extract_deliverables_and_samples",
+        "extract_contract_terms",
+        "extract_schedule_and_site_constraints",
+        "build_enterprise_snapshot",
+        "check_enterprise_qualifications",
+        "search_enterprise_projects",
+        "assess_current_capacity",
+        "load_financial_capacity",
+        "load_quota_baseline",
+        "load_bid_rate_card",
+        "load_customer_and_bid_history",
+        "evaluate_deadline_gate",
+        "evaluate_qualification_gate",
+        "evaluate_personnel_performance_gate",
+        "evaluate_legal_compliance_gate",
+        "evaluate_guarantee_cash_gate",
+        "evaluate_minimum_bid_capacity_gate",
+        "evaluate_enterprise_prohibited_risk_gate",
+        "analyze_qualification_compliance",
+        "analyze_win_probability",
+        "analyze_project_economics",
+        "analyze_bid_investment",
+        "analyze_contract_delivery_risk",
+        "analyze_capability_fit",
+        "analyze_customer_strategy",
+        "synthesize_assessment",
+        "evaluate_final_decision",
+        "validate_claim_evidence",
+        "validate_report_consistency",
+        "generate_preliminary_report",
+        "generate_deep_report",
+        "generate_version_delta"
+      ]
+    },
+    "ToolName": {
+      "type": "string",
+      "enum": [
+        "facts.query",
+        "evidence.search",
+        "evidence.read",
+        "documents.outline",
+        "tables.read_region",
+        "documents.compare_versions",
+        "tool_result.read_slice",
+        "enterprise.profile.query",
+        "enterprise.qualifications.query",
+        "enterprise.personnel.query",
+        "enterprise.projects.search",
+        "enterprise.capacity.query",
+        "enterprise.financial_capacity.query",
+        "enterprise.customer_history.query",
+        "enterprise.bid_history.query",
+        "enterprise.bid_rate_card.query",
+        "quota.cost_items.search",
+        "calculate.bid_workload",
+        "calculate.bid_labor_cost",
+        "calculate.external_bid_expense",
+        "calculate.fund_occupation_cost",
+        "calculate.bid_investment_total",
+        "calculate.project_economics",
+        "calculate.payment_cashflow",
+        "calculate.sensitivity_scenarios"
+      ]
+    },
+    "TaskDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_key",
+        "task_type",
+        "objective",
+        "depends_on",
+        "required_fact_slots",
+        "tool_profile",
+        "context_profile",
+        "budget_profile",
+        "completion_contract"
+      ],
+      "properties": {
+        "task_key": {"type": "string", "minLength": 1, "maxLength": 160},
+        "task_type": {"$ref": "#/$defs/TaskType"},
+        "objective": {"type": "string", "minLength": 1, "maxLength": 500},
+        "depends_on": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        },
+        "required_fact_slots": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        },
+        "tool_profile": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"},
+        "context_profile": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"},
+        "budget_profile": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"},
+        "completion_contract": {"type": "string", "minLength": 1, "maxLength": 120}
+      }
+    },
+    "TaskScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assessment_id", "scope_id", "scope_version"],
+      "properties": {
+        "assessment_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "scope_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "scope_version": {"type": "integer", "minimum": 1},
+        "lot_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 80}
+      }
+    },
+    "TaskBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_iterations", "max_tool_calls"],
+      "properties": {
+        "max_iterations": {"type": "integer", "minimum": 1, "maximum": 20},
+        "max_tool_calls": {"type": "integer", "minimum": 0, "maximum": 40},
+        "max_input_tokens": {"type": "integer", "minimum": 1, "maximum": 32000},
+        "max_output_tokens": {"type": "integer", "minimum": 1, "maximum": 8000}
+      }
+    },
+    "TaskContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "task_key",
+        "task_type",
+        "objective",
+        "scope",
+        "depends_on",
+        "bound_versions",
+        "required_fact_slots",
+        "allowed_tools",
+        "context_profile",
+        "budget",
+        "completion_contract",
+        "stop_conditions",
+        "failure_policy",
+        "output_version"
+      ],
+      "properties": {
+        "task_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "task_key": {"type": "string", "minLength": 1, "maxLength": 160},
+        "task_type": {"$ref": "#/$defs/TaskType"},
+        "objective": {"type": "string", "minLength": 1, "maxLength": 500},
+        "scope": {"$ref": "#/$defs/TaskScope"},
+        "depends_on": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        },
+        "bound_versions": {"$ref": "contracts.schema.json#/$defs/VersionBinding"},
+        "required_fact_slots": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        },
+        "allowed_tools": {
+          "type": "array",
+          "maxItems": 25,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/ToolName"}
+        },
+        "context_profile": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"},
+        "budget": {"$ref": "#/$defs/TaskBudget"},
+        "completion_contract": {"type": "string", "minLength": 1, "maxLength": 120},
+        "stop_conditions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {"type": "string", "minLength": 1, "maxLength": 240}
+        },
+        "failure_policy": {
+          "type": "string",
+          "enum": ["fail_fast", "retry_then_fail", "partial_allowed", "wait_for_input"]
+        },
+        "output_version": {"type": "string", "minLength": 1, "maxLength": 80}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/TaskDefinition"},
+    {"$ref": "#/$defs/TaskContract"}
+  ]
+}

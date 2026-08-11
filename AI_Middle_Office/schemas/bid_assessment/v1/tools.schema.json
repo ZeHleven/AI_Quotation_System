@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/tools.schema.json",
+  "title": "Qisheng Bid Assessment Model-visible Tool Arguments v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tool_name", "arguments"],
+  "properties": {
+    "tool_name": {
+      "type": "string",
+      "enum": [
+        "facts.query",
+        "evidence.search",
+        "evidence.read",
+        "documents.outline",
+        "tables.read_region",
+        "documents.compare_versions",
+        "tool_result.read_slice",
+        "enterprise.profile.query",
+        "enterprise.qualifications.query",
+        "enterprise.personnel.query",
+        "enterprise.projects.search",
+        "enterprise.capacity.query",
+        "enterprise.financial_capacity.query",
+        "enterprise.customer_history.query",
+        "enterprise.bid_history.query",
+        "enterprise.bid_rate_card.query",
+        "quota.cost_items.search",
+        "calculate.bid_workload",
+        "calculate.bid_labor_cost",
+        "calculate.external_bid_expense",
+        "calculate.fund_occupation_cost",
+        "calculate.bid_investment_total",
+        "calculate.project_economics",
+        "calculate.payment_cashflow",
+        "calculate.sensitivity_scenarios"
+      ]
+    },
+    "arguments": {"type": "object"}
+  },
+  "allOf": [
+    {"if": {"properties": {"tool_name": {"const": "facts.query"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/FactsQueryArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "evidence.search"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EvidenceSearchArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "evidence.read"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EvidenceReadArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "documents.outline"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/DocumentsOutlineArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "tables.read_region"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/TablesReadRegionArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "documents.compare_versions"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/DocumentsCompareVersionsArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "tool_result.read_slice"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/ToolResultReadSliceArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "enterprise.profile.query"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EnterpriseProfileQueryArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "enterprise.qualifications.query"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EnterpriseQualificationsQueryArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "enterprise.personnel.query"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EnterprisePersonnelQueryArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "enterprise.projects.search"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EnterpriseProjectsSearchArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "enterprise.capacity.query"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EnterpriseCapacityQueryArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "enterprise.financial_capacity.query"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EnterpriseFinancialCapacityQueryArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "enterprise.customer_history.query"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EnterpriseCustomerHistoryQueryArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "enterprise.bid_history.query"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EnterpriseBidHistoryQueryArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "enterprise.bid_rate_card.query"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/EnterpriseBidRateCardQueryArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "quota.cost_items.search"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/QuotaCostItemsSearchArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "calculate.bid_workload"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/CalculateBidWorkloadArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "calculate.bid_labor_cost"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/CalculateBidLaborCostArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "calculate.external_bid_expense"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/CalculateExternalBidExpenseArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "calculate.fund_occupation_cost"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/CalculateFundOccupationCostArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "calculate.bid_investment_total"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/CalculateBidInvestmentTotalArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "calculate.project_economics"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/CalculateProjectEconomicsArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "calculate.payment_cashflow"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/CalculatePaymentCashflowArguments"}}}},
+    {"if": {"properties": {"tool_name": {"const": "calculate.sensitivity_scenarios"}}}, "then": {"properties": {"arguments": {"$ref": "#/$defs/CalculateSensitivityScenariosArguments"}}}}
+  ],
+  "x-tool-registry": {
+    "facts.query": "#/$defs/FactsQueryArguments",
+    "evidence.search": "#/$defs/EvidenceSearchArguments",
+    "evidence.read": "#/$defs/EvidenceReadArguments",
+    "documents.outline": "#/$defs/DocumentsOutlineArguments",
+    "tables.read_region": "#/$defs/TablesReadRegionArguments",
+    "documents.compare_versions": "#/$defs/DocumentsCompareVersionsArguments",
+    "tool_result.read_slice": "#/$defs/ToolResultReadSliceArguments",
+    "enterprise.profile.query": "#/$defs/EnterpriseProfileQueryArguments",
+    "enterprise.qualifications.query": "#/$defs/EnterpriseQualificationsQueryArguments",
+    "enterprise.personnel.query": "#/$defs/EnterprisePersonnelQueryArguments",
+    "enterprise.projects.search": "#/$defs/EnterpriseProjectsSearchArguments",
+    "enterprise.capacity.query": "#/$defs/EnterpriseCapacityQueryArguments",
+    "enterprise.financial_capacity.query": "#/$defs/EnterpriseFinancialCapacityQueryArguments",
+    "enterprise.customer_history.query": "#/$defs/EnterpriseCustomerHistoryQueryArguments",
+    "enterprise.bid_history.query": "#/$defs/EnterpriseBidHistoryQueryArguments",
+    "enterprise.bid_rate_card.query": "#/$defs/EnterpriseBidRateCardQueryArguments",
+    "quota.cost_items.search": "#/$defs/QuotaCostItemsSearchArguments",
+    "calculate.bid_workload": "#/$defs/CalculateBidWorkloadArguments",
+    "calculate.bid_labor_cost": "#/$defs/CalculateBidLaborCostArguments",
+    "calculate.external_bid_expense": "#/$defs/CalculateExternalBidExpenseArguments",
+    "calculate.fund_occupation_cost": "#/$defs/CalculateFundOccupationCostArguments",
+    "calculate.bid_investment_total": "#/$defs/CalculateBidInvestmentTotalArguments",
+    "calculate.project_economics": "#/$defs/CalculateProjectEconomicsArguments",
+    "calculate.payment_cashflow": "#/$defs/CalculatePaymentCashflowArguments",
+    "calculate.sensitivity_scenarios": "#/$defs/CalculateSensitivityScenariosArguments"
+  },
+  "$defs": {
+    "Id": {"type": "string", "minLength": 1, "maxLength": 80},
+    "Date": {"type": "string", "format": "date"},
+    "DateTime": {"type": "string", "format": "date-time"},
+    "DecimalString": {"type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$"},
+    "NonnegativeDecimalString": {"type": "string", "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$"},
+    "MoneyDecimalString": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{4}$"},
+    "RatioDecimalString": {"type": "string", "pattern": "^(0(\\.[0-9]{1,6})?|1(\\.0{1,6})?)$"},
+    "NullableDecimalString": {"type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$"},
+    "NullableNonnegativeDecimalString": {"type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$"},
+    "NullableMoneyDecimalString": {"type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{4}$"},
+    "NullableRatioDecimalString": {"type": ["string", "null"], "pattern": "^(0(\\.[0-9]{1,6})?|1(\\.0{1,6})?)$"},
+    "DateRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {"start": {"$ref": "#/$defs/Date"}, "end": {"$ref": "#/$defs/Date"}}
+    },
+    "Money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "properties": {"amount": {"$ref": "#/$defs/MoneyDecimalString"}, "currency": {"type": "string", "enum": ["CNY"]}}
+    },
+    "ScenarioNumber": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["low", "base", "high"],
+      "properties": {
+        "low": {"$ref": "#/$defs/NullableDecimalString"},
+        "base": {"$ref": "#/$defs/NullableDecimalString"},
+        "high": {"$ref": "#/$defs/NullableDecimalString"},
+        "unit": {"type": "string", "maxLength": 30}
+      }
+    },
+    "ScenarioMoney": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["low", "base", "high", "currency"],
+      "properties": {
+        "low": {"$ref": "#/$defs/NullableMoneyDecimalString"},
+        "base": {"$ref": "#/$defs/NullableMoneyDecimalString"},
+        "high": {"$ref": "#/$defs/NullableMoneyDecimalString"},
+        "currency": {"type": "string", "enum": ["CNY"]}
+      }
+    },
+    "StringList20": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+    "FactsQueryArguments": {
+      "type": "object", "additionalProperties": false, "required": ["fact_slots"],
+      "properties": {
+        "fact_slots": {"type": "array", "minItems": 1, "maxItems": 30, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9_.-]+$"}},
+        "statuses": {"type": "array", "uniqueItems": true, "items": {"enum": ["supported", "partial", "conflicted"]}},
+        "coverage_statuses": {"type": "array", "uniqueItems": true, "items": {"enum": ["not_assessed", "unavailable", "blocked_by_parent", "missing", "resolved", "not_applicable", "stale"]}},
+        "include_assertions": {"type": "boolean", "default": false},
+        "cursor": {"type": "string", "maxLength": 200}
+      }
+    },
+    "EvidenceSearchArguments": {
+      "type": "object", "additionalProperties": false, "required": ["query"],
+      "properties": {
+        "query": {"type": "string", "minLength": 1, "maxLength": 500},
+        "document_types": {"$ref": "#/$defs/StringList20"},
+        "document_version_ids": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}},
+        "fact_slots": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9_.-]+$"}},
+        "locator_hint": {"type": "string", "maxLength": 200},
+        "top_k": {"type": "integer", "minimum": 1, "maximum": 8, "default": 5}
+      }
+    },
+    "EvidenceReadArguments": {
+      "type": "object", "additionalProperties": false, "required": ["evidence_ids", "expansion"],
+      "properties": {
+        "evidence_ids": {"type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}},
+        "expansion": {"enum": ["none", "neighbors", "parent_section", "bounded_pages"]},
+        "radius": {"type": "integer", "minimum": 0, "maximum": 2, "default": 1},
+        "max_pages": {"type": "integer", "minimum": 1, "maximum": 4, "default": 2},
+        "include_locator": {"type": "boolean", "const": true, "default": true}
+      }
+    },
+    "DocumentsOutlineArguments": {
+      "type": "object", "additionalProperties": false, "required": ["document_version_id"],
+      "properties": {"document_version_id": {"$ref": "#/$defs/Id"}, "max_depth": {"type": "integer", "minimum": 1, "maximum": 6, "default": 4}, "cursor": {"type": "string", "maxLength": 200}}
+    },
+    "TablesReadRegionArguments": {
+      "type": "object", "additionalProperties": false, "required": ["document_version_id", "sheet", "range"],
+      "properties": {
+        "document_version_id": {"$ref": "#/$defs/Id"},
+        "sheet": {"type": "string", "minLength": 1, "maxLength": 100},
+        "range": {"type": "string", "pattern": "^[A-Z]{1,3}[1-9][0-9]*:[A-Z]{1,3}[1-9][0-9]*$"},
+        "include_headers": {"type": "boolean", "default": true},
+        "include_formulas": {"type": "boolean", "default": false}
+      },
+      "x-semantic-limits": {"max_rows": 10, "max_columns": 12, "max_cells": 120}
+    },
+    "DocumentsCompareVersionsArguments": {
+      "type": "object", "additionalProperties": false, "required": ["old_version_id", "new_version_id"],
+      "properties": {
+        "old_version_id": {"$ref": "#/$defs/Id"}, "new_version_id": {"$ref": "#/$defs/Id"},
+        "focus": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "maxLength": 100}},
+        "cursor": {"type": "string", "maxLength": 200}
+      }
+    },
+    "ToolResultReadSliceArguments": {
+      "type": "object", "additionalProperties": false, "required": ["result_ref_id"],
+      "properties": {"result_ref_id": {"$ref": "#/$defs/Id"}, "cursor": {"type": "string", "maxLength": 200}, "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 10}}
+    },
+    "EnterpriseProfileQueryArguments": {
+      "type": "object", "additionalProperties": false, "required": ["fields"],
+      "properties": {"fields": {"type": "array", "minItems": 1, "maxItems": 30, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9_.-]+$"}}, "snapshot_version": {"type": "string", "maxLength": 80}}
+    },
+    "EnterpriseQualificationsQueryArguments": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"qualification_types": {"$ref": "#/$defs/StringList20"}, "levels": {"$ref": "#/$defs/StringList20"}, "valid_on": {"$ref": "#/$defs/Date"}, "include_expired": {"type": "boolean", "default": false}}
+    },
+    "EnterprisePersonnelQueryArguments": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"roles": {"$ref": "#/$defs/StringList20"}, "certificates": {"$ref": "#/$defs/StringList20"}, "availability_window": {"$ref": "#/$defs/DateRange"}, "region": {"type": "string", "maxLength": 100}, "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 20}}
+    },
+    "EnterpriseProjectsSearchArguments": {
+      "type": "object", "additionalProperties": false, "required": ["query"],
+      "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 300}, "project_types": {"$ref": "#/$defs/StringList20"}, "regions": {"$ref": "#/$defs/StringList20"}, "customer_name": {"type": "string", "maxLength": 200}, "completed_only": {"type": "boolean", "default": false}, "top_k": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}}
+    },
+    "EnterpriseCapacityQueryArguments": {
+      "type": "object", "additionalProperties": false, "required": ["window"],
+      "properties": {"window": {"$ref": "#/$defs/DateRange"}, "resource_types": {"$ref": "#/$defs/StringList20"}, "include_committed": {"type": "boolean", "default": true}, "include_tentative": {"type": "boolean", "default": true}}
+    },
+    "EnterpriseFinancialCapacityQueryArguments": {
+      "type": "object", "additionalProperties": false, "required": ["metrics"],
+      "properties": {"metrics": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9_.-]+$"}}, "as_of": {"$ref": "#/$defs/Date"}, "include_policy_limits": {"type": "boolean", "default": true}}
+    },
+    "EnterpriseCustomerHistoryQueryArguments": {
+      "type": "object", "additionalProperties": false, "required": ["customer_name"],
+      "properties": {"customer_name": {"type": "string", "minLength": 1, "maxLength": 200}, "include_projects": {"type": "boolean", "default": true}, "include_payment": {"type": "boolean", "default": true}, "include_disputes": {"type": "boolean", "default": true}, "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 20}}
+    },
+    "EnterpriseBidHistoryQueryArguments": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"customer_name": {"type": "string", "maxLength": 200}, "project_types": {"$ref": "#/$defs/StringList20"}, "regions": {"$ref": "#/$defs/StringList20"}, "result": {"enum": ["won", "lost", "withdrawn", "unknown"]}, "date_window": {"$ref": "#/$defs/DateRange"}, "top_k": {"type": "integer", "minimum": 1, "maximum": 20, "default": 10}}
+    },
+    "EnterpriseBidRateCardQueryArguments": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"roles": {"$ref": "#/$defs/StringList20"}, "valid_on": {"$ref": "#/$defs/Date"}, "include_overtime": {"type": "boolean", "default": true}}
+    },
+    "QuotaCostItemsSearchArguments": {
+      "type": "object", "additionalProperties": false, "required": ["query"],
+      "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 300}, "spec": {"type": "string", "maxLength": 300}, "unit": {"type": "string", "maxLength": 30}, "region": {"type": "string", "maxLength": 100}, "active_only": {"type": "boolean", "const": true, "default": true}, "top_k": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}}
+    },
+    "ScenarioInput": {
+      "type": "object", "additionalProperties": false, "required": ["name", "value_type", "value"],
+      "properties": {"name": {"type": "string", "pattern": "^[a-z0-9_.-]+$"}, "value_type": {"enum": ["decimal", "string", "boolean", "null"]}, "value": {"type": ["string", "boolean", "null"]}, "unit": {"type": ["string", "null"], "maxLength": 30}}
+    },
+    "CalculateBidWorkloadArguments": {
+      "type": "object", "additionalProperties": false, "required": ["deliverables", "complexity", "deadline"],
+      "properties": {
+        "deliverables": {"type": "array", "minItems": 1, "maxItems": 40, "items": {"type": "object", "additionalProperties": false, "required": ["code", "name", "quantity", "role"], "properties": {"code": {"type": "string", "maxLength": 80}, "name": {"type": "string", "maxLength": 200}, "quantity": {"$ref": "#/$defs/NonnegativeDecimalString"}, "role": {"type": "string", "maxLength": 80}, "evidence_fact_ids": {"type": "array", "maxItems": 10, "items": {"$ref": "#/$defs/Id"}}}}},
+        "complexity": {"enum": ["low", "medium", "high", "unknown"]},
+        "deadline": {"$ref": "#/$defs/DateTime"},
+        "available_calendar_days": {"$ref": "#/$defs/NullableNonnegativeDecimalString"},
+        "scenario_inputs": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/ScenarioInput"}}
+      }
+    },
+    "CalculateBidLaborCostArguments": {
+      "type": "object", "additionalProperties": false, "required": ["workload_calculation_id", "rate_card_version"],
+      "properties": {"workload_calculation_id": {"$ref": "#/$defs/Id"}, "rate_card_version": {"$ref": "#/$defs/Id"}, "overtime_policy": {"enum": ["none", "configured", "scenario"]}, "role_rate_overrides": {"type": "array", "maxItems": 20, "items": {"type": "object", "additionalProperties": false, "required": ["role", "daily_rate"], "properties": {"role": {"type": "string", "maxLength": 80}, "daily_rate": {"$ref": "#/$defs/Money"}, "reason": {"type": "string", "maxLength": 300}}}}}
+    },
+    "CalculateExternalBidExpenseArguments": {
+      "type": "object", "additionalProperties": false, "required": ["expense_items"],
+      "properties": {"expense_items": {"type": "array", "minItems": 1, "maxItems": 40, "items": {"type": "object", "additionalProperties": false, "required": ["category", "name", "amount", "refundable"], "properties": {"category": {"enum": ["document_fee", "travel", "sample", "testing", "printing", "consulting", "platform", "other"]}, "name": {"type": "string", "maxLength": 200}, "amount": {"$ref": "#/$defs/ScenarioMoney"}, "refundable": {"type": "boolean"}, "fact_ids": {"type": "array", "maxItems": 10, "items": {"$ref": "#/$defs/Id"}}}}}}
+    },
+    "CalculateFundOccupationCostArguments": {
+      "type": "object", "additionalProperties": false, "required": ["amount", "start_date", "end_date", "annual_rate", "refundable"],
+      "properties": {"amount": {"$ref": "#/$defs/Money"}, "start_date": {"$ref": "#/$defs/Date"}, "end_date": {"$ref": "#/$defs/Date"}, "annual_rate": {"$ref": "#/$defs/RatioDecimalString"}, "day_count_basis": {"enum": ["ACT_365", "ACT_360"], "default": "ACT_365"}, "refundable": {"type": "boolean"}, "fact_ids": {"type": "array", "maxItems": 10, "items": {"$ref": "#/$defs/Id"}}}
+    },
+    "CalculateBidInvestmentTotalArguments": {
+      "type": "object", "additionalProperties": false, "required": ["labor_calculation_id", "external_calculation_id"],
+      "properties": {"labor_calculation_id": {"$ref": "#/$defs/Id"}, "external_calculation_id": {"$ref": "#/$defs/Id"}, "fund_calculation_ids": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}, "include_contingency_rate": {"$ref": "#/$defs/RatioDecimalString", "default": "0.000000"}}
+    },
+    "CalculateProjectEconomicsArguments": {
+      "type": "object", "additionalProperties": false, "required": ["revenue", "cost_components", "tax_inputs", "risk_reserve"],
+      "properties": {
+        "revenue": {"$ref": "#/$defs/ScenarioMoney"},
+        "cost_components": {"type": "array", "minItems": 1, "maxItems": 40, "items": {"type": "object", "additionalProperties": false, "required": ["code", "name", "amount"], "properties": {"code": {"type": "string", "maxLength": 80}, "name": {"type": "string", "maxLength": 200}, "amount": {"$ref": "#/$defs/ScenarioMoney"}, "source_ids": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/Id"}}}}},
+        "tax_inputs": {"type": "object", "additionalProperties": false, "required": ["tax_rate"], "properties": {"tax_rate": {"$ref": "#/$defs/RatioDecimalString"}, "tax_included": {"type": "boolean"}}},
+        "risk_reserve": {"$ref": "#/$defs/ScenarioMoney"},
+        "target_margin": {"$ref": "#/$defs/NullableRatioDecimalString"}
+      }
+    },
+    "CalculatePaymentCashflowArguments": {
+      "type": "object", "additionalProperties": false, "required": ["milestones", "cost_curve", "finance_rate"],
+      "properties": {
+        "milestones": {"type": "array", "minItems": 1, "maxItems": 36, "items": {"type": "object", "additionalProperties": false, "required": ["date", "cash_in"], "properties": {"date": {"$ref": "#/$defs/Date"}, "cash_in": {"$ref": "#/$defs/ScenarioMoney"}, "label": {"type": "string", "maxLength": 100}, "fact_ids": {"type": "array", "maxItems": 10, "items": {"$ref": "#/$defs/Id"}}}}},
+        "cost_curve": {"type": "array", "minItems": 1, "maxItems": 36, "items": {"type": "object", "additionalProperties": false, "required": ["date", "cash_out"], "properties": {"date": {"$ref": "#/$defs/Date"}, "cash_out": {"$ref": "#/$defs/ScenarioMoney"}, "label": {"type": "string", "maxLength": 100}}}},
+        "finance_rate": {"$ref": "#/$defs/RatioDecimalString"}
+      }
+    },
+    "SensitivityChange": {
+      "type": "object", "additionalProperties": false, "required": ["variable", "delta_type", "value"],
+      "properties": {"variable": {"enum": ["revenue", "material_cost", "labor_cost", "duration", "payment_delay", "risk_reserve", "bid_price"]}, "delta_type": {"enum": ["absolute", "ratio", "days"]}, "value": {"$ref": "#/$defs/DecimalString"}}
+    },
+    "CalculateSensitivityScenariosArguments": {
+      "type": "object", "additionalProperties": false, "required": ["base_calculation_id", "variables", "scenarios"],
+      "properties": {
+        "base_calculation_id": {"$ref": "#/$defs/Id"},
+        "variables": {"type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true, "items": {"enum": ["revenue", "material_cost", "labor_cost", "duration", "payment_delay", "risk_reserve", "bid_price"]}},
+        "scenarios": {"type": "array", "minItems": 1, "maxItems": 9, "items": {"type": "object", "additionalProperties": false, "required": ["name", "changes"], "properties": {"name": {"type": "string", "maxLength": 80}, "changes": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"$ref": "#/$defs/SensitivityChange"}}}}}
+      }
+    }
+  }
+}

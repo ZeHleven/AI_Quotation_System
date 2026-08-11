@@ -6,6 +6,7 @@ import json
 import os
 
 from hybrid_searcher import execute_strict_retrieval, rebuild_indexes, _GLOBAL_MODEL
+from reload_auth import verify_reload_secret
 from tender_evidence_search import register_tender_evidence_routes
 
 app = FastAPI(title="Enterprise RAG Core API", version="2.0.0")
@@ -59,7 +60,10 @@ async def reload_knowledge_base(request: ReloadRequest):
     调用方：Windows FastAPI sync_milvus 接口。
     鉴权：request body 中的 secret 字段。
     """
-    if RELOAD_SECRET and request.secret != RELOAD_SECRET:
+    reload_auth_status = verify_reload_secret(RELOAD_SECRET, request.secret)
+    if reload_auth_status == "unconfigured":
+        raise HTTPException(status_code=503, detail="RAG reload authentication is not configured")
+    if reload_auth_status != "ok":
         raise HTTPException(status_code=403, detail="secret 校验失败")
 
     materials = [m.dict() for m in request.materials]

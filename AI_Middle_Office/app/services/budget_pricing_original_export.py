@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import re
+import unicodedata
 from copy import copy
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Iterable
 
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.budget_project import BudgetProjectImportBatch, BudgetProjectImportSheetMapping, BudgetProjectProfile
 from app.models.budget_pricing_draft import BudgetProjectPricingDraft, BudgetProjectPricingDraftLine
 from app.models.file_object import FileObject
@@ -22,6 +27,8 @@ from app.services.budget_pricing_drafts import (
     ensure_budget_pricing_draft_uses_active_import,
     get_current_budget_pricing_draft,
 )
+from app.services.file_storage import get_object_bytes
+from app.services.legacy_excel import LegacyExcelConversionError, normalize_excel_workbook_bytes
 
 
 MONEY_NUMBER_FORMAT = "#,##0.00"
@@ -68,12 +75,37 @@ EXPORT_FIELDS: tuple[ExportField, ...] = (
     ExportField("owner_material_loss_amount", "甲供材损耗金", ("甲供材损耗金", "甲供材损耗", "甲供材料损耗金"), MONEY_NUMBER_FORMAT),
 )
 
+# Some client templates intentionally combine multiple system breakdown fields in
+# one visible column. Original-format export writes these values only when the
+# template already exposes the combined column; it must not widen the client layout
+# with optional audit columns.
+EXISTING_ONLY_EXPORT_FIELDS: tuple[ExportField, ...] = (
+    ExportField(
+        "auxiliary_machinery_unit_cost",
+        "辅材及机械费",
+        ("辅材及机械费", "辅材机械费", "辅材+机械费", "辅材及机械"),
+        MONEY_NUMBER_FORMAT,
+    ),
+    ExportField(
+        "comprehensive_charge_unit_cost",
+        "综合取费",
+        ("综合取费", "综合取费单价"),
+        MONEY_NUMBER_FORMAT,
+    ),
+)
+WRITABLE_EXPORT_FIELDS: tuple[ExportField, ...] = EXPORT_FIELDS + EXISTING_ONLY_EXPORT_FIELDS
+APPENDABLE_EXPORT_FIELDS: tuple[ExportField, ...] = tuple(
+    field
+    for field in EXPORT_FIELDS
+    if field.key in {"effective_unit_price", "line_total"}
+)
+
 
 @dataclass(frozen=True)
 class BudgetPricingOriginalExportSource:
     draft: BudgetProjectPricingDraft
     batch: BudgetProjectImportBatch
-    source_file: FileObject
+    source_file: FileObject | None
     sheet_mappings: tuple[BudgetProjectImportSheetMapping, ...]
     lines: tuple[BudgetProjectPricingDraftLine, ...]
 
@@ -107,8 +139,6 @@ def prepare_budget_pricing_original_export(
     if batch is None:
         raise BudgetPricingError("BUDGET_PRICING_EXPORT_IMPORT_BATCH_NOT_FOUND", status_code=409)
     source_file = batch.source_file_object
-    if source_file is None:
-        raise BudgetPricingError("BUDGET_PRICING_EXPORT_SOURCE_FILE_NOT_RETAINED", status_code=409)
 
     sheet_mappings = (
         db.query(BudgetProjectImportSheetMapping)
@@ -131,6 +161,45 @@ def prepare_budget_pricing_original_export(
     )
 
 
+def load_budget_pricing_original_source_content(source: BudgetPricingOriginalExportSource) -> bytes:
+    """Load the immutable source workbook for original-format export.
+
+    Production continues to require the retained FileObject in object storage.
+    A local filesystem fallback is available only in development/test and only
+    beneath one explicitly configured root. Its bytes must match the SHA-256
+    captured when the import batch was created.
+    """
+
+    if source.source_file is not None:
+        return get_object_bytes(source.source_file.object_name, source.source_file.bucket)
+
+    local_root = str(settings.budget_pricing_local_source_root or "").strip()
+    if settings.app_env not in {"development", "test"} or not local_root:
+        raise BudgetPricingError("BUDGET_PRICING_EXPORT_SOURCE_FILE_NOT_RETAINED", status_code=409)
+
+    source_filename = str(source.batch.source_filename or "").strip()
+    normalized_filename = source_filename.replace("\\", "/")
+    safe_filename = Path(normalized_filename).name
+    if not safe_filename or safe_filename != normalized_filename:
+        raise BudgetPricingError("BUDGET_PRICING_EXPORT_LOCAL_SOURCE_PATH_INVALID", status_code=409)
+
+    root = Path(local_root).expanduser().resolve()
+    candidate = (root / safe_filename).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise BudgetPricingError("BUDGET_PRICING_EXPORT_LOCAL_SOURCE_PATH_INVALID", status_code=409) from exc
+    if not candidate.is_file():
+        raise BudgetPricingError("BUDGET_PRICING_EXPORT_LOCAL_SOURCE_NOT_FOUND", status_code=409)
+
+    content = candidate.read_bytes()
+    expected_sha256 = str(source.batch.source_file_sha256 or "").strip().lower()
+    actual_sha256 = hashlib.sha256(content).hexdigest()
+    if not expected_sha256 or not hmac.compare_digest(actual_sha256, expected_sha256):
+        raise BudgetPricingError("BUDGET_PRICING_EXPORT_LOCAL_SOURCE_HASH_MISMATCH", status_code=409)
+    return content
+
+
 def render_budget_pricing_original_export(
     source_content: bytes,
     source: BudgetPricingOriginalExportSource,
@@ -139,11 +208,16 @@ def render_budget_pricing_original_export(
 ) -> BudgetPricingOriginalExportResult:
     keep_vba = source.batch.source_filename.lower().endswith(".xlsm")
     try:
-        workbook = load_workbook(BytesIO(source_content), data_only=False, keep_vba=keep_vba)
+        normalized_content = normalize_excel_workbook_bytes(
+            source_content,
+            filename=source.batch.source_filename,
+        )
+        workbook = load_workbook(BytesIO(normalized_content), data_only=False, keep_vba=keep_vba)
+    except LegacyExcelConversionError as exc:
+        raise BudgetPricingError("BUDGET_PRICING_EXPORT_WORKBOOK_INVALID", status_code=422) from exc
     except Exception as exc:  # pragma: no cover - openpyxl has implementation-specific errors.
         raise BudgetPricingError("BUDGET_PRICING_EXPORT_WORKBOOK_INVALID", status_code=422) from exc
 
-    mappings_by_sheet = {mapping.sheet_name: mapping for mapping in source.sheet_mappings}
     lines_by_sheet: dict[str, list[BudgetProjectPricingDraftLine]] = {}
     for line in source.lines:
         lines_by_sheet.setdefault(line.source_sheet, []).append(line)
@@ -156,10 +230,14 @@ def render_budget_pricing_original_export(
         "unresolved": [],
     }
     for sheet_name, lines in lines_by_sheet.items():
-        worksheet = workbook[sheet_name] if sheet_name in workbook.sheetnames else None
-        mapping = mappings_by_sheet.get(sheet_name)
+        worksheet, worksheet_error = _resolve_worksheet(workbook, sheet_name)
+        mapping = _resolve_sheet_mapping(source.sheet_mappings, sheet_name)
         if worksheet is None:
-            summary["unresolved"].append({"sheet": sheet_name, "reason": "WORKSHEET_NOT_FOUND", "line_count": len(lines)})
+            summary["unresolved"].append({
+                "sheet": sheet_name,
+                "reason": worksheet_error or "WORKSHEET_NOT_FOUND",
+                "line_count": len(lines),
+            })
             continue
         if mapping is None or not mapping.header_row_index:
             summary["unresolved"].append({"sheet": sheet_name, "reason": "HEADER_ROW_NOT_FOUND", "line_count": len(lines)})
@@ -189,9 +267,17 @@ def render_budget_pricing_original_export(
 def _write_sheet_pricing_fields(worksheet: Any, *, header_row: int, lines: Iterable[BudgetProjectPricingDraftLine]) -> dict[str, Any]:
     layout = _detect_header_layout(worksheet, header_row)
     header_columns, unresolved = _match_existing_header_columns(worksheet, layout)
+    existing_only_columns, existing_only_unresolved = _match_existing_header_columns(
+        worksheet,
+        layout,
+        fields=EXISTING_ONLY_EXPORT_FIELDS,
+        occupied=set(header_columns.values()),
+    )
+    header_columns.update(existing_only_columns)
+    unresolved.extend(existing_only_unresolved)
     missing_fields = [
         field
-        for field in EXPORT_FIELDS
+        for field in APPENDABLE_EXPORT_FIELDS
         if field.key not in header_columns and not any(item["field"] == field.label for item in unresolved)
     ]
     appended_columns = _append_missing_fields(
@@ -212,7 +298,7 @@ def _write_sheet_pricing_fields(worksheet: Any, *, header_row: int, lines: Itera
         values = _line_field_values(line)
         if line.effective_unit_price is None:
             pending_count += 1
-        for field in EXPORT_FIELDS:
+        for field in WRITABLE_EXPORT_FIELDS:
             column_index = header_columns.get(field.key)
             if column_index is None:
                 continue
@@ -223,9 +309,7 @@ def _write_sheet_pricing_fields(worksheet: Any, *, header_row: int, lines: Itera
             if field.preserve_existing_value and cell.value not in (None, ""):
                 continue
             cell.value = value
-            if field.number_format and (
-                column_index in appended_columns.values() or _is_generic_number_format(cell.number_format)
-            ):
+            if field.number_format and column_index in appended_columns.values():
                 cell.number_format = field.number_format
         written_count += 1
     return {
@@ -233,7 +317,7 @@ def _write_sheet_pricing_fields(worksheet: Any, *, header_row: int, lines: Itera
         "written_line_count": written_count,
         "pending_line_count": pending_count,
         "appended_fields": appended_fields,
-        "matched_fields": [field.label for field in EXPORT_FIELDS if field.key in header_columns],
+        "matched_fields": [field.label for field in WRITABLE_EXPORT_FIELDS if field.key in header_columns],
         "unresolved": unresolved,
     }
 
@@ -281,7 +365,13 @@ def _find_table_right_column(worksheet: Any, header_rows: tuple[int, ...]) -> in
     return right_column
 
 
-def _match_existing_header_columns(worksheet: Any, layout: HeaderLayout) -> tuple[dict[str, int], list[dict[str, Any]]]:
+def _match_existing_header_columns(
+    worksheet: Any,
+    layout: HeaderLayout,
+    *,
+    fields: tuple[ExportField, ...] = EXPORT_FIELDS,
+    occupied: set[int] | None = None,
+) -> tuple[dict[str, int], list[dict[str, Any]]]:
     normalized_headers: dict[str, list[int]] = {}
     for column_index in range(1, layout.table_right_column + 1):
         for normalized in _column_header_labels(worksheet, layout.rows, column_index):
@@ -289,8 +379,8 @@ def _match_existing_header_columns(worksheet: Any, layout: HeaderLayout) -> tupl
 
     resolved: dict[str, int] = {}
     unresolved: list[dict[str, Any]] = []
-    occupied: set[int] = set()
-    for field in EXPORT_FIELDS:
+    occupied_columns = set(occupied or ())
+    for field in fields:
         candidate_scores: dict[int, int] = {}
         for alias in field.aliases:
             normalized_alias = _normalize_header(alias)
@@ -303,7 +393,7 @@ def _match_existing_header_columns(worksheet: Any, layout: HeaderLayout) -> tupl
         candidate_scores = {
             column_index: score
             for column_index, score in candidate_scores.items()
-            if column_index not in occupied
+            if column_index not in occupied_columns
         }
         highest_score = max(candidate_scores.values(), default=None)
         candidates = [
@@ -313,13 +403,13 @@ def _match_existing_header_columns(worksheet: Any, layout: HeaderLayout) -> tupl
         ]
         if len(candidates) == 1:
             resolved[field.key] = candidates[0]
-            occupied.add(candidates[0])
+            occupied_columns.add(candidates[0])
         elif field.key == "quantity" and candidates:
             # Multi-region bills repeat the same quantity header. The import mapper uses
             # the first source column for its calculation quantity, so retain that column.
             selected_column = min(candidates)
             resolved[field.key] = selected_column
-            occupied.add(selected_column)
+            occupied_columns.add(selected_column)
         elif len(candidates) > 1:
             unresolved.append({
                 "field": field.label,
@@ -513,10 +603,6 @@ def _appended_column_width(field: ExportField, source_width: float | None) -> fl
     return float(min(max(source_width, 10), preferred))
 
 
-def _is_generic_number_format(number_format: str | None) -> bool:
-    return not number_format or number_format.lower() == "general"
-
-
 def _copy_cell_style(source: Any, target: Any) -> None:
     if source.has_style:
         target._style = copy(source._style)
@@ -543,11 +629,21 @@ def _line_field_values(line: BudgetProjectPricingDraftLine) -> dict[str, Any]:
         "labor_unit_cost": _number_value(breakdown.get("labor_unit_cost")),
         "main_material_unit_cost": _number_value(breakdown.get("main_material_unit_cost")),
         "auxiliary_material_unit_cost": _number_value(breakdown.get("auxiliary_material_unit_cost")),
+        "auxiliary_machinery_unit_cost": _sum_number_values(
+            breakdown.get("auxiliary_material_unit_cost"),
+            breakdown.get("machinery_unit_cost"),
+        ),
         "tax_amount": _number_value(breakdown.get("tax_amount")),
         "main_material_without_loss": _number_value(breakdown.get("main_material_without_loss")),
         "loss_rate": _number_value(breakdown.get("loss_rate")),
         "machinery_unit_cost": _number_value(breakdown.get("machinery_unit_cost")),
         "comprehensive_unit_cost": _number_value(breakdown.get("comprehensive_unit_cost")),
+        "comprehensive_charge_unit_cost": _sum_number_values(
+            breakdown.get("comprehensive_unit_cost"),
+            breakdown.get("management_unit_cost"),
+            breakdown.get("profit_unit_cost"),
+            breakdown.get("measure_unit_cost"),
+        ),
         "management_unit_cost": _number_value(breakdown.get("management_unit_cost")),
         "profit_unit_cost": _number_value(breakdown.get("profit_unit_cost")),
         "measure_unit_cost": _number_value(breakdown.get("measure_unit_cost")),
@@ -614,6 +710,56 @@ def _number_value(value: Any) -> float | None:
         return float(Decimal(str(value)))
     except (InvalidOperation, TypeError, ValueError):
         return None
+
+
+def _sum_number_values(*values: Any) -> float | None:
+    parsed_values: list[Decimal] = []
+    for value in values:
+        if value in (None, ""):
+            continue
+        try:
+            parsed_values.append(Decimal(str(value)))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+    return float(sum(parsed_values, Decimal("0"))) if parsed_values else None
+
+
+def _resolve_worksheet(workbook: Any, source_sheet_name: str) -> tuple[Any | None, str | None]:
+    if source_sheet_name in workbook.sheetnames:
+        return workbook[source_sheet_name], None
+    normalized_name = _normalize_sheet_name(source_sheet_name)
+    candidates = [
+        sheet_name
+        for sheet_name in workbook.sheetnames
+        if _normalize_sheet_name(sheet_name) == normalized_name
+    ]
+    if len(candidates) == 1:
+        return workbook[candidates[0]], None
+    if len(candidates) > 1:
+        return None, "WORKSHEET_NAME_AMBIGUOUS"
+    return None, "WORKSHEET_NOT_FOUND"
+
+
+def _resolve_sheet_mapping(
+    sheet_mappings: Iterable[BudgetProjectImportSheetMapping],
+    source_sheet_name: str,
+) -> BudgetProjectImportSheetMapping | None:
+    mappings = tuple(sheet_mappings)
+    exact = [mapping for mapping in mappings if mapping.sheet_name == source_sheet_name]
+    if len(exact) == 1:
+        return exact[0]
+    normalized_name = _normalize_sheet_name(source_sheet_name)
+    candidates = [
+        mapping
+        for mapping in mappings
+        if _normalize_sheet_name(mapping.sheet_name) == normalized_name
+    ]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _normalize_sheet_name(value: Any) -> str:
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    return text.strip(" \t\r\n\u00a0\u200b\u3000\ufeff").casefold()
 
 
 def _normalize_header(value: Any) -> str:

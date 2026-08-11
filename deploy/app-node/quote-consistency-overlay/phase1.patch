@@ -1,0 +1,634 @@
+diff --git a/AI_Middle_Office/app/api/v1/quote.py b/AI_Middle_Office/app/api/v1/quote.py
+index 24f88c5..c2f928d 100644
+--- a/AI_Middle_Office/app/api/v1/quote.py
++++ b/AI_Middle_Office/app/api/v1/quote.py
+@@ -28,6 +28,14 @@ from app.services.quote_cost_context import (
+     safe_append_quote_cost_context,
+ )
+ from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
++from app.services.quote_consistency import (
++    lock_quote_push_for_finalize,
++    mark_quote_push_delivered,
++    mark_quote_push_external_delivered,
++    mark_quote_push_failed,
++    quote_push_result,
++    start_quote_push_attempt,
++)
+ from app.services.quote_excel_parser import (
+     QuoteExcelParseError,
+     is_legacy_excel_file,
+@@ -442,75 +450,127 @@ async def confirm_and_push(
+         payload = dict(payload)
+         payload["excel_base64"] = excel_b64
+         logger.info("confirm_push_payload_keys", extra={"keys": list(payload.keys())})
+-        response = await post_json_via_gateway(
+-            provider="n8n",
+-            model="dingtalk-export",
+-            endpoint_type="quote_push",
+-            url=N8N_WEBHOOK_URL_PUSH,
+-            json_payload=payload,
+-            headers=sign_payload(payload),
+-            timeout=60,
++        push_start = start_quote_push_attempt(
++            db,
+             username=current_user.username,
+-            trace_id=get_trace_id(),
++            quote_job_id=quote_job_id,
++            payload=payload,
+         )
+-        if response.status_code == 200:
+-            quote_history_id = None
+-            no_cost_draft_summary = None
++        push_attempt_id = push_start.attempt.id
++        idempotency_key = push_start.attempt.idempotency_key
++
++        if push_start.action == "delivered":
++            db.commit()
++            result = quote_push_result(push_start.attempt)
++            result["idempotent"] = True
++            message = "✅ 最终报价单已成功投递至钉钉群！"
++            summary = result.get("no_cost_draft_summary") or {}
++            if summary.get("created_count"):
++                message += f" 已生成 {summary['created_count']} 条成本库待审核草稿。"
++            return api_ok(result, message=message)
++        if push_start.action == "in_progress":
++            db.commit()
++            raise HTTPException(status_code=409, detail="报价单正在推送中，请勿重复提交")
++
++        payload["idempotency_key"] = idempotency_key
++        if push_start.action == "send":
++            db.commit()
+             try:
+-                record = create_quote_history_record(
+-                    db,
++                response = await post_json_via_gateway(
++                    provider="n8n",
++                    model="dingtalk-export",
++                    endpoint_type="quote_push",
++                    url=N8N_WEBHOOK_URL_PUSH,
++                    json_payload=payload,
++                    headers=sign_payload(payload),
++                    timeout=60,
+                     username=current_user.username,
+-                    payload=payload,
+-                    confirmed_by=current_user.username,
++                    trace_id=get_trace_id(),
+                 )
+-                db.commit()
+-                db.refresh(record)
+-                quote_history_id = record.id
+-            except Exception:
++            except Exception as exc:
+                 db.rollback()
+-                logger.exception("quote_history_record_failed", extra={"event": "quote_history_record_failed"})
+-            try:
+-                record_confirmed_quote(
++                mark_quote_push_failed(db, attempt_id=push_attempt_id, error_message=str(exc))
++                db.commit()
++                raise
++            if response.status_code != 200:
++                mark_quote_push_failed(
+                     db,
+-                    username=current_user.username,
+-                    final_payload=payload,
+-                    quote_history_id=quote_history_id,
+-                    allow_cross_user=has_admin_role(current_user),
++                    attempt_id=push_attempt_id,
++                    error_message=f"N8N_PUSH_HTTP_{response.status_code}",
+                 )
+                 db.commit()
+-            except Exception:
+-                db.rollback()
+-                logger.exception("quote_feedback_confirm_record_failed", extra={"event": "quote_feedback_confirm_record_failed"})
++                raise HTTPException(status_code=500, detail="底层推送流水线异常")
++            mark_quote_push_external_delivered(
++                db,
++                attempt_id=push_attempt_id,
++                status_code=response.status_code,
++                response_text=getattr(response, "text", ""),
++            )
++            db.commit()
++            finalize_attempt = lock_quote_push_for_finalize(db, attempt_id=push_attempt_id)
++            if finalize_attempt.status == "delivered":
++                result = quote_push_result(finalize_attempt)
++                db.commit()
++                result["idempotent"] = True
++                message = "✅ 最终报价单已成功投递至钉钉群！"
++                summary = result.get("no_cost_draft_summary") or {}
++                if summary.get("created_count"):
++                    message += f" 已生成 {summary['created_count']} 条成本库待审核草稿。"
++                return api_ok(result, message=message)
++
++        try:
++            record = create_quote_history_record(
++                db,
++                username=current_user.username,
++                payload=payload,
++                confirmed_by=current_user.username,
++            )
++            quote_history_id = record.id
++            record_confirmed_quote(
++                db,
++                username=current_user.username,
++                final_payload=payload,
++                quote_history_id=quote_history_id,
++                allow_cross_user=has_admin_role(current_user),
++            )
++            no_cost_draft_summary = None
+             if _no_cost_draft_capture_enabled():
+-                try:
+-                    no_cost_draft_summary = create_no_cost_draft_items(
+-                        db,
+-                        current_user,
+-                        payload,
+-                        quote_job_id=quote_job_id,
+-                        quote_history_id=quote_history_id,
+-                    )
+-                    db.commit()
+-                except Exception:
+-                    db.rollback()
+-                    logger.exception("no_cost_draft_capture_failed", extra={"event": "no_cost_draft_capture_failed"})
+-                    no_cost_draft_summary = {
+-                        "enabled": True,
+-                        "success": False,
+-                        "error": "NO_COST_DRAFT_CAPTURE_FAILED",
+-                    }
++                no_cost_draft_summary = create_no_cost_draft_items(
++                    db,
++                    current_user,
++                    payload,
++                    quote_job_id=quote_job_id,
++                    quote_history_id=quote_history_id,
++                )
+             if quote_job_id:
+-                try:
+-                    mark_preview_draft_pushed(db, quote_job_id=quote_job_id)
+-                    db.commit()
+-                except Exception:
+-                    db.rollback()
+-                    logger.exception("quote_preview_draft_mark_pushed_failed", extra={"event": "quote_preview_draft_mark_pushed_failed"})
+-            message = "✅ 最终报价单已成功投递至钉钉群！"
+-            if no_cost_draft_summary and no_cost_draft_summary.get("created_count"):
+-                message += f" 已生成 {no_cost_draft_summary['created_count']} 条成本库待审核草稿。"
+-            return api_ok({"no_cost_draft_summary": no_cost_draft_summary}, message=message)
+-        raise HTTPException(status_code=500, detail="底层推送流水线异常")
++                mark_preview_draft_pushed(db, quote_job_id=quote_job_id)
++            result = {
++                "no_cost_draft_summary": no_cost_draft_summary,
++                "idempotent": push_start.action == "finalize",
++                "idempotency_key": idempotency_key,
++            }
++            mark_quote_push_delivered(
++                db,
++                attempt_id=push_attempt_id,
++                quote_history_id=quote_history_id,
++                result=result,
++            )
++            db.commit()
++        except Exception as exc:
++            db.rollback()
++            logger.exception(
++                "quote_push_local_finalize_failed",
++                extra={"event": "quote_push_local_finalize_failed", "idempotency_key": idempotency_key},
++            )
++            raise HTTPException(
++                status_code=500,
++                detail="报价已送达外部推送链路，但本地记录尚未完成；请使用原报价重新提交以自动补账",
++            ) from exc
++
++        message = "✅ 最终报价单已成功投递至钉钉群！"
++        if no_cost_draft_summary and no_cost_draft_summary.get("created_count"):
++            message += f" 已生成 {no_cost_draft_summary['created_count']} 条成本库待审核草稿。"
++        return api_ok(result, message=message)
+     except HTTPException:
+         raise
+     except Exception as e:
+diff --git a/AI_Middle_Office/app/api/v1/quote_jobs.py b/AI_Middle_Office/app/api/v1/quote_jobs.py
+index beedac2..0f6c97a 100644
+--- a/AI_Middle_Office/app/api/v1/quote_jobs.py
++++ b/AI_Middle_Office/app/api/v1/quote_jobs.py
+@@ -27,6 +27,11 @@ from app.models.user import User
+ from app.services.file_storage import StorageDisabledError, store_file_bytes
+ from app.services.client_inquiries import _parse_local_datetime, create_or_reuse_client_inquiry, serialize_client_inquiry
+ from app.services.quote_dispatcher import dispatch_quote_job
++from app.services.quote_consistency import (
++    QuoteQuotaUnavailable,
++    release_quote_quota,
++    reserve_quote_quota,
++)
+ from app.services.rbac import has_admin_role, has_any_role
+ from app.services.quote_job_readability import (
+     apply_job_duration,
+@@ -53,6 +58,7 @@ from app.services.quote_budget_workspace import (
+ )
+ from app.services.quote_review import (
+     build_quote_review_detail,
++    clone_quote_requirement_rows,
+     parse_requirement_rows_payload,
+     save_quote_requirement_rows,
+ )
+@@ -199,6 +205,7 @@ def _serialize_job(
+         "stage": job.stage,
+         "trace_id": job.trace_id,
+         "celery_task_id": job.celery_task_id,
++        "source_job_id": job.source_job_id,
+         "message_preview": (job.message or "")[:120],
+         "request_summary": job.request_summary or (job.message or "")[:180],
+         "file_name": job.file_name,
+@@ -287,6 +294,7 @@ def _dispatch_and_store(job: QuoteJob, db: Session) -> None:
+         apply_job_failure(job, "dispatch")
+         apply_job_duration(job)
+         append_job_event(job, "error", f"❌ 异步报价任务派发失败: {str(exc)}", trace_id=job.trace_id, stage="dispatch")
++        release_quote_quota(db, quote_job_id=job.job_id, reason="dispatch_failed")
+         db.commit()
+         db.refresh(job)
+
+@@ -361,7 +369,7 @@ async def create_quote_job(
+     current_user: User = Depends(get_current_user),
+     db: Session = Depends(get_db),
+ ):
+-    if current_user.quota <= 0:
++    if int(current_user.quota or 0) - int(current_user.quota_reserved or 0) <= 0:
+         raise HTTPException(status_code=403, detail="您的 AI 调用额度已耗尽，请联系管理员充值")
+
+     file_content = await file.read() if file else None
+@@ -413,6 +421,11 @@ async def create_quote_job(
+     append_job_event(job, "queued", "报价任务已进入队列", trace_id=job.trace_id, stage="queued")
+     db.add(job)
+     db.flush()
++    try:
++        reserve_quote_quota(db, user_id=current_user.id, quote_job_id=job.job_id)
++    except QuoteQuotaUnavailable as exc:
++        db.rollback()
++        raise HTTPException(status_code=403, detail="您的 AI 调用额度已耗尽，请联系管理员充值") from exc
+     save_quote_requirement_rows(db, quote_job_id=job.job_id, rows=requirement_rows)
+     db.commit()
+     db.refresh(job)
+@@ -667,6 +680,13 @@ async def cancel_quote_job(
+     db: Session = Depends(get_db),
+ ):
+     job = _get_accessible_job(job_id, current_user, db)
++    job = (
++        db.query(QuoteJob)
++        .filter(QuoteJob.id == job.id)
++        .populate_existing()
++        .with_for_update()
++        .one()
++    )
+     if job.status == "canceled":
+         data = _serialize_job(job)
+         return api_ok(data)
+@@ -681,6 +701,7 @@ async def cancel_quote_job(
+     apply_job_failure(job, "canceled")
+     apply_job_duration(job)
+     append_job_event(job, "error", "⏹️ 报价任务已取消", trace_id=job.trace_id, stage="canceled")
++    release_quote_quota(db, quote_job_id=job.job_id, reason="canceled")
+     db.commit()
+     db.refresh(job)
+     data = _serialize_job(job)
+@@ -700,7 +721,7 @@ async def retry_quote_job(
+     target_user = db.query(User).filter(User.username == source_job.username).first()
+     if not target_user or not target_user.is_active:
+         raise HTTPException(status_code=400, detail="原任务用户不存在或已禁用，无法重试")
+-    if target_user.quota <= 0:
++    if int(target_user.quota or 0) - int(target_user.quota_reserved or 0) <= 0:
+         raise HTTPException(status_code=403, detail="原任务用户 AI 调用额度已耗尽，无法重试")
+
+     retry_job = QuoteJob(
+@@ -715,6 +736,7 @@ async def retry_quote_job(
+         file_base64=source_job.file_base64,
+         client_inquiry_id=source_job.client_inquiry_id,
+         budget_project_id=source_job.budget_project_id,
++        source_job_id=source_job.job_id,
+         trace_id=get_trace_id() or uuid.uuid4().hex,
+     )
+     apply_job_request_summary(retry_job)
+@@ -728,6 +750,17 @@ async def retry_quote_job(
+         source_job_number=quote_job_number(source_job),
+     )
+     db.add(retry_job)
++    db.flush()
++    try:
++        reserve_quote_quota(db, user_id=target_user.id, quote_job_id=retry_job.job_id)
++    except QuoteQuotaUnavailable as exc:
++        db.rollback()
++        raise HTTPException(status_code=403, detail="原任务用户 AI 调用额度已耗尽，无法重试") from exc
++    clone_quote_requirement_rows(
++        db,
++        source_quote_job_id=source_job.job_id,
++        target_quote_job_id=retry_job.job_id,
++    )
+     db.commit()
+     db.refresh(retry_job)
+     _dispatch_and_store(retry_job, db)
+diff --git a/AI_Middle_Office/app/api/v1/users.py b/AI_Middle_Office/app/api/v1/users.py
+index bd53be8..e0ef88d 100644
+--- a/AI_Middle_Office/app/api/v1/users.py
++++ b/AI_Middle_Office/app/api/v1/users.py
+@@ -133,6 +133,11 @@ async def set_user_quota(
+     user = db.query(User).filter(User.id == user_id).first()
+     if not user:
+         raise HTTPException(status_code=404, detail="用户不存在")
++    if body.quota < int(user.quota_reserved or 0):
++        raise HTTPException(
++            status_code=409,
++            detail=f"当前有 {int(user.quota_reserved or 0)} 次报价额度处于预占状态，不能设置为更低值",
++        )
+     user.quota = body.quota
+     db.commit()
+     return api_ok(message=f"已将 {user.username} 的额度设置为 {body.quota} 次")
+diff --git a/AI_Middle_Office/app/models/quote_job.py b/AI_Middle_Office/app/models/quote_job.py
+index 61a4898..4a6b91c 100644
+--- a/AI_Middle_Office/app/models/quote_job.py
++++ b/AI_Middle_Office/app/models/quote_job.py
+@@ -1,4 +1,4 @@
+-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
++from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+ from sqlalchemy.dialects.mysql import LONGTEXT
+ from sqlalchemy.orm import relationship
+ from sqlalchemy.sql import func
+@@ -35,6 +35,9 @@ class QuoteJob(Base):
+     events_json = Column(_long_text(), default="[]")
+     trace_id = Column(String(64), index=True, nullable=True)
+     celery_task_id = Column(String(128), nullable=True)
++    source_job_id = Column(String(36), ForeignKey("quote_jobs.job_id", ondelete="SET NULL"), index=True, nullable=True)
++    attempt_id = Column(String(36), index=True, nullable=True)
++    started_at = Column(DateTime(timezone=True), nullable=True)
+     client_inquiry_id = Column(String(36), ForeignKey("client_inquiries.inquiry_id"), index=True, nullable=True)
+     budget_project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), index=True, nullable=True)
+     budget_pricing_draft_id = Column(
+@@ -76,3 +79,44 @@ class QuoteJobEvent(Base):
+     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+     job = relationship("QuoteJob", back_populates="events")
++
++
++class QuoteQuotaReservation(Base):
++    __tablename__ = "quote_quota_reservations"
++    __table_args__ = (
++        UniqueConstraint("quote_job_id", name="uq_quote_quota_reservations_job"),
++    )
++
++    id = Column(Integer, primary_key=True, index=True)
++    reservation_id = Column(String(36), unique=True, nullable=False)
++    quote_job_id = Column(String(36), ForeignKey("quote_jobs.job_id", ondelete="RESTRICT"), index=True, nullable=False)
++    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), index=True, nullable=False)
++    amount = Column(Integer, nullable=False, default=1, server_default="1")
++    status = Column(String(24), index=True, nullable=False, default="reserved", server_default="reserved")
++    release_reason = Column(String(64), nullable=True)
++    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
++    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
++    consumed_at = Column(DateTime(timezone=True), nullable=True)
++    released_at = Column(DateTime(timezone=True), nullable=True)
++
++
++class QuotePushAttempt(Base):
++    __tablename__ = "quote_push_attempts"
++
++    id = Column(Integer, primary_key=True, index=True)
++    idempotency_key = Column(String(64), unique=True, nullable=False)
++    quote_job_id = Column(String(36), ForeignKey("quote_jobs.job_id", ondelete="SET NULL"), index=True, nullable=True)
++    username = Column(String(64), index=True, nullable=False)
++    payload_sha256 = Column(String(64), index=True, nullable=False)
++    payload_json = Column(_long_text(), nullable=False)
++    status = Column(String(32), index=True, nullable=False, default="sending", server_default="sending")
++    retry_count = Column(Integer, nullable=False, default=0, server_default="0")
++    external_status_code = Column(Integer, nullable=True)
++    external_response = Column(_long_text(), nullable=True)
++    error_message = Column(_long_text(), nullable=True)
++    quote_history_id = Column(Integer, ForeignKey("quote_history.id", ondelete="SET NULL"), index=True, nullable=True)
++    result_json = Column(_long_text(), nullable=True)
++    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
++    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
++    external_delivered_at = Column(DateTime(timezone=True), nullable=True)
++    delivered_at = Column(DateTime(timezone=True), nullable=True)
+diff --git a/AI_Middle_Office/app/models/user.py b/AI_Middle_Office/app/models/user.py
+index fa4f05f..f656351 100644
+--- a/AI_Middle_Office/app/models/user.py
++++ b/AI_Middle_Office/app/models/user.py
+@@ -20,6 +20,7 @@ class User(Base):
+
+     # 额度管控：限制员工调用 AI 的次数，默认 10 次
+     quota = Column(Integer, default=10)
++    quota_reserved = Column(Integer, nullable=False, default=0, server_default="0")
+
+     is_active = Column(Boolean, default=True)
+     must_change_password = Column(Boolean, default=False)
+diff --git a/AI_Middle_Office/app/services/quote_job_runner.py b/AI_Middle_Office/app/services/quote_job_runner.py
+index d1f72bb..640fa30 100644
+--- a/AI_Middle_Office/app/services/quote_job_runner.py
++++ b/AI_Middle_Office/app/services/quote_job_runner.py
+@@ -25,6 +25,14 @@ from app.services.quote_cost_context import (
+     safe_append_quote_cost_context,
+ )
+ from app.services.quote_cost_matching import safe_enrich_quote_payload_with_cost_refs
++from app.services.quote_consistency import (
++    QuoteConsistencyError,
++    QuoteQuotaUnavailable,
++    claim_quote_job,
++    consume_quote_quota,
++    ensure_quote_quota_reservation,
++    release_quote_quota,
++)
+ from app.services.quote_excel_parser import (
+     QuoteExcelParseError,
+     is_legacy_excel_file,
+@@ -191,12 +199,35 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
+     return value.astimezone(timezone.utc)
+
+
++def _claimed_job_for_update(db: Session, *, job_id: str, attempt_id: str) -> QuoteJob | None:
++    return (
++        db.query(QuoteJob)
++        .filter(
++            QuoteJob.job_id == job_id,
++            QuoteJob.status == "running",
++            QuoteJob.attempt_id == attempt_id,
++        )
++        .populate_existing()
++        .with_for_update()
++        .first()
++    )
++
++
+ def mark_stale_quote_jobs(db, timeout_minutes: int) -> list[QuoteJob]:
+     cutoff = _utcnow() - timedelta(minutes=timeout_minutes)
+     stale_jobs = []
+-    candidates = db.query(QuoteJob).filter(QuoteJob.status.in_(ACTIVE_STATUSES)).all()
+-
+-    for job in candidates:
++    candidate_ids = [row[0] for row in db.query(QuoteJob.id).filter(QuoteJob.status.in_(ACTIVE_STATUSES)).all()]
++
++    for candidate_id in candidate_ids:
++        job = (
++            db.query(QuoteJob)
++            .filter(QuoteJob.id == candidate_id, QuoteJob.status.in_(ACTIVE_STATUSES))
++            .populate_existing()
++            .with_for_update()
++            .first()
++        )
++        if not job:
++            continue
+         last_seen = _as_utc(job.updated_at) or _as_utc(job.created_at)
+         if not last_seen or last_seen > cutoff:
+             continue
+@@ -208,6 +239,7 @@ def mark_stale_quote_jobs(db, timeout_minutes: int) -> list[QuoteJob]:
+         apply_job_failure(job, "timeout")
+         apply_job_duration(job)
+         append_job_event(job, "error", f"❌ {job.error_message}", trace_id=job.trace_id, stage="timeout")
++        release_quote_quota(db, quote_job_id=job.job_id, reason="timed_out")
+         stale_jobs.append(job)
+
+     if stale_jobs:
+@@ -796,8 +828,15 @@ async def run_quote_job_async(job_id: str) -> None:
+     trace_token = None
+     run_started_at = time.perf_counter()
+     try:
+-        job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).first()
+-        if not job or job.status in TERMINAL_STATUSES:
++        attempt_id = str(uuid.uuid4())
++        if not claim_quote_job(db, job_id=job_id, attempt_id=attempt_id):
++            db.rollback()
++            return
++        db.commit()
++
++        job = _claimed_job_for_update(db, job_id=job_id, attempt_id=attempt_id)
++        if not job:
++            db.rollback()
+             return
+
+         trace_token = set_trace_id(job.trace_id or uuid.uuid4().hex)
+@@ -810,10 +849,13 @@ async def run_quote_job_async(job_id: str) -> None:
+             apply_job_failure(job, "auth")
+             _apply_runtime_duration(job, run_started_at)
+             append_job_event(job, "error", "❌ 登录状态已失效，请重新登录", trace_id=job.trace_id, stage="auth")
++            release_quote_quota(db, quote_job_id=job.job_id, reason="auth_failed")
+             db.commit()
+             return
+
+-        if user.quota <= 0:
++        try:
++            ensure_quote_quota_reservation(db, user_id=user.id, quote_job_id=job.job_id)
++        except (QuoteQuotaUnavailable, QuoteConsistencyError):
+             job.status = "failed"
+             job.stage = "quota"
+             job.error_message = "AI 调用额度已耗尽"
+@@ -824,8 +866,6 @@ async def run_quote_job_async(job_id: str) -> None:
+             db.commit()
+             return
+
+-        job.status = "running"
+-        job.stage = "started"
+         append_job_event(job, "processing", "异步报价任务已开始执行", trace_id=job.trace_id, stage="started")
+         db.commit()
+
+@@ -833,6 +873,10 @@ async def run_quote_job_async(job_id: str) -> None:
+             file_content = await _load_job_file_content(job, db)
+         except Exception as exc:
+             logger.exception("quote_job_file_load_failed", extra={"job_id": job.job_id, "event": "quote_job_file_load_failed"})
++            job = _claimed_job_for_update(db, job_id=job_id, attempt_id=attempt_id)
++            if not job:
++                db.rollback()
++                return
+             job.status = "failed"
+             job.stage = "file_load"
+             job.error_message = f"报价附件读取失败: {str(exc)}"
+@@ -840,6 +884,7 @@ async def run_quote_job_async(job_id: str) -> None:
+             apply_job_failure(job, "file_load")
+             _apply_runtime_duration(job, run_started_at)
+             append_job_event(job, "error", f"❌ {job.error_message}", trace_id=job.trace_id, stage="file_load")
++            release_quote_quota(db, quote_job_id=job.job_id, reason="file_load_failed")
+             db.commit()
+             return
+
+@@ -856,8 +901,9 @@ async def run_quote_job_async(job_id: str) -> None:
+             quote_job_id=job.job_id,
+             current_user=user,
+         ):
+-            db.refresh(job)
+-            if job.status in TERMINAL_STATUSES:
++            job = _claimed_job_for_update(db, job_id=job_id, attempt_id=attempt_id)
++            if not job:
++                db.rollback()
+                 return
+
+             job.stage = extra.get("stage", job.stage)
+@@ -885,7 +931,7 @@ async def run_quote_job_async(job_id: str) -> None:
+                 job.finished_at = _utcnow()
+                 apply_job_result_summary(job, result_payload)
+                 _apply_runtime_duration(job, run_started_at)
+-                user.quota -= 1
++                consume_quote_quota(db, quote_job_id=job.job_id)
+                 db.commit()
+                 safe_record_ai_preview(
+                     db,
+@@ -901,6 +947,7 @@ async def run_quote_job_async(job_id: str) -> None:
+                 job.finished_at = _utcnow()
+                 apply_job_failure(job, extra.get("stage"))
+                 _apply_runtime_duration(job, run_started_at)
++                release_quote_quota(db, quote_job_id=job.job_id, reason=str(extra.get("stage") or "quote_failed"))
+
+             db.commit()
+             if job.status in TERMINAL_STATUSES:
+@@ -909,7 +956,7 @@ async def run_quote_job_async(job_id: str) -> None:
+         logger.exception("quote_job_crashed", extra={"job_id": job_id, "event": "quote_job_crashed"})
+         try:
+             db.rollback()
+-            job = db.query(QuoteJob).filter(QuoteJob.job_id == job_id).first()
++            job = _claimed_job_for_update(db, job_id=job_id, attempt_id=attempt_id)
+             if job:
+                 job.status = "failed"
+                 job.stage = "crashed"
+@@ -918,7 +965,10 @@ async def run_quote_job_async(job_id: str) -> None:
+                 apply_job_failure(job, "crashed")
+                 _apply_runtime_duration(job, run_started_at)
+                 append_job_event(job, "error", f"❌ [API Gateway] 异步任务崩溃: {str(exc)}", trace_id=job.trace_id, stage="crashed")
++                release_quote_quota(db, quote_job_id=job.job_id, reason="crashed")
+                 db.commit()
++            else:
++                db.rollback()
+         except Exception:
+             db.rollback()
+     finally:
+diff --git a/AI_Middle_Office/app/services/quote_review.py b/AI_Middle_Office/app/services/quote_review.py
+index 5b3b2ac..c8dc0ee 100644
+--- a/AI_Middle_Office/app/services/quote_review.py
++++ b/AI_Middle_Office/app/services/quote_review.py
+@@ -165,6 +165,37 @@ def quote_requirement_rows(db: Session, quote_job_id: str) -> list[QuoteRequirem
+     )
+
+
++def clone_quote_requirement_rows(
++    db: Session,
++    *,
++    source_quote_job_id: str,
++    target_quote_job_id: str,
++) -> list[QuoteRequirementRow]:
++    source_rows = quote_requirement_rows(db, source_quote_job_id)
++    cloned_rows: list[QuoteRequirementRow] = []
++    for row in source_rows:
++        cloned = QuoteRequirementRow(
++            quote_job_id=target_quote_job_id,
++            requirement_row_key=row.requirement_row_key,
++            source_sheet=row.source_sheet,
++            raw_row_index=row.raw_row_index,
++            item_name=row.item_name,
++            spec=row.spec,
++            quantity=row.quantity,
++            unit=row.unit,
++            remark=row.remark,
++            raw_text=row.raw_text,
++            raw_cells_json=row.raw_cells_json,
++            row_json=row.row_json,
++            sort_order=row.sort_order,
++        )
++        db.add(cloned)
++        cloned_rows.append(cloned)
++    if cloned_rows:
++        db.flush()
++    return cloned_rows
++
++
+ def requirement_rows_as_source_rows(requirement_rows: list[QuoteRequirementRow]) -> list[dict[str, Any]]:
+     return [
+         {

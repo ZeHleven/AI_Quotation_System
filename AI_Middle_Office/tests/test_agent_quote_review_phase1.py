@@ -346,7 +346,7 @@ def test_agent_catalog_requires_feature_flag(client):
 
 
 def test_quote_review_agent_run_persists_trace_and_findings(client):
-    username, headers = _role_headers(client, ["staff"], username_prefix="agent_owner")
+    username, headers = _role_headers(client, ["quote_user"], username_prefix="agent_owner")
     job_id = _seed_quote_job_with_missing_row(username)
     old_value = _set_flag("feature_agent_assistants", True)
     old_llm_value = _set_flag("feature_agent_llm_explanation", True)
@@ -441,7 +441,7 @@ def test_manual_quote_audit_requires_and_binds_pushed_history(client):
 
 
 def test_quote_review_agent_no_longer_creates_suggestion_loop(client):
-    username, headers = _role_headers(client, ["staff"], username_prefix="agent_saving")
+    username, headers = _role_headers(client, ["quote_user"], username_prefix="agent_saving")
     job_id = _seed_quote_job_with_saving_suggestion(username)
     old_value = _set_flag("feature_agent_assistants", True)
     old_llm_value = _set_flag("feature_agent_llm_explanation", True)
@@ -549,7 +549,7 @@ def test_quote_review_agent_llm_explanation_uses_deepseek_when_configured(client
         "app.services.agent_llm_explanation.post_json_via_gateway",
         fake_post_json_via_gateway,
     )
-    username, headers = _role_headers(client, ["staff"], username_prefix="agent_deepseek")
+    username, headers = _role_headers(client, ["quote_user"], username_prefix="agent_deepseek")
     job_id = _seed_quote_job_with_saving_suggestion(username)
     old_agent_value = _set_flag("feature_agent_assistants", True)
     old_llm_value = _set_flag("feature_agent_llm_explanation", True)
@@ -927,8 +927,8 @@ def test_daily_quote_review_scheduler_runs_once_and_exposes_status(client):
 
 
 def test_quote_review_agent_hides_other_users_quote_jobs(client):
-    owner_username, _ = _role_headers(client, ["staff"], username_prefix="agent_owner")
-    _, other_headers = _role_headers(client, ["staff"], username_prefix="agent_other")
+    owner_username, _ = _role_headers(client, ["quote_user"], username_prefix="agent_owner")
+    _, other_headers = _role_headers(client, ["quote_user"], username_prefix="agent_other")
     job_id = _seed_quote_job_with_missing_row(owner_username)
     old_value = _set_flag("feature_agent_assistants", True)
     try:

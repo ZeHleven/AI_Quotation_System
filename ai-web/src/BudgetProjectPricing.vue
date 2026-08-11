@@ -43,16 +43,17 @@
       />
 
       <div class="pricing-draft-workspace">
-        <div class="budget-title">
+        <div class="budget-title pricing-draft-heading">
           <div>
             <strong>报价草稿</strong>
-            <small>快速审核与专业全字段共用同一份草稿；系统自动按账户定额、企业定额、AI估价顺序完成计价</small>
           </div>
           <div class="draft-actions">
-            <el-button v-if="draft" plain :disabled="!canManageDraft" @click="openAccountQuotaSync">同步至账户定额</el-button>
-            <el-button v-if="draft" plain :loading="originalExporting" :disabled="draftQuoteJobRunning" @click="exportOriginalFormatPricingDraft">导出</el-button>
+            <el-button v-if="draft" size="small" plain @click="openEnterpriseQuotaPanel()">企业定额库</el-button>
+            <el-button v-if="draft" size="small" plain :disabled="!canManageDraft" @click="openAccountQuotaSync">同步至账户定额</el-button>
+            <el-button v-if="draft" size="small" plain :loading="originalExporting" :disabled="draftQuoteJobRunning" @click="exportOriginalFormatPricingDraft">导出</el-button>
             <el-button
               v-if="draftQuoteJobRunning"
+              size="small"
               type="danger"
               plain
               :loading="draftQuoteJobCancelling"
@@ -61,13 +62,6 @@
             >
               取消生成
             </el-button>
-          </div>
-        </div>
-
-        <div class="quote-workbench-flow" aria-label="报价流程">
-          <div v-for="(step, index) in quoteWorkflowSteps" :key="step" :class="{ active: index <= quoteWorkflowActiveStep }">
-            <span>{{ index + 1 }}</span>
-            <strong>{{ step }}</strong>
           </div>
         </div>
 
@@ -103,7 +97,6 @@
             <div class="quote-workbench-total">
               <span>当前报价合计</span>
               <strong>¥ {{ formatMoney(draftTotals.quote_amount ?? draftTotals.tax_included_total ?? draft.priced_subtotal ?? 0) }}</strong>
-              <small>账户定额 → 企业定额 → AI估价</small>
             </div>
             <div class="quote-workbench-kpis">
               <div><span>施工项目</span><strong>{{ draftSummaryCount('line_count', 'row_count', 'standard_item_count') }}</strong></div>
@@ -123,7 +116,18 @@
                 <small>占项目数 {{ draftSourcePercent(draftSummaryCount('ai_estimate_count')) }}</small>
               </div>
               <div v-if="draftManualChangeCount > 0"><span>人工修改</span><strong>{{ draftManualChangeCount }}</strong></div>
-              <div v-if="draftAttentionCount > 0" class="warning">
+              <div
+                v-if="draftAttentionCount > 0"
+                class="warning attention-kpi"
+                :class="{ 'is-locating': attentionFocusLoading }"
+                role="button"
+                tabindex="0"
+                :aria-label="`定位待处理项目，共 ${draftAttentionCount} 条`"
+                title="点击定位待处理项目；再次点击定位下一条"
+                @click="focusNextAttentionLine"
+                @keyup.enter="focusNextAttentionLine"
+                @keyup.space.prevent="focusNextAttentionLine"
+              >
                 <span>待处理</span>
                 <strong>{{ draftAttentionCount }}</strong>
               </div>
@@ -171,9 +175,6 @@
               <label><span>报价上下浮(%)</span><el-input-number v-model="totalsConfigInputs.quote_adjustment_percent" :min="-100" :controls="false" size="small" /></label>
               <el-button type="primary" plain :loading="totalsSaving" :disabled="!canManageDraft" @click="saveDraftTotalsConfig">保存费率</el-button>
             </div>
-          </div>
-          <div class="draft-boundary-note">
-            当前是可变草稿，不是正式计价结果；人工改价可同步为账户定额草稿，但不会立即重算当前草稿；{{ draftModeOf(draft) === 'enterprise_ai' ? '企业定额未匹配行保留现有 AI 估价结果。' : '账户定额仅匹配当前账号 active 条目；未匹配行保持空价。' }}
           </div>
           <el-alert
             v-if="draftQuoteJobRunning"
@@ -265,25 +266,43 @@
             v-loading="draftLinesLoading"
             :data="draftLines"
             :row-key="lineIdOf"
+            :expand-row-keys="professionalExpandedRowKeys"
+            :row-class-name="professionalDraftRowClass"
             class="users-table quote-line-table professional-fields-table"
             max-height="620"
             empty-text="当前筛选条件下暂无草稿行"
             @row-click="toggleProfessionalQuotaRow"
+            @expand-change="syncProfessionalExpandedRows"
           >
-            <el-table-column type="expand" width="52" fixed="left" class-name="project-quota-expand-cell">
+            <el-table-column type="expand" width="28" class-name="project-quota-expand-cell">
               <template #expand="{ expanded }">
                 <span class="project-quota-expand-symbol" aria-hidden="true">{{ expanded ? '−' : '+' }}</span>
               </template>
               <template #default="{ row }">
                 <div class="project-quota-relation" @click.stop>
-                  <span class="project-quota-relation-branch" aria-hidden="true"></span>
-                  <el-table
-                    :data="[projectQuotaMainItem(row)]"
-                    :show-header="false"
-                    class="matched-quota-aligned-table"
-                    :row-class-name="() => projectQuotaRowClass(row)"
-                    @row-click="selectProjectQuota(row)"
-                  >
+                  <span v-if="hasProjectQuotaItem(row)" class="project-quota-relation-branch" aria-hidden="true"></span>
+                  <template v-if="hasProjectQuotaItem(row)">
+                    <el-table
+                      :data="projectQuotaMainItems(row)"
+                      row-key="entry_key"
+                      :expand-row-keys="projectQuotaExpandedEntryKeys(row)"
+                      :show-header="false"
+                      class="matched-quota-aligned-table"
+                      :row-class-name="({ row: quotaRow }) => projectQuotaRowClass(row, quotaRow)"
+                      @row-click="(quotaRow) => selectProjectQuota(row, quotaRow)"
+                    >
+                    <el-table-column type="expand" width="28" class-name="project-quota-detail-expand-cell">
+                      <template #expand><span aria-hidden="true"></span></template>
+                      <template #default="{ row: quotaRow }">
+                        <div
+                          v-if="isProjectQuotaRowActive(row) && isProjectQuotaItemActive(quotaRow)"
+                          :ref="captureProjectQuotaInlineHost"
+                          id="project-quota-inline-host"
+                          class="project-quota-inline-host"
+                          :data-quota-entry-key="quotaRow.entry_key"
+                        />
+                      </template>
+                    </el-table-column>
                     <el-table-column
                       v-for="column in projectQuotaMainColumns"
                       :key="column.key"
@@ -291,28 +310,62 @@
                       :min-width="column.minWidth"
                       :align="column.align || 'left'"
                     >
-                      <template #default="{ row: quotaRow }">{{ projectQuotaMainFieldValue(quotaRow, column) }}</template>
+                      <template #default="{ row: quotaRow }">
+                        <div v-if="column.key === 'item_name'" class="project-quota-name-cell">
+                          <span>{{ projectQuotaMainFieldValue(quotaRow, column) }}</span>
+                          <div class="project-quota-row-actions" aria-label="定额项操作">
+                            <el-button link size="small" type="primary" :disabled="!canManageDraft" @click.stop="openProjectQuotaAddition(row)">新增</el-button>
+                            <el-button link size="small" type="danger" :disabled="!canManageDraft" @click.stop="deleteCurrentProjectQuota(row, quotaRow)">删除</el-button>
+                            <el-button link size="small" type="warning" :disabled="!canManageDraft" @click.stop="openProjectQuotaReplacement(row, quotaRow)">替换</el-button>
+                          </div>
+                        </div>
+                        <template v-else>{{ projectQuotaMainFieldValue(quotaRow, column) }}</template>
+                      </template>
                     </el-table-column>
-                  </el-table>
+                    </el-table>
+                  </template>
+                  <div v-else class="project-quota-empty-row">
+                    <span>暂无定额，当前清单价格已按剩余价格来源重新计算。</span>
+                    <el-button size="small" type="primary" plain :disabled="!canManageDraft" @click.stop="openProjectQuotaAddition(row)">新增定额</el-button>
+                  </div>
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="序号" width="72" fixed="left" align="center">
+            <el-table-column label="序号" min-width="30" align="center">
               <template #default="{ $index }">{{ draftRowSequence($index) }}</template>
             </el-table-column>
-            <el-table-column label="名称" width="190" fixed="left"><template #default="{ row }">{{ row.item_name || row.project_name || '—' }}</template></el-table-column>
-            <el-table-column label="项目特征" min-width="260" show-overflow-tooltip><template #default="{ row }">{{ row.spec || row.project_feature || '无项目特征' }}</template></el-table-column>
-            <el-table-column label="单位" width="80"><template #default="{ row }">{{ row.unit || '—' }}</template></el-table-column>
-            <el-table-column label="工程量" width="120" align="right"><template #default="{ row }"><strong class="quote-quantity">{{ formatQuantity(row.quantity ?? row.calculation_quantity) }}</strong></template></el-table-column>
-            <el-table-column label="不含税综合单价" width="135" align="right"><template #default="{ row }"><strong>{{ formatMoney(draftPreviewUnitPrice(row) ?? quoteUnitPrice(row)) }}</strong></template></el-table-column>
-            <el-table-column label="不含税综合合价" width="145" align="right"><template #default="{ row }">{{ formatMoney(draftPreviewLineTotal(row) ?? lineTotalCost(row)) }}</template></el-table-column>
-            <el-table-column label="人工费" width="110" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'labor')) }}</template></el-table-column>
-            <el-table-column label="主材费" width="110" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'main_material')) }}</template></el-table-column>
-            <el-table-column label="辅材费" width="110" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'auxiliary_material')) }}</template></el-table-column>
-            <el-table-column label="机械费" width="110" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'machinery')) }}</template></el-table-column>
-            <el-table-column label="措施费" width="110" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'measure')) }}</template></el-table-column>
-            <el-table-column label="管理费" width="110" align="right"><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'management')) }}</template></el-table-column>
-            <el-table-column label="税费" width="110" align="right"><template #default="{ row }">{{ formatMoney(draftPreviewTaxAmount(row) ?? taxAmount(row) ?? 0) }}</template></el-table-column>
+            <el-table-column label="名称" min-width="64" show-overflow-tooltip><template #default="{ row }">{{ row.item_name || row.project_name || '—' }}</template></el-table-column>
+            <el-table-column label="项目特征" min-width="72" show-overflow-tooltip><template #default="{ row }">{{ row.spec || row.project_feature || '无项目特征' }}</template></el-table-column>
+            <el-table-column label="单位" min-width="26" show-overflow-tooltip><template #default="{ row }">{{ row.unit || '—' }}</template></el-table-column>
+            <el-table-column label="工程量" min-width="34" align="right" show-overflow-tooltip><template #default="{ row }"><strong class="quote-quantity">{{ formatQuantity(row.quantity ?? row.calculation_quantity) }}</strong></template></el-table-column>
+            <el-table-column label="不含税综合单价" min-width="42" align="right" show-overflow-tooltip><template #default="{ row }"><strong>{{ formatMoney(draftPreviewUnitPrice(row) ?? quoteUnitPrice(row)) }}</strong></template></el-table-column>
+            <el-table-column label="不含税综合合价" min-width="46" align="right" show-overflow-tooltip><template #default="{ row }">{{ formatMoney(draftPreviewLineTotal(row) ?? lineTotalCost(row)) }}</template></el-table-column>
+            <el-table-column label="人工费" min-width="31" align="right" show-overflow-tooltip><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'labor')) }}</template></el-table-column>
+            <el-table-column label="主材费" min-width="31" align="right" show-overflow-tooltip><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'main_material')) }}</template></el-table-column>
+            <el-table-column label="辅材费" min-width="31" align="right" show-overflow-tooltip><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'auxiliary_material')) }}</template></el-table-column>
+            <el-table-column label="机械费" min-width="31" align="right" show-overflow-tooltip><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'machinery')) }}</template></el-table-column>
+            <el-table-column label="措施费" min-width="31" align="right" show-overflow-tooltip><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'measure')) }}</template></el-table-column>
+            <el-table-column label="管理费" min-width="31" align="right" show-overflow-tooltip><template #default="{ row }">{{ formatMoney(feeUnitValue(row, 'management')) }}</template></el-table-column>
+            <el-table-column label="税费" min-width="31" align="right" show-overflow-tooltip><template #default="{ row }">{{ formatMoney(draftPreviewTaxAmount(row) ?? taxAmount(row) ?? 0) }}</template></el-table-column>
+            <el-table-column label="报价来源" min-width="102" class-name="professional-source-column">
+              <template #default="{ row }">
+                <div class="draft-status-stack">
+                  <el-tag
+                    class="source-basis-tag"
+                    size="small"
+                    effect="plain"
+                    role="button"
+                    tabindex="0"
+                    title="点击查看成本依据"
+                    @click.stop="openCostBasis(row)"
+                    @keyup.enter="openCostBasis(row)"
+                  >
+                    {{ draftPriceSourceLabel(row) }}
+                  </el-tag>
+                  <small>{{ draftPriceSourceMeta(row) }}</small>
+                </div>
+              </template>
+            </el-table-column>
           </el-table>
           <el-pagination v-if="draftLineTotal > draftLinePageSize" v-model:current-page="draftLinePage" :page-size="draftLinePageSize" :total="draftLineTotal" layout="total, prev, pager, next" @current-change="loadDraftLines" />
           </template>
@@ -837,82 +890,157 @@
           :disabled="!costBasisDrawer.activeEnterpriseItemId || !costBasisDrawer.activeEnterpriseVersionId"
           @click="openEnterpriseQuotaLibraryItem"
         >
-          在当前生效企业定额库中查看
+          查看企业定额库
         </el-button>
       </div>
     </template>
   </el-drawer>
 
-  <section
-    v-if="pricingAvailable && canViewPricing && pricingWorkspaceView === 'professional'"
-    class="budget-panel project-quota-resource-workbench"
-    aria-labelledby="project-quota-resource-title"
+  <Teleport
+    defer
+    v-if="pricingAvailable && canViewPricing && pricingWorkspaceView === 'professional' && projectQuotaWorkbench.row && projectQuotaInlineReady && projectQuotaInlineHost"
+    :to="projectQuotaInlineHost"
   >
-    <div class="budget-title project-quota-workbench-heading">
-      <div>
-        <strong id="project-quota-resource-title">工料机明细</strong>
-        <small v-if="!projectQuotaWorkbench.row">请先在上方“专业全字段”中展开项目，再点击定额项的任意位置。</small>
-      </div>
-      <el-tag v-if="projectQuotaWorkbench.snapshot" type="primary" effect="plain">
-        定额编码：{{ projectQuotaWorkbench.snapshot.quota?.quota_code || '项目补充定额' }}
-      </el-tag>
+  <section class="project-quota-inline-workbench" aria-label="明细项">
+    <el-skeleton v-if="projectQuotaWorkbench.loading" :rows="2" animated />
+    <div v-else-if="!draft || !projectQuotaWorkbench.snapshot" class="project-quota-detail-empty">
+      暂无明细项
     </div>
-    <el-skeleton v-if="projectQuotaWorkbench.loading" :rows="10" animated />
-    <el-empty v-else-if="!draft" description="创建报价草稿后，可在这里查看定额工料机明细" />
-    <el-empty v-else-if="!projectQuotaWorkbench.snapshot" description="点击上方定额项后，在这里显示对应工料机明细" />
     <template v-else>
-      <div class="project-quota-summary">
-        <div><span>项目定额单价</span><strong>¥ {{ formatMoney(projectQuotaWorkbench.snapshot.quota?.unit_price) }}</strong></div>
-        <div><span>人工</span><strong>{{ formatMoney(projectQuotaWorkbench.snapshot.quota?.labor_fee) }}</strong></div>
-        <div><span>主材</span><strong>{{ formatMoney(projectQuotaWorkbench.snapshot.quota?.main_material_fee) }}</strong></div>
-        <div><span>辅材</span><strong>{{ formatMoney(projectQuotaWorkbench.snapshot.quota?.auxiliary_material_fee) }}</strong></div>
-        <div><span>机械</span><strong>{{ formatMoney(projectQuotaWorkbench.snapshot.quota?.machinery_fee) }}</strong></div>
-      </div>
-
-      <div class="budget-title project-quota-resource-heading">
+      <div class="project-quota-detail-heading">
         <div>
-          <strong>明细列表</strong>
-          <small>点击一行可编辑全部业务字段；含量、单价或金额变化后，项目定额和报价草稿会同步重算。</small>
+          <strong>明细项</strong>
         </div>
-        <el-button
-          type="primary"
-          plain
-          :disabled="!projectQuotaCanEdit"
-          @click="startCreateProjectQuotaResource"
-        >
-          新增工料机
-        </el-button>
+        <span>{{ projectQuotaResources.length }} 项</span>
       </div>
-      <el-table
-        :data="projectQuotaWorkbench.snapshot.resources || []"
-        class="users-table project-quota-resource-table"
-        max-height="330"
-        empty-text="暂无工料机明细"
-        highlight-current-row
-        @row-click="startEditProjectQuotaResource"
+      <div
+        v-if="projectQuotaResources.length"
+        class="project-quota-detail-list"
+        role="list"
       >
-        <el-table-column prop="fee_bucket_label" label="费用类别" width="100" />
-        <el-table-column prop="resource_code" label="编码" width="120" />
-        <el-table-column prop="component_type" label="类型" width="100" />
-        <el-table-column prop="resource_name" label="名称" min-width="190" />
-        <el-table-column prop="specification" label="规格" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="brand" label="品牌" width="120" show-overflow-tooltip />
-        <el-table-column prop="unit" label="单位" width="80" />
-        <el-table-column label="含量" width="115" align="right"><template #default="{ row }">{{ formatQuantity(row.quantity) }}</template></el-table-column>
-        <el-table-column label="单价" width="120" align="right"><template #default="{ row }">{{ formatMoney(row.unit_price) }}</template></el-table-column>
-        <el-table-column label="金额" width="120" align="right"><template #default="{ row }"><strong>{{ formatMoney(row.amount) }}</strong></template></el-table-column>
-        <el-table-column label="操作" width="95" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" type="primary" plain @click.stop="startEditProjectQuotaResource(row)">编辑</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        <div class="project-quota-detail-row project-quota-detail-row--header" aria-hidden="true">
+          <span
+            v-for="field in projectQuotaDetailFields"
+            :key="field.key"
+            :class="{ 'is-number': field.type === 'number' }"
+          >
+            {{ field.label }}
+          </span>
+          <span class="project-quota-detail-action-header">操作</span>
+        </div>
+        <div
+          v-for="resource in projectQuotaResources"
+          :key="resource.resource_uuid"
+          class="project-quota-detail-row project-quota-detail-row--item"
+          :class="{ 'is-editing': projectQuotaInlineEditor.resourceUuid === resource.resource_uuid }"
+          role="listitem"
+        >
+          <div
+            v-for="field in projectQuotaDetailFields"
+            :key="field.key"
+            class="project-quota-detail-cell"
+            :class="{
+              'is-number': field.type === 'number',
+              'is-active-editor': isProjectQuotaFieldEditing(resource, field.key),
+            }"
+          >
+            <el-button
+              v-if="projectQuotaCanEdit && !isProjectQuotaFieldEditing(resource, field.key)"
+              link
+              class="project-quota-field-edit"
+              :icon="Edit"
+              :aria-label="`编辑${field.label}`"
+              :title="`编辑${field.label}`"
+              @click.stop="beginProjectQuotaFieldEdit(resource, field)"
+            />
+            <span
+              class="project-quota-detail-value"
+              :class="{ 'is-strong': field.key === 'resource_name' || field.key === 'amount' }"
+              :title="projectQuotaDetailFieldValue(resource, field)"
+            >
+              {{ projectQuotaDetailFieldValue(resource, field) }}
+            </span>
+            <div
+              v-if="isProjectQuotaFieldEditing(resource, field.key)"
+              class="project-quota-inline-editor"
+              :class="{ 'is-right': field.key === 'unit_price' || field.key === 'amount' }"
+              @click.stop
+            >
+              <el-select
+                v-if="field.key === 'fee_bucket'"
+                v-model="projectQuotaInlineEditor.value"
+                size="small"
+                aria-label="编辑费用类别"
+              >
+                <el-option v-for="option in projectQuotaFeeBucketOptions" :key="option.value" :label="option.label" :value="option.value" />
+              </el-select>
+              <el-input-number
+                v-else-if="field.type === 'number'"
+                v-model="projectQuotaInlineEditor.value"
+                size="small"
+                :min="0"
+                :precision="6"
+                :controls="false"
+                :aria-label="`编辑${field.label}`"
+              />
+              <el-input
+                v-else
+                v-model="projectQuotaInlineEditor.value"
+                size="small"
+                clearable
+                :maxlength="field.maxlength"
+                :aria-label="`编辑${field.label}`"
+                @keyup.enter="saveProjectQuotaInlineField"
+              />
+              <div class="project-quota-inline-editor-actions">
+                <el-button
+                  circle
+                  size="small"
+                  type="primary"
+                  :icon="Check"
+                  :loading="projectQuotaInlineEditor.saving"
+                  aria-label="保存字段修改"
+                  title="保存"
+                  @click.stop="saveProjectQuotaInlineField"
+                />
+                <el-button
+                  circle
+                  size="small"
+                  :icon="Close"
+                  :disabled="projectQuotaInlineEditor.saving"
+                  aria-label="取消字段修改"
+                  title="取消"
+                  @click.stop="cancelProjectQuotaFieldEdit"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="project-quota-detail-action">
+            <el-dropdown
+              trigger="click"
+              :disabled="!projectQuotaCanEdit"
+              @command="(command) => handleProjectQuotaResourceAction(command, resource)"
+            >
+              <el-button link size="small" type="primary" :disabled="!projectQuotaCanEdit">编辑</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="add">添加明细</el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>删除明细</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+      </div>
+      <div v-else class="project-quota-detail-empty">
+        暂无明细项。
+        <el-button link type="primary" :disabled="!projectQuotaCanEdit" @click="startCreateProjectQuotaResource">添加明细</el-button>
+      </div>
 
       <section v-if="projectQuotaEditor.visible" class="project-quota-editor">
         <div class="budget-title">
           <div>
-            <strong>{{ projectQuotaEditor.mode === 'create' ? '新增工料机' : '编辑工料机' }}</strong>
-            <small>来源主键、创建人和审计字段由系统维护；以下业务字段均可修改。</small>
+            <strong>新增明细项</strong>
           </div>
           <el-button text @click="projectQuotaEditor.visible = false">收起编辑区</el-button>
         </div>
@@ -966,21 +1094,12 @@
           >
             保存后同步到企业定额库
           </el-checkbox>
-          <span v-if="!projectQuotaEnterpriseEligible">当前定额不是由企业定额匹配形成，不能直接回写。</span>
+          <span v-if="projectQuotaHasMultipleItems">当前清单包含多条定额，请分别维护，不能把合并结果回写为一条企业定额。</span>
+          <span v-else-if="!projectQuotaEnterpriseEligible">当前定额不是由企业定额匹配形成，不能直接回写。</span>
           <span v-else-if="!projectQuotaCanSyncEnterprise">当前账号可以编辑项目工料机，但没有企业定额同步权限。</span>
           <span v-else>同步会写入企业定额草稿版本，仍需在企业定额版本中心审核启用。</span>
         </div>
         <div class="project-quota-editor-actions">
-          <el-button
-            v-if="projectQuotaEditor.mode === 'edit'"
-            type="danger"
-            plain
-            :loading="projectQuotaEditor.deleting"
-            :disabled="!projectQuotaCanEdit"
-            @click="deleteProjectQuotaResourceRow"
-          >
-            删除工料机
-          </el-button>
           <span />
           <el-button @click="projectQuotaEditor.visible = false">取消</el-button>
           <el-button
@@ -994,25 +1113,25 @@
         </div>
       </section>
 
-      <div class="project-quota-sync-status">
-        <div>
-          <strong>企业定额同步状态</strong>
-          <span v-if="projectQuotaWorkbench.snapshot.enterprise_sync?.target_version_id">
-            最近已同步到企业定额草稿版本 #{{ projectQuotaWorkbench.snapshot.enterprise_sync.target_version_id }}；当前 active 版本未被直接修改。
-          </span>
-          <span v-else>尚未同步，企业定额库保持不变。</span>
-        </div>
-        <el-button
-          v-if="projectQuotaEnterpriseEligible"
-          plain
-          :loading="projectQuotaEditor.syncing"
-          @click="syncCurrentProjectQuotaToEnterprise"
-        >
-          同步当前项目定额
-        </el-button>
-      </div>
     </template>
   </section>
+  </Teleport>
+
+  <EnterpriseQuotaMiniPanel
+    v-model="enterpriseQuotaPanel.visible"
+    :selectable="['add', 'replace'].includes(enterpriseQuotaPanel.mode)"
+    :multiple="enterpriseQuotaPanel.mode === 'add'"
+    :selected-item-id="enterpriseQuotaPanel.selectedItemId"
+    :selected-item-ids="enterpriseQuotaPanel.selectedItemIds"
+    :disabled-item-ids="enterpriseQuotaPanel.disabledItemIds"
+    :expected-version-id="readiness?.active_quota_version?.id"
+    :initial-keyword="enterpriseQuotaPanel.keyword"
+    :project-id="projectId"
+    :pricing-mode="selectedDraftMode"
+    :title="enterpriseQuotaPanel.mode === 'add' ? '选择新增定额' : (enterpriseQuotaPanel.mode === 'replace' ? '选择替换定额' : '企业定额库')"
+    :confirm-label="enterpriseQuotaPanel.mode === 'add' ? '勾选新增' : '勾选替换'"
+    @select="applyProjectQuotaFromLibrary"
+  />
 
   <el-drawer v-model="candidateDrawer.visible" size="760px" title="定额候选与匹配证据">
     <el-skeleton v-if="candidateDrawer.loading" :rows="8" animated />
@@ -1047,10 +1166,11 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit } from '@element-plus/icons-vue'
-import { budgetApiErrorMessage, budgetProjectApi, budgetResponseData, budgetResponseItems } from './budgetProjectApi'
+import { Check, Close, Edit } from '@element-plus/icons-vue'
+import { budgetApiErrorMessage, budgetBlobErrorMessage, budgetProjectApi, budgetResponseData, budgetResponseItems } from './budgetProjectApi'
+import EnterpriseQuotaMiniPanel from './EnterpriseQuotaMiniPanel.vue'
 
 const props = defineProps({
   project: { type: Object, default: null },
@@ -1097,6 +1217,8 @@ const draftLines = ref([])
 const draftLinePage = ref(1)
 const draftLinePageSize = 50
 const draftLineTotal = ref(0)
+const attentionFocusLoading = ref(false)
+const attentionFocusLineId = ref('')
 const draftFilters = reactive({ keyword: '', match_status: '', pricing_status: '' })
 const draftPriceInputs = reactive({})
 const draftBreakdownInputs = reactive({})
@@ -1156,6 +1278,21 @@ const projectQuotaWorkbench = reactive({
   loading: false,
   row: null,
   snapshot: null,
+  entryKey: null,
+})
+const projectQuotaInlineReady = ref(false)
+const projectQuotaInlineHost = ref(null)
+const professionalExpandedRowKeys = ref([])
+const enterpriseQuotaPanel = reactive({
+  visible: false,
+  mode: 'browse',
+  targetRow: null,
+  targetQuotaEntryKey: null,
+  selectedItemId: null,
+  selectedItemIds: [],
+  disabledItemIds: [],
+  keyword: '',
+  submitting: false,
 })
 const projectQuotaEditor = reactive({
   visible: false,
@@ -1168,6 +1305,35 @@ const projectQuotaEditor = reactive({
   reason: '',
   syncToEnterprise: false,
 })
+const projectQuotaInlineEditor = reactive({
+  resourceUuid: '',
+  field: '',
+  value: '',
+  saving: false,
+})
+const projectQuotaFeeBucketOptions = [
+  { value: 'labor', label: '人工' },
+  { value: 'main_material', label: '主材' },
+  { value: 'auxiliary_material', label: '辅材' },
+  { value: 'machinery', label: '机械' },
+]
+const projectQuotaDetailFields = [
+  { key: 'fee_bucket', label: '费用类别', type: 'select' },
+  { key: 'resource_code', label: '编码', type: 'text', maxlength: 64 },
+  { key: 'resource_name', label: '名称', type: 'text', maxlength: 255 },
+  { key: 'specification', label: '规格', type: 'text', maxlength: 255 },
+  { key: 'brand', label: '品牌', type: 'text', maxlength: 255 },
+  { key: 'unit', label: '单位', type: 'text', maxlength: 64 },
+  { key: 'quantity', label: '含量', type: 'number' },
+  { key: 'unit_price', label: '单价', type: 'number' },
+  { key: 'amount', label: '金额', type: 'number' },
+]
+const projectQuotaResources = computed(() => {
+  const resources = projectQuotaWorkbench.snapshot?.resources || []
+  const entryKey = String(projectQuotaWorkbench.entryKey || '')
+  if (!entryKey) return resources
+  return resources.filter((resource) => String(resource.quota_entry_key || '') === entryKey)
+})
 
 const pricingWorkspaceViews = [
   { value: 'quick', label: '快速审核' },
@@ -1175,8 +1341,6 @@ const pricingWorkspaceViews = [
   { value: 'summary', label: '费用汇总' },
   { value: 'versions', label: '版本记录' },
 ]
-const quoteWorkflowSteps = ['提交需求', '标准清单', '自动计价', '人工复核', '费用汇总', '导出下发']
-
 const matchStatusOptions = [
   { value: 'auto_matched', label: '自动匹配' },
   { value: 'manual_matched', label: '人工匹配' },
@@ -1218,6 +1382,9 @@ const projectQuotaCanEdit = computed(() => (
 ))
 const projectQuotaEnterpriseEligible = computed(() => (
   projectQuotaWorkbench.snapshot?.enterprise_sync?.eligible === true
+))
+const projectQuotaHasMultipleItems = computed(() => (
+  Number(projectQuotaWorkbench.snapshot?.quota_item_count || 0) > 1
 ))
 const projectQuotaCanSyncEnterprise = computed(() => (
   projectQuotaEnterpriseEligible.value
@@ -1298,13 +1465,6 @@ const draftAttentionCount = computed(() => {
     draftSummaryCount('quantity_unresolved_count'),
   )
 })
-const quoteWorkflowActiveStep = computed(() => {
-  if (!draft.value) return 1
-  if (draftQuoteJobRunning.value) return 2
-  if (draftAttentionCount.value > 0) return 3
-  if (Number(draftTotals.value.quote_amount || draftTotals.value.tax_included_total || 0) > 0) return 4
-  return 3
-})
 const quoteStatCards = computed(() => [
   { key: 'main_material_total', label: '主材', value: draftTotals.value.main_material_total, detailBucket: 'main_material' },
   { key: 'auxiliary_material_total', label: '辅材', value: draftTotals.value.auxiliary_material_total, detailBucket: 'auxiliary_material' },
@@ -1357,6 +1517,21 @@ const quotaSyncCanConfirm = computed(() => (
 
 const runIdOf = (run) => run?.id ?? run?.run_id
 const lineIdOf = (line) => line?.id ?? line?.line_id ?? line?.line_uuid ?? line?.row_key
+const draftLineNeedsAttention = (line) => {
+  const effectiveUnitPrice = line?.effective_unit_price
+  const calculationQuantity = Number(line?.calculation_quantity ?? line?.quantity ?? 0)
+  return effectiveUnitPrice === null
+    || effectiveUnitPrice === undefined
+    || effectiveUnitPrice === ''
+    || line?.quantity_status !== 'valid'
+    || !Number.isFinite(calculationQuantity)
+    || calculationQuantity <= 0
+}
+const professionalDraftRowClass = ({ row }) => (
+  String(lineIdOf(row) || '') === String(attentionFocusLineId.value || '')
+    ? 'is-attention-focus'
+    : ''
+)
 const draftModeOf = (value) => value?.pricing_mode || value?.mode || 'enterprise_ai'
 const draftModeLabel = (value) => ({ enterprise_ai: '基础定额', account_strict: '账户定额' })[value] || value || '未知模式'
 const formatDate = (value) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
@@ -1572,6 +1747,16 @@ const ensureDraftBreakdownInputs = (row) => {
     if (draftBreakdownInputs[lineId][key] === undefined) draftBreakdownInputs[lineId][key] = draftBreakdownInitialValue(row, key)
   }
 }
+const refreshDraftBreakdownInputs = (row) => {
+  const lineId = lineIdOf(row)
+  if (!lineId) return
+  if (!draftBreakdownInputs[lineId]) draftBreakdownInputs[lineId] = {}
+  for (const key of draftBreakdownKeys) {
+    if (draftBreakdownEditing[`${lineId}:${key}`] !== true) {
+      draftBreakdownInputs[lineId][key] = draftBreakdownInitialValue(row, key)
+    }
+  }
+}
 const draftBreakdownInputValue = (row, key) => {
   ensureDraftBreakdownInputs(row)
   return draftBreakdownInputs[lineIdOf(row)]?.[key] ?? ''
@@ -1775,22 +1960,37 @@ const openCostBasis = async (row) => {
     costBasisDrawer.loading = false
   }
 }
-const openEnterpriseQuotaLibraryItem = () => {
-  if (!costBasisDrawer.activeEnterpriseItemId || !costBasisDrawer.activeEnterpriseVersionId) {
-    ElMessage.warning('当前条目不属于生效中的企业定额库，无法跳转')
+const openEnterpriseQuotaPanel = (options = {}) => {
+  enterpriseQuotaPanel.mode = ['add', 'replace'].includes(options.mode) ? options.mode : 'browse'
+  enterpriseQuotaPanel.targetRow = options.row || null
+  enterpriseQuotaPanel.targetQuotaEntryKey = options.quotaEntryKey || null
+  enterpriseQuotaPanel.selectedItemId = options.selectedItemId || null
+  enterpriseQuotaPanel.selectedItemIds = [...(options.selectedItemIds || [])]
+  enterpriseQuotaPanel.disabledItemIds = [...(options.disabledItemIds || [])]
+  enterpriseQuotaPanel.keyword = options.keyword || ''
+  enterpriseQuotaPanel.visible = true
+}
+const enterpriseQuotaLibraryUrl = computed(() => {
+  if (!costBasisDrawer.activeEnterpriseItemId || !costBasisDrawer.activeEnterpriseVersionId) return ''
+  const params = new URLSearchParams({
+    enterprise_quota_version: 'active',
+    enterprise_quota_version_id: String(costBasisDrawer.activeEnterpriseVersionId),
+    enterprise_quota_item_id: String(costBasisDrawer.activeEnterpriseItemId),
+  })
+  return `/admin/cost-db?${params.toString()}`
+})
+const openEnterpriseQuotaLibraryItem = (event) => {
+  if (!enterpriseQuotaLibraryUrl.value) {
+    event?.preventDefault()
+    ElMessage.warning('当前条目不属于生效中的企业定额库，无法查看')
     return
   }
-  const url = new URL('/admin/cost-db', window.location.origin)
-  url.searchParams.set('enterprise_quota_item_id', String(costBasisDrawer.activeEnterpriseItemId))
-  url.searchParams.set('enterprise_quota_version', 'active')
-  url.searchParams.set('enterprise_quota_version_id', String(costBasisDrawer.activeEnterpriseVersionId))
-  const newPage = window.open('', '_blank')
-  if (!newPage) {
-    ElMessage.warning('浏览器阻止了新页面，请允许本站打开新标签页后重试')
+  const openedTab = window.open('about:blank', '_blank')
+  if (!openedTab) {
+    ElMessage.warning('浏览器阻止了新标签页，请允许弹出窗口后重试')
     return
   }
-  newPage.opener = null
-  newPage.location.href = url.toString()
+  openedTab.location.replace(new URL(enterpriseQuotaLibraryUrl.value, window.location.origin).href)
 }
 const quickReviewLabel = (row) => {
   const quantity = Number(row?.quantity ?? row?.calculation_quantity)
@@ -1861,68 +2061,119 @@ function emptyProjectQuotaResourceForm() {
   }
 }
 const projectQuotaMainColumns = [
-  { key: '__expand_spacer', width: 52 },
-  { key: 'quota_code', label: '定额编码', width: 72, align: 'center' },
-  { key: 'item_name', label: '名称', width: 190 },
-  { key: 'project_feature', label: '项目特征', minWidth: 260 },
-  { key: 'unit', label: '单位', width: 80 },
-  { key: 'quantity', label: '工程量', width: 120, align: 'right', quantity: true },
-  { key: 'unit_price', label: '不含税综合单价', width: 135, align: 'right', money: true },
-  { key: 'line_total', label: '不含税综合合价', width: 145, align: 'right', money: true },
-  { key: 'labor_fee', label: '人工费', width: 110, align: 'right', money: true },
-  { key: 'main_material_fee', label: '主材费', width: 110, align: 'right', money: true },
-  { key: 'auxiliary_material_fee', label: '辅材费', width: 110, align: 'right', money: true },
-  { key: 'machinery_fee', label: '机械费', width: 110, align: 'right', money: true },
-  { key: 'measure_fee', label: '措施费', width: 110, align: 'right', money: true },
-  { key: 'management_fee', label: '管理费', width: 110, align: 'right', money: true },
-  { key: 'tax_fee', label: '税费', width: 110, align: 'right', money: true },
+  { key: 'quota_code', label: '定额编码', minWidth: 30, align: 'center' },
+  { key: 'item_name', label: '名称', minWidth: 64 },
+  { key: 'project_feature', label: '项目特征', minWidth: 72 },
+  { key: 'unit', label: '单位', minWidth: 26 },
+  { key: 'quantity', label: '工程量', minWidth: 34, align: 'right', quantity: true },
+  { key: 'unit_price', label: '不含税综合单价', minWidth: 42, align: 'right', money: true },
+  { key: 'line_total', label: '不含税综合合价', minWidth: 46, align: 'right', money: true },
+  { key: 'labor_fee', label: '人工费', minWidth: 31, align: 'right', money: true },
+  { key: 'main_material_fee', label: '主材费', minWidth: 31, align: 'right', money: true },
+  { key: 'auxiliary_material_fee', label: '辅材费', minWidth: 31, align: 'right', money: true },
+  { key: 'machinery_fee', label: '机械费', minWidth: 31, align: 'right', money: true },
+  { key: 'measure_fee', label: '措施费', minWidth: 31, align: 'right', money: true },
+  { key: 'management_fee', label: '管理费', minWidth: 31, align: 'right', money: true },
+  { key: 'tax_fee', label: '税费', minWidth: 31, align: 'right', money: true },
+  { key: '__source_spacer', minWidth: 102 },
 ]
 const projectQuotaMainFieldValue = (item, column) => {
-  if (column.key === '__expand_spacer') return ''
+  if (column.key === '__source_spacer') return ''
   const value = item?.[column.key]
   if (column.money) return formatMoney(value)
   if (column.quantity) return formatQuantity(value)
   return value === null || value === undefined || value === '' ? '—' : value
 }
-const projectQuotaMainItem = (row) => {
+const projectQuotaMainItemFromSource = (row, source = {}) => {
   const selected = row?.selected_source || row?.selected_quota || {}
   const breakdown = row?.pricing_breakdown || row?.cost_breakdown || {}
-  const sourceSheet = selected?.source_sheet || row?.source_sheet
-  const sourceRow = selected?.source_row_index ?? row?.source_raw_row_index
+  const item = source && Object.keys(source).length ? source : selected
+  const sourceSheet = item?.source_sheet || row?.source_sheet
+  const sourceRow = item?.source_row_index ?? row?.source_raw_row_index
   const quantity = row?.quantity ?? row?.calculation_quantity
-  const unitPrice = selected?.unit_price ?? row?.base_unit_price ?? row?.effective_unit_price ?? null
+  const unitPrice = item?.unit_price ?? row?.base_unit_price ?? row?.effective_unit_price ?? null
   const numericQuantity = Number(quantity)
   const numericUnitPrice = Number(unitPrice)
   return {
-    quota_code: selected?.quota_code || selected?.code || null,
-    item_name: selected?.item_name || selected?.name || row?.item_name || '项目补充定额',
-    project_feature: selected?.work_content || selected?.specification || row?.spec || row?.project_feature || '',
-    work_content: selected?.work_content || row?.spec || row?.project_feature || '',
-    unit: selected?.unit || row?.unit || null,
+    entry_key: String(item?.entry_key || item?.source_enterprise_quota_item_id || item?.id || 'primary'),
+    source_enterprise_quota_item_id: item?.source_enterprise_quota_item_id || item?.id || null,
+    quota_code: item?.quota_code || item?.code || null,
+    item_name: item?.item_name || item?.name || row?.item_name || '项目补充定额',
+    project_feature: item?.work_content || item?.specification || row?.spec || row?.project_feature || '',
+    work_content: item?.work_content || row?.spec || row?.project_feature || '',
+    unit: item?.unit || row?.unit || null,
     quantity,
     unit_price: unitPrice,
     line_total: Number.isFinite(numericQuantity) && Number.isFinite(numericUnitPrice)
       ? Number((numericQuantity * numericUnitPrice).toFixed(6))
       : null,
-    labor_fee: selected?.labor_fee ?? breakdown?.labor_unit_cost ?? 0,
-    main_material_fee: selected?.main_material_fee ?? breakdown?.main_material_unit_cost ?? 0,
-    auxiliary_material_fee: selected?.auxiliary_material_fee ?? breakdown?.auxiliary_material_unit_cost ?? 0,
-    machinery_fee: selected?.machinery_fee ?? breakdown?.machinery_unit_cost ?? 0,
-    measure_fee: selected?.measure_fee ?? selected?.measure_unit_cost ?? breakdown?.measure_unit_cost ?? 0,
-    management_fee: selected?.management_fee ?? selected?.management_unit_cost ?? breakdown?.management_unit_cost ?? 0,
-    tax_fee: selected?.tax_fee ?? selected?.tax_amount ?? breakdown?.tax_amount ?? 0,
+    labor_fee: item?.labor_fee ?? breakdown?.labor_unit_cost ?? 0,
+    main_material_fee: item?.main_material_fee ?? breakdown?.main_material_unit_cost ?? 0,
+    auxiliary_material_fee: item?.auxiliary_material_fee ?? breakdown?.auxiliary_material_unit_cost ?? 0,
+    machinery_fee: item?.machinery_fee ?? breakdown?.machinery_unit_cost ?? 0,
+    measure_fee: item?.measure_fee ?? item?.measure_unit_cost ?? 0,
+    management_fee: item?.management_fee ?? item?.management_unit_cost ?? 0,
+    tax_fee: item?.tax_fee ?? item?.tax_amount ?? 0,
     source_location: sourceSheet
       ? `${sourceSheet}${sourceRow ? ` · 第 ${sourceRow} 行` : ''}`
       : '当前项目报价草稿',
   }
 }
-const projectQuotaRowClass = (row) => (
+const projectQuotaMainItems = (row) => {
+  const isActive = isProjectQuotaRowActive(row)
+  const snapshotItems = isActive ? projectQuotaWorkbench.snapshot?.quota_items : null
+  const selected = row?.selected_source || row?.selected_quota || {}
+  const storedItems = selected?.project_quota_items
+  const sources = Array.isArray(snapshotItems) && snapshotItems.length
+    ? snapshotItems
+    : (Array.isArray(storedItems) && storedItems.length ? storedItems : [selected])
+  return sources.map((source) => projectQuotaMainItemFromSource(row, source))
+}
+const hasProjectQuotaItem = (row) => Boolean(
+  row?.has_project_quota === true
+  || positiveSourceId(row?.selected_enterprise_quota_item_id, row?.selected_account_quota_item_id)
+  || row?.selected_source,
+)
+const projectQuotaRowClass = (row, quotaRow) => (
   String(lineIdOf(projectQuotaWorkbench.row) || '') === String(lineIdOf(row) || '')
+    && String(projectQuotaWorkbench.entryKey || '') === String(quotaRow?.entry_key || '')
     ? 'is-selected-project-quota'
     : ''
 )
+const isProjectQuotaRowActive = (row) => (
+  String(lineIdOf(projectQuotaWorkbench.row) || '') === String(lineIdOf(row) || '')
+)
+const isProjectQuotaItemActive = (quotaRow) => (
+  String(projectQuotaWorkbench.entryKey || '') === String(quotaRow?.entry_key || '')
+)
+const projectQuotaExpandedEntryKeys = (row) => (
+  isProjectQuotaRowActive(row) && projectQuotaWorkbench.entryKey
+    ? [String(projectQuotaWorkbench.entryKey)]
+    : []
+)
 function toggleProfessionalQuotaRow(row) {
   professionalTableRef.value?.toggleRowExpansion(row)
+}
+function captureProjectQuotaInlineHost(element) {
+  projectQuotaInlineHost.value = element || null
+}
+function refreshProjectQuotaInlineHost() {
+  const element = typeof document === 'undefined'
+    ? null
+    : document.getElementById('project-quota-inline-host')
+  projectQuotaInlineHost.value = element
+  projectQuotaInlineReady.value = Boolean(element)
+}
+function syncProfessionalExpandedRows(_row, expandedRows) {
+  professionalExpandedRowKeys.value = (expandedRows || [])
+    .map((item) => lineIdOf(item))
+    .filter((item) => item !== null && item !== undefined && item !== '')
+}
+function removeProfessionalExpandedRow(row) {
+  const rowId = String(lineIdOf(row) || '')
+  professionalExpandedRowKeys.value = professionalExpandedRowKeys.value.filter(
+    (item) => String(item || '') !== rowId,
+  )
 }
 const draftRowSequence = (index) => ((draftLinePage.value - 1) * draftLinePageSize) + index + 1
 const projectQuotaResourcePayload = () => ({
@@ -1945,22 +2196,139 @@ const projectQuotaResourcePayload = () => ({
   work_content: projectQuotaEditor.form.work_content || null,
   calculation_rule: projectQuotaEditor.form.calculation_rule || null,
 })
+const projectQuotaFeeBucketLabel = (value) => (
+  projectQuotaFeeBucketOptions.find((option) => option.value === value)?.label || value || '—'
+)
+const projectQuotaDetailFieldValue = (resource, field) => {
+  const value = resource?.[field.key]
+  if (field.key === 'fee_bucket') return resource?.fee_bucket_label || projectQuotaFeeBucketLabel(value)
+  if (field.key === 'quantity') return formatQuantity(value)
+  if (field.key === 'unit_price' || field.key === 'amount') return formatMoney(value)
+  return value === null || value === undefined || value === '' ? '—' : String(value)
+}
+const isProjectQuotaFieldEditing = (resource, field) => (
+  projectQuotaInlineEditor.resourceUuid === resource?.resource_uuid
+  && projectQuotaInlineEditor.field === field
+)
+function cancelProjectQuotaFieldEdit() {
+  if (projectQuotaInlineEditor.saving) return
+  projectQuotaInlineEditor.resourceUuid = ''
+  projectQuotaInlineEditor.field = ''
+  projectQuotaInlineEditor.value = ''
+}
+function beginProjectQuotaFieldEdit(resource, field) {
+  if (!projectQuotaCanEdit.value) return ElMessage.warning('当前账号无权编辑项目工料机明细')
+  if (!resource || !field) return
+  projectQuotaEditor.visible = false
+  projectQuotaEditor.syncToEnterprise = false
+  projectQuotaInlineEditor.resourceUuid = resource.resource_uuid
+  projectQuotaInlineEditor.field = field.key
+  projectQuotaInlineEditor.value = field.type === 'number'
+    ? Number(resource[field.key] ?? 0)
+    : (resource[field.key] ?? '')
+}
+async function saveProjectQuotaInlineField() {
+  if (
+    !projectQuotaCanEdit.value
+    || !projectQuotaWorkbench.snapshot
+    || !projectQuotaWorkbench.row
+    || projectQuotaInlineEditor.saving
+  ) return
+  const field = projectQuotaDetailFields.find((item) => item.key === projectQuotaInlineEditor.field)
+  const resource = (projectQuotaWorkbench.snapshot.resources || []).find(
+    (item) => item.resource_uuid === projectQuotaInlineEditor.resourceUuid,
+  )
+  if (!field || !resource) return cancelProjectQuotaFieldEdit()
+  let value = projectQuotaInlineEditor.value
+  if (field.type === 'number') {
+    value = Number(value ?? 0)
+    if (!Number.isFinite(value) || value < 0) return ElMessage.warning(`${field.label}必须是大于等于 0 的数字`)
+  } else if (field.key !== 'fee_bucket') {
+    value = String(value ?? '').trim()
+    if (field.key === 'resource_name' && !value) return ElMessage.warning('名称不能为空')
+    if (!value) value = null
+  }
+  projectQuotaInlineEditor.saving = true
+  try {
+    const response = await budgetProjectApi.updateProjectQuotaResource(
+      projectId.value,
+      lineIdOf(projectQuotaWorkbench.row),
+      resource.resource_uuid,
+      {
+        expected_snapshot_revision: Number(projectQuotaWorkbench.snapshot.revision),
+        expected_resource_revision: Number(resource.revision),
+        [field.key]: value,
+        reason: `修改明细项${field.label}`,
+      },
+    )
+    setProjectQuotaSnapshot(budgetResponseData(response))
+    projectQuotaInlineEditor.resourceUuid = ''
+    projectQuotaInlineEditor.field = ''
+    projectQuotaInlineEditor.value = ''
+    await loadDraft(true)
+    await nextTick()
+    ElMessage.success(`${field.label}已更新，清单价格和统计信息已同步重算`)
+  } catch (error) {
+    if (error?.response?.status === 409) {
+      ElMessage.warning(budgetApiErrorMessage(error, '项目定额已被其他操作更新，请重新展开后再编辑'))
+    } else {
+      ElMessage.error(budgetApiErrorMessage(error, `${field.label}保存失败`))
+    }
+  } finally {
+    projectQuotaInlineEditor.saving = false
+  }
+}
 const setProjectQuotaSnapshot = (snapshot) => {
   if (!snapshot) return
   projectQuotaWorkbench.snapshot = snapshot
+  const entryKeys = (snapshot.quota_items || []).map((item) => String(item.entry_key || ''))
+  if (!entryKeys.includes(String(projectQuotaWorkbench.entryKey || ''))) {
+    projectQuotaWorkbench.entryKey = entryKeys[0] || null
+  }
   if (projectQuotaEditor.resource) {
     projectQuotaEditor.resource = (snapshot.resources || []).find(
       (row) => row.resource_uuid === projectQuotaEditor.resource.resource_uuid,
     ) || null
   }
+  if (
+    projectQuotaInlineEditor.resourceUuid
+    && !(snapshot.resources || []).some((row) => row.resource_uuid === projectQuotaInlineEditor.resourceUuid)
+  ) {
+    cancelProjectQuotaFieldEdit()
+  }
 }
-async function selectProjectQuota(row) {
+function collapseProjectQuotaDetails() {
+  projectQuotaInlineReady.value = false
+  projectQuotaInlineHost.value = null
+  projectQuotaWorkbench.row = null
+  projectQuotaWorkbench.snapshot = null
+  projectQuotaWorkbench.entryKey = null
+  projectQuotaEditor.visible = false
+  projectQuotaEditor.resource = null
+  projectQuotaEditor.syncToEnterprise = false
+  cancelProjectQuotaFieldEdit()
+}
+async function selectProjectQuota(row, quotaRow = null) {
   if (!row || !projectId.value) return
+  const requestedEntryKey = quotaRow?.entry_key ? String(quotaRow.entry_key) : null
+  if (
+    quotaRow
+    && projectQuotaWorkbench.snapshot
+    && isProjectQuotaRowActive(row)
+    && isProjectQuotaItemActive(quotaRow)
+  ) {
+    collapseProjectQuotaDetails()
+    return
+  }
+  projectQuotaInlineReady.value = false
+  projectQuotaInlineHost.value = null
   projectQuotaWorkbench.loading = true
   projectQuotaWorkbench.row = row
+  projectQuotaWorkbench.entryKey = requestedEntryKey
   projectQuotaWorkbench.snapshot = null
   projectQuotaEditor.visible = false
   projectQuotaEditor.syncToEnterprise = false
+  cancelProjectQuotaFieldEdit()
   try {
     const response = await budgetProjectApi.materializeProjectQuota(
       projectId.value,
@@ -1968,6 +2336,11 @@ async function selectProjectQuota(row) {
       { pricing_mode: selectedDraftMode.value },
     )
     setProjectQuotaSnapshot(budgetResponseData(response))
+    if (requestedEntryKey) projectQuotaWorkbench.entryKey = requestedEntryKey
+    row.has_project_quota = true
+    await nextTick()
+    refreshProjectQuotaInlineHost()
+    await nextTick()
   } catch (error) {
     projectQuotaWorkbench.snapshot = null
     ElMessage.error(budgetApiErrorMessage(error, '项目定额与工料机明细读取失败'))
@@ -1975,8 +2348,156 @@ async function selectProjectQuota(row) {
     projectQuotaWorkbench.loading = false
   }
 }
+async function openProjectQuotaAddition(row) {
+  if (!row) return
+  if (hasProjectQuotaItem(row) && (!isProjectQuotaRowActive(row) || !projectQuotaWorkbench.snapshot)) {
+    await selectProjectQuota(row)
+  }
+  const existingIds = (projectQuotaWorkbench.snapshot?.quota_items || [])
+    .map((item) => Number(item.source_enterprise_quota_item_id))
+    .filter((item) => Number.isFinite(item) && item > 0)
+  openEnterpriseQuotaPanel({
+    mode: 'add',
+    row,
+    selectedItemIds: [],
+    disabledItemIds: existingIds,
+    keyword: row?.item_name || row?.project_name || '',
+  })
+}
+async function openProjectQuotaReplacement(row, quotaRow = null) {
+  if (!row) return
+  if (!isProjectQuotaRowActive(row) || !projectQuotaWorkbench.snapshot) {
+    await selectProjectQuota(row, quotaRow)
+  }
+  if (!projectQuotaWorkbench.snapshot) return
+  const activeQuota = quotaRow
+    || projectQuotaMainItems(row).find(
+      (item) => String(item.entry_key || '') === String(projectQuotaWorkbench.entryKey || ''),
+    )
+    || projectQuotaMainItems(row)[0]
+  openEnterpriseQuotaPanel({
+    mode: 'replace',
+    row,
+    quotaEntryKey: activeQuota?.entry_key || projectQuotaWorkbench.entryKey,
+    selectedItemId: activeQuota?.source_enterprise_quota_item_id || null,
+    keyword: activeQuota?.quota_code || activeQuota?.item_name || row?.item_name || '',
+  })
+}
+async function applyProjectQuotaFromLibrary(selection) {
+  const row = enterpriseQuotaPanel.targetRow
+  const adding = enterpriseQuotaPanel.mode === 'add'
+  const items = (Array.isArray(selection) ? selection : [selection]).filter(Boolean)
+  if (!row || !items.length || enterpriseQuotaPanel.submitting) return
+  if (!adding && !projectQuotaWorkbench.snapshot) return
+  enterpriseQuotaPanel.submitting = true
+  try {
+    const item = items[0]
+    const response = adding
+      ? await budgetProjectApi.addProjectQuota(projectId.value, lineIdOf(row), {
+        pricing_mode: selectedDraftMode.value,
+        enterprise_quota_item_ids: items.map((current) => Number(current.id)),
+        expected_snapshot_revision: projectQuotaWorkbench.snapshot
+          ? Number(projectQuotaWorkbench.snapshot.revision)
+          : undefined,
+        reason: `人工新增企业定额：${items.map((current) => current.quota_code || current.item_name || current.id).join('、')}`,
+      })
+      : await budgetProjectApi.replaceProjectQuota(projectId.value, lineIdOf(row), {
+        expected_snapshot_revision: Number(projectQuotaWorkbench.snapshot.revision),
+        enterprise_quota_item_id: Number(item.id),
+        quota_entry_key: enterpriseQuotaPanel.targetQuotaEntryKey || projectQuotaWorkbench.entryKey,
+        reason: `人工替换为企业定额 ${item.quota_code || item.item_name || item.id}`,
+      })
+    const data = budgetResponseData(response) || {}
+    setProjectQuotaSnapshot(data.snapshot || data)
+    if (adding) {
+      const firstAddedKey = String(items[0]?.id || '')
+      if (firstAddedKey) projectQuotaWorkbench.entryKey = firstAddedKey
+    }
+    projectQuotaWorkbench.row = row
+    row.has_project_quota = true
+    enterpriseQuotaPanel.mode = 'browse'
+    enterpriseQuotaPanel.targetRow = null
+    enterpriseQuotaPanel.targetQuotaEntryKey = null
+    enterpriseQuotaPanel.selectedItemId = item.id
+    enterpriseQuotaPanel.selectedItemIds = []
+    enterpriseQuotaPanel.disabledItemIds = []
+    enterpriseQuotaPanel.keyword = item.quota_code || item.item_name || ''
+    ElMessage.success(adding
+      ? '定额已新增，清单价格、统计信息和费用汇总已同步更新'
+      : '定额已替换，明细项和报价已同步重算')
+    await loadDraft(true)
+  } catch (error) {
+    ElMessage.error(budgetApiErrorMessage(error, adding ? '定额新增失败' : '定额替换失败'))
+  } finally {
+    enterpriseQuotaPanel.submitting = false
+  }
+}
+async function deleteCurrentProjectQuota(row, quotaRow = null) {
+  if (!row) return
+  if (!isProjectQuotaRowActive(row) || !projectQuotaWorkbench.snapshot) {
+    await selectProjectQuota(row, quotaRow)
+  }
+  if (!projectQuotaWorkbench.snapshot) return
+  const targetEntryKey = String(quotaRow?.entry_key || projectQuotaWorkbench.entryKey || '')
+  const targetItem = projectQuotaMainItems(row).find(
+    (item) => String(item.entry_key || '') === targetEntryKey,
+  )
+  try {
+    await ElMessageBox.confirm(
+      `确定删除定额“${targetItem?.quota_code || targetItem?.item_name || '当前定额'}”吗？该定额的明细会一并移除，价格和统计信息会立即重算。`,
+      '删除定额',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    const response = await budgetProjectApi.deleteProjectQuota(
+      projectId.value,
+      lineIdOf(row),
+      {
+        expected_snapshot_revision: Number(projectQuotaWorkbench.snapshot.revision),
+        quota_entry_key: targetEntryKey || undefined,
+        reason: '人工删除清单项下的项目定额',
+      },
+    )
+    const payload = budgetResponseData(response) || {}
+    if (payload.snapshot) {
+      setProjectQuotaSnapshot(payload.snapshot)
+      await loadDraft(true)
+      await nextTick()
+      ElMessage.success('定额已删除，清单价格、总计和统计信息已同步更新')
+      return
+    }
+    professionalTableRef.value?.toggleRowExpansion(row, false)
+    removeProfessionalExpandedRow(row)
+    projectQuotaInlineReady.value = false
+    projectQuotaInlineHost.value = null
+    projectQuotaWorkbench.snapshot = null
+    projectQuotaWorkbench.row = null
+    projectQuotaWorkbench.entryKey = null
+    projectQuotaEditor.visible = false
+    cancelProjectQuotaFieldEdit()
+    if (payload.draft) {
+      draft.value = payload.draft
+      syncTotalsConfigInputs()
+    }
+    if (payload.line) {
+      const index = draftLines.value.findIndex(
+        (item) => String(lineIdOf(item) || '') === String(lineIdOf(row) || ''),
+      )
+      if (index >= 0) draftLines.value.splice(index, 1, payload.line)
+    }
+    await loadDraft(true)
+    await nextTick()
+    ElMessage.success('定额已删除，清单价格、来源统计和费用汇总已同步更新')
+  } catch (error) {
+    ElMessage.error(budgetApiErrorMessage(error, '定额删除失败'))
+  }
+}
 function startCreateProjectQuotaResource() {
   if (!projectQuotaCanEdit.value) return ElMessage.warning('当前账号无权编辑项目工料机明细')
+  cancelProjectQuotaFieldEdit()
   projectQuotaEditor.mode = 'create'
   projectQuotaEditor.resource = null
   projectQuotaEditor.form = emptyProjectQuotaResourceForm()
@@ -2019,6 +2540,18 @@ function startEditProjectQuotaResource(resource) {
   projectQuotaEditor.reason = ''
   projectQuotaEditor.syncToEnterprise = false
   projectQuotaEditor.visible = true
+}
+function handleProjectQuotaResourceAction(command, resource) {
+  if (command === 'add') {
+    startCreateProjectQuotaResource()
+    return
+  }
+  if (command === 'delete') {
+    projectQuotaEditor.resource = resource
+    projectQuotaEditor.reason = ''
+    projectQuotaEditor.syncToEnterprise = false
+    deleteProjectQuotaResourceRow()
+  }
 }
 function recalculateProjectQuotaEditorAmount() {
   const quantity = Number(projectQuotaEditor.form.quantity ?? 0)
@@ -2086,6 +2619,7 @@ async function saveProjectQuotaResource() {
   try {
     const payload = {
       expected_snapshot_revision: Number(projectQuotaWorkbench.snapshot.revision),
+      quota_entry_key: projectQuotaWorkbench.entryKey || undefined,
       ...projectQuotaResourcePayload(),
       reason: projectQuotaEditor.reason.trim() || '项目工料机明细调整',
     }
@@ -2104,14 +2638,20 @@ async function saveProjectQuotaResource() {
           expected_resource_revision: Number(projectQuotaEditor.resource.revision),
         },
       )
+    const isCreate = projectQuotaEditor.mode === 'create'
     setProjectQuotaSnapshot(budgetResponseData(response))
-    ElMessage.success(projectQuotaEditor.mode === 'create' ? '工料机已新增，项目定额已重算' : '工料机已更新，项目定额已重算')
     if (projectQuotaEditor.syncToEnterprise) {
       await performProjectQuotaEnterpriseSync(projectQuotaEditor.reason)
     }
     projectQuotaEditor.visible = false
     projectQuotaEditor.syncToEnterprise = false
     await loadDraft(true)
+    await nextTick()
+    ElMessage.success(
+      isCreate
+        ? '工料机已新增，清单价格、来源统计和费用汇总已同步更新'
+        : '工料机已更新，清单价格、来源统计和费用汇总已同步更新',
+    )
   } catch (error) {
     if (error?.response?.status === 409) {
       ElMessage.warning(budgetApiErrorMessage(error, '项目定额已被其他操作更新，请关闭后重新打开'))
@@ -2152,7 +2692,7 @@ async function deleteProjectQuotaResourceRow() {
       },
     )
     setProjectQuotaSnapshot(budgetResponseData(response))
-    ElMessage.success('工料机已删除，项目定额已重算')
+    ElMessage.success('明细已删除，定额项、清单项、总计和统计信息已同步更新')
     if (projectQuotaEditor.syncToEnterprise) {
       await performProjectQuotaEnterpriseSync(projectQuotaEditor.reason)
     }
@@ -2163,26 +2703,6 @@ async function deleteProjectQuotaResourceRow() {
     ElMessage.error(budgetApiErrorMessage(error, '工料机删除失败'))
   } finally {
     projectQuotaEditor.deleting = false
-  }
-}
-async function syncCurrentProjectQuotaToEnterprise() {
-  if (!projectQuotaCanSyncEnterprise.value) {
-    return ElMessage.warning('无权限同步企业定额，请联系管理员授予成本核定权限')
-  }
-  try {
-    const result = await ElMessageBox.prompt(
-      '本操作会把当前项目定额写入一个企业定额草稿版本，不会直接修改 active 版本。请输入同步原因。',
-      '同步到企业定额库',
-      {
-        confirmButtonText: '确认同步',
-        cancelButtonText: '取消',
-        inputPlaceholder: '例如：项目复核后修正人工含量和材料单价',
-        inputValidator: (value) => String(value || '').trim().length >= 4 || '请至少填写 4 个字符',
-      },
-    )
-    await performProjectQuotaEnterpriseSync(result.value)
-  } catch {
-    // User canceled the explicit enterprise synchronization.
   }
 }
 const quotaSyncUnitPrice = (row) => row?.sync_unit_price ?? row?.effective_unit_price ?? row?.manual_unit_price ?? null
@@ -2351,6 +2871,7 @@ function clearDraftLinesState() {
   draftLines.value = []
   draftLineTotal.value = 0
   draftLinePage.value = 1
+  attentionFocusLineId.value = ''
   for (const key of Object.keys(draftPriceInputs)) delete draftPriceInputs[key]
   for (const key of Object.keys(draftBreakdownInputs)) delete draftBreakdownInputs[key]
   for (const key of Object.keys(draftBreakdownEditing)) delete draftBreakdownEditing[key]
@@ -2363,6 +2884,9 @@ function resetDraft(resetMode = true) {
   resourceDetailDrawer.visible = false
   procurementDrawer.visible = false
   projectQuotaWorkbench.loading = false
+  projectQuotaInlineReady.value = false
+  projectQuotaInlineHost.value = null
+  professionalExpandedRowKeys.value = []
   projectQuotaWorkbench.row = null
   projectQuotaWorkbench.snapshot = null
   projectQuotaEditor.visible = false
@@ -2461,6 +2985,9 @@ async function loadDraft(silent = false) {
     resetDraft()
     return
   }
+  if (projectQuotaWorkbench.row) {
+    projectQuotaInlineReady.value = false
+  }
   draftLoading.value = true
   try {
     const response = await budgetProjectApi.currentPricingDraft(projectId.value, { pricing_mode: selectedDraftMode.value })
@@ -2476,6 +3003,7 @@ async function loadDraft(silent = false) {
     }
     await loadCurrentDraftQuoteJob(true)
     await loadDraftLines()
+    await restoreProjectQuotaInlineRow()
   } catch (error) {
     if (error?.response?.status === 404) {
       draft.value = null
@@ -2487,6 +3015,30 @@ async function loadDraft(silent = false) {
   } finally {
     draftLoading.value = false
   }
+}
+
+async function restoreProjectQuotaInlineRow() {
+  const activeLineId = lineIdOf(projectQuotaWorkbench.row)
+  if (!activeLineId) return
+  projectQuotaInlineReady.value = false
+  const refreshedRow = draftLines.value.find(
+    (row) => String(lineIdOf(row) || '') === String(activeLineId),
+  )
+  if (!refreshedRow) {
+    projectQuotaWorkbench.row = null
+    projectQuotaWorkbench.snapshot = null
+    projectQuotaEditor.visible = false
+    return
+  }
+  projectQuotaWorkbench.row = refreshedRow
+  if (pricingWorkspaceView.value !== 'professional') return
+  const refreshedRowId = lineIdOf(refreshedRow)
+  if (!professionalExpandedRowKeys.value.some((item) => String(item) === String(refreshedRowId))) {
+    professionalExpandedRowKeys.value = [...professionalExpandedRowKeys.value, refreshedRowId]
+  }
+  await nextTick()
+  refreshProjectQuotaInlineHost()
+  await nextTick()
 }
 
 async function saveDraft() {
@@ -2555,7 +3107,7 @@ async function exportOriginalFormatPricingDraft() {
       ElMessage.success('已导出原格式报价 Excel')
     }
   } catch (error) {
-    ElMessage.error(budgetApiErrorMessage(error, '原格式报价 Excel 导出失败'))
+    ElMessage.error(await budgetBlobErrorMessage(error, '原格式报价 Excel 导出失败'))
   } finally {
     originalExporting.value = false
   }
@@ -2591,7 +3143,7 @@ async function exportPricingStatistics(sections = statisticsExportDialog.section
       .map((item) => item.label)
     ElMessage.success(`已导出：${selectedLabels.join('、')}`)
   } catch (error) {
-    ElMessage.error(budgetApiErrorMessage(error, '统计导出失败'))
+    ElMessage.error(await budgetBlobErrorMessage(error, '统计导出失败'))
   } finally {
     statisticsExporting.value = false
   }
@@ -2666,8 +3218,91 @@ async function cancelDraftQuoteJob() {
 }
 
 function searchDraftLines() {
+  attentionFocusLineId.value = ''
   draftLinePage.value = 1
   loadDraftLines()
+}
+
+const responsePageTotal = (response, fallback = 0) => {
+  const data = budgetResponseData(response)
+  return Number(response?.data?.total ?? (!Array.isArray(data) ? data?.total : null) ?? fallback)
+}
+
+async function allDraftLinesForAttention() {
+  const pageSize = 200
+  const allLines = []
+  let page = 1
+  let total = null
+  while (true) {
+    const response = await budgetProjectApi.pricingDraftLines(projectId.value, {
+      pricing_mode: selectedDraftMode.value,
+      page,
+      page_size: pageSize,
+    })
+    const pageLines = budgetResponseItems(response)
+    if (total === null) total = responsePageTotal(response, pageLines.length)
+    allLines.push(...pageLines)
+    if (!pageLines.length || pageLines.length < pageSize || allLines.length >= total) break
+    page += 1
+  }
+  return allLines
+}
+
+async function scrollAttentionTargetIntoView() {
+  await nextTick()
+  await new Promise((resolve) => window.requestAnimationFrame(resolve))
+  const tableElement = professionalTableRef.value?.$el
+  const targetElement = tableElement?.querySelector('tr.is-attention-focus')
+  if (!targetElement) return false
+  targetElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+  return true
+}
+
+async function focusNextAttentionLine() {
+  if (attentionFocusLoading.value || !draft.value || !projectId.value) return
+  attentionFocusLoading.value = true
+  try {
+    const allLines = await allDraftLinesForAttention()
+    const attentionLines = allLines
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => draftLineNeedsAttention(row))
+    if (!attentionLines.length) {
+      attentionFocusLineId.value = ''
+      await loadDraft(true)
+      ElMessage.success('当前没有需要处理的项目')
+      return
+    }
+    const currentIndex = attentionLines.findIndex(
+      ({ row }) => String(lineIdOf(row) || '') === String(attentionFocusLineId.value || ''),
+    )
+    const target = attentionLines[currentIndex >= 0 ? (currentIndex + 1) % attentionLines.length : 0]
+    const targetLineId = lineIdOf(target.row)
+
+    pricingWorkspaceView.value = 'professional'
+    draftFilters.keyword = ''
+    draftFilters.match_status = ''
+    draftFilters.pricing_status = ''
+    draftLinePage.value = Math.floor(target.index / draftLinePageSize) + 1
+    attentionFocusLineId.value = targetLineId
+    await loadDraftLines()
+
+    const visibleTarget = draftLines.value.find(
+      (row) => String(lineIdOf(row) || '') === String(targetLineId || ''),
+    )
+    const located = visibleTarget ? await scrollAttentionTargetIntoView() : false
+    if (!located) {
+      ElMessage.warning('已切换到待处理项目所在页，请查看橙色标记行')
+      return
+    }
+    const ordinal = attentionLines.findIndex(
+      ({ row }) => String(lineIdOf(row) || '') === String(targetLineId || ''),
+    ) + 1
+    ElMessage.success(`已定位第 ${ordinal}/${attentionLines.length} 条待处理项目：${target.row.item_name || '未命名项目'}`)
+  } catch (error) {
+    ElMessage.error(budgetApiErrorMessage(error, '待处理项目定位失败'))
+  } finally {
+    attentionFocusLoading.value = false
+  }
 }
 
 async function loadDraftLines() {
@@ -2688,11 +3323,10 @@ async function loadDraftLines() {
     }
     const response = await budgetProjectApi.pricingDraftLines(projectId.value, params)
     draftLines.value = budgetResponseItems(response)
-    const data = budgetResponseData(response)
-    draftLineTotal.value = Number(response.data?.total ?? (!Array.isArray(data) ? data?.total : null) ?? draftLines.value.length)
+    draftLineTotal.value = responsePageTotal(response, draftLines.value.length)
     for (const row of draftLines.value) {
       draftPriceInputs[lineIdOf(row)] = hasManualPrice(row) ? String(row.manual_unit_price) : ''
-      ensureDraftBreakdownInputs(row)
+      refreshDraftBreakdownInputs(row)
     }
   } catch (error) {
     ElMessage.error(budgetApiErrorMessage(error, '计价草稿明细加载失败'))
@@ -3079,31 +3713,26 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.quote-workbench-flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:4px 0 14px;padding:12px;border:1px solid rgba(148,163,184,.2);border-radius:14px;background:rgba(255,255,255,.88)}
-.quote-workbench-flow>div{position:relative;display:flex;align-items:center;gap:8px;min-width:0;color:#94a3b8}
-.quote-workbench-flow>div:not(:last-child)::after{position:absolute;right:2px;width:18px;height:1px;background:#dbe2ea;content:""}
-.quote-workbench-flow span{display:grid;flex:0 0 24px;width:24px;height:24px;place-items:center;border-radius:50%;background:#e2e8f0;font-size:12px;font-weight:700}
-.quote-workbench-flow strong{overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}
-.quote-workbench-flow>div.active{color:#1d4ed8}.quote-workbench-flow>div.active span{background:#2563eb;color:#fff}
-.workspace-view-tabs{display:flex;margin-bottom:14px}.workspace-view-tabs:deep(.el-radio-button){flex:1}.workspace-view-tabs:deep(.el-radio-button__inner){width:100%;padding:11px 16px}
+.workspace-view-tabs{display:flex;margin-bottom:8px}.workspace-view-tabs:deep(.el-radio-button){flex:1}.workspace-view-tabs:deep(.el-radio-button__inner){width:100%;padding:7px 12px;font-size:12px}
 .pricing-version-card{display:grid;grid-template-columns:minmax(240px,420px) auto 1fr;align-items:end;gap:14px;padding:18px;border:1px solid rgba(37,99,235,.2);border-radius:16px;background:linear-gradient(135deg,#eff6ff,#fff)}.pricing-version-card>label{display:flex;flex-direction:column;gap:7px;color:#64748b;font-size:13px}.pricing-version-card>label .el-select{width:100%}.pricing-version-card>.el-tag{align-self:end;margin-bottom:5px}.pricing-version-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}.pricing-version-actions .el-button+.el-button{margin-left:0}@media(max-width:760px){.pricing-version-card{grid-template-columns:1fr;align-items:stretch}.pricing-version-card>.el-tag{justify-self:start;margin-bottom:0}.pricing-version-actions{justify-content:flex-start}}
 .draft-strategy-panel{margin-bottom:14px;padding:14px;border:1px solid rgba(245,158,11,.24);border-radius:14px;background:#fffbeb}
 .draft-strategy-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:10px}.draft-strategy-heading>div{display:flex;flex-direction:column;gap:4px}
 .draft-strategy-heading span,.quick-item-cell span,.draft-status-stack small{color:#64748b;font-size:12px}
-.quote-workbench-hero{display:grid;grid-template-columns:minmax(280px,1.2fr) minmax(560px,2fr);gap:12px;margin-bottom:14px}
-.quote-workbench-total{display:flex;flex-direction:column;justify-content:center;min-height:112px;padding:20px 24px;border-radius:16px;background:linear-gradient(135deg,#0f172a,#172554);color:#fff}
-.quote-workbench-total span,.quote-workbench-total small{color:rgba(255,255,255,.7)}.quote-workbench-total strong{margin:7px 0;font-size:clamp(24px,2vw,34px);letter-spacing:-.02em}
-.quote-workbench-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}.quote-workbench-kpis>div{display:flex;flex-direction:column;justify-content:center;min-width:0;padding:14px;border:1px solid rgba(148,163,184,.22);border-radius:14px;background:#fff}
-.quote-workbench-kpis span{color:#64748b;font-size:12px}.quote-workbench-kpis strong{margin-top:6px;color:#0f172a;font-size:24px}.quote-workbench-kpis>div.warning{border-color:rgba(245,158,11,.42);background:#fffaf0}.quote-workbench-kpis>div.warning strong{color:#c2410c}
-.quote-workbench-kpis .source-kpi small{margin-top:4px;color:#94a3b8;font-size:12px;line-height:1.35}
+.quote-workbench-hero{display:grid;grid-template-columns:minmax(260px,1.2fr) minmax(540px,2fr);gap:8px;margin-bottom:8px}
+.quote-workbench-total{display:flex;flex-direction:column;justify-content:center;min-height:82px;padding:11px 16px;border-radius:12px;background:linear-gradient(135deg,#0f172a,#172554);color:#fff}
+.quote-workbench-total span,.quote-workbench-total small{color:rgba(255,255,255,.7);font-size:10px}.quote-workbench-total strong{margin:3px 0;font-size:clamp(22px,1.75vw,28px);letter-spacing:-.02em}
+.quote-workbench-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px}.quote-workbench-kpis>div{display:flex;flex-direction:column;justify-content:center;min-width:0;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:11px;background:#fff}
+.quote-workbench-kpis span{color:#64748b;font-size:10px}.quote-workbench-kpis strong{margin-top:2px;color:#0f172a;font-size:20px}.quote-workbench-kpis>div.warning{border-color:rgba(245,158,11,.42);background:#fffaf0}.quote-workbench-kpis>div.warning strong{color:#c2410c}.quote-workbench-kpis>div.attention-kpi{cursor:pointer;transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease}.quote-workbench-kpis>div.attention-kpi:hover{border-color:#f59e0b;box-shadow:0 5px 14px rgba(245,158,11,.2);transform:translateY(-1px)}.quote-workbench-kpis>div.attention-kpi:focus-visible{outline:2px solid rgba(245,158,11,.55);outline-offset:2px}.quote-workbench-kpis>div.attention-kpi.is-locating{cursor:wait;opacity:.72}
+.quote-workbench-kpis .source-kpi small{margin-top:1px;color:#94a3b8;font-size:10px;line-height:1.2}
 .quick-item-cell{display:flex;flex-direction:column;gap:5px}.quick-item-cell span{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}.quick-risk-cell{display:flex;align-items:flex-start;flex-direction:column;gap:6px}.quick-risk-cell small{color:#64748b;font-size:12px;line-height:1.45}.quick-review-table:deep(.el-table__cell){padding:10px 0}.quick-review-table:deep(.cell){padding-right:11px;padding-left:11px;line-height:1.45}.quick-review-table:deep(th.el-table__cell .cell){white-space:nowrap}
 .construction-note-cell{display:grid;gap:6px;min-width:0}.construction-note-cell-head{display:flex;align-items:center;justify-content:flex-end;gap:8px}.construction-note-cell-head .el-button{margin-left:0}.construction-note-cell>span,.professional-note-preview{display:-webkit-box;overflow:hidden;color:#475569;font-size:12px;line-height:1.5;-webkit-box-orient:vertical;-webkit-line-clamp:2}.construction-note-cell>span.empty{color:#94a3b8}.construction-note-drawer{display:grid;gap:16px}.construction-note-hero{padding:16px;border:1px solid rgba(148,163,184,.24);border-radius:16px;background:#f8fafc}.construction-note-hero strong{color:#0f172a;font-size:17px;line-height:1.5}.construction-note-section-title{display:flex;flex-direction:column;gap:5px}.construction-note-section-title span{color:#64748b;font-size:12px;line-height:1.5}.construction-note-section{display:grid;gap:10px;padding:15px;border:1px solid rgba(148,163,184,.22);border-radius:14px;background:#fff}.construction-note-footer{display:flex;justify-content:flex-end;gap:8px}
 .source-basis-tag{cursor:pointer;user-select:none;transition:transform .16s ease,box-shadow .16s ease}.source-basis-tag:hover{box-shadow:0 3px 10px rgba(37,99,235,.18);transform:translateY(-1px)}.source-basis-tag:focus-visible{outline:2px solid rgba(37,99,235,.42);outline-offset:2px}.cost-basis-drawer{display:grid;gap:16px}.cost-basis-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:17px 18px;border:1px solid rgba(37,99,235,.2);border-radius:16px;background:linear-gradient(135deg,#eff6ff,#fff)}.cost-basis-hero>div{display:flex;min-width:0;flex-direction:column;gap:5px}.cost-basis-hero span,.cost-basis-hero small{color:#64748b;font-size:12px}.cost-basis-hero strong{color:#0f172a;font-size:17px;line-height:1.5}.cost-basis-section{display:grid;gap:11px;padding:15px;border:1px solid rgba(148,163,184,.22);border-radius:14px;background:#fff}.cost-basis-footer{display:flex;justify-content:flex-end;gap:8px}
 .quick-row-actions{display:flex;gap:6px}.quick-row-actions .el-button+.el-button{margin-left:0}.professional-fields-table{border-top:3px solid #2563eb}.quick-review-table{border-top:3px solid #22c55e}
-@media(max-width:1200px){.quote-workbench-flow{grid-template-columns:repeat(3,minmax(0,1fr))}.quote-workbench-hero{grid-template-columns:1fr}}
-@media(max-width:760px){.quote-workbench-flow,.quote-workbench-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.workspace-view-tabs{display:grid;grid-template-columns:1fr 1fr}.draft-strategy-heading{align-items:flex-start;flex-direction:column}}
+@media(max-width:1200px){.quote-workbench-hero{grid-template-columns:1fr}}
+@media(max-width:760px){.quote-workbench-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.workspace-view-tabs{display:grid;grid-template-columns:1fr 1fr}.draft-strategy-heading{align-items:flex-start;flex-direction:column}}
 .budget-panel{padding:20px;border:1px solid rgba(148,163,184,.22);border-radius:20px;background:rgba(255,255,255,.9);box-shadow:0 14px 34px rgba(15,23,42,.06);margin-bottom:18px}.budget-title{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.budget-title>div,.pricing-source{display:flex;flex-direction:column;gap:4px}.budget-title small,.pricing-source small,.pricing-context span,.pricing-metrics span,.pricing-run-meta{color:#64748b}.pricing-actions{align-items:flex-end;flex-direction:row!important}.pricing-alert{margin-bottom:14px}.pricing-context{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}.pricing-context>div,.pricing-metrics>div{padding:14px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#fff}.pricing-context strong{display:block;margin-top:7px}.pricing-run-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}.pricing-run-toolbar>.el-select{width:min(420px,100%)}.pricing-run-meta{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;font-size:13px}.pricing-metrics{display:grid;grid-template-columns:1.4fr repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.pricing-metrics strong{display:block;margin:7px 0;font-size:22px}.pricing-filters{display:grid;grid-template-columns:minmax(260px,1fr) 190px 190px auto;gap:12px;margin-bottom:14px}.drawer-section{margin-top:22px}.pricing-evidence{max-height:360px;overflow:auto;margin:0;padding:16px;border-radius:14px;background:#0f172a;color:#e2e8f0;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.el-pagination{margin-top:16px;justify-content:flex-end}@media(max-width:1100px){.pricing-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.pricing-context,.pricing-metrics,.pricing-filters{grid-template-columns:1fr}.pricing-run-toolbar{align-items:stretch;flex-direction:column}.pricing-run-meta{justify-content:flex-start}.budget-title{align-items:flex-start;flex-direction:column}.pricing-actions{align-items:flex-start!important}}
-.pricing-draft-workspace{margin:20px 0 24px;padding:18px;border:1px solid rgba(37,99,235,.18);border-radius:18px;background:linear-gradient(180deg,rgba(239,246,255,.72),rgba(255,255,255,.9))}.draft-mode-selector{margin-bottom:10px}.draft-mode-help{display:flex;flex-direction:column;gap:5px;margin-bottom:16px;padding:13px 15px;border-radius:14px;background:#fff;border:1px solid rgba(148,163,184,.2)}.draft-mode-help span,.draft-meta span{color:#64748b;font-size:13px}.draft-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}.draft-meta>div{padding:14px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#fff}.draft-meta strong{display:block;margin-top:7px}.draft-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}.quote-stat-strip{display:grid;grid-template-columns:auto repeat(6,minmax(140px,1fr)) auto;gap:4px;margin:-2px 0 14px;align-items:center}.quote-stat-title,.quote-stat-card{height:36px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(148,163,184,.2);background:#fff}.quote-stat-title{padding:0 14px;color:#475569;font-size:13px}.quote-stat-card{gap:6px;border-radius:8px}.quote-stat-card span{color:#64748b}.quote-stat-card strong{font-size:16px}.quote-totals-panel{margin:-4px 0 14px;padding:12px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:#fff}.quote-rate-editor{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr)) auto;gap:10px;margin-top:12px;align-items:end}.quote-rate-editor label{display:flex;flex-direction:column;gap:5px;color:#64748b;font-size:12px}.draft-boundary-note{margin:-2px 0 14px;padding:10px 13px;border-radius:12px;background:#f1f5f9;color:#475569;font-size:13px}.draft-quote-job-card{margin:0 0 14px;padding:14px;border:1px solid rgba(34,197,94,.22);border-radius:16px;background:#fff}.draft-quote-job-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.draft-quote-job-head>div{display:flex;flex-direction:column;gap:4px}.draft-quote-job-head small,.draft-quote-job-stats{color:#64748b;font-size:13px}.draft-quote-job-stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.draft-filters{margin-top:4px}.draft-status-stack{display:flex;align-items:flex-start;flex-direction:column;gap:5px}.draft-price-editor{display:grid;grid-template-columns:minmax(92px,1fr) auto auto auto;gap:5px}.draft-price-editor .el-button+.el-button{margin-left:0}.quote-quantity{color:#2563eb}.quote-line-table:deep(.el-table__cell){vertical-align:top}.breakdown-input:deep(.el-input__inner){text-align:right}.breakdown-edit-cell{display:flex;align-items:center;gap:4px;min-height:24px}.breakdown-edit-cell-right{justify-content:flex-end}.quota-sync-summary,.quota-sync-bulk-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}.quota-sync-summary span{font-size:13px;color:#475569}.quota-sync-bulk-actions .el-button+.el-button{margin-left:0}@media(max-width:1100px){.draft-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.draft-meta{grid-template-columns:repeat(2,minmax(0,1fr))}.quote-stat-strip{grid-template-columns:1fr 1fr}.quote-rate-editor{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.draft-meta{grid-template-columns:1fr}.pricing-draft-workspace{padding:14px}.draft-price-editor{grid-template-columns:1fr auto}.draft-price-editor .el-button:last-child{grid-column:2}.quote-stat-strip,.quote-rate-editor{grid-template-columns:1fr}}
+.pricing-draft-workspace{margin:12px 0 16px;padding:12px;border:1px solid rgba(37,99,235,.18);border-radius:16px;background:linear-gradient(180deg,rgba(239,246,255,.72),rgba(255,255,255,.9))}.pricing-draft-heading{align-items:center;margin-bottom:8px}.pricing-draft-heading>div:first-child{gap:2px}.pricing-draft-heading small{font-size:11px}.draft-actions{display:flex;align-items:center;gap:4px}.draft-actions .el-button+.el-button{margin-left:0}.draft-mode-selector{margin-bottom:10px}.draft-mode-help{display:flex;flex-direction:column;gap:5px;margin-bottom:16px;padding:13px 15px;border-radius:14px;background:#fff;border:1px solid rgba(148,163,184,.2)}.draft-mode-help span,.draft-meta span{color:#64748b;font-size:13px}.draft-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}.draft-meta>div{padding:14px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:#fff}.draft-meta strong{display:block;margin-top:7px}.draft-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}.quote-stat-strip{display:grid;grid-template-columns:auto repeat(6,minmax(110px,1fr)) auto;gap:3px;margin:0 0 8px;align-items:center}.quote-stat-title,.quote-stat-card{height:30px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(148,163,184,.2);background:#fff}.quote-stat-title{padding:0 10px;color:#475569;font-size:11px}.quote-stat-card{gap:4px;border-radius:7px}.quote-stat-card span{color:#64748b;font-size:11px}.quote-stat-card strong{font-size:14px}.quote-totals-panel{margin:-2px 0 8px;padding:10px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:#fff}.quote-rate-editor{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr)) auto;gap:10px;margin-top:12px;align-items:end}.quote-rate-editor label{display:flex;flex-direction:column;gap:5px;color:#64748b;font-size:12px}.draft-boundary-note{margin:0 0 8px;padding:7px 10px;border-radius:10px;background:#f1f5f9;color:#475569;font-size:11px}.draft-quote-job-card{margin:0 0 8px;padding:10px;border:1px solid rgba(34,197,94,.22);border-radius:12px;background:#fff}.draft-quote-job-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:6px}.draft-quote-job-head>div{display:flex;flex-direction:column;gap:2px}.draft-quote-job-head small,.draft-quote-job-stats{color:#64748b;font-size:11px}.draft-quote-job-stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:5px}.draft-filters{margin-top:4px}.draft-status-stack{display:flex;align-items:flex-start;flex-direction:column;gap:5px}.draft-price-editor{display:grid;grid-template-columns:minmax(92px,1fr) auto auto auto;gap:5px}.draft-price-editor .el-button+.el-button{margin-left:0}.quote-quantity{color:#2563eb}.quote-line-table:deep(.el-table__cell){vertical-align:top}.breakdown-input:deep(.el-input__inner){text-align:right}.breakdown-edit-cell{display:flex;align-items:center;gap:4px;min-height:24px}.breakdown-edit-cell-right{justify-content:flex-end}.quota-sync-summary,.quota-sync-bulk-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}.quota-sync-summary span{font-size:13px;color:#475569}.quota-sync-bulk-actions .el-button+.el-button{margin-left:0}@media(max-width:1100px){.draft-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.draft-meta{grid-template-columns:repeat(2,minmax(0,1fr))}.quote-stat-strip{grid-template-columns:1fr 1fr}.quote-rate-editor{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.draft-meta{grid-template-columns:1fr}.pricing-draft-workspace{padding:10px}.draft-price-editor{grid-template-columns:1fr auto}.draft-price-editor .el-button:last-child{grid-column:2}.quote-stat-strip,.quote-rate-editor{grid-template-columns:1fr}}
+.pricing-draft-heading>.draft-actions{display:flex;align-items:center;justify-content:flex-end;flex-direction:row;flex-wrap:wrap;gap:4px}.pricing-draft-heading>.draft-actions .el-button+.el-button{margin-left:0}
 .quote-stat-card.clickable{cursor:pointer;transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease}.quote-stat-card.clickable:hover{border-color:rgba(37,99,235,.45);box-shadow:0 4px 12px rgba(37,99,235,.12);transform:translateY(-1px)}.quote-stat-card.clickable:focus-visible{outline:2px solid rgba(37,99,235,.42);outline-offset:2px}.statistics-export-dialog>p{margin:0 0 14px;color:#64748b;font-size:13px}.statistics-export-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}.statistics-export-option{display:flex!important;align-items:flex-start!important;height:auto!important;margin:0!important;padding:13px 14px;border:1px solid rgba(148,163,184,.26);border-radius:12px;background:#fff}.statistics-export-option:deep(.el-checkbox__label){display:flex;min-width:0;flex-direction:column;gap:4px;white-space:normal}.statistics-export-option small{color:#64748b;font-size:12px;line-height:1.4}.statistics-export-option.is-checked{border-color:#60a5fa;background:#eff6ff}.resource-detail-summary{display:flex;align-items:center;gap:14px;margin-bottom:14px;padding:13px 15px;border:1px solid rgba(37,99,235,.18);border-radius:14px;background:linear-gradient(135deg,#eff6ff,#fff)}.resource-detail-summary>div{display:flex;align-items:baseline;gap:7px}.resource-detail-summary span,.resource-detail-summary small{color:#64748b;font-size:13px}.resource-detail-summary strong{color:#0f172a;font-size:18px}.resource-detail-summary small{flex:1;min-width:180px}.resource-detail-export{margin-left:auto}.resource-detail-table{border-top:3px solid #2563eb}@media(max-width:1100px){.resource-detail-summary{align-items:flex-start;flex-direction:column}.resource-detail-summary small{min-width:0}.resource-detail-export{align-self:flex-end;margin-left:0}}@media(max-width:600px){.statistics-export-options{grid-template-columns:1fr}}
 .quote-stat-actions{display:flex;align-items:center;justify-content:flex-end;gap:2px}.quote-stat-actions .el-button+.el-button{margin-left:0}.procurement-summary{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:10px;margin-bottom:14px}.procurement-summary>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:14px 16px;border:1px solid rgba(37,99,235,.18);border-radius:14px;background:#f8fbff}.procurement-summary>div.warning{border-color:rgba(245,158,11,.4);background:#fffaf0}.procurement-summary span{color:#64748b;font-size:13px}.procurement-summary strong{color:#0f172a;font-size:24px}.procurement-summary>div.warning strong{color:#c2410c}.procurement-tabs{margin-top:14px}.procurement-unit-summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;border-radius:12px;background:#f8fafc}.procurement-unit-summary>span{color:#64748b;font-size:13px}@media(max-width:760px){.procurement-summary{grid-template-columns:1fr}.quote-stat-actions{justify-content:center}}
 .professional-fields-table:deep(.project-quota-expand-cell .cell){display:flex;align-items:center;justify-content:center;padding:0}
@@ -3111,26 +3740,36 @@ onBeforeUnmount(() => {
 .professional-fields-table:deep(.project-quota-expand-cell .el-table__expand-icon:hover){border-color:#3b82f6;background:#dbeafe;box-shadow:0 2px 8px rgba(37,99,235,.18)}
 .project-quota-expand-symbol{font-size:16px;font-weight:700;line-height:1}
 .professional-fields-table:deep(.el-table__expanded-cell){padding:0!important;background:#f8fbff}
+.professional-fields-table:deep(.el-table__body tr.is-attention-focus>td.el-table__cell){background:#fff7ed!important;box-shadow:inset 0 1px #fdba74,inset 0 -1px #fdba74}.professional-fields-table:deep(.el-table__body tr.is-attention-focus>td.el-table__cell:first-child){box-shadow:inset 4px 0 #f97316,inset 0 1px #fdba74,inset 0 -1px #fdba74}.professional-fields-table:deep(.el-table__body tr.is-attention-focus .cell){color:#9a3412;font-weight:600}
 .project-quota-relation{position:relative}
 .project-quota-relation-branch{position:absolute;z-index:3;top:0;left:25px;width:27px;height:25px;border-bottom:2px solid #60a5fa;border-left:2px solid #60a5fa;border-bottom-left-radius:4px;pointer-events:none}
+.project-quota-empty-row{position:sticky;left:0;display:flex;box-sizing:border-box;width:min(720px,calc(100vw - 96px));align-items:center;justify-content:space-between;gap:12px;padding:10px 14px 10px 52px;border-top:1px dashed #cbd5e1;background:#f8fafc;color:#64748b;font-size:12px}
 .matched-quota-aligned-table{width:100%;cursor:pointer;--el-table-row-hover-bg-color:#eff6ff}
 .matched-quota-aligned-table:deep(.el-table__inner-wrapper::before){display:none}
+.matched-quota-aligned-table:deep(.project-quota-detail-expand-cell){pointer-events:none}.matched-quota-aligned-table:deep(.project-quota-detail-expand-cell .el-table__expand-icon){visibility:hidden}.matched-quota-aligned-table:deep(.el-table__expanded-cell){height:auto;padding:0!important;background:#fff!important}
 .matched-quota-aligned-table:deep(td.el-table__cell){height:48px;border-bottom:0;background:#f8fbff;vertical-align:middle}
 .matched-quota-aligned-table:deep(.el-table__row:hover>td.el-table__cell){background:#eff6ff!important}
 .matched-quota-aligned-table:deep(.is-selected-project-quota>td.el-table__cell){background:#dbeafe!important;color:#1d4ed8}
-.project-quota-resource-workbench{border-color:rgba(37,99,235,.28);background:linear-gradient(180deg,rgba(239,246,255,.55),rgba(255,255,255,.96))}
-.project-quota-workbench-heading{align-items:center}
-.project-quota-summary{display:grid;grid-template-columns:1.35fr repeat(4,minmax(100px,1fr));gap:10px;margin-bottom:18px}
-.project-quota-summary>div{display:flex;flex-direction:column;gap:6px;padding:14px;border:1px solid rgba(148,163,184,.22);border-radius:14px;background:#fff}
-.project-quota-summary span{color:#64748b;font-size:12px}.project-quota-summary strong{color:#0f172a;font-size:20px}
-.project-quota-resource-heading{align-items:flex-end;margin-top:6px}.project-quota-resource-table{border-top:3px solid #2563eb}
-.project-quota-editor{margin-top:18px;padding:17px;border:1px solid rgba(37,99,235,.22);border-radius:16px;background:#f8fbff}
+.project-quota-name-cell{display:flex;min-width:0;flex-direction:column;align-items:flex-start;gap:2px}.project-quota-name-cell>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.project-quota-row-actions{display:flex;justify-content:flex-start;gap:2px;white-space:nowrap}.project-quota-row-actions .el-button{height:14px;padding:0;font-size:9px}.project-quota-row-actions .el-button+.el-button{margin-left:0}
+.project-quota-inline-host{min-height:1px;border-top:1px dashed #93c5fd;background:#fff}
+.project-quota-inline-workbench{position:sticky;left:0;box-sizing:border-box;width:min(1360px,calc(100vw - 72px));padding:5px 4px 7px 34px;background:#fff}
+.project-quota-detail-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;color:#334155}
+.project-quota-detail-heading>div{display:flex;align-items:baseline;gap:8px;min-width:0}.project-quota-detail-heading strong{font-size:12px}.project-quota-detail-heading>span{flex:none;padding:1px 6px;border-radius:999px;background:#eff6ff;color:#2563eb;font-size:10px}
+.project-quota-detail-list{width:100%;border-top:1px solid #dbeafe}
+.project-quota-detail-row{display:grid;grid-template-columns:54px 68px 86px 62px 58px 34px 42px 50px 56px 44px;gap:2px;box-sizing:border-box;width:100%;align-items:center;justify-content:start;padding:2px 4px;border-bottom:1px solid #e2e8f0}
+.project-quota-detail-row--header{min-height:21px;background:#f8fafc;color:#64748b;font-size:9px;font-weight:600}
+.project-quota-detail-row--item{min-height:30px;color:#334155;cursor:default;font-size:10px;transition:background-color .15s ease,box-shadow .15s ease}.project-quota-detail-row--item:hover{background:#f8fbff}.project-quota-detail-row--item.is-editing{position:relative;z-index:5;background:#eff6ff;box-shadow:inset 2px 0 #2563eb}
+.project-quota-detail-cell{position:relative;display:flex;min-width:0;align-items:center;justify-content:flex-start;gap:1px;overflow:visible;white-space:nowrap}.project-quota-detail-value{min-width:0;max-width:calc(100% - 13px);flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.project-quota-detail-value.is-strong{font-weight:600}.project-quota-detail-cell:nth-child(2) .project-quota-detail-value,.project-quota-detail-cell:nth-child(6) .project-quota-detail-value{overflow:visible;font-size:9px;letter-spacing:-.2px;text-overflow:clip}.project-quota-field-edit{width:12px!important;height:14px!important;min-height:14px!important;flex:none;margin:0!important;padding:0!important;opacity:.42}.project-quota-detail-cell:hover .project-quota-field-edit,.project-quota-field-edit:focus-visible{opacity:1}.project-quota-field-edit:deep(.el-icon){font-size:9px}.project-quota-detail-row .is-number{justify-content:flex-end;text-align:right;font-variant-numeric:tabular-nums}.project-quota-detail-row .is-number .project-quota-detail-value{text-align:right}
+.project-quota-detail-action,.project-quota-detail-action-header{display:flex;align-items:center;justify-content:center;white-space:nowrap}.project-quota-detail-action .el-button{height:18px;padding:0;font-size:10px}
+.project-quota-inline-editor{position:absolute;z-index:12;top:calc(100% + 4px);left:-5px;display:grid;width:220px;grid-template-columns:minmax(0,1fr) auto;gap:6px;padding:7px;border:1px solid #93c5fd;border-radius:8px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.16);text-align:left}.project-quota-inline-editor.is-right{right:-5px;left:auto}.project-quota-inline-editor:deep(.el-input-number),.project-quota-inline-editor:deep(.el-select){width:100%}.project-quota-inline-editor-actions{display:flex;align-items:center;gap:4px}.project-quota-inline-editor-actions .el-button+.el-button{margin-left:0}
+.project-quota-detail-empty{padding:7px 8px;color:#94a3b8;font-size:11px}
+.project-quota-editor{margin-top:8px;padding:10px 12px;border:1px solid rgba(37,99,235,.22);border-radius:10px;background:#f8fbff}
 .project-quota-form{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:0 12px}.project-quota-form .span-2{grid-column:span 2}.project-quota-form:deep(.el-input-number),.project-quota-form:deep(.el-select){width:100%}
 .project-quota-editor-tools{display:grid;grid-template-columns:auto minmax(280px,1fr);gap:10px;margin-top:2px}
-.project-quota-enterprise-option{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:13px;padding:12px 14px;border:1px solid rgba(245,158,11,.3);border-radius:12px;background:#fffbeb}.project-quota-enterprise-option span{color:#92400e;font-size:12px}
-.project-quota-editor-actions{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;margin-top:14px}
-.project-quota-sync-status{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;padding:14px 16px;border:1px solid rgba(148,163,184,.22);border-radius:14px;background:#f8fafc}.project-quota-sync-status>div{display:flex;flex-direction:column;gap:5px}.project-quota-sync-status span{color:#64748b;font-size:12px}
-.professional-fields-table .draft-price-editor{grid-template-columns:minmax(92px,1fr) auto auto auto}
-@media(max-width:1100px){.project-quota-summary{grid-template-columns:repeat(3,minmax(120px,1fr))}.project-quota-form{grid-template-columns:repeat(2,minmax(150px,1fr))}}
-@media(max-width:760px){.project-quota-workbench-heading{align-items:flex-start}.project-quota-summary,.project-quota-form,.project-quota-editor-tools{grid-template-columns:1fr}.project-quota-form .span-2{grid-column:span 1}.project-quota-editor-actions{grid-template-columns:1fr}.project-quota-editor-actions>span{display:none}.project-quota-sync-status{align-items:flex-start;flex-direction:column}}
+.project-quota-enterprise-option{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding:8px 10px;border:1px solid rgba(245,158,11,.3);border-radius:9px;background:#fffbeb}.project-quota-enterprise-option span{color:#92400e;font-size:11px}
+.project-quota-editor-actions{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;margin-top:9px}
+.professional-fields-table:deep(.el-table__cell){padding:4px 0;font-size:11px}.professional-fields-table:deep(.cell){padding:0 4px;line-height:1.25}.professional-fields-table:deep(.el-table__header .cell){white-space:normal;word-break:keep-all;text-align:center}.professional-fields-table:deep(.el-table__body .cell){white-space:nowrap}.professional-fields-table:deep(.professional-source-column .draft-status-stack){min-width:0;gap:2px}.professional-fields-table:deep(.professional-source-column .draft-status-stack small){display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.professional-fields-table .draft-price-editor{grid-template-columns:minmax(92px,1fr) auto auto auto}
+@media(max-width:900px){.professional-fields-table:deep(.el-table__cell){padding:2px 0;font-size:9px}.professional-fields-table:deep(.cell){padding:0 1px;line-height:1.15}}
+@media(max-width:1100px){.project-quota-form{grid-template-columns:repeat(2,minmax(150px,1fr))}}
+@media(max-width:760px){.project-quota-inline-workbench{width:calc(100vw - 60px);padding-left:26px}.project-quota-detail-row{grid-template-columns:52px 66px 78px 58px 54px 32px 40px 48px 54px 42px}.project-quota-form,.project-quota-editor-tools{grid-template-columns:1fr}.project-quota-form .span-2{grid-column:span 1}.project-quota-editor-actions{grid-template-columns:1fr}.project-quota-editor-actions>span{display:none}}
 </style>

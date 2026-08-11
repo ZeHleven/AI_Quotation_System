@@ -1,0 +1,26 @@
+[Unit]
+Description=AI Middle Office host, certificate and hybrid-network monitor
+After=network-online.target docker.service ipsec.service nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /usr/local/libexec/ai-middle-office-host-monitor.py
+TimeoutStartSec=90
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ai-middle-office-monitor
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

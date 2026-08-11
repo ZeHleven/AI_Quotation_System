@@ -39,11 +39,12 @@ from app.models.enterprise_quota import (
     EnterpriseQuotaVersionEvent,
 )
 from app.models.user import User
-from app.services.budget_pricing import BudgetPricingError
+from app.services.budget_pricing import BudgetPricingError, strict_active_quota_version
 from app.services.budget_pricing_drafts import (
     get_budget_pricing_draft_line,
     get_current_budget_pricing_draft,
     patch_budget_pricing_draft_line,
+    refresh_budget_pricing_draft_summary,
 )
 from app.services.enterprise_quota_v2_parser import (
     ENTERPRISE_SHEET,
@@ -176,7 +177,121 @@ def _section_path(db: Session, item: EnterpriseQuotaItem | None, line: BudgetPro
     ]
 
 
-def _serialize_resource(resource: BudgetProjectQuotaResource) -> dict[str, Any]:
+def _quota_entry_key(item_id: Any) -> str:
+    return str(int(item_id)) if item_id is not None else "primary"
+
+
+def _resource_origin(entry_key: str, *, manual: bool) -> str:
+    prefix = "manual_added" if manual else "enterprise_snapshot"
+    suffix = f":q{entry_key}" if str(entry_key).isdigit() else ""
+    return f"{prefix}{suffix}"[:32]
+
+
+def _origin_entry_key(origin: Any) -> str | None:
+    text = str(origin or "")
+    marker = ":q"
+    if marker not in text:
+        return None
+    value = text.rsplit(marker, 1)[-1].strip()
+    return value if value.isdigit() else None
+
+
+def _resource_entry_key(
+    resource: BudgetProjectQuotaResource,
+    snapshot: BudgetProjectQuotaSnapshot,
+) -> str:
+    encoded = _origin_entry_key(resource.origin)
+    if encoded:
+        return encoded
+    component = resource.source_enterprise_component
+    if component is not None and component.quota_item_id is not None:
+        return _quota_entry_key(component.quota_item_id)
+    if snapshot.source_enterprise_quota_item_id is not None:
+        return _quota_entry_key(snapshot.source_enterprise_quota_item_id)
+    return "primary"
+
+
+def _quota_entry_from_item(
+    db: Session,
+    item: EnterpriseQuotaItem,
+    line: BudgetProjectPricingDraftLine,
+) -> dict[str, Any]:
+    return {
+        "entry_key": _quota_entry_key(item.id),
+        "source_enterprise_version_id": item.version_id,
+        "source_enterprise_quota_item_id": item.id,
+        "classification_levels": _section_path(db, item, line),
+        "quota_code": item.quota_code,
+        "item_name": item.item_name,
+        "work_content": item.work_content,
+        "specification": item.specification,
+        "brand": item.brand,
+        "unit": item.unit,
+        "source_sheet": item.source_sheet,
+        "source_row_index": item.source_row_index,
+    }
+
+
+def _legacy_quota_entry(snapshot: BudgetProjectQuotaSnapshot) -> dict[str, Any]:
+    raw = _json_load(snapshot.section_path_json, [])
+    levels = raw.get("classification_levels", []) if isinstance(raw, dict) else raw
+    return {
+        "entry_key": _quota_entry_key(snapshot.source_enterprise_quota_item_id),
+        "source_enterprise_version_id": snapshot.source_enterprise_version_id,
+        "source_enterprise_quota_item_id": snapshot.source_enterprise_quota_item_id,
+        "classification_levels": levels if isinstance(levels, list) else [],
+        "quota_code": snapshot.quota_code,
+        "item_name": snapshot.item_name,
+        "work_content": snapshot.work_content,
+        "specification": snapshot.specification,
+        "brand": snapshot.brand,
+        "unit": snapshot.unit,
+    }
+
+
+def _snapshot_quota_entries(snapshot: BudgetProjectQuotaSnapshot) -> list[dict[str, Any]]:
+    raw = _json_load(snapshot.section_path_json, [])
+    entries = raw.get("quota_items") if isinstance(raw, dict) else None
+    normalized = [dict(entry) for entry in entries or [] if isinstance(entry, dict)]
+    if not normalized:
+        normalized = [_legacy_quota_entry(snapshot)]
+    for entry in normalized:
+        entry["entry_key"] = str(
+            entry.get("entry_key")
+            or _quota_entry_key(entry.get("source_enterprise_quota_item_id"))
+        )
+        if not isinstance(entry.get("classification_levels"), list):
+            entry["classification_levels"] = []
+    return normalized
+
+
+def _set_snapshot_quota_entries(
+    snapshot: BudgetProjectQuotaSnapshot,
+    entries: list[dict[str, Any]],
+) -> None:
+    if not entries:
+        raise BudgetPricingError("PROJECT_QUOTA_ITEMS_REQUIRED", status_code=409)
+    primary = entries[0]
+    snapshot.source_enterprise_version_id = primary.get("source_enterprise_version_id")
+    snapshot.source_enterprise_quota_item_id = primary.get("source_enterprise_quota_item_id")
+    snapshot.quota_code = _text(primary.get("quota_code"), 64)
+    snapshot.item_name = _text(primary.get("item_name"), 255) or "未命名项目定额"
+    snapshot.work_content = _text(primary.get("work_content"))
+    snapshot.specification = _text(primary.get("specification"), 255)
+    snapshot.brand = _text(primary.get("brand"), 255)
+    snapshot.unit = _text(primary.get("unit"), 64)
+    snapshot.section_path_json = _json_dump(
+        {
+            "classification_levels": primary.get("classification_levels") or [],
+            "quota_items": entries,
+        }
+    )
+
+
+def _serialize_resource(
+    resource: BudgetProjectQuotaResource,
+    snapshot: BudgetProjectQuotaSnapshot | None = None,
+) -> dict[str, Any]:
     return {
         "id": resource.id,
         "resource_uuid": resource.resource_uuid,
@@ -207,6 +322,7 @@ def _serialize_resource(resource: BudgetProjectQuotaResource) -> dict[str, Any]:
         "updated_by": resource.updated_by,
         "created_at": _format_dt(resource.created_at),
         "updated_at": _format_dt(resource.updated_at),
+        "quota_entry_key": _resource_entry_key(resource, snapshot) if snapshot is not None else None,
     }
 
 
@@ -216,8 +332,34 @@ def serialize_project_quota(
     can_edit: bool,
     can_sync_enterprise: bool,
 ) -> dict[str, Any]:
-    levels = _json_load(snapshot.section_path_json, [])
-    resources = [_serialize_resource(resource) for resource in snapshot.resources]
+    raw_metadata = _json_load(snapshot.section_path_json, [])
+    levels = raw_metadata.get("classification_levels", []) if isinstance(raw_metadata, dict) else raw_metadata
+    resources = [_serialize_resource(resource, snapshot) for resource in snapshot.resources]
+    grouped: defaultdict[str, defaultdict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+    group_counts: defaultdict[str, int] = defaultdict(int)
+    for resource in snapshot.resources:
+        entry_key = _resource_entry_key(resource, snapshot)
+        grouped[entry_key][resource.fee_bucket] += _q6(resource.amount)
+        group_counts[entry_key] += 1
+    quota_items: list[dict[str, Any]] = []
+    for entry in _snapshot_quota_entries(snapshot):
+        entry_key = str(entry["entry_key"])
+        sums = grouped[entry_key]
+        labor = _q6(sums["labor"])
+        main_material = _q6(sums["main_material"])
+        auxiliary_material = _q6(sums["auxiliary_material"])
+        machinery = _q6(sums["machinery"])
+        quota_items.append(
+            {
+                **entry,
+                "labor_fee": _decimal_text(labor),
+                "main_material_fee": _decimal_text(main_material),
+                "auxiliary_material_fee": _decimal_text(auxiliary_material),
+                "machinery_fee": _decimal_text(machinery),
+                "unit_price": _decimal_text(labor + main_material + auxiliary_material + machinery),
+                "resource_count": int(group_counts[entry_key]),
+            }
+        )
     return {
         "id": snapshot.id,
         "snapshot_uuid": snapshot.snapshot_uuid,
@@ -241,12 +383,14 @@ def serialize_project_quota(
             "machinery_fee": _decimal_text(snapshot.machinery_fee),
             "unit_price": _decimal_text(snapshot.unit_price),
         },
+        "quota_items": quota_items,
+        "quota_item_count": len(quota_items),
         "resources": resources,
         "resource_count": len(resources),
         "revision": snapshot.revision,
         "enterprise_sync": {
-            "eligible": snapshot.source_enterprise_quota_item_id is not None,
-            "can_sync": bool(can_sync_enterprise and snapshot.source_enterprise_quota_item_id),
+            "eligible": len(quota_items) == 1 and snapshot.source_enterprise_quota_item_id is not None,
+            "can_sync": bool(can_sync_enterprise and len(quota_items) == 1 and snapshot.source_enterprise_quota_item_id),
             "target_version_id": snapshot.enterprise_sync_version_id,
             "synced_by": snapshot.enterprise_synced_by,
             "synced_at": _format_dt(snapshot.enterprise_synced_at),
@@ -334,6 +478,7 @@ def _materialize_enterprise_resources(
     item: EnterpriseQuotaItem,
     current_user: User,
 ) -> None:
+    entry_key = _quota_entry_key(item.id)
     for index, (component, resource) in enumerate(_component_rows(db, item), start=1):
         bucket = component.fee_bucket if component.fee_bucket in PROJECT_QUOTA_FEE_BUCKETS else "auxiliary_material"
         quantity = _q6(component.quantity)
@@ -345,7 +490,7 @@ def _materialize_enterprise_resources(
                 snapshot_id=snapshot.id,
                 source_enterprise_component_id=component.id,
                 source_enterprise_resource_id=component.resource_id,
-                origin="enterprise_snapshot",
+                origin=_resource_origin(entry_key, manual=False),
                 component_type=_text(component.component_type, 64) or _component_type_for_bucket(bucket),
                 resource_code=_text(component.resource_code, 64) or _text(getattr(resource, "resource_code", None), 64),
                 resource_name=_text(component.resource_name, 255)
@@ -509,6 +654,451 @@ def materialize_project_quota(
     return snapshot
 
 
+def _enterprise_item_snapshot(item: EnterpriseQuotaItem) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "version_id": item.version_id,
+        "section_id": item.section_id,
+        "section_code": item.section.section_code if item.section else None,
+        "section_name": item.section.section_name if item.section else None,
+        "quota_code": item.quota_code,
+        "item_name": item.item_name,
+        "work_content": item.work_content,
+        "worker_or_subtype": item.worker_or_subtype,
+        "specification": item.specification,
+        "brand": item.brand,
+        "unit": item.unit,
+        "quantity": item.quantity,
+        "unit_price": _decimal_text(item.unit_price),
+        "labor_fee": _decimal_text(item.labor_fee),
+        "main_material_fee": _decimal_text(item.main_material_fee),
+        "auxiliary_material_fee": _decimal_text(item.auxiliary_material_fee),
+        "machinery_fee": _decimal_text(item.machinery_fee),
+        "source_sheet": item.source_sheet,
+        "source_row_index": item.source_row_index,
+    }
+
+
+def _sync_enterprise_line_metadata(
+    db: Session,
+    snapshot: BudgetProjectQuotaSnapshot,
+    *,
+    clear_ai_estimate: bool = False,
+    normalize_price_source: bool = False,
+) -> None:
+    """Keep the line source snapshot aligned with the grouped project quota."""
+
+    serialized = serialize_project_quota(snapshot, can_edit=True, can_sync_enterprise=False)
+    quota_items = serialized.get("quota_items") or []
+    sourced_items = [
+        item for item in quota_items if item.get("source_enterprise_quota_item_id") is not None
+    ]
+    if not sourced_items:
+        return
+    primary = sourced_items[0]
+    line = (
+        db.query(BudgetProjectPricingDraftLine)
+        .filter(BudgetProjectPricingDraftLine.id == snapshot.draft_line_id)
+        .with_for_update()
+        .one()
+    )
+    selected_source = {
+        **primary,
+        "id": primary.get("source_enterprise_quota_item_id"),
+        "version_id": primary.get("source_enterprise_version_id"),
+        "project_quota_items": quota_items,
+        "project_quota_snapshot_uuid": snapshot.snapshot_uuid,
+        "unit_price": _decimal_text(snapshot.unit_price),
+        "labor_fee": _decimal_text(snapshot.labor_fee),
+        "main_material_fee": _decimal_text(snapshot.main_material_fee),
+        "auxiliary_material_fee": _decimal_text(snapshot.auxiliary_material_fee),
+        "machinery_fee": _decimal_text(snapshot.machinery_fee),
+    }
+    line.selected_enterprise_quota_item_id = int(primary["source_enterprise_quota_item_id"])
+    line.selected_account_quota_item_id = None
+    line.selected_source_snapshot_json = _json_dump(selected_source)
+    if normalize_price_source:
+        has_positive_total = _q6(snapshot.unit_price) > 0
+        line.base_unit_price = _q6(snapshot.unit_price) if has_positive_total else None
+        line.manual_unit_price = None
+        line.effective_unit_price = _q6(snapshot.unit_price) if has_positive_total else None
+        line.price_source = "enterprise_quota" if has_positive_total else "none"
+        line.match_status = "manual_matched"
+    if clear_ai_estimate:
+        line.ai_estimated_unit_price = None
+        line.ai_estimate_snapshot_json = None
+    draft = db.query(BudgetProjectPricingDraft).filter(BudgetProjectPricingDraft.id == snapshot.draft_id).one()
+    refresh_budget_pricing_draft_summary(db, draft)
+
+
+def _validate_enterprise_item_version(
+    item: EnterpriseQuotaItem | None,
+    active_version: EnterpriseQuotaVersion,
+    draft: BudgetProjectPricingDraft,
+) -> EnterpriseQuotaItem:
+    if item is None:
+        raise BudgetPricingError("ENTERPRISE_QUOTA_ITEM_NOT_FOUND", status_code=404)
+    if int(item.version_id) != int(active_version.id):
+        raise BudgetPricingError(
+            "PROJECT_QUOTA_REPLACEMENT_VERSION_MISMATCH",
+            status_code=409,
+            context={
+                "active_enterprise_quota_version_id": active_version.id,
+                "draft_enterprise_quota_version_id": draft.enterprise_quota_version_id,
+                "selected_enterprise_quota_version_id": item.version_id,
+            },
+        )
+    return item
+
+
+def replace_project_quota(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    *,
+    line_identifier: str | int,
+    expected_snapshot_revision: int,
+    enterprise_quota_item_id: int,
+    quota_entry_key: str | None = None,
+    reason: str | None,
+    event_type: str = "quota_replaced",
+) -> BudgetProjectQuotaSnapshot:
+    snapshot = _locked_snapshot(db, project_id=profile.project_id, line_identifier=line_identifier)
+    _check_snapshot_revision(snapshot, expected_snapshot_revision)
+    draft = (
+        db.query(BudgetProjectPricingDraft)
+        .filter(BudgetProjectPricingDraft.id == snapshot.draft_id)
+        .with_for_update()
+        .one()
+    )
+    active_version = strict_active_quota_version(db, for_update=True)
+    item = (
+        db.query(EnterpriseQuotaItem)
+        .filter(EnterpriseQuotaItem.id == int(enterprise_quota_item_id))
+        .with_for_update()
+        .one_or_none()
+    )
+    item = _validate_enterprise_item_version(item, active_version, draft)
+
+    before = serialize_project_quota(snapshot, can_edit=True, can_sync_enterprise=True)
+    entries = _snapshot_quota_entries(snapshot)
+    target_key = str(quota_entry_key or entries[0]["entry_key"])
+    target_index = next(
+        (index for index, entry in enumerate(entries) if str(entry["entry_key"]) == target_key),
+        None,
+    )
+    if target_index is None:
+        raise BudgetPricingError("PROJECT_QUOTA_ITEM_NOT_FOUND", status_code=404)
+    replacement_key = _quota_entry_key(item.id)
+    if any(
+        index != target_index and str(entry["entry_key"]) == replacement_key
+        for index, entry in enumerate(entries)
+    ):
+        raise BudgetPricingError(
+            "PROJECT_QUOTA_ITEM_ALREADY_ADDED",
+            status_code=409,
+            context={"enterprise_quota_item_id": item.id},
+        )
+    for resource in list(snapshot.resources):
+        if _resource_entry_key(resource, snapshot) == target_key:
+            db.delete(resource)
+    db.flush()
+    entries[target_index] = _quota_entry_from_item(db, item, snapshot.draft_line)
+    _set_snapshot_quota_entries(snapshot, entries)
+    snapshot.enterprise_sync_version_id = None
+    snapshot.enterprise_synced_by = None
+    snapshot.enterprise_synced_at = None
+    snapshot.revision = int(snapshot.revision) + 1
+    snapshot.updated_by = current_user.id
+    _materialize_enterprise_resources(db, snapshot, item, current_user)
+    db.flush()
+    db.expire(snapshot, ["resources"])
+    _recalculate_snapshot(db, snapshot)
+    replacement_total = sum(
+        (_q6(resource.amount) for resource in snapshot.resources if _resource_entry_key(resource, snapshot) == replacement_key),
+        Decimal("0"),
+    )
+    if replacement_total <= 0:
+        raise BudgetPricingError(
+            "PROJECT_QUOTA_TOTAL_MUST_BE_POSITIVE",
+            status_code=409,
+            context={"message": "所选企业定额的工料机合计必须大于 0"},
+        )
+    _sync_draft_line_from_snapshot(db, profile, current_user, snapshot, reason=reason or "人工替换项目定额")
+    _sync_enterprise_line_metadata(
+        db,
+        snapshot,
+        clear_ai_estimate=True,
+        normalize_price_source=True,
+    )
+    refresh_budget_pricing_draft_summary(db, draft)
+    _append_event(
+        db,
+        snapshot,
+        current_user,
+        event_type,
+        before=before,
+        after=serialize_project_quota(snapshot, can_edit=True, can_sync_enterprise=True),
+        details={
+            "reason": _text(reason, 500),
+            "enterprise_quota_item_id": item.id,
+            "quota_entry_key": target_key,
+        },
+    )
+    db.flush()
+    return snapshot
+
+
+def add_project_quota(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    *,
+    pricing_mode: str | None,
+    line_identifier: str | int,
+    enterprise_quota_item_id: int,
+    reason: str | None,
+) -> BudgetProjectQuotaSnapshot:
+    """Backward-compatible single-item wrapper."""
+
+    return add_project_quotas(
+        db,
+        profile,
+        current_user,
+        pricing_mode=pricing_mode,
+        line_identifier=line_identifier,
+        enterprise_quota_item_ids=[enterprise_quota_item_id],
+        expected_snapshot_revision=None,
+        reason=reason,
+        event_type="quota_added",
+    )
+
+
+def add_project_quotas(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    *,
+    pricing_mode: str | None,
+    line_identifier: str | int,
+    enterprise_quota_item_ids: list[int],
+    expected_snapshot_revision: int | None,
+    reason: str | None,
+    event_type: str = "quota_items_added",
+) -> BudgetProjectQuotaSnapshot:
+    """Append one or more active enterprise quota items to a draft line."""
+
+    item_ids = list(dict.fromkeys(int(item_id) for item_id in enterprise_quota_item_ids))
+    if not item_ids:
+        raise BudgetPricingError("PROJECT_QUOTA_ITEMS_REQUIRED", status_code=422)
+
+    snapshot = materialize_project_quota(
+        db,
+        profile,
+        current_user,
+        pricing_mode=pricing_mode,
+        line_identifier=line_identifier,
+    )
+    if expected_snapshot_revision is not None:
+        _check_snapshot_revision(snapshot, expected_snapshot_revision)
+    draft = (
+        db.query(BudgetProjectPricingDraft)
+        .filter(BudgetProjectPricingDraft.id == snapshot.draft_id)
+        .with_for_update()
+        .one()
+    )
+    active_version = strict_active_quota_version(db, for_update=True)
+    loaded_items = (
+        db.query(EnterpriseQuotaItem)
+        .filter(EnterpriseQuotaItem.id.in_(item_ids))
+        .with_for_update()
+        .all()
+    )
+    by_id = {int(item.id): item for item in loaded_items}
+    items = [
+        _validate_enterprise_item_version(by_id.get(item_id), active_version, draft)
+        for item_id in item_ids
+    ]
+    before = serialize_project_quota(snapshot, can_edit=True, can_sync_enterprise=True)
+    entries = _snapshot_quota_entries(snapshot)
+    if len(entries) == 1 and entries[0].get("source_enterprise_quota_item_id") is None:
+        for resource in list(snapshot.resources):
+            db.delete(resource)
+        db.flush()
+        entries = []
+    existing_keys = {str(entry["entry_key"]) for entry in entries}
+    duplicate_ids = [item.id for item in items if _quota_entry_key(item.id) in existing_keys]
+    if duplicate_ids:
+        raise BudgetPricingError(
+            "PROJECT_QUOTA_ITEM_ALREADY_ADDED",
+            status_code=409,
+            context={"enterprise_quota_item_ids": duplicate_ids},
+        )
+    for item in items:
+        entries.append(_quota_entry_from_item(db, item, snapshot.draft_line))
+        _materialize_enterprise_resources(db, snapshot, item, current_user)
+    _set_snapshot_quota_entries(snapshot, entries)
+    snapshot.enterprise_sync_version_id = None
+    snapshot.enterprise_synced_by = None
+    snapshot.enterprise_synced_at = None
+    snapshot.revision = int(snapshot.revision) + 1
+    snapshot.updated_by = current_user.id
+    db.flush()
+    db.expire(snapshot, ["resources"])
+    for item in items:
+        entry_key = _quota_entry_key(item.id)
+        item_total = sum(
+            (
+                _q6(resource.amount)
+                for resource in snapshot.resources
+                if _resource_entry_key(resource, snapshot) == entry_key
+            ),
+            Decimal("0"),
+        )
+        if item_total <= 0:
+            raise BudgetPricingError(
+                "PROJECT_QUOTA_TOTAL_MUST_BE_POSITIVE",
+                status_code=409,
+                context={
+                    "message": f"定额“{item.quota_code or item.item_name or item.id}”的工料机合计必须大于 0",
+                    "enterprise_quota_item_id": item.id,
+                },
+            )
+    _recalculate_snapshot(db, snapshot)
+    _sync_draft_line_from_snapshot(
+        db,
+        profile,
+        current_user,
+        snapshot,
+        reason=reason or "人工从企业定额库新增项目定额",
+    )
+    _sync_enterprise_line_metadata(
+        db,
+        snapshot,
+        clear_ai_estimate=True,
+        normalize_price_source=True,
+    )
+    refresh_budget_pricing_draft_summary(db, draft)
+    _append_event(
+        db,
+        snapshot,
+        current_user,
+        event_type,
+        before=before,
+        after=serialize_project_quota(snapshot, can_edit=True, can_sync_enterprise=True),
+        details={"reason": _text(reason, 500), "enterprise_quota_item_ids": item_ids},
+    )
+    db.flush()
+    return snapshot
+
+
+def delete_project_quota(
+    db: Session,
+    profile: BudgetProjectProfile,
+    current_user: User,
+    *,
+    line_identifier: str | int,
+    expected_snapshot_revision: int,
+    quota_entry_key: str | None = None,
+    reason: str | None,
+) -> BudgetProjectQuotaSnapshot | tuple[BudgetProjectPricingDraft, BudgetProjectPricingDraftLine]:
+    snapshot = _locked_snapshot(db, project_id=profile.project_id, line_identifier=line_identifier)
+    _check_snapshot_revision(snapshot, expected_snapshot_revision)
+    draft = (
+        db.query(BudgetProjectPricingDraft)
+        .filter(BudgetProjectPricingDraft.id == snapshot.draft_id)
+        .with_for_update()
+        .one()
+    )
+    entries = _snapshot_quota_entries(snapshot)
+    target_key = str(quota_entry_key or entries[0]["entry_key"])
+    if len(entries) > 1:
+        target = next((entry for entry in entries if str(entry["entry_key"]) == target_key), None)
+        if target is None:
+            raise BudgetPricingError("PROJECT_QUOTA_ITEM_NOT_FOUND", status_code=404)
+        before = serialize_project_quota(snapshot, can_edit=True, can_sync_enterprise=True)
+        for resource in list(snapshot.resources):
+            if _resource_entry_key(resource, snapshot) == target_key:
+                db.delete(resource)
+        remaining = [entry for entry in entries if str(entry["entry_key"]) != target_key]
+        _set_snapshot_quota_entries(snapshot, remaining)
+        snapshot.enterprise_sync_version_id = None
+        snapshot.enterprise_synced_by = None
+        snapshot.enterprise_synced_at = None
+        snapshot.revision = int(snapshot.revision) + 1
+        snapshot.updated_by = current_user.id
+        db.flush()
+        db.expire(snapshot, ["resources"])
+        _recalculate_snapshot(db, snapshot)
+        _sync_draft_line_from_snapshot(
+            db,
+            profile,
+            current_user,
+            snapshot,
+            reason=reason or "人工删除清单项下的项目定额",
+        )
+        _sync_enterprise_line_metadata(db, snapshot, normalize_price_source=True)
+        refresh_budget_pricing_draft_summary(db, draft)
+        _append_event(
+            db,
+            snapshot,
+            current_user,
+            "quota_item_deleted",
+            before=before,
+            after=serialize_project_quota(snapshot, can_edit=True, can_sync_enterprise=True),
+            details={"reason": _text(reason, 500), "quota_entry_key": target_key},
+        )
+        db.flush()
+        return snapshot
+    line = get_budget_pricing_draft_line(db, draft, line_identifier, for_update=True)
+    previous_breakdown = _json_load(line.pricing_breakdown_json, {})
+    preserved_breakdown = {}
+    if previous_breakdown.get("remark"):
+        preserved_breakdown["remark"] = previous_breakdown["remark"]
+    draft, line = patch_budget_pricing_draft_line(
+        db,
+        profile,
+        current_user,
+        pricing_mode=draft.pricing_mode,
+        line_identifier=line.id,
+        expected_revision=int(draft.revision),
+        expected_line_revision=int(line.line_revision),
+        manual_unit_price=None,
+        pricing_breakdown=None,
+        reason=reason or "人工删除项目定额",
+    )
+    line.selected_enterprise_quota_item_id = None
+    line.selected_account_quota_item_id = None
+    line.selected_source_snapshot_json = None
+    line.base_unit_price = None
+    line.manual_unit_price = None
+    line.pricing_breakdown_json = _json_dump(preserved_breakdown) if preserved_breakdown else None
+    ai_price = _decimal(line.ai_estimated_unit_price)
+    if ai_price is not None and ai_price > 0:
+        line.effective_unit_price = _q6(ai_price)
+        line.price_source = "ai_estimate"
+        quantity = _q6(line.calculation_quantity)
+        if line.quantity_status == "valid" and quantity > 0:
+            line.line_total = _q6(quantity * ai_price)
+            line.amount_included = True
+            line.pricing_status = "priced"
+        else:
+            line.line_total = Decimal("0.000000")
+            line.amount_included = False
+            line.pricing_status = "quantity_unresolved"
+    else:
+        line.effective_unit_price = None
+        line.line_total = None
+        line.amount_included = False
+        line.price_source = "none"
+        line.pricing_status = "pending_match"
+    line.match_status = "unmatched"
+    db.delete(snapshot)
+    db.flush()
+    refresh_budget_pricing_draft_summary(db, draft)
+    return draft, line
+
+
 def _locked_snapshot(
     db: Session,
     *,
@@ -596,12 +1186,6 @@ def _sync_draft_line_from_snapshot(
     *,
     reason: str | None,
 ) -> None:
-    if _q6(snapshot.unit_price) <= 0:
-        raise BudgetPricingError(
-            "PROJECT_QUOTA_TOTAL_MUST_BE_POSITIVE",
-            status_code=409,
-            context={"message": "项目定额工料机合计必须大于 0"},
-        )
     line = (
         db.query(BudgetProjectPricingDraftLine)
         .filter(BudgetProjectPricingDraftLine.id == snapshot.draft_line_id)
@@ -631,6 +1215,23 @@ def _sync_draft_line_from_snapshot(
             "project_quota_snapshot_uuid": snapshot.snapshot_uuid,
         }
     )
+    if _q6(snapshot.unit_price) <= 0:
+        previous_revision = int(draft.revision)
+        line.base_unit_price = None
+        line.manual_unit_price = None
+        line.effective_unit_price = None
+        line.pricing_breakdown_json = _json_dump(breakdown)
+        line.line_total = None
+        line.amount_included = False
+        line.price_source = "none"
+        line.pricing_status = "pending_match"
+        line.line_revision = int(line.line_revision) + 1
+        line.updated_by = current_user.id
+        draft.revision = previous_revision + 1
+        draft.updated_by = current_user.id
+        refresh_budget_pricing_draft_summary(db, draft)
+        db.flush()
+        return
     patch_budget_pricing_draft_line(
         db,
         profile,
@@ -652,11 +1253,16 @@ def create_project_quota_resource(
     *,
     line_identifier: str | int,
     expected_snapshot_revision: int,
+    quota_entry_key: str | None = None,
     payload: dict[str, Any],
     reason: str | None,
 ) -> BudgetProjectQuotaSnapshot:
     snapshot = _locked_snapshot(db, project_id=profile.project_id, line_identifier=line_identifier)
     _check_snapshot_revision(snapshot, expected_snapshot_revision)
+    entries = _snapshot_quota_entries(snapshot)
+    target_key = str(quota_entry_key or entries[0]["entry_key"])
+    if not any(str(entry["entry_key"]) == target_key for entry in entries):
+        raise BudgetPricingError("PROJECT_QUOTA_ITEM_NOT_FOUND", status_code=404)
     max_order = (
         db.query(func.max(BudgetProjectQuotaResource.sort_order))
         .filter(BudgetProjectQuotaResource.snapshot_id == snapshot.id)
@@ -666,7 +1272,7 @@ def create_project_quota_resource(
     resource = BudgetProjectQuotaResource(
         resource_uuid=str(uuid4()),
         snapshot_id=snapshot.id,
-        origin="manual_added",
+        origin=_resource_origin(target_key, manual=True),
         fee_bucket="auxiliary_material",
         quantity=Decimal("0"),
         unit_price=Decimal("0"),
@@ -683,7 +1289,8 @@ def create_project_quota_resource(
     snapshot.updated_by = current_user.id
     _recalculate_snapshot(db, snapshot)
     _sync_draft_line_from_snapshot(db, profile, current_user, snapshot, reason=reason)
-    after = _serialize_resource(resource)
+    _sync_enterprise_line_metadata(db, snapshot)
+    after = _serialize_resource(resource, snapshot)
     _append_event(
         db,
         snapshot,
@@ -736,7 +1343,8 @@ def update_project_quota_resource(
     snapshot.updated_by = current_user.id
     _recalculate_snapshot(db, snapshot)
     _sync_draft_line_from_snapshot(db, profile, current_user, snapshot, reason=reason)
-    after = _serialize_resource(resource)
+    _sync_enterprise_line_metadata(db, snapshot)
+    after = _serialize_resource(resource, snapshot)
     _append_event(
         db,
         snapshot,
@@ -789,12 +1397,6 @@ def delete_project_quota_resource(
             status_code=409,
             context={"current_revision": resource.revision},
         )
-    if len(resources) <= 1:
-        raise BudgetPricingError(
-            "PROJECT_QUOTA_LAST_RESOURCE_DELETE_BLOCKED",
-            status_code=409,
-            context={"message": "至少保留一条工料机明细；可将其改为新的明细"},
-        )
     before = _serialize_resource(resource)
     resource_uuid = resource.resource_uuid
     db.delete(resource)
@@ -804,6 +1406,7 @@ def delete_project_quota_resource(
     db.expire(snapshot, ["resources"])
     _recalculate_snapshot(db, snapshot)
     _sync_draft_line_from_snapshot(db, profile, current_user, snapshot, reason=reason)
+    _sync_enterprise_line_metadata(db, snapshot)
     _append_event(
         db,
         snapshot,

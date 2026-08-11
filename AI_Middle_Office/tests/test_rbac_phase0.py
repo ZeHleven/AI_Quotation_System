@@ -1,5 +1,6 @@
 import uuid
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.user import User, UserRole, UserRoleEvent
@@ -187,6 +188,54 @@ def test_system_admin_can_grant_cost_specific_role(client):
         db.close()
 
 
+def test_system_admin_can_replace_function_roles_atomically(client):
+    admin_name = f"rbac_replace_sys_{uuid.uuid4().hex[:8]}"
+    target_name = f"rbac_replace_target_{uuid.uuid4().hex[:8]}"
+    password = "secret123"
+    _create_user(admin_name, password, legacy_role="admin", roles=["system_admin", "admin"])
+    target = _create_user(target_name, password, roles=["staff", "cost_viewer"])
+
+    token = _login(client, admin_name, password)
+    response = client.put(
+        f"/api/v1/admin/users/{target.id}/roles",
+        headers={"Authorization": f"Bearer {token}", "X-Trace-Id": "test-replace-roles"},
+        json={
+            "roles": ["quote_user", "cost_editor"],
+            "note": "replace visible function permissions",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["roles"] == ["quote_user", "cost_editor"]
+    assert data["role_version"] == 2
+
+    db = SessionLocal()
+    try:
+        assignments = (
+            db.query(UserRole)
+            .filter(UserRole.user_id == target.id)
+            .order_by(UserRole.role.asc())
+            .all()
+        )
+        assert {assignment.role for assignment in assignments} == {"quote_user", "cost_editor"}
+        events = (
+            db.query(UserRoleEvent)
+            .filter(UserRoleEvent.target_user_id == target.id)
+            .order_by(UserRoleEvent.id.asc())
+            .all()
+        )
+        assert {(event.action, event.role) for event in events} == {
+            ("revoked", "staff"),
+            ("revoked", "cost_viewer"),
+            ("granted", "quote_user"),
+            ("granted", "cost_editor"),
+        }
+        assert all(event.trace_id == "test-replace-roles" for event in events)
+    finally:
+        db.close()
+
+
 def test_revoke_role_invalidates_existing_token(client):
     admin_name = f"rbac_revoke_admin_{uuid.uuid4().hex[:8]}"
     target_name = f"rbac_revoke_target_{uuid.uuid4().hex[:8]}"
@@ -222,3 +271,59 @@ def test_staff_cannot_read_admin_users(client):
     response = client.get("/api/v1/admin/users", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 403
+
+
+def test_staff_scope_is_limited_to_five_business_modules(client):
+    username = f"rbac_staff_scope_{uuid.uuid4().hex[:8]}"
+    password = "secret123"
+    _create_user(username, password, roles=["staff"])
+    token = _login(client, username, password)
+    headers = {"Authorization": f"Bearer {token}"}
+    feature_names = (
+        "feature_unified_quotes",
+        "feature_budget_projects",
+        "feature_bidding_mvp",
+        "feature_cost_db",
+        "feature_account_quotas",
+        "feature_pricing_agent",
+        "feature_agent_assistants",
+        "feature_requirement_standardization",
+        "feature_project_progress",
+    )
+    previous = {name: getattr(settings, name) for name in feature_names}
+    for name in feature_names:
+        object.__setattr__(settings, name, True)
+    try:
+        me_response = client.get("/api/v1/auth/me", headers=headers)
+        assert me_response.status_code == 200
+        module_keys = {item["key"] for item in me_response.json()["available_modules"]}
+        assert module_keys == {"unified_quotes", "legacy_quote", "bidding", "cost_db", "account_quotas"}
+
+        assert client.get("/api/v1/quote/jobs", headers=headers).status_code == 200
+        assert client.get("/api/v1/admin/budget-projects", headers=headers).status_code == 200
+        assert client.get("/api/v1/admin/bidding/projects", headers=headers).status_code == 200
+        assert client.get("/api/v1/admin/cost-items", headers=headers).status_code == 200
+        denied_cost_write = client.post(
+            "/api/v1/admin/cost-items",
+            headers=headers,
+            json={
+                "category": "permission-test",
+                "item_name": "staff-read-only",
+                "unit": "item",
+                "price_type": "combined",
+            },
+        )
+        assert denied_cost_write.status_code == 403
+
+        assert client.get("/api/v1/pricing-agent/capabilities", headers=headers).status_code == 403
+        assert client.get("/api/v1/admin/agents/catalog", headers=headers).status_code == 403
+        assert client.get("/api/v1/admin/projects", headers=headers).status_code == 403
+        requirement_response = client.post(
+            "/api/v1/admin/requirement-standardization/preview",
+            headers=headers,
+            files={"file": ("scope.xlsx", b"not-read-after-role-gate", "application/octet-stream")},
+        )
+        assert requirement_response.status_code == 403
+    finally:
+        for name, value in previous.items():
+            object.__setattr__(settings, name, value)

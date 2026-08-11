@@ -72,6 +72,7 @@ from app.services.budget_pricing import (
     create_budget_pricing_run,
 )
 from app.services.budget_pricing_drafts import (
+    _draft_totals_summary,
     capture_budget_pricing_run_draft_snapshot,
     create_or_rebuild_budget_pricing_draft,
     get_current_budget_pricing_draft,
@@ -90,9 +91,14 @@ from app.services.budget_pricing_statistics_export import (
     render_budget_pricing_statistics_export,
 )
 from app.services.budget_project_quotas import (
+    add_project_quota,
+    add_project_quotas,
     create_project_quota_resource,
+    delete_project_quota,
     delete_project_quota_resource,
     materialize_project_quota,
+    replace_project_quota,
+    serialize_project_quota,
     sync_project_quota_to_enterprise,
     update_project_quota_resource,
 )
@@ -106,6 +112,43 @@ from app.services.budget_pricing_draft_quote_jobs import (
     run_budget_pricing_draft_quote_job,
 )
 from app.services.budget_projects import accessible_budget_profile_query, get_budget_profile
+
+
+def test_totals_keep_tax_for_mixed_legacy_and_current_breakdowns():
+    def line(*, quantity: str, effective: str, breakdown: dict[str, str]):
+        return SimpleNamespace(
+            amount_included=True,
+            calculation_quantity=Decimal(quantity),
+            effective_unit_price=Decimal(effective),
+            item_name="验收定额",
+            spec="",
+            pricing_breakdown_json=json.dumps(breakdown),
+            selected_source_snapshot_json="{}",
+            source_row_snapshot_json="{}",
+        )
+
+    legacy = line(
+        quantity="2",
+        effective="80",
+        breakdown={"labor_unit_cost": "80.000000"},
+    )
+    current = line(
+        quantity="1",
+        effective="100",
+        breakdown={
+            "labor_unit_cost": "100.000000",
+            "tax_amount": "9.000000",
+        },
+    )
+
+    totals = _draft_totals_summary(
+        [legacy, current],
+        subtotal=Decimal("260"),
+        config={},
+    )
+
+    assert totals["tax_total"] == "23.400000"
+    assert totals["tax_included_total"] == "283.400000"
 
 
 MIGRATION_PATH = (
@@ -1841,6 +1884,33 @@ def test_project_quota_resource_crud_recalculates_project_only(db):
     session.flush()
     assert snapshot.machinery_fee == Decimal("4.000000")
     assert snapshot.unit_price == Decimal("16.500000")
+    session.refresh(line)
+    session.refresh(draft)
+    assert line.manual_unit_price == Decimal("16.500000")
+    assert line.effective_unit_price == Decimal("16.500000")
+    assert line.line_total == Decimal("33.000000")
+    summary_after_create = json.loads(draft.summary_json)
+    assert summary_after_create["enterprise_quota_matched_count"] == 1
+    assert summary_after_create["manual_price_count"] == 1
+    assert summary_after_create["pending_count"] == 1
+    assert summary_after_create["totals"] == {
+        "tax_rate": "0.090000",
+        "labor_total": "9.000000",
+        "main_material_total": "16.000000",
+        "auxiliary_material_total": "0.000000",
+        "subcontract_total": "0.000000",
+        "tax_excluded_total": "33.000000",
+        "tax_total": "2.970000",
+        "tax_included_total": "35.970000",
+        "direct_subtotal": "25.000000",
+        "measures_fee": "0.000000",
+        "management_fee": "0.000000",
+        "other_fee": "0.000000",
+        "suspended_amount": "0.000000",
+        "cost_total": "33.000000",
+        "quote_amount": "33.000000",
+        "unit_cost": None,
+    }
 
     main_material = next(
         resource for resource in snapshot.resources if resource.fee_bucket == "main_material"
@@ -1868,6 +1938,449 @@ def test_project_quota_resource_crud_recalculates_project_only(db):
     assert quota_item.unit_price == 10
     assert len(enterprise_components) == 2
     assert [component.amount for component in enterprise_components] == [2.0, 8.0]
+
+
+def test_project_quota_multi_add_and_detail_delete_recalculate_all_levels(db):
+    session, _ = db
+    user, _, _, profile, batch, revision = _seed_account_project(
+        session,
+        suffix="project-quota-multi-add",
+    )
+    version, first_item = _seed_enterprise_quota(session, user)
+    _seed_project_quota_components(session, version, first_item)
+    second_item = EnterpriseQuotaItem(
+        version_id=version.id,
+        quota_code="Q-002",
+        item_name="第二条项目定额",
+        unit="㎡",
+        unit_price=10,
+        labor_fee=2,
+        main_material_fee=8,
+        auxiliary_material_fee=0,
+        machinery_fee=0,
+        sort_order=2,
+    )
+    session.add(second_item)
+    session.flush()
+    _seed_project_quota_components(session, version, second_item)
+    session.commit()
+
+    draft = create_or_rebuild_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_active_quota_version_id=version.id,
+    )
+    session.flush()
+    line = draft.lines[0]
+    snapshot = materialize_project_quota(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        line_identifier=line.id,
+    )
+
+    snapshot = add_project_quotas(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        line_identifier=line.id,
+        enterprise_quota_item_ids=[second_item.id],
+        expected_snapshot_revision=snapshot.revision,
+        reason="多选新增定额验收",
+    )
+    session.flush()
+    payload = serialize_project_quota(snapshot, can_edit=True, can_sync_enterprise=True)
+    assert payload["quota_item_count"] == 2
+    assert [item["quota_code"] for item in payload["quota_items"]] == ["Q-001", "Q-002"]
+    assert payload["resource_count"] == 4
+    assert snapshot.unit_price == Decimal("20.000000")
+    session.refresh(line)
+    assert line.effective_unit_price == Decimal("20.000000")
+    assert line.line_total == Decimal("40.000000")
+    source_snapshot = json.loads(line.selected_source_snapshot_json)
+    assert len(source_snapshot["project_quota_items"]) == 2
+
+    second_key = str(second_item.id)
+    second_resource = next(
+        resource
+        for resource in snapshot.resources
+        if resource.origin.endswith(f":q{second_key}") and resource.fee_bucket == "labor"
+    )
+    snapshot = delete_project_quota_resource(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        resource_identifier=second_resource.resource_uuid,
+        expected_snapshot_revision=snapshot.revision,
+        expected_resource_revision=second_resource.revision,
+        reason="删除第二条定额的人工明细",
+    )
+    session.flush()
+    payload = serialize_project_quota(snapshot, can_edit=True, can_sync_enterprise=True)
+    second_payload = next(item for item in payload["quota_items"] if item["entry_key"] == second_key)
+    assert second_payload["resource_count"] == 1
+    assert second_payload["unit_price"] == "8.000000"
+    assert snapshot.unit_price == Decimal("18.000000")
+    session.refresh(line)
+    session.refresh(draft)
+    assert line.effective_unit_price == Decimal("18.000000")
+    assert line.line_total == Decimal("36.000000")
+    assert json.loads(draft.summary_json)["totals"]["tax_excluded_total"] == "36.000000"
+
+    snapshot = create_project_quota_resource(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=snapshot.revision,
+        quota_entry_key=second_key,
+        payload={
+            "fee_bucket": "auxiliary_material",
+            "resource_name": "新增辅材明细",
+            "unit": "项",
+            "quantity": "1",
+            "unit_price": "3",
+        },
+        reason="新增第二条定额的辅材明细",
+    )
+    session.flush()
+    assert snapshot.unit_price == Decimal("21.000000")
+    session.refresh(line)
+    session.refresh(draft)
+    assert line.line_total == Decimal("42.000000")
+    assert json.loads(draft.summary_json)["totals"]["tax_excluded_total"] == "42.000000"
+
+    result = delete_project_quota(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=snapshot.revision,
+        quota_entry_key=second_key,
+        reason="删除第二条项目定额",
+    )
+    assert isinstance(result, BudgetProjectQuotaSnapshot)
+    session.flush()
+    payload = serialize_project_quota(result, can_edit=True, can_sync_enterprise=True)
+    assert payload["quota_item_count"] == 1
+    assert payload["quota_items"][0]["quota_code"] == "Q-001"
+    assert result.unit_price == Decimal("10.000000")
+    session.refresh(line)
+    assert line.line_total == Decimal("20.000000")
+
+    for current in list(result.resources):
+        result = delete_project_quota_resource(
+            session,
+            profile,
+            user,
+            line_identifier=line.id,
+            resource_identifier=current.resource_uuid,
+            expected_snapshot_revision=result.revision,
+            expected_resource_revision=current.revision,
+            reason="验证最后一条明细也可删除",
+        )
+        session.flush()
+    assert result.unit_price == Decimal("0.000000")
+    assert len(result.resources) == 0
+    session.refresh(line)
+    session.refresh(draft)
+    assert line.effective_unit_price is None
+    assert line.line_total is None
+    assert json.loads(draft.summary_json)["totals"]["tax_excluded_total"] == "0.000000"
+
+    result = create_project_quota_resource(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=result.revision,
+        quota_entry_key=str(first_item.id),
+        payload={
+            "fee_bucket": "labor",
+            "resource_name": "重新添加人工明细",
+            "unit": "工日",
+            "quantity": "1",
+            "unit_price": "5",
+        },
+        reason="空定额重新添加明细",
+    )
+    session.flush()
+    session.refresh(line)
+    session.refresh(draft)
+    assert result.unit_price == Decimal("5.000000")
+    assert line.line_total == Decimal("10.000000")
+    assert json.loads(draft.summary_json)["totals"]["tax_excluded_total"] == "10.000000"
+
+
+def test_project_quota_can_be_replaced_from_current_active_enterprise_version_and_deleted(db):
+    session, _ = db
+    user, _, _, profile, batch, revision = _seed_account_project(
+        session,
+        suffix="project-quota-replace",
+    )
+    version, original_item = _seed_enterprise_quota(session, user)
+    _seed_project_quota_components(session, version, original_item)
+    session.commit()
+
+    draft = create_or_rebuild_budget_pricing_draft(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        source_import_batch_id=batch.id,
+        source_import_revision_id=revision.id,
+        expected_active_quota_version_id=version.id,
+    )
+    session.flush()
+    line = draft.lines[0]
+    snapshot = materialize_project_quota(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        line_identifier=line.id,
+    )
+
+    # The draft keeps its original version for audit, while manual replacement
+    # must browse and select from the enterprise quota version active now.
+    version.status = "archived"
+    version.is_active = False
+    active_version = EnterpriseQuotaVersion(
+        version_code="quota-active-v2",
+        version_name="旗胜2.0",
+        status="active",
+        is_active=True,
+        source_file_sha256="r" * 64,
+        created_by=user.id,
+    )
+    session.add(active_version)
+    session.flush()
+    replacement_item = EnterpriseQuotaItem(
+        version_id=active_version.id,
+        quota_code="Q-002",
+        item_name="石材地面替换定额",
+        work_content="替换后的工作内容",
+        specification="20mm",
+        unit="㎡",
+        unit_price=10,
+        labor_fee=2,
+        main_material_fee=8,
+        auxiliary_material_fee=0,
+        machinery_fee=0,
+        sort_order=2,
+    )
+    session.add(replacement_item)
+    session.flush()
+    _seed_project_quota_components(session, active_version, replacement_item)
+    session.commit()
+
+    previous_flags = (
+        settings.feature_budget_projects,
+        settings.feature_budget_pricing,
+        settings.feature_budget_pricing_drafts,
+    )
+    object.__setattr__(settings, "feature_budget_projects", True)
+    object.__setattr__(settings, "feature_budget_pricing", True)
+    object.__setattr__(settings, "feature_budget_pricing_drafts", True)
+    try:
+        picker_page = asyncio.run(
+            budget_pricing_api.list_pricing_draft_enterprise_quota_items_endpoint(
+                profile.project_id,
+                pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+                keyword="Q-002",
+                page=1,
+                page_size=12,
+                current_user=user,
+                db=session,
+            )
+        )
+    finally:
+        (
+            budget_projects_enabled,
+            budget_pricing_enabled,
+            pricing_drafts_enabled,
+        ) = previous_flags
+        object.__setattr__(settings, "feature_budget_projects", budget_projects_enabled)
+        object.__setattr__(settings, "feature_budget_pricing", budget_pricing_enabled)
+        object.__setattr__(settings, "feature_budget_pricing_drafts", pricing_drafts_enabled)
+
+    assert picker_page["total"] == 1
+    assert picker_page["data"][0]["id"] == replacement_item.id
+    assert picker_page["data"][0]["version_id"] == active_version.id
+    assert picker_page["active_version"]["id"] == active_version.id
+    assert picker_page["active_version"]["version_name"] == "旗胜2.0"
+    assert draft.enterprise_quota_version_id == version.id
+
+    snapshot = replace_project_quota(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=snapshot.revision,
+        enterprise_quota_item_id=replacement_item.id,
+        reason="人工勾选替换定额",
+    )
+    session.flush()
+    session.refresh(line)
+
+    assert snapshot.source_enterprise_quota_item_id == replacement_item.id
+    assert snapshot.source_enterprise_version_id == active_version.id
+    assert snapshot.quota_code == "Q-002"
+    assert snapshot.item_name == "石材地面替换定额"
+    assert len(snapshot.resources) == 2
+    assert line.selected_enterprise_quota_item_id == replacement_item.id
+    assert line.price_source == "enterprise_quota"
+    assert line.manual_unit_price is None
+    assert line.effective_unit_price == Decimal("10.000000")
+    assert draft.enterprise_quota_version_id == version.id
+    assert session.query(BudgetProjectQuotaEvent).filter_by(
+        snapshot_id=snapshot.id,
+        event_type="quota_replaced",
+    ).count() == 1
+
+    line.ai_estimated_unit_price = Decimal("18.000000")
+    session.flush()
+    draft, line = delete_project_quota(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=snapshot.revision,
+        reason="人工删除项目定额",
+    )
+    session.flush()
+
+    assert session.query(BudgetProjectQuotaSnapshot).filter_by(id=snapshot.id).count() == 0
+    assert line.selected_enterprise_quota_item_id is None
+    assert line.selected_source_snapshot_json is None
+    assert line.base_unit_price is None
+    assert line.price_source == "ai_estimate"
+    assert line.effective_unit_price == Decimal("18.000000")
+    assert draft.summary_json
+    summary = json.loads(draft.summary_json)
+    assert summary["enterprise_quota_matched_count"] == 0
+    assert summary["ai_estimate_count"] == 1
+    assert summary["manual_price_count"] == 0
+    assert summary["pending_count"] == 1
+    assert summary["totals"] == {
+        "tax_rate": "0.090000",
+        "labor_total": "9.000000",
+        "main_material_total": "19.800000",
+        "auxiliary_material_total": "2.880000",
+        "subcontract_total": "0.000000",
+        "tax_excluded_total": "36.000000",
+        "tax_total": "3.240000",
+        "tax_included_total": "39.240000",
+        "direct_subtotal": "31.680000",
+        "measures_fee": "0.000000",
+        "management_fee": "0.000000",
+        "other_fee": "0.000000",
+        "suspended_amount": "0.000000",
+        "cost_total": "36.000000",
+        "quote_amount": "36.000000",
+        "unit_cost": None,
+    }
+
+    added_snapshot = add_project_quota(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        line_identifier=line.id,
+        enterprise_quota_item_id=replacement_item.id,
+        reason="删除后从企业定额库手动新增",
+    )
+    session.flush()
+    session.refresh(line)
+    session.refresh(draft)
+    assert added_snapshot.source_enterprise_quota_item_id == replacement_item.id
+    assert added_snapshot.unit_price == Decimal("10.000000")
+    assert line.selected_enterprise_quota_item_id == replacement_item.id
+    assert line.price_source == "enterprise_quota"
+    assert line.effective_unit_price == Decimal("10.000000")
+    assert session.query(BudgetProjectQuotaEvent).filter_by(
+        snapshot_id=added_snapshot.id,
+        event_type="quota_added",
+    ).count() == 1
+    added_summary = json.loads(draft.summary_json)
+    assert added_summary["enterprise_quota_matched_count"] == 1
+    assert added_summary["ai_estimate_count"] == 0
+
+    line.ai_estimated_unit_price = Decimal("18.000000")
+    session.flush()
+    draft, line = delete_project_quota(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=added_snapshot.revision,
+        reason="继续验证删除后手工新增明细",
+    )
+    session.flush()
+
+    recreated_snapshot = materialize_project_quota(
+        session,
+        profile,
+        user,
+        pricing_mode=PRICING_MODE_ENTERPRISE_AI,
+        line_identifier=line.id,
+    )
+    session.flush()
+    assert recreated_snapshot.source_enterprise_quota_item_id is None
+    assert recreated_snapshot.unit_price == Decimal("18.000000")
+
+    recreated_snapshot = create_project_quota_resource(
+        session,
+        profile,
+        user,
+        line_identifier=line.id,
+        expected_snapshot_revision=recreated_snapshot.revision,
+        payload={
+            "fee_bucket": "auxiliary_material",
+            "resource_name": "删除后重新新增辅材",
+            "component_type": "辅材",
+            "unit": "项",
+            "quantity": "1",
+            "unit_price": "2",
+        },
+        reason="验证删除后重新新增联动",
+    )
+    session.flush()
+    session.refresh(line)
+    session.refresh(draft)
+    assert recreated_snapshot.unit_price == Decimal("20.000000")
+    assert line.manual_unit_price == Decimal("20.000000")
+    assert line.effective_unit_price == Decimal("20.000000")
+    assert line.line_total == Decimal("40.000000")
+    recreated_summary = json.loads(draft.summary_json)
+    assert recreated_summary["enterprise_quota_matched_count"] == 0
+    assert recreated_summary["manual_price_count"] == 1
+    assert recreated_summary["pending_count"] == 1
+    assert recreated_summary["totals"] == {
+        "tax_rate": "0.090000",
+        "labor_total": "0.000000",
+        "main_material_total": "0.000000",
+        "auxiliary_material_total": "40.000000",
+        "subcontract_total": "0.000000",
+        "tax_excluded_total": "40.000000",
+        "tax_total": "3.600000",
+        "tax_included_total": "43.600000",
+        "direct_subtotal": "40.000000",
+        "measures_fee": "0.000000",
+        "management_fee": "0.000000",
+        "other_fee": "0.000000",
+        "suspended_amount": "0.000000",
+        "cost_total": "40.000000",
+        "quote_amount": "40.000000",
+        "unit_cost": None,
+    }
 
 
 def test_project_quota_enterprise_sync_creates_versioned_draft(db):

@@ -49,13 +49,13 @@
             <input
               ref="fileInput"
               type="file"
-              accept="image/*,.xlsx,.xlsm"
+              accept="image/*,.xls,.xlsx,.xlsm"
               @change="selectFile"
             />
             <span class="project-quote-upload-icon">＋</span>
             <span>
               <strong>{{ form.file ? form.file.name : '选择图片或 Excel' }}</strong>
-              <small>支持图片、.xlsx、.xlsm；旧 .xls 请先另存为 .xlsx</small>
+              <small>支持图片、.xls、.xlsx、.xlsm</small>
             </span>
           </label>
         </el-form-item>
@@ -213,7 +213,7 @@ const form = reactive({
   file: null,
 })
 
-const isExcel = computed(() => /\.(xlsx|xlsm)$/i.test(form.file?.name || ''))
+const isExcel = computed(() => /\.(xls|xlsx|xlsm)$/i.test(form.file?.name || ''))
 const useBudgetProjectFlow = computed(() => Boolean(
   isExcel.value && props.canEditBudgetProjects && form.projectName.trim(),
 ))
@@ -225,13 +225,6 @@ const submitButtonText = computed(() => (
 ))
 const routeHint = computed(() => {
   if (!form.file) return null
-  if (/\.xls$/i.test(form.file.name)) {
-    return {
-      type: 'warning',
-      title: '暂不支持旧 .xls 文件',
-      description: '请先在 Excel 中另存为 .xlsx 后重新上传。',
-    }
-  }
   if (isExcel.value && props.canEditBudgetProjects && !form.projectName.trim()) {
     return {
       type: 'warning',

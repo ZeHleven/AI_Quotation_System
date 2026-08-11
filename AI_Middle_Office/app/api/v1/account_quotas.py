@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.responses import api_ok, api_page
-from app.dependencies import require_admin
+from app.dependencies import require_account_quota_user
 from app.models.user import User
 from app.schemas.account_quota import (
     AccountQuotaBatchStatusIn,
@@ -51,7 +51,7 @@ async def list_account_quotas_endpoint(
     keyword: Optional[str] = Query(default=None, max_length=255),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_account_quota_user),
     db: Session = Depends(get_db),
 ):
     _ensure_feature_enabled()
@@ -79,7 +79,7 @@ async def list_account_quotas_endpoint(
 @router.post("/admin/account-quotas", summary="新建当前账号定额")
 async def create_account_quota_endpoint(
     payload: AccountQuotaCreateIn,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_account_quota_user),
     db: Session = Depends(get_db),
 ):
     _ensure_feature_enabled()
@@ -99,7 +99,7 @@ async def create_account_quota_endpoint(
 @router.post("/admin/account-quotas/status/batch", summary="批量流转当前账号定额状态")
 async def batch_change_account_quota_status_endpoint(
     payload: AccountQuotaBatchStatusIn,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_account_quota_user),
     db: Session = Depends(get_db),
 ):
     _ensure_feature_enabled()
@@ -127,7 +127,7 @@ async def batch_change_account_quota_status_endpoint(
 @router.get("/admin/account-quotas/{item_identifier}", summary="查看当前账号定额详情")
 async def get_account_quota_endpoint(
     item_identifier: str,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_account_quota_user),
     db: Session = Depends(get_db),
 ):
     _ensure_feature_enabled()
@@ -142,7 +142,7 @@ async def get_account_quota_endpoint(
 async def update_account_quota_endpoint(
     item_identifier: str,
     payload: AccountQuotaUpdateIn,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_account_quota_user),
     db: Session = Depends(get_db),
 ):
     _ensure_feature_enabled()
@@ -163,7 +163,7 @@ async def update_account_quota_endpoint(
 async def change_account_quota_status_endpoint(
     item_identifier: str,
     payload: AccountQuotaStatusIn,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_account_quota_user),
     db: Session = Depends(get_db),
 ):
     _ensure_feature_enabled()
@@ -185,7 +185,7 @@ async def list_account_quota_history_endpoint(
     item_identifier: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=100, ge=1, le=200),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_account_quota_user),
     db: Session = Depends(get_db),
 ):
     _ensure_feature_enabled()

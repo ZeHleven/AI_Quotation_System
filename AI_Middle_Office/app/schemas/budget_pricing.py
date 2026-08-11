@@ -103,12 +103,60 @@ class BudgetProjectQuotaMaterializeIn(BaseModel):
     pricing_mode: Literal["enterprise_ai", "account_strict"] = "enterprise_ai"
 
 
+class BudgetProjectQuotaAddIn(BaseModel):
+    """Append one or more enterprise quota items to a draft line."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pricing_mode: Literal["enterprise_ai", "account_strict"] = "enterprise_ai"
+    enterprise_quota_item_id: int | None = Field(default=None, gt=0)
+    enterprise_quota_item_ids: list[int] = Field(default_factory=list, max_length=50)
+    expected_snapshot_revision: int | None = Field(default=None, gt=0)
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_items(self):
+        ids = self.item_ids()
+        if not ids:
+            raise ValueError("至少选择一条企业定额")
+        self.enterprise_quota_item_ids = ids
+        return self
+
+    def item_ids(self) -> list[int]:
+        values = list(self.enterprise_quota_item_ids)
+        if self.enterprise_quota_item_id is not None:
+            values.append(self.enterprise_quota_item_id)
+        return list(dict.fromkeys(int(value) for value in values))
+
+
+class BudgetProjectQuotaReplaceIn(BaseModel):
+    """Replace the one project-local quota with an item from the pinned enterprise version."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_snapshot_revision: int = Field(gt=0)
+    enterprise_quota_item_id: int = Field(gt=0)
+    quota_entry_key: str | None = Field(default=None, max_length=64)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class BudgetProjectQuotaDeleteIn(BaseModel):
+    """Delete the project-local quota and clear its selected pricing source."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_snapshot_revision: int = Field(gt=0)
+    quota_entry_key: str | None = Field(default=None, max_length=64)
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class BudgetProjectQuotaResourceCreateIn(BaseModel):
     """Create one project-local labor/material/machinery composition row."""
 
     model_config = ConfigDict(extra="forbid")
 
     expected_snapshot_revision: int = Field(gt=0)
+    quota_entry_key: str | None = Field(default=None, max_length=64)
     component_type: str | None = Field(default=None, max_length=64)
     resource_code: str | None = Field(default=None, max_length=64)
     resource_name: str = Field(min_length=1, max_length=255)

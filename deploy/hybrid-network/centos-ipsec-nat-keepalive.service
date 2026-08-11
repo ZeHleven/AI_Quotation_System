@@ -1,0 +1,19 @@
+[Unit]
+Description=AI Middle Office IPsec NAT mapping keepalive probe
+Wants=network-online.target ipsec.service
+After=network-online.target ipsec.service
+ConditionPathExists=/usr/local/sbin/centos-ipsec-nat-keepalive-probe.sh
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/centos-ipsec-nat-keepalive-probe.sh
+Restart=always
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+CapabilityBoundingSet=CAP_NET_RAW
+
+[Install]
+WantedBy=multi-user.target

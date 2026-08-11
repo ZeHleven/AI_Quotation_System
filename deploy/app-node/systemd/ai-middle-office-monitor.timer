@@ -1,0 +1,13 @@
+[Unit]
+Description=Run AI Middle Office host monitor every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
+AccuracySec=15s
+Unit=ai-middle-office-monitor.service
+
+[Install]
+WantedBy=timers.target

@@ -31,7 +31,7 @@ STATUS_FILE_NAME = "job_status.json"
 
 
 def _require_worker_access(current_user: User) -> None:
-    if not has_any_role(current_user, {"admin", "system_admin", "staff", "quote_user"}):
+    if not has_any_role(current_user, {"admin", "system_admin", "quote_user"}):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
 
 

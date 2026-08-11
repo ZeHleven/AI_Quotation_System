@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
@@ -313,7 +314,8 @@ def test_dingtalk_alerts_use_httpx_client(monkeypatch):
         ops_monitor,
         "settings",
         SimpleNamespace(
-            alert_dingtalk_webhook="http://ding.test/webhook",
+            alert_dingtalk_webhook="https://oapi.dingtalk.com/robot/send?access_token=test-access-token",
+            alert_dingtalk_secret="SEC-test-signing-secret",
             alert_dedup_minutes=30,
             alert_rate_limit_window_minutes=5,
             alert_rate_limit_count=3,
@@ -322,9 +324,39 @@ def test_dingtalk_alerts_use_httpx_client(monkeypatch):
     ops_monitor._dedup_cache.clear()
     ops_monitor._rate_window.clear()
 
-    ops_monitor.send_dingtalk_alerts([{"level": "warning", "title": "Ops test", "message": "hello"}])
+    sent = ops_monitor.send_dingtalk_alerts([{"level": "warning", "title": "Ops test", "message": "hello"}])
 
     assert calls[0]["client_kwargs"] == {"timeout": 10}
-    assert calls[0]["url"] == "http://ding.test/webhook"
+    parsed_url = urlsplit(calls[0]["url"])
+    signed_query = parse_qs(parsed_url.query)
+    assert parsed_url.scheme == "https"
+    assert parsed_url.hostname == "oapi.dingtalk.com"
+    assert signed_query["access_token"] == ["test-access-token"]
+    assert signed_query["timestamp"][0].isdigit()
+    assert signed_query["sign"][0]
     assert calls[0]["kwargs"]["json"]["msgtype"] == "markdown"
+    assert sent is True
     assert "Ops test" in ops_monitor._dedup_cache
+
+
+def test_dingtalk_alerts_fail_closed_without_signing_secret(monkeypatch):
+    monkeypatch.setattr(
+        ops_monitor,
+        "settings",
+        SimpleNamespace(
+            alert_dingtalk_webhook="https://oapi.dingtalk.com/robot/send?access_token=test-access-token",
+            alert_dingtalk_secret="",
+            alert_dedup_minutes=30,
+            alert_rate_limit_window_minutes=5,
+            alert_rate_limit_count=3,
+        ),
+    )
+    ops_monitor._dedup_cache.clear()
+    ops_monitor._rate_window.clear()
+
+    sent = ops_monitor.send_dingtalk_alerts(
+        [{"level": "warning", "title": "Unsigned test", "message": "must not send"}]
+    )
+
+    assert sent is False
+    assert "Unsigned test" not in ops_monitor._dedup_cache

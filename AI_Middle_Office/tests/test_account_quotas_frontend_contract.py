@@ -11,11 +11,11 @@ def _source(name: str) -> str:
 def test_account_quota_route_navigation_and_feature_gate_are_wired():
     app = _source("App.vue")
 
-    assert "import AccountQuotaLibrary from './AccountQuotaLibrary.vue'" in app
+    assert "const AccountQuotaLibrary = defineAsyncComponent(() => import('./AccountQuotaLibrary.vue'))" in app
     assert "module.key === 'account_quotas'" in app
     assert "module.path === '/admin/account-quotas'" in app
     assert "accountQuotasModule.value?.status === 'available'" in app
-    assert "accountQuotasFeatureAvailable.value && canAccessPermissions.value" in app
+    assert "const canViewAccountQuotas = computed(() => accountQuotasFeatureAvailable.value)" in app
     assert 'v-if="canViewAccountQuotas"' in app
     assert "navigate('/admin/account-quotas')" in app
     assert "if (pathname === '/admin/account-quotas') return 'accountQuotas'" in app

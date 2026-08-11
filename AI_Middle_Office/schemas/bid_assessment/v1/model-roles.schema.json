@@ -1,0 +1,457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/model-roles.schema.json",
+  "title": "Bid Assessment Model Role Contracts v1",
+  "description": "Strict local-research, synthesizer and evidence-validator boundaries derived from master spec section 12.3.1. Planner uses planner.schema.json.",
+  "$defs": {
+    "ScopedResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_type", "resource_id", "summary"],
+      "properties": {
+        "resource_type": {"type": "string", "enum": ["fact", "calculation", "finding", "gate", "dimension", "task_output"]},
+        "resource_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 1000}
+      }
+    },
+    "WorkingState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actions_taken", "no_result_queries", "remaining_iterations", "remaining_tool_calls"],
+      "properties": {
+        "actions_taken": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {"type": "string", "minLength": 1, "maxLength": 240}
+        },
+        "no_result_queries": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {"type": "string", "minLength": 1, "maxLength": 500}
+        },
+        "remaining_iterations": {"type": "integer", "minimum": 0, "maximum": 20},
+        "remaining_tool_calls": {"type": "integer", "minimum": 0, "maximum": 40}
+      }
+    },
+    "FindingCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding_type", "statement", "polarity", "severity", "support_ids"],
+      "properties": {
+        "finding_type": {"type": "string", "minLength": 1, "maxLength": 80},
+        "dimension_code": {
+          "oneOf": [
+            {"$ref": "dimension.schema.json#/$defs/DimensionCode"},
+            {"type": "null"}
+          ]
+        },
+        "statement": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "polarity": {"type": "string", "enum": ["positive", "negative", "mixed"]},
+        "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "informational"]},
+        "support_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        }
+      }
+    },
+    "LocalResearchInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_contract", "bound_versions", "known_facts", "dependency_outputs", "working_state", "allowed_tools"],
+      "properties": {
+        "task_contract": {"$ref": "task.schema.json#/$defs/TaskContract"},
+        "bound_versions": {"$ref": "contracts.schema.json#/$defs/VersionBinding"},
+        "known_facts": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {"$ref": "fact.schema.json#/$defs/FactSlotResolution"}
+        },
+        "dependency_outputs": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/ScopedResource"}
+        },
+        "working_state": {"$ref": "#/$defs/WorkingState"},
+        "allowed_tools": {
+          "type": "array",
+          "maxItems": 25,
+          "uniqueItems": true,
+          "items": {"$ref": "task.schema.json#/$defs/ToolName"}
+        }
+      }
+    },
+    "CalculationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool_name", "arguments"],
+      "properties": {
+        "tool_name": {
+          "type": "string",
+          "enum": [
+            "calculate.bid_workload",
+            "calculate.bid_labor_cost",
+            "calculate.external_bid_expense",
+            "calculate.fund_occupation_cost",
+            "calculate.bid_investment_total",
+            "calculate.project_economics",
+            "calculate.payment_cashflow",
+            "calculate.sensitivity_scenarios"
+          ]
+        },
+        "arguments": {"type": "object"}
+      },
+      "allOf": [
+        {"$ref": "tools.schema.json#/allOf/17"},
+        {"$ref": "tools.schema.json#/allOf/18"},
+        {"$ref": "tools.schema.json#/allOf/19"},
+        {"$ref": "tools.schema.json#/allOf/20"},
+        {"$ref": "tools.schema.json#/allOf/21"},
+        {"$ref": "tools.schema.json#/allOf/22"},
+        {"$ref": "tools.schema.json#/allOf/23"},
+        {"$ref": "tools.schema.json#/allOf/24"}
+      ]
+    },
+    "LocalResearchToolAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "tool_name", "arguments", "purpose_code"],
+      "properties": {
+        "action": {"const": "tool_call"},
+        "tool_name": {"$ref": "task.schema.json#/$defs/ToolName"},
+        "arguments": {"type": "object"},
+        "purpose_code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,79}$"}
+      },
+      "allOf": [
+        {"$ref": "tools.schema.json#/allOf/0"},
+        {"$ref": "tools.schema.json#/allOf/1"},
+        {"$ref": "tools.schema.json#/allOf/2"},
+        {"$ref": "tools.schema.json#/allOf/3"},
+        {"$ref": "tools.schema.json#/allOf/4"},
+        {"$ref": "tools.schema.json#/allOf/5"},
+        {"$ref": "tools.schema.json#/allOf/6"},
+        {"$ref": "tools.schema.json#/allOf/7"},
+        {"$ref": "tools.schema.json#/allOf/8"},
+        {"$ref": "tools.schema.json#/allOf/9"},
+        {"$ref": "tools.schema.json#/allOf/10"},
+        {"$ref": "tools.schema.json#/allOf/11"},
+        {"$ref": "tools.schema.json#/allOf/12"},
+        {"$ref": "tools.schema.json#/allOf/13"},
+        {"$ref": "tools.schema.json#/allOf/14"},
+        {"$ref": "tools.schema.json#/allOf/15"},
+        {"$ref": "tools.schema.json#/allOf/16"},
+        {"$ref": "tools.schema.json#/allOf/17"},
+        {"$ref": "tools.schema.json#/allOf/18"},
+        {"$ref": "tools.schema.json#/allOf/19"},
+        {"$ref": "tools.schema.json#/allOf/20"},
+        {"$ref": "tools.schema.json#/allOf/21"},
+        {"$ref": "tools.schema.json#/allOf/22"},
+        {"$ref": "tools.schema.json#/allOf/23"},
+        {"$ref": "tools.schema.json#/allOf/24"}
+      ]
+    },
+    "LocalResearchFinishAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "status",
+        "fact_assertion_candidates",
+        "calculation_requests",
+        "finding_candidates",
+        "dimension_candidate",
+        "unknown_fact_slots",
+        "question_candidates",
+        "completion_evidence"
+      ],
+      "properties": {
+        "action": {"const": "finish_task"},
+        "status": {"type": "string", "enum": ["succeeded", "partial", "insufficient"]},
+        "fact_assertion_candidates": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {"$ref": "fact.schema.json#/$defs/FactAssertionCandidate"}
+        },
+        "calculation_requests": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {"$ref": "#/$defs/CalculationRequest"}
+        },
+        "finding_candidates": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/FindingCandidate"}
+        },
+        "dimension_candidate": {
+          "oneOf": [
+            {"$ref": "dimension.schema.json#/$defs/DimensionResult"},
+            {"type": "null"}
+          ]
+        },
+        "unknown_fact_slots": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        },
+        "question_candidates": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {"$ref": "planner.schema.json#/$defs/QuestionCandidate"}
+        },
+        "completion_evidence": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        }
+      }
+    },
+    "LocalResearchTurn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output"],
+      "properties": {
+        "input": {"$ref": "#/$defs/LocalResearchInput"},
+        "output": {
+          "oneOf": [
+            {"$ref": "#/$defs/LocalResearchToolAction"},
+            {"$ref": "#/$defs/LocalResearchFinishAction"}
+          ]
+        }
+      }
+    },
+    "SynthesisScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lot_id"],
+      "properties": {
+        "lot_id": {"$ref": "contracts.schema.json#/$defs/Id"}
+      }
+    },
+    "CrossDimensionFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "polarity", "impact", "support_ids", "affected_dimensions"],
+      "properties": {
+        "statement": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "polarity": {"type": "string", "enum": ["positive", "negative", "mixed"]},
+        "impact": {"type": "string", "enum": ["high", "medium", "low"]},
+        "support_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        },
+        "affected_dimensions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {"$ref": "dimension.schema.json#/$defs/DimensionCode"}
+        }
+      }
+    },
+    "DecisionTension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "support_ids"],
+      "properties": {
+        "statement": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "support_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        }
+      }
+    },
+    "ClaimCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_type", "text", "support_ids"],
+      "properties": {
+        "claim_type": {"$ref": "report.schema.json#/$defs/ClaimType"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "support_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        },
+        "premise_or_trigger": {"type": ["string", "null"], "maxLength": 1000}
+      }
+    },
+    "SynthesizerInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "gate_results",
+        "dimension_results",
+        "key_facts",
+        "calculations",
+        "high_impact_findings",
+        "critical_unknowns",
+        "allowed_evidence_ids"
+      ],
+      "properties": {
+        "scope": {"$ref": "#/$defs/SynthesisScope"},
+        "gate_results": {"type": "array", "maxItems": 7, "items": {"$ref": "#/$defs/ScopedResource"}},
+        "dimension_results": {"type": "array", "maxItems": 7, "items": {"$ref": "dimension.schema.json#/$defs/DimensionResult"}},
+        "key_facts": {"type": "array", "maxItems": 200, "items": {"$ref": "fact.schema.json#/$defs/ResolvedFact"}},
+        "calculations": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/ScopedResource"}},
+        "high_impact_findings": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/ScopedResource"}},
+        "critical_unknowns": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        },
+        "allowed_evidence_ids": {
+          "type": "array",
+          "maxItems": 500,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        }
+      }
+    },
+    "SynthesizerOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cross_dimension_findings",
+        "condition_candidates",
+        "decision_tensions",
+        "summary_claim_candidates",
+        "unresolved_critical_unknowns",
+        "cannot_synthesize"
+      ],
+      "properties": {
+        "cross_dimension_findings": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/CrossDimensionFinding"}},
+        "condition_candidates": {"type": "array", "maxItems": 3, "items": {"$ref": "decision.schema.json#/$defs/DecisionCondition"}},
+        "decision_tensions": {"type": "array", "maxItems": 30, "items": {"$ref": "#/$defs/DecisionTension"}},
+        "summary_claim_candidates": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/ClaimCandidate"}},
+        "unresolved_critical_unknowns": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        },
+        "cannot_synthesize": {"type": "boolean"}
+      }
+    },
+    "SynthesizerTurn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output"],
+      "properties": {
+        "input": {"$ref": "#/$defs/SynthesizerInput"},
+        "output": {"$ref": "#/$defs/SynthesizerOutput"}
+      }
+    },
+    "ValidationClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "claim_type", "text", "scope"],
+      "properties": {
+        "claim_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "claim_type": {"$ref": "report.schema.json#/$defs/ClaimType"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "scope": {"$ref": "#/$defs/SynthesisScope"}
+      }
+    },
+    "EvidenceText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "text", "locator"],
+      "properties": {
+        "evidence_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 12000},
+        "locator": {"type": "string", "minLength": 1, "maxLength": 500}
+      }
+    },
+    "EvidenceValidatorInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim", "supports", "evidence_texts", "calculation_snapshots", "validation_policy_version"],
+      "properties": {
+        "claim": {"$ref": "#/$defs/ValidationClaim"},
+        "supports": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/ScopedResource"}},
+        "evidence_texts": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/EvidenceText"}},
+        "calculation_snapshots": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/ScopedResource"}},
+        "validation_policy_version": {"type": "string", "minLength": 1, "maxLength": 80}
+      }
+    },
+    "RepairCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replacement_text", "reason_codes"],
+      "properties": {
+        "replacement_text": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,79}$"}
+        }
+      }
+    },
+    "EvidenceValidatorOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "status",
+        "supported_span",
+        "unsupported_or_conflicting_span",
+        "reason_codes",
+        "scope_match",
+        "numeric_match",
+        "citation_match",
+        "repair_candidate"
+      ],
+      "properties": {
+        "claim_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "status": {"type": "string", "enum": ["entailed", "partial", "contradicted", "not_supported", "unverifiable"]},
+        "supported_span": {"type": ["string", "null"], "maxLength": 4000},
+        "unsupported_or_conflicting_span": {"type": ["string", "null"], "maxLength": 4000},
+        "reason_codes": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,79}$"}
+        },
+        "scope_match": {"type": "boolean"},
+        "numeric_match": {"type": "boolean"},
+        "citation_match": {"type": "boolean"},
+        "repair_candidate": {
+          "oneOf": [
+            {"$ref": "#/$defs/RepairCandidate"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "EvidenceValidatorTurn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output"],
+      "properties": {
+        "input": {"$ref": "#/$defs/EvidenceValidatorInput"},
+        "output": {"$ref": "#/$defs/EvidenceValidatorOutput"}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/LocalResearchTurn"},
+    {"$ref": "#/$defs/SynthesizerTurn"},
+    {"$ref": "#/$defs/EvidenceValidatorTurn"}
+  ]
+}

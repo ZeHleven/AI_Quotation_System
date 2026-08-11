@@ -1,3 +1,4 @@
 pytest
+xlwt==1.3.0
 httpx
 alembic

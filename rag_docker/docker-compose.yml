@@ -30,8 +30,8 @@ services:
     container_name: milvus-minio
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     environment:
-      MINIO_ACCESS_KEY: ${MILVUS_MINIO_ACCESS_KEY:-milvus-minio}
-      MINIO_SECRET_KEY: ${MILVUS_MINIO_SECRET_KEY:-change-this-password}
+      MINIO_ACCESS_KEY: ${MILVUS_MINIO_ACCESS_KEY:?MILVUS_MINIO_ACCESS_KEY must be set}
+      MINIO_SECRET_KEY: ${MILVUS_MINIO_SECRET_KEY:?MILVUS_MINIO_SECRET_KEY must be set}
     # ⚠️ 端口已移除：服务器上 RAGFlow 的 MinIO 已占用 9000/9001
     # 此 MinIO 仅供 Milvus 内部使用，无需对外暴露
     volumes:
@@ -58,13 +58,12 @@ services:
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
-      MINIO_ACCESS_KEY_ID: ${MILVUS_MINIO_ACCESS_KEY:-milvus-minio}
-      MINIO_SECRET_ACCESS_KEY: ${MILVUS_MINIO_SECRET_KEY:-change-this-password}
+      MINIO_ACCESS_KEY_ID: ${MILVUS_MINIO_ACCESS_KEY:?MILVUS_MINIO_ACCESS_KEY must be set}
+      MINIO_SECRET_ACCESS_KEY: ${MILVUS_MINIO_SECRET_KEY:?MILVUS_MINIO_SECRET_KEY must be set}
     volumes:
       - /opt/rag_service/volumes/milvus:/var/lib/milvus
-    ports:
-      - "19530:19530"
-      - "9091:9091"
+    # Milvus is consumed by rag-service on rag_net. Do not publish its data or
+    # management ports on the host; use docker compose exec for maintenance.
     depends_on:
       - "etcd"
       - "minio"
@@ -81,10 +80,13 @@ services:
     image: rag_service-rag-service-tender:phase3c
     build:
       context: .
-      dockerfile: Dockerfile
+      # The deployment host already carries the frozen CPU/model base image.
+      # Security and route patches should use the thin overlay instead of
+      # downloading the full Torch/CUDA dependency tree on every rebuild.
+      dockerfile: Dockerfile.tender-overlay
     container_name: rag-api-service
     ports:
-      - "8001:8001"
+      - "${INTERNAL_BIND_ADDRESS:?INTERNAL_BIND_ADDRESS must be an explicit private IP}:8001:8001"
     environment:
       - HF_ENDPOINT=https://hf-mirror.com
       - HF_HOME=/model_cache
@@ -104,7 +106,7 @@ services:
       - RAG_VECTOR_ENABLED=true
       - MILVUS_HOST=standalone
       - MILVUS_PORT=19530
-      - RELOAD_SECRET=${RELOAD_SECRET:-change-me-rag-reload-secret}
+      - RELOAD_SECRET=${RELOAD_SECRET:?RELOAD_SECRET must be set}
       - TENDER_EVIDENCE_INDEX_SECRET=${TENDER_EVIDENCE_INDEX_SECRET:-}
       - TENDER_EVIDENCE_INDEX_SECRET_FILE=/run/secrets/tender_evidence_index.secret
       - TENDER_EVIDENCE_COLLECTION=tender_evidence_blocks_v1
@@ -132,7 +134,7 @@ services:
     image: redis:7.2-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
-      - "6380:6379"
+      - "${INTERNAL_BIND_ADDRESS:?INTERNAL_BIND_ADDRESS must be an explicit private IP}:6380:6379"
     volumes:
       - /opt/rag_service/volumes/redis:/data
     healthcheck:
@@ -153,14 +155,14 @@ services:
     container_name: quote-minio
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     environment:
-      MINIO_ROOT_USER: ${QUOTE_MINIO_ROOT_USER:-quoteadmin}
-      MINIO_ROOT_PASSWORD: ${QUOTE_MINIO_ROOT_PASSWORD:-change-this-password}
-      MINIO_ACCESS_KEY: ${QUOTE_MINIO_ROOT_USER:-quoteadmin}
-      MINIO_SECRET_KEY: ${QUOTE_MINIO_ROOT_PASSWORD:-change-this-password}
+      MINIO_ROOT_USER: ${QUOTE_MINIO_ROOT_USER:?QUOTE_MINIO_ROOT_USER must be set}
+      MINIO_ROOT_PASSWORD: ${QUOTE_MINIO_ROOT_PASSWORD:?QUOTE_MINIO_ROOT_PASSWORD must be set}
+      MINIO_ACCESS_KEY: ${QUOTE_MINIO_ROOT_USER:?QUOTE_MINIO_ROOT_USER must be set}
+      MINIO_SECRET_KEY: ${QUOTE_MINIO_ROOT_PASSWORD:?QUOTE_MINIO_ROOT_PASSWORD must be set}
     command: minio server /data --console-address ":9001"
     ports:
-      - "9002:9000"
-      - "9003:9001"
+      - "${INTERNAL_BIND_ADDRESS:?INTERNAL_BIND_ADDRESS must be an explicit private IP}:9002:9000"
+      - "${INTERNAL_BIND_ADDRESS:?INTERNAL_BIND_ADDRESS must be an explicit private IP}:9003:9001"
     volumes:
       - /opt/rag_service/volumes/quote-minio:/data
     healthcheck:

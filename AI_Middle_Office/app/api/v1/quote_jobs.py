@@ -27,6 +27,11 @@ from app.models.user import User
 from app.services.file_storage import StorageDisabledError, store_file_bytes
 from app.services.client_inquiries import _parse_local_datetime, create_or_reuse_client_inquiry, serialize_client_inquiry
 from app.services.quote_dispatcher import dispatch_quote_job
+from app.services.quote_consistency import (
+    QuoteQuotaUnavailable,
+    release_quote_quota,
+    reserve_quote_quota,
+)
 from app.services.rbac import has_admin_role, has_any_role
 from app.services.quote_job_readability import (
     apply_job_duration,
@@ -53,6 +58,7 @@ from app.services.quote_budget_workspace import (
 )
 from app.services.quote_review import (
     build_quote_review_detail,
+    clone_quote_requirement_rows,
     parse_requirement_rows_payload,
     save_quote_requirement_rows,
 )
@@ -199,6 +205,7 @@ def _serialize_job(
         "stage": job.stage,
         "trace_id": job.trace_id,
         "celery_task_id": job.celery_task_id,
+        "source_job_id": job.source_job_id,
         "message_preview": (job.message or "")[:120],
         "request_summary": job.request_summary or (job.message or "")[:180],
         "file_name": job.file_name,
@@ -287,6 +294,7 @@ def _dispatch_and_store(job: QuoteJob, db: Session) -> None:
         apply_job_failure(job, "dispatch")
         apply_job_duration(job)
         append_job_event(job, "error", f"❌ 异步报价任务派发失败: {str(exc)}", trace_id=job.trace_id, stage="dispatch")
+        release_quote_quota(db, quote_job_id=job.job_id, reason="dispatch_failed")
         db.commit()
         db.refresh(job)
 
@@ -361,7 +369,7 @@ async def create_quote_job(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.quota <= 0:
+    if int(current_user.quota or 0) - int(current_user.quota_reserved or 0) <= 0:
         raise HTTPException(status_code=403, detail="您的 AI 调用额度已耗尽，请联系管理员充值")
 
     file_content = await file.read() if file else None
@@ -413,6 +421,11 @@ async def create_quote_job(
     append_job_event(job, "queued", "报价任务已进入队列", trace_id=job.trace_id, stage="queued")
     db.add(job)
     db.flush()
+    try:
+        reserve_quote_quota(db, user_id=current_user.id, quote_job_id=job.job_id)
+    except QuoteQuotaUnavailable as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail="您的 AI 调用额度已耗尽，请联系管理员充值") from exc
     save_quote_requirement_rows(db, quote_job_id=job.job_id, rows=requirement_rows)
     db.commit()
     db.refresh(job)
@@ -667,6 +680,13 @@ async def cancel_quote_job(
     db: Session = Depends(get_db),
 ):
     job = _get_accessible_job(job_id, current_user, db)
+    job = (
+        db.query(QuoteJob)
+        .filter(QuoteJob.id == job.id)
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
     if job.status == "canceled":
         data = _serialize_job(job)
         return api_ok(data)
@@ -681,6 +701,7 @@ async def cancel_quote_job(
     apply_job_failure(job, "canceled")
     apply_job_duration(job)
     append_job_event(job, "error", "⏹️ 报价任务已取消", trace_id=job.trace_id, stage="canceled")
+    release_quote_quota(db, quote_job_id=job.job_id, reason="canceled")
     db.commit()
     db.refresh(job)
     data = _serialize_job(job)
@@ -700,7 +721,7 @@ async def retry_quote_job(
     target_user = db.query(User).filter(User.username == source_job.username).first()
     if not target_user or not target_user.is_active:
         raise HTTPException(status_code=400, detail="原任务用户不存在或已禁用，无法重试")
-    if target_user.quota <= 0:
+    if int(target_user.quota or 0) - int(target_user.quota_reserved or 0) <= 0:
         raise HTTPException(status_code=403, detail="原任务用户 AI 调用额度已耗尽，无法重试")
 
     retry_job = QuoteJob(
@@ -715,6 +736,7 @@ async def retry_quote_job(
         file_base64=source_job.file_base64,
         client_inquiry_id=source_job.client_inquiry_id,
         budget_project_id=source_job.budget_project_id,
+        source_job_id=source_job.job_id,
         trace_id=get_trace_id() or uuid.uuid4().hex,
     )
     apply_job_request_summary(retry_job)
@@ -728,6 +750,17 @@ async def retry_quote_job(
         source_job_number=quote_job_number(source_job),
     )
     db.add(retry_job)
+    db.flush()
+    try:
+        reserve_quote_quota(db, user_id=target_user.id, quote_job_id=retry_job.job_id)
+    except QuoteQuotaUnavailable as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail="原任务用户 AI 调用额度已耗尽，无法重试") from exc
+    clone_quote_requirement_rows(
+        db,
+        source_quote_job_id=source_job.job_id,
+        target_quote_job_id=retry_job.job_id,
+    )
     db.commit()
     db.refresh(retry_job)
     _dispatch_and_store(retry_job, db)

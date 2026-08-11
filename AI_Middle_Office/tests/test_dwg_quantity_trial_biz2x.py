@@ -69,6 +69,10 @@ def _login(client, user: User) -> dict:
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
+def _create_trial_user() -> User:
+    return _create_user("user", roles=["quote_user"])
+
+
 def _trace_row() -> dict[str, object]:
     row: dict[str, object] = {header: "" for header in trace_pack.TRACE_REVIEW_HEADERS}
     row.update(
@@ -135,8 +139,22 @@ def _completed_confirmation_workbook_bytes(tmp_path: Path) -> bytes:
     return workbook_path.read_bytes()
 
 
+def test_dwg_quantity_trial_rejects_staff_access(client):
+    user = _create_user("staff", roles=["staff"])
+    headers = _login(client, user)
+
+    response = client.post(
+        "/api/v1/admin/dwg-quantity-trial/convert",
+        headers=headers,
+        files={"file": ("trace-review.xlsx", b"PK fake", "application/octet-stream")},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "PERMISSION_DENIED"
+
+
 def test_dwg_quantity_trial_upload_converts_and_downloads_final_excel(client, tmp_path):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
 
     response = client.post(
@@ -165,7 +183,7 @@ def test_dwg_quantity_trial_upload_converts_and_downloads_final_excel(client, tm
 
 
 def test_dwg_quantity_trial_validates_r0_r9_confirmation_and_downloads_final_excel(client, tmp_path, monkeypatch):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
     monkeypatch.setattr(dwg_quantity_trial, "OUTPUT_DIR", tmp_path)
 
@@ -193,7 +211,7 @@ def test_dwg_quantity_trial_validates_r0_r9_confirmation_and_downloads_final_exc
 
 
 def test_dwg_quantity_trial_rejects_unsupported_file_type(client):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
 
     response = client.post(
@@ -251,7 +269,7 @@ def test_build_quantity_list_rows_keeps_frontend_to_four_fields():
 
 
 def test_dwg_quantity_trial_uploads_dwg_and_returns_item_listing(client, tmp_path, monkeypatch):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
     monkeypatch.setattr(dwg_quantity_trial, "OUTPUT_DIR", tmp_path)
 
@@ -423,7 +441,7 @@ def test_dwg_quantity_trial_uploads_dwg_and_returns_item_listing(client, tmp_pat
 
 
 def test_dwg_quantity_trial_finalizes_low_risk_mvp_and_downloads_backfilled_excel(client, tmp_path, monkeypatch):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
     monkeypatch.setattr(dwg_quantity_trial, "OUTPUT_DIR", tmp_path)
     result_dir = tmp_path / "debug" / "20260617_120000"
@@ -1345,7 +1363,7 @@ def test_pdf_visual_evidence_uses_pass_specific_tile_selection(tmp_path, monkeyp
 
 
 def test_dwg_quantity_trial_uploads_pdf_only_returns_four_field_list(client, tmp_path, monkeypatch):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
     monkeypatch.setattr(dwg_quantity_trial, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(
@@ -1408,7 +1426,7 @@ def test_dwg_quantity_trial_uploads_pdf_only_returns_four_field_list(client, tmp
 
 
 def test_dwg_quantity_trial_uploads_pdf_uses_dashscope_agent_provider(client, tmp_path, monkeypatch):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
     monkeypatch.setattr(dwg_quantity_trial, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(
@@ -1486,7 +1504,7 @@ def test_dwg_quantity_trial_uploads_pdf_uses_dashscope_agent_provider(client, tm
 
 
 def test_dwg_quantity_trial_uploads_dwg_and_pdf_returns_pdf_evidence(client, tmp_path, monkeypatch):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
     monkeypatch.setattr(dwg_quantity_trial, "OUTPUT_DIR", tmp_path)
 
@@ -1624,7 +1642,7 @@ def test_listing_payload_hides_ineffective_pdf_outputs_from_business_files(tmp_p
 
 
 def test_dwg_quantity_trial_finalize_special_traces_generates_final_excel(client, tmp_path, monkeypatch):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
     monkeypatch.setattr(dwg_quantity_trial, "OUTPUT_DIR", tmp_path)
     result_path = tmp_path / "BIZ2x_DWG上传列项_20260615_120000.json"
@@ -1701,7 +1719,7 @@ def test_dwg_quantity_trial_finalize_special_traces_generates_final_excel(client
 
 
 def test_dwg_quantity_trial_finalize_selection_generates_final_excel(client, tmp_path, monkeypatch):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
     monkeypatch.setattr(dwg_quantity_trial, "OUTPUT_DIR", tmp_path)
     result_path = tmp_path / "BIZ2x_DWG上传列项_20260614_120000.json"
@@ -1774,7 +1792,7 @@ def test_dwg_quantity_trial_finalize_selection_generates_final_excel(client, tmp
 
 
 def test_dwg_quantity_trial_regression_report_uses_latest_listing_result(client, tmp_path, monkeypatch):
-    user = _create_user("staff")
+    user = _create_trial_user()
     headers = _login(client, user)
     monkeypatch.setattr(dwg_quantity_trial, "OUTPUT_DIR", tmp_path)
     result_path = tmp_path / "BIZ2x_DWG上传列项_20260615_130000.json"

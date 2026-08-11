@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { clearAuth, getToken } from './authStorage'
+import { clearAuth, getToken, isPasswordChangeRequiredError, redirectToPasswordChange } from './authStorage'
 
 const budgetApiClient = axios.create({ baseURL: '/api/v1' })
 
@@ -12,6 +12,10 @@ budgetApiClient.interceptors.request.use((config) => {
 budgetApiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (isPasswordChangeRequiredError(error)) {
+      redirectToPasswordChange()
+      return Promise.reject(error)
+    }
     if (error.response?.status === 401) {
       clearAuth()
       window.location.href = '/login'
@@ -52,10 +56,14 @@ export const budgetProjectApi = Object.freeze({
   pricingDraftQuoteJob: (projectId, jobId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/quote-jobs/' + jobId, { params }),
   cancelPricingDraftQuoteJob: (projectId, jobId) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-draft/quote-jobs/' + jobId + '/cancel'),
   pricingDraftLines: (projectId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/lines', { params }),
+  projectEnterpriseQuotaItems: (projectId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/enterprise-quota-items', { params }),
   pricingDraftResourceDetails: (projectId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/resource-details', { params }),
   exportPricingDraftStatistics: (projectId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/statistics-export', { params, responseType: 'blob' }),
   pricingDraftProcurementStatistics: (projectId, params) => budgetApiClient.get('/admin/budget-projects/' + projectId + '/pricing-draft/procurement-statistics', { params }),
   materializeProjectQuota: (projectId, lineId, payload) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-draft/lines/' + lineId + '/project-quota', payload),
+  addProjectQuota: (projectId, lineId, payload) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-draft/lines/' + lineId + '/project-quota/add', payload),
+  replaceProjectQuota: (projectId, lineId, payload) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-draft/lines/' + lineId + '/project-quota/replace', payload),
+  deleteProjectQuota: (projectId, lineId, payload) => budgetApiClient.delete('/admin/budget-projects/' + projectId + '/pricing-draft/lines/' + lineId + '/project-quota', { data: payload }),
   createProjectQuotaResource: (projectId, lineId, payload) => budgetApiClient.post('/admin/budget-projects/' + projectId + '/pricing-draft/lines/' + lineId + '/project-quota/resources', payload),
   updateProjectQuotaResource: (projectId, lineId, resourceId, payload) => budgetApiClient.patch('/admin/budget-projects/' + projectId + '/pricing-draft/lines/' + lineId + '/project-quota/resources/' + resourceId, payload),
   deleteProjectQuotaResource: (projectId, lineId, resourceId, payload) => budgetApiClient.delete('/admin/budget-projects/' + projectId + '/pricing-draft/lines/' + lineId + '/project-quota/resources/' + resourceId, { data: payload }),
@@ -89,9 +97,20 @@ function budgetSheetLimitText(sheet) {
   return size ? `${name}（${size}）` : name
 }
 
+const budgetErrorMessages = Object.freeze({
+  BUDGET_PRICING_EXPORT_IMPORT_BATCH_NOT_FOUND: '当前报价草稿关联的原始导入批次不存在，请重新导入清单',
+  BUDGET_PRICING_EXPORT_SOURCE_FILE_NOT_RETAINED: '原始清单文件未保留，请重新上传清单后再导出',
+  BUDGET_PRICING_EXPORT_LOCAL_SOURCE_NOT_FOUND: '本地验收环境找不到原始清单文件，请重新初始化测试数据',
+  BUDGET_PRICING_EXPORT_LOCAL_SOURCE_PATH_INVALID: '本地验收原始清单路径无效，请重新初始化测试数据',
+  BUDGET_PRICING_EXPORT_LOCAL_SOURCE_HASH_MISMATCH: '本地原始清单与导入记录不一致，请重新导入清单',
+  BUDGET_PRICING_EXPORT_WORKBOOK_INVALID: '原始清单文件损坏或格式无法读取，请重新上传有效的 Excel 文件',
+})
+
+const budgetErrorText = (value) => budgetErrorMessages[value] || value
+
 export function budgetApiErrorMessage(error, fallback = '请求失败') {
   const detail = error?.response?.data?.detail
-  if (typeof detail === 'string') return detail
+  if (typeof detail === 'string') return budgetErrorText(detail)
   if (detail?.message || detail?.code) {
     const sheets = Array.isArray(detail.sheets) && detail.sheets.length
       ? `（Sheet：${detail.sheets.map(budgetSheetLimitText).filter(Boolean).join('、')}）`
@@ -99,7 +118,21 @@ export function budgetApiErrorMessage(error, fallback = '请求失败') {
     const limits = detail.code === 'BUDGET_IMPORT_WORKBOOK_LIMIT_EXCEEDED'
       ? `；单个 Sheet 上限：${detail.max_rows_per_sheet ?? '-'} 行 / ${detail.max_columns_per_sheet ?? '-'} 列`
       : ''
-    return `${detail.message || detail.code}${sheets}${limits}`
+    return `${detail.message || budgetErrorText(detail.code)}${sheets}${limits}`
   }
   return error?.response?.data?.message || fallback
+}
+
+export async function budgetBlobErrorMessage(error, fallback = '请求失败') {
+  const data = error?.response?.data
+  if (!data || typeof data.text !== 'function') return budgetApiErrorMessage(error, fallback)
+  try {
+    const text = await data.text()
+    const parsed = JSON.parse(text)
+    return budgetApiErrorMessage({
+      response: { ...error.response, data: parsed },
+    }, fallback)
+  } catch {
+    return fallback
+  }
 }

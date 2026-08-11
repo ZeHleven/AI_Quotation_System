@@ -1,0 +1,15 @@
+[Unit]
+Description=AI Middle Office Docker and host firewall containment
+Wants=docker.service
+After=network-online.target docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/sysconfig/ai-middle-office-firewall
+ExecStart=/usr/local/sbin/ai-middle-office-firewall.sh apply
+ExecReload=/usr/local/sbin/ai-middle-office-firewall.sh apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

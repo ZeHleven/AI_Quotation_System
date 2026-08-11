@@ -1,0 +1,15 @@
+[Unit]
+Description=AI Middle Office IPsec private Docker forwarding rules
+Wants=network-online.target firewalld.service docker.service ipsec.service
+After=network-online.target firewalld.service docker.service ipsec.service
+PartOf=firewalld.service docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ai-middle-office-private-forward-firewall.sh apply
+ExecReload=/usr/local/sbin/ai-middle-office-private-forward-firewall.sh apply
+ExecStop=/usr/local/sbin/ai-middle-office-private-forward-firewall.sh remove
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target firewalld.service docker.service

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -35,6 +35,9 @@ class QuoteJob(Base):
     events_json = Column(_long_text(), default="[]")
     trace_id = Column(String(64), index=True, nullable=True)
     celery_task_id = Column(String(128), nullable=True)
+    source_job_id = Column(String(36), ForeignKey("quote_jobs.job_id", ondelete="SET NULL"), index=True, nullable=True)
+    attempt_id = Column(String(36), index=True, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
     client_inquiry_id = Column(String(36), ForeignKey("client_inquiries.inquiry_id"), index=True, nullable=True)
     budget_project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), index=True, nullable=True)
     budget_pricing_draft_id = Column(
@@ -76,3 +79,44 @@ class QuoteJobEvent(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     job = relationship("QuoteJob", back_populates="events")
+
+
+class QuoteQuotaReservation(Base):
+    __tablename__ = "quote_quota_reservations"
+    __table_args__ = (
+        UniqueConstraint("quote_job_id", name="uq_quote_quota_reservations_job"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    reservation_id = Column(String(36), unique=True, nullable=False)
+    quote_job_id = Column(String(36), ForeignKey("quote_jobs.job_id", ondelete="RESTRICT"), index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), index=True, nullable=False)
+    amount = Column(Integer, nullable=False, default=1, server_default="1")
+    status = Column(String(24), index=True, nullable=False, default="reserved", server_default="reserved")
+    release_reason = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    released_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class QuotePushAttempt(Base):
+    __tablename__ = "quote_push_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    idempotency_key = Column(String(64), unique=True, nullable=False)
+    quote_job_id = Column(String(36), ForeignKey("quote_jobs.job_id", ondelete="SET NULL"), index=True, nullable=True)
+    username = Column(String(64), index=True, nullable=False)
+    payload_sha256 = Column(String(64), index=True, nullable=False)
+    payload_json = Column(_long_text(), nullable=False)
+    status = Column(String(32), index=True, nullable=False, default="sending", server_default="sending")
+    retry_count = Column(Integer, nullable=False, default=0, server_default="0")
+    external_status_code = Column(Integer, nullable=True)
+    external_response = Column(_long_text(), nullable=True)
+    error_message = Column(_long_text(), nullable=True)
+    quote_history_id = Column(Integer, ForeignKey("quote_history.id", ondelete="SET NULL"), index=True, nullable=True)
+    result_json = Column(_long_text(), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    external_delivered_at = Column(DateTime(timezone=True), nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)

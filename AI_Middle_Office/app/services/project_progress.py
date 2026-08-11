@@ -553,7 +553,7 @@ def normalize_evidence_type(value: str | None) -> str:
 def can_access_project_progress(user: User) -> bool:
     return has_any_role(
         user,
-        {"system_admin", "admin", "staff", "manager", "viewer", "project_viewer", "project_member", "project_manager"},
+        {"system_admin", "admin", "manager", "viewer", "project_viewer", "project_member", "project_manager"},
     )
 
 

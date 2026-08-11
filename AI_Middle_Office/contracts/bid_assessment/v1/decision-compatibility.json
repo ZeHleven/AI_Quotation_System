@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_version": "bid-assessment-v1",
+  "decision_classes": [
+    "recommend",
+    "conditional",
+    "not_recommend",
+    "insufficient"
+  ],
+  "investment_levels": [
+    "stop",
+    "low_cost_verification",
+    "limited",
+    "full"
+  ],
+  "allowed_pairs": {
+    "recommend": ["limited", "full"],
+    "conditional": ["low_cost_verification", "limited"],
+    "not_recommend": ["stop", "low_cost_verification"],
+    "insufficient": ["stop", "low_cost_verification"]
+  },
+  "conditional_rules": {
+    "recommend.full": "requires_strict_full_investment_gate",
+    "not_recommend.low_cost_verification": "high_value_review_only"
+  },
+  "on_forbidden_pair": "fail_decision_task"
+}

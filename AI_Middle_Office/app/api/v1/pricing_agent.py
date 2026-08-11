@@ -36,9 +36,15 @@ from app.services.pricing_archives import (
     list_pricing_archives,
     serialize_pricing_archive,
 )
+from app.services.rbac import has_any_role
 
 
-router = APIRouter(prefix="/pricing-agent")
+def require_pricing_agent_access(current_user: User = Depends(get_current_user)) -> None:
+    if not has_any_role(current_user, {"system_admin", "admin", "quote_user", "quote_operator"}):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
+
+
+router = APIRouter(prefix="/pricing-agent", dependencies=[Depends(require_pricing_agent_access)])
 
 
 def _ensure_enabled() -> None:

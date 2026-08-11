@@ -1,0 +1,56 @@
+# Deny by default. Only the files required by the public app-node image are
+# allowed into the Docker build context. This prevents local secrets, backups,
+# customer files, test databases, logs, and runtime artifacts from being sent
+# to the Docker daemon even if a Dockerfile accidentally tries to copy them.
+**
+
+!.dockerignore
+!app.html
+!index.html
+!admin.html
+
+!static/
+!static/**
+
+!ai-web/
+!ai-web/index.html
+!ai-web/package.json
+!ai-web/package-lock.json
+!ai-web/vite.config.js
+!ai-web/public/
+!ai-web/public/**
+!ai-web/src/
+!ai-web/src/**
+
+!AI_Middle_Office/
+!AI_Middle_Office/requirements.txt
+!AI_Middle_Office/requirements-production.txt
+!AI_Middle_Office/requirements-production.lock
+!AI_Middle_Office/alembic.ini
+!AI_Middle_Office/alembic/
+!AI_Middle_Office/alembic/**
+!AI_Middle_Office/app/
+!AI_Middle_Office/app/**
+!AI_Middle_Office/mcp_servers/
+!AI_Middle_Office/mcp_servers/**
+!deploy/
+!deploy/app-node/
+!deploy/app-node/Dockerfile
+
+# Re-apply hard exclusions after the allowlist so generated files nested under
+# a source directory can never re-enter the context.
+**/__pycache__/
+**/__pycache__/**
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.env
+**/.env.*
+**/*.env
+**/*.env.*
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/*.log
+**/.pytest_cache/
+**/.pytest_cache/**

@@ -1,9 +1,14 @@
 from io import BytesIO
 
 import pytest
+import xlwt
 from openpyxl import Workbook
 
-from app.services.quote_excel_parser import QuoteExcelParseError, parse_quote_excel_bytes
+from app.services.quote_excel_parser import (
+    QuoteExcelParseError,
+    is_quote_excel_file,
+    parse_quote_excel_bytes,
+)
 
 
 def _workbook_bytes(rows, *, sheet_title="需求单") -> bytes:
@@ -12,6 +17,18 @@ def _workbook_bytes(rows, *, sheet_title="需求单") -> bytes:
     sheet.title = sheet_title
     for row in rows:
         sheet.append(row)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def _legacy_workbook_bytes(rows, *, sheet_title="需求单") -> bytes:
+    workbook = xlwt.Workbook()
+    sheet = workbook.add_sheet(sheet_title)
+    for row_index, row in enumerate(rows):
+        for column_index, value in enumerate(row):
+            if value is not None:
+                sheet.write(row_index, column_index, value)
     buffer = BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()
@@ -59,6 +76,23 @@ def test_parse_quote_excel_bytes_reads_common_alias_headers():
             "spec": "拆除至指定堆放点",
         },
     )
+
+
+def test_parse_quote_excel_bytes_reads_legacy_xls():
+    content = _legacy_workbook_bytes(
+        [
+            ["施工项目", "数量", "单位", "备注"],
+            ["旧版清单墙面拆除", 15, "㎡", "人工复核"],
+        ]
+    )
+
+    assert is_quote_excel_file("legacy.xls", "application/vnd.ms-excel") is True
+    result = parse_quote_excel_bytes(content, filename="legacy.xls")
+
+    assert result.sheet_name == "需求单"
+    assert result.item_count == 1
+    assert result.items[0]["project_name"] == "旧版清单墙面拆除"
+    assert result.items[0]["quantity"] == "15"
 
 
 def test_parse_quote_excel_bytes_rejects_sheet_without_quote_items():

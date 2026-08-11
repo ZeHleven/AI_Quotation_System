@@ -413,7 +413,7 @@ def test_cost_rag_sync_status_endpoint_requires_cost_view_access(client, monkeyp
     finally:
         _set_flag("feature_cost_db", old_flag)
 
-    assert staff_response.status_code == 403
+    assert staff_response.status_code == 200
     assert viewer_response.status_code == 200
     assert viewer_response.json()["data"]["status"] == "synced"
     assert admin_response.status_code == 200
@@ -457,7 +457,7 @@ def test_cost_rag_sync_runs_endpoint_lists_recent_runs(client):
     finally:
         _set_flag("feature_cost_db", old_flag)
 
-    assert staff_response.status_code == 403
+    assert staff_response.status_code == 200
     assert viewer_response.status_code == 200
     assert admin_response.status_code == 200
     data = admin_response.json()["data"]

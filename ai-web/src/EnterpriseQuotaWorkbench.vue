@@ -540,7 +540,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   enterpriseQuotaV2Api,
@@ -572,6 +572,7 @@ const routeParams = new URLSearchParams(window.location.search)
 const routeRequiresActiveVersion = routeParams.get('enterprise_quota_version') === 'active'
 const routeActiveVersionId = Number(routeParams.get('enterprise_quota_version_id')) || null
 const routeQuotaItemId = Number(routeParams.get('enterprise_quota_item_id')) || null
+if (routeRequiresActiveVersion && routeQuotaItemId && window.opener) window.opener = null
 let routeQuotaItemApplied = false
 const versionsLoading = ref(false)
 const gridLoading = ref(false)
@@ -712,6 +713,10 @@ async function loadRows() {
       selectedChapterId.value = data.classification?.selected_chapter_id || null
     }
     if (data.version) replaceVersion(data.version)
+    if (routeRequiresActiveVersion && routeQuotaItemId && isActiveVersion(selectedVersion.value)) {
+      await nextTick()
+      document.querySelector('.excel-row-route-target')?.scrollIntoView({ block: 'center' })
+    }
   } catch (error) {
     ElMessage.error(quotaV2ErrorMessage(error, '加载工作表失败'))
   } finally {
@@ -1012,6 +1017,12 @@ function rowClass(row) {
     {
       'excel-row-editable': grid.editable && row.entity_type === 'resource',
       'excel-row-editing': editingRowId.value === row.id,
+      'excel-row-route-target':
+        routeRequiresActiveVersion
+        && routeQuotaItemId
+        && isActiveVersion(selectedVersion.value)
+        && row.row_kind === 'quota_item'
+        && Number(row.entity_id) === routeQuotaItemId,
     },
   ]
 }
@@ -1034,15 +1045,15 @@ function columnLetter(index) {
 
 function columnWidth(sheet, index) {
   if (sheet === 'enterprise') {
-    return ['126px', '84px', '220px', '280px', '170px', '150px', '82px', '90px', '105px', '105px', '105px', '105px', '105px'][index] || '120px'
+    return ['6%', '5%', '15%', '12%', '9%', '8%', '5%', '7%', '6%', '6%', '6%', '6%', '6%'][index] || '7%'
   }
   if (sheet === 'labor') {
-    return ['120px', '90px', '210px', '250px', '230px', '90px', '100px', '140px'][index] || '130px'
+    return ['11%', '7%', '17%', '14%', '14%', '7%', '9%', '18%'][index] || '12%'
   }
   if (sheet === 'material') {
-    return ['125px', '125px', '90px', '220px', '190px', '170px', '90px', '140px'][index] || '130px'
+    return ['10%', '10%', '7%', '18%', '15%', '13%', '8%', '16%'][index] || '12%'
   }
-  return ['125px', '130px', '170px', '220px', '90px', '110px', '110px', '110px', '110px', '120px'][index] || '130px'
+  return ['9%', '9%', '14%', '15%', '8%', '8%', '8%', '8%', '9%', '9%'][index] || '10%'
 }
 
 function displayCell(value) {
@@ -1332,30 +1343,30 @@ button.quota-metric {
 
 .excel-grid-wrap {
   max-height: 650px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid #b9c5d4;
   border-radius: 10px;
   background: #fff;
 }
 
 .excel-grid {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
   color: #1f2937;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .row-number-column {
-  width: 48px;
+  width: 3%;
 }
 
 .excel-grid th,
 .excel-grid td {
   height: 34px;
-  padding: 5px 7px;
+  padding: 4px;
   overflow: hidden;
   border-right: 1px solid #cbd5e1;
   border-bottom: 1px solid #cbd5e1;
@@ -1417,6 +1428,12 @@ button.quota-metric {
   color: #17365d;
   background: #eaf3f8;
   font-weight: 700;
+}
+
+.excel-row-route-target th,
+.excel-row-route-target td {
+  background: #fff4cc !important;
+  box-shadow: inset 0 2px #f59e0b, inset 0 -2px #f59e0b;
 }
 
 .excel-row-component:hover td,

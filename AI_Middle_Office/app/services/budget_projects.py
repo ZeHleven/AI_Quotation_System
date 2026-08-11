@@ -49,6 +49,7 @@ from app.services.requirement_standardizer import (
     standardization_quote_rows,
     standardize_requirement_excel_bytes,
 )
+from app.services.legacy_excel import LegacyExcelConversionError, normalize_excel_workbook_bytes
 
 
 BUDGET_PROJECT_READ_ROLES = {
@@ -95,7 +96,7 @@ BUDGET_SHEET_ROLE_OPTIONAL_BACKUP = "optional_backup"
 BUDGET_SHEET_ROLE_SUMMARY_ANALYSIS = "summary_analysis"
 MAX_IMPORT_BYTES = 30 * 1024 * 1024
 BUDGET_MAX_SCAN_ROWS = 30
-SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm"}
+SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm", ".xls"}
 
 _SEQUENCE_LABELS = {
     "\u5e8f\u53f7",  # sequence number
@@ -752,10 +753,13 @@ def _validate_workbook_limits(content: bytes, filename: str) -> None:
             detail={"code": "UNSUPPORTED_BUDGET_IMPORT_FILE", "supported": sorted(SUPPORTED_EXTENSIONS)},
         )
     try:
-        workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+        normalized_content = normalize_excel_workbook_bytes(content, filename=filename)
+        workbook = load_workbook(BytesIO(normalized_content), read_only=True, data_only=True)
+    except LegacyExcelConversionError as exc:
+        raise RequirementStandardizationError(str(exc)) from exc
     except Exception as exc:
         raise RequirementStandardizationError(
-            f"Excel requirement file cannot be read as .xlsx/.xlsm: {exc}"
+            f"Excel requirement file cannot be read as .xls/.xlsx/.xlsm: {exc}"
         ) from exc
     over_limit: list[dict[str, Any]] = []
     try:
@@ -1743,9 +1747,18 @@ def standardize_budget_workbook_bytes(
     """
 
     safe_filename = _clean_text(filename, 255) or "requirements.xlsx"
-    _validate_workbook_limits(content, safe_filename)
-    preview = standardize_requirement_excel_bytes(content, filename=safe_filename)
-    preview = _apply_workbook_semantics(preview, content)
+    try:
+        normalized_content = normalize_excel_workbook_bytes(content, filename=safe_filename)
+    except LegacyExcelConversionError as exc:
+        raise RequirementStandardizationError(str(exc)) from exc
+    _validate_workbook_limits(normalized_content, "requirements.xlsx")
+    preview = standardize_requirement_excel_bytes(normalized_content, filename="requirements.xlsx")
+    preview["source"] = {
+        **(preview.get("source") or {}),
+        "file_name": safe_filename,
+        "file_type": Path(safe_filename).suffix.lower().lstrip("."),
+    }
+    preview = _apply_workbook_semantics(preview, normalized_content)
     preview = _ensure_budget_mapping_columns(preview)
     return _sanitize_automatic_quantity_mappings(preview)
 

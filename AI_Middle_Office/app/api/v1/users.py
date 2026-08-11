@@ -8,7 +8,7 @@ from app.core.responses import api_ok
 from app.core.security import get_password_hash
 from app.dependencies import require_admin, require_system_admin
 from app.models.user import User, UserRoleEvent
-from app.services.rbac import grant_role, normalize_role, revoke_role, serialize_user_for_rbac
+from app.services.rbac import grant_role, normalize_role, replace_roles, revoke_role, serialize_user_for_rbac
 from app.services.account_tenancy import (
     AccountTenancyError,
     assign_user_to_operator_default_account,
@@ -38,6 +38,11 @@ class RoleGrantRequest(BaseModel):
 class RoleRevokeRequest(BaseModel):
     note: str
     trace_id: str | None = None
+
+
+class RoleSetRequest(BaseModel):
+    roles: list[str] = Field(default_factory=list)
+    note: str
 
 
 @router.get("/admin/users", summary="获取所有用户列表")
@@ -133,6 +138,11 @@ async def set_user_quota(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    if body.quota < int(user.quota_reserved or 0):
+        raise HTTPException(
+            status_code=409,
+            detail=f"当前有 {int(user.quota_reserved or 0)} 次报价额度处于预占状态，不能设置为更低值",
+        )
     user.quota = body.quota
     db.commit()
     return api_ok(message=f"已将 {user.username} 的额度设置为 {body.quota} 次")
@@ -186,6 +196,33 @@ async def revoke_user_role(
         db,
         target_user=user,
         role=role,
+        operator=current_user,
+        note=body.note,
+        request=request,
+    )
+    return api_ok({"id": user.id, "username": user.username, "roles": roles, "role_version": user.role_version})
+
+
+@router.put("/admin/users/{user_id}/roles", summary="设置用户完整功能角色")
+async def replace_user_roles(
+    user_id: int,
+    body: RoleSetRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_system_admin),
+):
+    user = (
+        db.query(User)
+        .options(selectinload(User.role_assignments))
+        .filter(User.id == user_id)
+        .first()
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    roles = replace_roles(
+        db,
+        target_user=user,
+        roles=body.roles,
         operator=current_user,
         note=body.note,
         request=request,

@@ -1,6 +1,9 @@
 import uuid
 
 from app.core.config import settings
+from app.core.database import SessionLocal
+from app.core.security import get_password_hash
+from app.models.user import User, UserRole
 
 
 def _set_flag(name: str, value):
@@ -61,3 +64,91 @@ def test_login_rejects_wrong_password(client):
     )
 
     assert response.status_code == 401
+
+
+def test_forced_password_change_blocks_business_apis_and_revokes_rotation_token(client):
+    username = f"forced_rotation_{uuid.uuid4().hex[:10]}"
+    old_password = "temporary123"
+    new_password = "changed456"
+    db = SessionLocal()
+    try:
+        user = User(
+            username=username,
+            hashed_password=get_password_hash(old_password),
+            role="user",
+            role_version=1,
+            quota=5,
+            is_active=True,
+            must_change_password=True,
+        )
+        db.add(user)
+        db.flush()
+        db.add(UserRole(user_id=user.id, role="staff", created_by=None, note="forced rotation test"))
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        data={"username": username, "password": old_password},
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["must_change_password"] is True
+    rotation_token = login_response.json()["access_token"]
+    rotation_headers = {"Authorization": f"Bearer {rotation_token}"}
+
+    me_response = client.get("/api/v1/auth/me", headers=rotation_headers)
+    assert me_response.status_code == 200
+    assert me_response.json()["must_change_password"] is True
+
+    blocked_response = client.get("/api/v1/quote/jobs", headers=rotation_headers)
+    assert blocked_response.status_code == 403
+    assert blocked_response.json()["detail"] == "PASSWORD_CHANGE_REQUIRED"
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).one()
+        user.must_change_password = False
+        db.commit()
+    finally:
+        db.close()
+    claim_blocked_response = client.get("/api/v1/quote/jobs", headers=rotation_headers)
+    assert claim_blocked_response.status_code == 403
+    assert claim_blocked_response.json()["detail"] == "PASSWORD_CHANGE_REQUIRED"
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).one()
+        user.must_change_password = True
+        db.commit()
+    finally:
+        db.close()
+
+    change_response = client.post(
+        "/api/v1/auth/change_password",
+        headers=rotation_headers,
+        json={"old_password": old_password, "new_password": new_password},
+    )
+    assert change_response.status_code == 200
+    assert change_response.json()["must_change_password"] is False
+    rotated_headers = {
+        "Authorization": f"Bearer {change_response.json()['access_token']}"
+    }
+    assert client.get("/api/v1/quote/jobs", headers=rotated_headers).status_code == 200
+
+    expired_response = client.get("/api/v1/auth/me", headers=rotation_headers)
+    assert expired_response.status_code == 401
+    assert expired_response.json()["detail"] == "ROLE_VERSION_EXPIRED"
+
+    assert client.post(
+        "/api/v1/auth/login",
+        data={"username": username, "password": old_password},
+    ).status_code == 401
+
+    relogin_response = client.post(
+        "/api/v1/auth/login",
+        data={"username": username, "password": new_password},
+    )
+    assert relogin_response.status_code == 200
+    assert relogin_response.json()["must_change_password"] is False
+    normal_headers = {"Authorization": f"Bearer {relogin_response.json()['access_token']}"}
+    assert client.get("/api/v1/quote/jobs", headers=normal_headers).status_code == 200

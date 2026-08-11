@@ -78,7 +78,7 @@ def test_requirement_standardization_requires_feature_flag(client):
 
 
 def test_requirement_standardization_remap_and_confirm_are_stateless(client):
-    user = _create_user("user")
+    user = _create_user("user", roles=["quote_user"])
     headers = _login(client, user)
     old_flag = _set_flag("feature_requirement_standardization", True)
     try:
@@ -182,7 +182,7 @@ def test_quote_user_can_preview_requirement_standardization(client):
 
 
 def test_confirmed_requirement_quote_text_can_create_quote_job(client):
-    user = _create_user("staff")
+    user = _create_user("user", roles=["staff", "quote_user"])
     headers = _login(client, user)
     old_flag = _set_flag("feature_requirement_standardization", True)
     try:

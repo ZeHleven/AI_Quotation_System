@@ -3,6 +3,7 @@
 # Run on CentOS from /opt/rag_service. It does not delete old backups.
 
 set -euo pipefail
+umask 077
 
 RAG_DIR="${RAG_DIR:-/opt/rag_service}"
 ENV_FILE="${ENV_FILE:-$RAG_DIR/.env}"
@@ -144,7 +145,12 @@ log "Backup destination: $DEST"
 
 backup_file "$RAG_DIR/rag_materials.json" "rag_materials.json"
 backup_file "$RAG_DIR/docker-compose.yml" "docker-compose.yml"
-backup_file "$ENV_FILE" "rag_service.env"
+if [ "${BACKUP_INCLUDE_ENV:-false}" = "true" ]; then
+  warn "BACKUP_INCLUDE_ENV=true: the backup will contain live secrets and must be encrypted before leaving this host"
+  backup_file "$ENV_FILE" "rag_service.env"
+else
+  warn "Runtime .env excluded from backup; restore secrets from the approved secret store"
+fi
 backup_mysql
 backup_n8n
 backup_milvus_volumes
@@ -152,7 +158,9 @@ backup_dir_tar "$RAG_DIR/volumes/quote-minio" "quote_minio"
 
 (
   cd "$DEST"
-  find . -maxdepth 1 -type f -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS
+  find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 \
+    | sort -z \
+    | xargs -0 -r sha256sum > SHA256SUMS
 )
 
 ln -sfn "$DEST" "$BACKUP_ROOT/latest"

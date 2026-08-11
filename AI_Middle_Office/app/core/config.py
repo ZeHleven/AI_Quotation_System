@@ -2,8 +2,10 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
+from urllib.parse import urlsplit
 
 from dotenv import dotenv_values, load_dotenv
+from sqlalchemy.engine import make_url
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -20,6 +22,18 @@ def _env(name: str, default: str = "") -> str:
     file_value = ENV_VALUES.get(name)
     if file_value is not None and str(file_value).strip():
         return str(file_value).strip()
+    return default
+
+
+def _env_allow_empty(name: str, default: str = "") -> str:
+    """Read settings where an explicit empty value disables the feature."""
+
+    value = os.environ.get(name)
+    if value is not None:
+        return value.strip()
+    if name in ENV_VALUES:
+        file_value = ENV_VALUES.get(name)
+        return "" if file_value is None else str(file_value).strip()
     return default
 
 
@@ -64,6 +78,7 @@ class Settings:
     log_level: str = _env("LOG_LEVEL", "INFO")
 
     database_url: str = _env("DATABASE_URL", "sqlite:///./sql_app.db")
+    migration_database_url: str = _env("MIGRATION_DATABASE_URL", "")
     database_startup_wait_seconds: int = _env_int("DATABASE_STARTUP_WAIT_SECONDS", 120)
     database_startup_retry_interval_seconds: float = _env_float("DATABASE_STARTUP_RETRY_INTERVAL_SECONDS", 3.0)
     auto_create_tables: bool = _env_bool("AUTO_CREATE_TABLES", False)
@@ -187,6 +202,7 @@ class Settings:
     ops_log_lookback_minutes: int = _env_int("OPS_LOG_LOOKBACK_MINUTES", 180)
     ops_log_current_minutes: int = _env_int("OPS_LOG_CURRENT_MINUTES", 30)
     alert_dingtalk_webhook: str = _env("ALERT_DINGTALK_WEBHOOK", "")
+    alert_dingtalk_secret: str = _env("ALERT_DINGTALK_SECRET", "")
     alert_dedup_minutes: int = _env_int("ALERT_DEDUP_MINUTES", 30)
     alert_rate_limit_count: int = _env_int("ALERT_RATE_LIMIT_COUNT", 3)
     alert_rate_limit_window_minutes: int = _env_int("ALERT_RATE_LIMIT_WINDOW_MINUTES", 5)
@@ -247,12 +263,16 @@ class Settings:
     model_gateway_cost_per_1k_chars: float = _env_float("MODEL_GATEWAY_COST_PER_1K_CHARS", 0.0)
     minio_enabled: bool = _env_bool("MINIO_ENABLED", False)
     minio_endpoint: str = _env("MINIO_ENDPOINT", "192.168.88.128:9002")
-    minio_access_key: str = _env("MINIO_ACCESS_KEY", "quoteadmin")
-    minio_secret_key: str = _env("MINIO_SECRET_KEY", "change-this-password")
+    minio_access_key: str = _env("MINIO_ACCESS_KEY", "")
+    minio_secret_key: str = _env("MINIO_SECRET_KEY", "")
     minio_secure: bool = _env_bool("MINIO_SECURE", False)
     minio_bucket: str = _env("MINIO_BUCKET", "quote-files")
     minio_presigned_expire_seconds: int = _env_int("MINIO_PRESIGNED_EXPIRE_SECONDS", 3600)
     minio_max_upload_mb: int = _env_int("MINIO_MAX_UPLOAD_MB", 50)
+    # Development/test-only fallback for original-format budget exports when
+    # object storage is intentionally disabled. The exporter still verifies
+    # the workbook against the immutable import SHA-256.
+    budget_pricing_local_source_root: str = _env("BUDGET_PRICING_LOCAL_SOURCE_ROOT", "")
     tender_evidence_body_storage_enabled: bool = _env_bool(
         "TENDER_EVIDENCE_BODY_STORAGE_ENABLED",
         False,
@@ -263,13 +283,14 @@ class Settings:
     rag_eval_warn_mrr: float = _env_float("RAG_EVAL_WARN_MRR", 0.50)
     login_rate_limit: str = _env("LOGIN_RATE_LIMIT", "10/5minutes")
 
-    http_proxy: str = _env("HTTP_PROXY", "http://127.0.0.1:7897")
-    https_proxy: str = _env("HTTPS_PROXY", "http://127.0.0.1:7897")
-    no_proxy: str = _env(
+    http_proxy: str = _env_allow_empty("HTTP_PROXY", "")
+    https_proxy: str = _env_allow_empty("HTTPS_PROXY", "")
+    no_proxy: str = _env_allow_empty(
         "NO_PROXY",
         "192.168.88.128,192.168.0.0/16,192.168.88.0/24,localhost,127.0.0.1,127.0.0.0/8",
     )
     allowed_origins: List[str] = field(default_factory=lambda: _env_list("CORS_ALLOW_ORIGINS", "*"))
+    trusted_hosts: List[str] = field(default_factory=lambda: _env_list("TRUSTED_HOSTS", "*"))
     legacy_materials_file: Path = field(
         default_factory=lambda: Path(
             _env("LEGACY_MATERIALS_FILE", _env("MATERIALS_FILE", str(BASE_DIR / "rag_materials.json")))
@@ -284,20 +305,50 @@ class Settings:
         """Backward-compatible alias for the legacy JSON import file."""
         return self.legacy_materials_file
 
+    @property
+    def internal_experimental_routes_enabled(self) -> bool:
+        """Keep high-risk trial/POC routes available only in internal mode.
+
+        These routes process untrusted CAD/PDF inputs and currently use local
+        job artifacts.  They must not be mounted merely because the main
+        application is switched to public-access mode.
+        """
+
+        return not self.public_access_enabled
+
+    @property
+    def alembic_database_url(self) -> str:
+        """Use a dedicated migrator when configured; retain local compatibility."""
+
+        return self.migration_database_url or self.database_url
+
     def __post_init__(self) -> None:
         app_env = self.app_env.lower()
         database_url = self.database_url.lower()
         uses_external_database = not database_url.startswith("sqlite:")
-        should_validate_secrets = self.strict_config or app_env in {"prod", "production"} or uses_external_database
+        should_validate_secrets = (
+            self.strict_config
+            or app_env in {"prod", "production"}
+            or uses_external_database
+            or self.public_access_enabled
+        )
         if not should_validate_secrets:
             return
 
         errors = []
 
-        def require_secret(name: str, value: str, weak_values: set[str] | None = None) -> None:
+        def require_secret(
+            name: str,
+            value: str,
+            weak_values: set[str] | None = None,
+            minimum_length: int = 16,
+        ) -> None:
             weak_values = weak_values or set()
-            if not value or value in weak_values:
-                errors.append(f"{name} must be set to a non-default secret")
+            if len(value.strip()) < minimum_length or value in weak_values:
+                errors.append(
+                    f"{name} must be set to a non-default secret of at least "
+                    f"{minimum_length} characters"
+                )
 
         require_secret(
             "JWT_SECRET_KEY",
@@ -307,9 +358,65 @@ class Settings:
         require_secret("WEBHOOK_SECRET", self.webhook_secret)
         require_secret("RELOAD_SECRET", self.reload_secret)
         require_secret("ZHIPU_API_KEY", self.zhipu_api_key)
-        if self.minio_enabled:
-            require_secret("MINIO_SECRET_KEY", self.minio_secret_key, {"change-this-password"})
+        if self.public_access_enabled:
+            if not self.allowed_origins or "*" in self.allowed_origins:
+                errors.append(
+                    "CORS_ALLOW_ORIGINS must list exact HTTPS origins in public mode"
+                )
+            else:
+                invalid_origins = []
+                for origin in self.allowed_origins:
+                    parsed = urlsplit(origin)
+                    if (
+                        parsed.scheme != "https"
+                        or not parsed.hostname
+                        or parsed.username
+                        or parsed.password
+                        or parsed.path not in {"", "/"}
+                        or parsed.query
+                        or parsed.fragment
+                    ):
+                        invalid_origins.append(origin)
+                if invalid_origins:
+                    errors.append(
+                        "CORS_ALLOW_ORIGINS must contain only origin-level HTTPS URLs "
+                        "in public mode"
+                    )
 
+            if not self.trusted_hosts or "*" in self.trusted_hosts:
+                errors.append("TRUSTED_HOSTS must list exact hostnames in public mode")
+            elif any(
+                "://" in host or "/" in host or "@" in host
+                for host in self.trusted_hosts
+            ):
+                errors.append(
+                    "TRUSTED_HOSTS must contain hostnames only, without schemes or paths"
+                )
+
+            if not self.migration_database_url:
+                errors.append("MIGRATION_DATABASE_URL must use a dedicated migration account")
+            else:
+                try:
+                    runtime_url = make_url(self.database_url)
+                    migration_url = make_url(self.migration_database_url)
+                except Exception:
+                    errors.append("DATABASE_URL and MIGRATION_DATABASE_URL must be valid URLs")
+                else:
+                    same_account = (
+                        runtime_url.username == migration_url.username
+                        and runtime_url.host == migration_url.host
+                        and runtime_url.port == migration_url.port
+                        and runtime_url.database == migration_url.database
+                    )
+                    if same_account:
+                        errors.append(
+                            "MIGRATION_DATABASE_URL must use a distinct database account"
+                        )
+        if self.alert_dingtalk_webhook:
+            require_secret("ALERT_DINGTALK_SECRET", self.alert_dingtalk_secret)
+        if self.minio_enabled:
+            require_secret("MINIO_ACCESS_KEY", self.minio_access_key)
+            require_secret("MINIO_SECRET_KEY", self.minio_secret_key, {"change-this-password"})
         if errors:
             raise RuntimeError("Invalid production configuration: " + "; ".join(errors))
 

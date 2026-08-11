@@ -139,7 +139,7 @@ def test_admin_create_defaults_draft_and_derives_main_price(client):
     assert data["crew_benchmark_price"] == 25
 
 
-def test_staff_can_only_read_quote_cost_candidates(client):
+def test_staff_can_read_enterprise_cost_library_but_not_write(client):
     _, admin_headers = _headers(client, "admin")
     _, staff_headers = _headers(client, "staff")
     _, viewer_headers = _headers(client, "cost_viewer")
@@ -163,15 +163,13 @@ def test_staff_can_only_read_quote_cost_candidates(client):
         _set_flag("feature_cost_db", old_flag)
 
     assert activate_response.status_code == 200, activate_response.text
-    assert read_response.status_code == 403
-    assert read_response.json()["detail"] == "PERMISSION_DENIED"
+    assert read_response.status_code == 200, read_response.text
     assert candidate_response.status_code == 200, candidate_response.text
     candidate = candidate_response.json()["data"][0]
     assert candidate["id"] == item["id"]
-    assert candidate["restricted"] is True
     assert candidate["price"] == item["price"]
-    assert "notes" not in candidate
-    assert "client_tax_excluded_price" not in candidate
+    assert "restricted" not in candidate
+    assert "client_tax_excluded_price" in candidate
     assert viewer_candidate_response.status_code == 200, viewer_candidate_response.text
     viewer_candidate = viewer_candidate_response.json()["data"][0]
     assert viewer_candidate["id"] == item["id"]

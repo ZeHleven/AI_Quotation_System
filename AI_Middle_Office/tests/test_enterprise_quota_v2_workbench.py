@@ -22,6 +22,7 @@ from app.services.enterprise_quota_v2_parser import (
     MATERIAL_SHEET,
     VALIDATION_HEADERS,
     VALIDATION_SHEET,
+    _classify_row,
     parse_enterprise_quota_v2_bytes,
 )
 from app.services.enterprise_quota_v2_workbench import (
@@ -30,6 +31,7 @@ from app.services.enterprise_quota_v2_workbench import (
     clone_version_to_draft,
     import_v2_workbook_as_draft,
     list_sheet_rows,
+    reparse_draft_version_from_stored_rows,
     update_resource,
 )
 
@@ -39,7 +41,7 @@ def _set_headers(sheet, headers):
         sheet.cell(2, index, header)
 
 
-def _build_v2_workbook() -> bytes:
+def _build_v2_workbook(*, with_component_outlines: bool = True) -> bytes:
     workbook = Workbook()
     enterprise = workbook.active
     enterprise.title = ENTERPRISE_SHEET
@@ -109,8 +111,14 @@ def _build_v2_workbook() -> bytes:
             0,
         ]
     )
-    enterprise.row_dimensions[6].outlineLevel = 1
-    enterprise.row_dimensions[7].outlineLevel = 1
+    if with_component_outlines:
+        enterprise.row_dimensions[6].outlineLevel = 1
+        enterprise.row_dimensions[7].outlineLevel = 1
+    else:
+        # Real-world workbooks can omit grouping while retaining the visible
+        # component type values cached by Excel.
+        enterprise["B6"] = "人工"
+        enterprise["B7"] = "辅材"
 
     labor.append(["RG-001", "人工", "测试人工", "测试工作", "按含量计算", "工日", 1, 10])
     material.append(["辅材", "CL-001", "辅材", "测试辅材", "型号A", "测试品牌", "kg", 4])
@@ -185,6 +193,113 @@ def test_parser_preserves_headers_hierarchy_formulas_and_sheet_rows():
     assert formula_row["outline_level"] == 1
     assert formula_row["parent_row_number"] == 5
     assert formula_row["formulas"]["I"].startswith("=IFERROR(INDEX(人工价格库!")
+
+
+@pytest.mark.parametrize("component_type", ["人工", "主材", "辅材", "机械"])
+def test_row_classifier_recognizes_component_types_without_outline(component_type):
+    parent_context = {
+        "major_section": 3,
+        "chapter": 4,
+        "quota_item": 5,
+    }
+
+    row_kind, parent_row_number = _classify_row(
+        ENTERPRISE_SHEET,
+        6,
+        {"A": "RESOURCE-001", "B": component_type, "C": "测试工料机"},
+        0,
+        parent_context,
+    )
+
+    assert row_kind == "component"
+    assert parent_row_number == 5
+    assert parent_context["quota_item"] == 5
+
+
+def test_parser_recognizes_components_when_excel_outline_is_missing():
+    parsed = parse_enterprise_quota_v2_bytes(
+        _build_v2_workbook(with_component_outlines=False),
+        filename="企业定额2.0-无大纲层级.xlsx",
+    )
+
+    assert parsed["summary"]["chapter_count"] == 1
+    assert parsed["summary"]["quota_item_count"] == 1
+    assert parsed["summary"]["component_count"] == 2
+    assert parsed["items"][0]["unit_price"] == 32.0
+    component_rows = [
+        row
+        for row in parsed["workbook_rows"]
+        if row["sheet_name"] == ENTERPRISE_SHEET and row["row_number"] in {6, 7}
+    ]
+    assert [row["row_kind"] for row in component_rows] == ["component", "component"]
+    assert [row["parent_row_number"] for row in component_rows] == [5, 5]
+
+
+def test_reparse_draft_restores_components_from_preserved_rows(db_session):
+    version = import_v2_workbook_as_draft(
+        db_session,
+        _build_v2_workbook(with_component_outlines=False),
+        filename="企业定额2.0-待修复.xlsx",
+        actor_id=None,
+        version_code="enterprise-quota-v2-reparse",
+    )
+    db_session.flush()
+
+    component_rows = (
+        db_session.query(EnterpriseQuotaSheetRow)
+        .filter(
+            EnterpriseQuotaSheetRow.version_id == version.id,
+            EnterpriseQuotaSheetRow.sheet_name == ENTERPRISE_SHEET,
+            EnterpriseQuotaSheetRow.row_number.in_([6, 7]),
+        )
+        .all()
+    )
+    for row in component_rows:
+        row.row_kind = "chapter"
+        row.parent_row_number = None
+        row.entity_type = None
+        row.entity_id = None
+    db_session.query(EnterpriseQuotaComponent).filter_by(version_id=version.id).delete(
+        synchronize_session=False
+    )
+    item = db_session.query(EnterpriseQuotaItem).filter_by(version_id=version.id).one()
+    item.unit_price = 0
+    item.labor_fee = 0
+    item.auxiliary_material_fee = 0
+    db_session.flush()
+
+    result = reparse_draft_version_from_stored_rows(
+        db_session,
+        version.id,
+        actor_id=None,
+        expected_revision=version.revision,
+        reason="测试按新规则重新解析",
+    )
+
+    restored_item = db_session.query(EnterpriseQuotaItem).filter_by(version_id=version.id).one()
+    restored_components = (
+        db_session.query(EnterpriseQuotaComponent)
+        .filter_by(version_id=version.id)
+        .order_by(EnterpriseQuotaComponent.sort_order)
+        .all()
+    )
+    restored_rows = (
+        db_session.query(EnterpriseQuotaSheetRow)
+        .filter(
+            EnterpriseQuotaSheetRow.version_id == version.id,
+            EnterpriseQuotaSheetRow.sheet_name == ENTERPRISE_SHEET,
+            EnterpriseQuotaSheetRow.row_number.in_([6, 7]),
+        )
+        .order_by(EnterpriseQuotaSheetRow.row_number)
+        .all()
+    )
+    assert result["summary"]["component_count"] == 2
+    assert result["recalculation"]["linked_component_count"] == 2
+    assert restored_item.unit_price == 32
+    assert len(restored_components) == 2
+    assert [row.row_kind for row in restored_rows] == ["component", "component"]
+    assert [row.parent_row_number for row in restored_rows] == [5, 5]
+    assert all(row.entity_type == "component" and row.entity_id for row in restored_rows)
 
 
 def test_enterprise_rows_support_linked_major_and_chapter_filters(db_session):

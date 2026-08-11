@@ -9,12 +9,15 @@ from typing import Any
 
 from openpyxl import load_workbook
 
+from app.services.legacy_excel import LegacyExcelConversionError, normalize_excel_workbook_bytes
 
-SUPPORTED_EXCEL_EXTENSIONS = {".xlsx", ".xlsm"}
+
+SUPPORTED_EXCEL_EXTENSIONS = {".xlsx", ".xlsm", ".xls"}
 LEGACY_EXCEL_EXTENSIONS = {".xls"}
 SUPPORTED_EXCEL_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel.sheet.macroenabled.12",
+    "application/vnd.ms-excel",
 }
 
 HEADER_ALIASES = {
@@ -208,9 +211,12 @@ def parse_quote_excel_bytes(file_content: bytes, *, filename: str | None = None)
         raise QuoteExcelParseError("Excel 需求单为空，请重新上传")
 
     try:
-        workbook = load_workbook(BytesIO(file_content), data_only=True, read_only=True)
+        normalized_content = normalize_excel_workbook_bytes(file_content, filename=filename)
+        workbook = load_workbook(BytesIO(normalized_content), data_only=True, read_only=True)
+    except LegacyExcelConversionError as exc:
+        raise QuoteExcelParseError(str(exc)) from exc
     except Exception as exc:
-        raise QuoteExcelParseError(f"Excel 需求单读取失败，请确认文件为 .xlsx/.xlsm 格式: {exc}") from exc
+        raise QuoteExcelParseError(f"Excel 需求单读取失败，请确认文件为 .xls/.xlsx/.xlsm 格式: {exc}") from exc
 
     for sheet in workbook.worksheets:
         result = _parse_sheet(sheet)

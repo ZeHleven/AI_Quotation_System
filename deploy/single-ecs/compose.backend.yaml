@@ -1,0 +1,201 @@
+name: ai-middle-office-backend
+
+x-common: &common
+  restart: unless-stopped
+  init: true
+  networks:
+    - app_net
+  logging:
+    driver: json-file
+    options:
+      max-size: 20m
+      max-file: "3"
+
+services:
+  mysql:
+    <<: *common
+    image: mysql:8.0.39
+    container_name: ai-middle-office-mysql
+    volumes:
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/mysql:/var/lib/mysql
+    mem_limit: 2g
+    cpus: 1.5
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      app_net:
+        aliases:
+          - mysql
+          - ai-mysql
+
+  quote-redis:
+    <<: *common
+    image: redis:7.2-alpine
+    container_name: quote-redis
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/quote-redis:/data
+    mem_limit: 640m
+    cpus: 0.5
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+  milvus-etcd:
+    <<: *common
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: milvus-etcd
+    command: ["etcd", "-advertise-client-urls=http://127.0.0.1:2379", "-listen-client-urls", "http://0.0.0.0:2379", "--data-dir", "/etcd"]
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/milvus-etcd:/etcd
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+
+  milvus-minio:
+    <<: *common
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: milvus-minio
+    environment:
+      MINIO_ACCESS_KEY: ${MILVUS_MINIO_ACCESS_KEY:?MILVUS_MINIO_ACCESS_KEY must be set}
+      MINIO_SECRET_KEY: ${MILVUS_MINIO_SECRET_KEY:?MILVUS_MINIO_SECRET_KEY must be set}
+    command: ["minio", "server", "/minio_data", "--console-address", ":9001"]
+    volumes:
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/milvus-minio:/minio_data
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+
+  milvus:
+    <<: *common
+    image: milvusdb/milvus:v2.3.1
+    container_name: milvus-standalone
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+      MINIO_ACCESS_KEY_ID: ${MILVUS_MINIO_ACCESS_KEY:?MILVUS_MINIO_ACCESS_KEY must be set}
+      MINIO_SECRET_ACCESS_KEY: ${MILVUS_MINIO_SECRET_KEY:?MILVUS_MINIO_SECRET_KEY must be set}
+    volumes:
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/milvus:/var/lib/milvus
+    mem_limit: 1536m
+    cpus: 1.5
+    pids_limit: 512
+    depends_on:
+      milvus-etcd:
+        condition: service_healthy
+      milvus-minio:
+        condition: service_healthy
+
+  quote-minio:
+    <<: *common
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: quote-minio
+    environment:
+      MINIO_ROOT_USER: ${QUOTE_MINIO_ROOT_USER:?QUOTE_MINIO_ROOT_USER must be set}
+      MINIO_ROOT_PASSWORD: ${QUOTE_MINIO_ROOT_PASSWORD:?QUOTE_MINIO_ROOT_PASSWORD must be set}
+      MINIO_ACCESS_KEY: ${QUOTE_MINIO_ROOT_USER:?QUOTE_MINIO_ROOT_USER must be set}
+      MINIO_SECRET_KEY: ${QUOTE_MINIO_ROOT_PASSWORD:?QUOTE_MINIO_ROOT_PASSWORD must be set}
+    command: ["minio", "server", "/data", "--console-address", ":9001"]
+    volumes:
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/quote-minio:/data
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+
+  rag-service:
+    <<: *common
+    image: rag_service-rag-service-tender:phase3c
+    container_name: rag-api-service
+    environment:
+      HF_ENDPOINT: https://hf-mirror.com
+      HF_HOME: /model_cache
+      HF_HUB_CACHE: /model_cache/hub
+      TRANSFORMERS_CACHE: /model_cache/transformers
+      SENTENCE_TRANSFORMERS_HOME: /model_cache
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      RAG_MODEL_OFFLINE: "true"
+      EMBEDDING_MODEL_NAME: maidalun1020/bce-embedding-base_v1
+      EMBEDDING_MODEL_PATH: /model_cache/hub/models--maidalun1020--bce-embedding-base_v1/snapshots/9c0d82af44af61abe171ffae23fde5740c0ec1a8
+      RAG_MAX_SUB_QUERIES: "6"
+      RAG_MAX_QUERY_CHARS: "80"
+      MILVUS_LOAD_TIMEOUT_SECONDS: "90"
+      MILVUS_SEARCH_TIMEOUT_SECONDS: "20"
+      RAG_BM25_FALLBACK_ON_MILVUS_ERROR: "true"
+      RAG_VECTOR_ENABLED: "true"
+      MILVUS_HOST: milvus
+      MILVUS_PORT: "19530"
+      RELOAD_SECRET: ${RELOAD_SECRET:?RELOAD_SECRET must be set}
+      TENDER_EVIDENCE_INDEX_SECRET_FILE: /run/secrets/tender_evidence_index.secret
+      TENDER_EVIDENCE_COLLECTION: tender_evidence_blocks_v1
+      TENDER_EVIDENCE_VECTOR_DIMENSION: "768"
+      TENDER_EVIDENCE_MAX_BLOCKS: "10000"
+      TENDER_EVIDENCE_EMBED_CHUNK_SIZE: "128"
+    volumes:
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/rag/model-cache:/model_cache
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/rag/config/hybrid_searcher.py:/app/hybrid_searcher.py:ro
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/rag/config/rag_materials.json:/app/rag_materials.json:ro
+      - /etc/ai-middle-office/tender_evidence_index.secret:/run/secrets/tender_evidence_index.secret:ro
+    mem_limit: 2560m
+    cpus: 2.0
+    pids_limit: 512
+    depends_on:
+      milvus:
+        condition: service_started
+
+  n8n:
+    <<: *common
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    env_file:
+      - ${N8N_ENV_FILE:-/etc/ai-middle-office/n8n.env}
+    volumes:
+      - ${AI_DATA_ROOT:-/data/ai-middle-office}/n8n:/home/node/.n8n
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5678/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    # Keep 10.240.10.10/.11 available for the fixed-IP API and Worker even
+    # when the dependency stack is created while the application is stopped.
+    networks:
+      app_net:
+        ipv4_address: 10.240.10.12
+
+networks:
+  app_net:
+    external: true
+    name: ai-middle-office-app-net

@@ -57,6 +57,40 @@ def test_vite_login_rejects_unsafe_redirect_targets():
     assert "window.location.replace(landingPath(me))" in app
 
 
+def test_vite_login_bootstrap_does_not_load_the_admin_application_or_d3():
+    main = read_frontend("ai-web/src/main.js")
+    login_bootstrap = read_frontend("ai-web/src/loginBootstrap.js")
+    login_app = read_frontend("ai-web/src/LoginApp.vue")
+    app_bootstrap = read_frontend("ai-web/src/appBootstrap.js")
+    app = read_frontend("ai-web/src/App.vue")
+
+    assert "window.location.pathname === '/login'" in main
+    assert "import('./loginBootstrap.js')" in main
+    assert "import('./appBootstrap.js')" in main
+    assert "from './App.vue'" not in main
+    assert "from 'element-plus'" not in main
+
+    for component_path in ("button", "form", "icon", "input"):
+        assert f"element-plus/es/components/{component_path}/index.mjs" in login_bootstrap
+    assert "element-plus/dist/index.css" not in login_bootstrap
+    assert "./App.vue" not in login_bootstrap
+    assert "d3" not in login_app
+    assert "BidIntake" not in login_app
+    assert "from './App.vue'" in app_bootstrap
+    assert "element-plus/dist/index.css" in app_bootstrap
+
+    for component in (
+        "BidIntakeAssessment",
+        "BidIntakeWorkbench",
+        "BudgetProjects",
+        "AccountQuotaLibrary",
+        "EnterpriseQuotaWorkbench",
+        "PricingAgentLab",
+        "UnifiedQuotes",
+    ):
+        assert f"const {component} = defineAsyncComponent" in app
+
+
 def test_frontend_auth_session_is_tab_scoped_not_local_storage_shared():
     app = read_frontend("ai-web/src/App.vue")
     auth_storage = read_frontend("ai-web/src/authStorage.js")
@@ -83,6 +117,28 @@ def test_frontend_auth_session_is_tab_scoped_not_local_storage_shared():
     assert "authStorage().setItem(TOKEN_KEY, token)" in shared_js
     assert "window.localStorage.getItem(TOKEN_KEY)" not in shared_js
     assert "window.localStorage.setItem(TOKEN_KEY" not in shared_js
+
+
+def test_password_change_required_redirects_business_pages_to_the_forced_rotation_dialog():
+    app = read_frontend("ai-web/src/App.vue")
+    auth_storage = read_frontend("ai-web/src/authStorage.js")
+    guarded_clients = [
+        read_frontend("ai-web/src/budgetProjectApi.js"),
+        read_frontend("ai-web/src/accountQuotaApi.js"),
+        read_frontend("ai-web/src/enterpriseQuotaV2Api.js"),
+        read_frontend("ai-web/src/pricingAgentApi.js"),
+        read_frontend("ai-web/src/bidIntakeApi.js"),
+    ]
+
+    assert "isPasswordChangeRequiredError(error)" in auth_storage
+    assert "code === 'PASSWORD_CHANGE_REQUIRED'" in auth_storage
+    assert "window.location.replace(`/login?${params.toString()}`)" in auth_storage
+    assert "redirect: currentPath" in auth_storage
+    assert "if (me.must_change_password)" in app
+    assert "redirectToPasswordChange()" in app
+    for client in guarded_clients:
+        assert "isPasswordChangeRequiredError(error)" in client
+        assert "redirectToPasswordChange()" in client
 
 
 def test_vite_navigation_is_grouped_by_work_context_without_development_labels():

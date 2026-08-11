@@ -75,7 +75,7 @@ def test_pending_specialty_module_does_not_become_default_home():
 
 
 def test_module_metadata_separates_trial_stage_from_runtime_status():
-    modules = {item["key"]: item for item in get_available_modules(user_with_roles("staff"))}
+    modules = {item["key"]: item for item in get_available_modules(user_with_roles("quote_user"))}
 
     assert modules["dwg_trial"] == {
         "key": "dwg_trial",
@@ -109,3 +109,14 @@ def test_serialized_user_exposes_default_home_path():
 
     assert payload["default_home_path"] == "/admin/project-tasks/my"
     assert payload["roles"] == ["project_member"]
+
+
+def test_staff_only_role_exposes_exactly_five_business_modules():
+    modules = {item["key"]: item for item in get_available_modules(user_with_roles("staff"))}
+
+    assert set(modules) == {"unified_quotes", "legacy_quote", "bidding", "cost_db", "account_quotas"}
+    assert modules["unified_quotes"]["status"] == "available"
+    assert modules["legacy_quote"]["status"] == "available"
+    assert modules["bidding"]["status"] in {"available", "pending"}
+    assert modules["cost_db"]["status"] in {"available", "pending"}
+    assert modules["account_quotas"]["status"] in {"available", "pending"}

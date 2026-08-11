@@ -21,7 +21,12 @@ def test_health_ready(client):
     assert response.json()["task_queue"]["mode"] == "disabled"
     assert response.json()["task_queue"]["worker"] == "disabled"
     assert response.json()["external_dependencies"]["enabled"] is False
+    assert "rag_service_url" not in response.json()
     assert response.headers.get("x-trace-id")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "SAMEORIGIN"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
 
 
 def test_health_ready_can_probe_external_dependencies(monkeypatch, client):

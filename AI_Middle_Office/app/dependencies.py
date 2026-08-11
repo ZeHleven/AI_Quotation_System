@@ -12,7 +12,7 @@ from app.services.rbac import get_effective_roles, has_admin_role, has_any_role,
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_authenticated_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="认证失效",
@@ -46,12 +46,27 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             headers={"WWW-Authenticate": "Bearer"},
         )
     user.effective_roles = get_effective_roles(user)
+    user.token_password_change_required = bool(payload.get("password_change_required", False))
     return user
+
+
+def get_current_user(current_user: User = Depends(get_authenticated_user)) -> User:
+    if bool(current_user.must_change_password) or bool(
+        getattr(current_user, "token_password_change_required", False)
+    ):
+        raise HTTPException(status_code=403, detail="PASSWORD_CHANGE_REQUIRED")
+    return current_user
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if not has_admin_role(current_user):
         raise HTTPException(status_code=403, detail="权限不足，仅管理员可操作")
+    return current_user
+
+
+def require_account_quota_user(current_user: User = Depends(get_current_user)) -> User:
+    if not has_any_role(current_user, {"system_admin", "admin", "staff"}):
+        raise HTTPException(status_code=403, detail="PERMISSION_DENIED")
     return current_user
 
 

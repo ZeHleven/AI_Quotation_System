@@ -1,0 +1,27 @@
+# Captured from the source CentOS on 2026-08-06.
+# These are Docker image content IDs, not registry manifest digests.
+# When an image is transferred with docker save/load, verify the loaded local
+# image ID exactly. Do not substitute a moving latest tag.
+
+rag_service-rag-service-tender:phase3c|sha256:e803e6bb3dd5fef48f09092037af028e99f2be22cd33babff013a506d560898d
+milvusdb/milvus:v2.3.1|sha256:1373b24bf3c1d5c607e64e454da2e53f22579dc1ead2058b5d5206ad95f4c157
+minio/minio:RELEASE.2023-03-20T20-16-18Z|sha256:400c20c8aac03024d00a34603f5445dd4679b97712e062727190a8462c6a34b5
+redis:7.2-alpine|sha256:b63cfcebcc37003fa6821163fa9e36c3cc586f915d17bc056d48b52a5a025ab7
+quay.io/coreos/etcd:v3.5.5|sha256:673f29d03de9f5d46158b4cfc3e4c1d69b72d31a800825b4c5e9e6b1ed553acb
+mysql:8.0.39|sha256:f5da8fc4b539c8ff9005b316b41b09d99b6ef6cdf55b5abbfcfd40dd3547f845
+nginx:latest|sha256:1a1e6313642049664ed59099f3ca37a672486049af68395c62dd885a9bf4de35
+langgenius/dify-api:1.13.2|sha256:09a9a00770330c6524d0f180063cf91c946732ad9b69a135669928ec35282d32
+langgenius/dify-plugin-daemon:0.5.4-local|sha256:5a2c04159c24354a7b1c7f25c979be9d5731275272cf5be59ec3d8cd129e3b74
+ubuntu/squid:latest|sha256:f49c57d208193ab0d5468e8daedf2eb48d78b3a842bd1d9f8849db13d566b024
+langgenius/dify-web:1.13.2|sha256:7457f725969a627acae14f755c54564e797ade766028445208119fc9369d7c1b
+redis:6-alpine|sha256:d81ff0fbad3b19214168a7a4b9619137b4025ac7174e1ca83ed1fa5014137757
+langgenius/dify-sandbox:0.2.12|sha256:ba1b250b95055bf8c8a5e70aba0448117358fe27c14a91754bf1c121f9cd97ff
+postgres:15-alpine|sha256:cd848ee12e8efaf62a09b7e7290a287c21f332a32779048afb970d497374bb04
+semitechnologies/weaviate:1.27.0|sha256:f24b5f0e68e6629024cd525876cd4a1c4cf313ec9295168ab6784ea09ef6d382
+docker.n8n.io/n8nio/n8n|sha256:b3be16a7682658f933fb21256be88bd7602a48a87cc80af9b6b03c9a48fd3ccc
+
+# Deliberately excluded from the production migration candidate:
+# infiniflow/ragflow:v0.24.0
+# elasticsearch:8.11.3
+# valkey/valkey:8 (pending final RAGFlow-only dependency confirmation)
+# quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z (pending final RAGFlow-only dependency confirmation)

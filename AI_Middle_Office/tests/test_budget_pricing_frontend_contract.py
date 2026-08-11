@@ -63,27 +63,50 @@ def test_budget_pricing_api_contract_is_wired():
     assert "responseType: 'blob'" in api
     assert "pricingDraftProcurementStatistics: (projectId, params)" in api
     assert "/pricing-draft/procurement-statistics" in api
+    assert "projectEnterpriseQuotaItems: (projectId, params)" in api
+    assert "/pricing-draft/enterprise-quota-items" in api
     assert "materializeProjectQuota: (projectId, lineId, payload)" in api
+    assert "addProjectQuota: (projectId, lineId, payload)" in api
+    assert "replaceProjectQuota: (projectId, lineId, payload)" in api
+    assert "deleteProjectQuota: (projectId, lineId, payload)" in api
     assert "createProjectQuotaResource: (projectId, lineId, payload)" in api
     assert "updateProjectQuotaResource: (projectId, lineId, resourceId, payload)" in api
     assert "deleteProjectQuotaResource: (projectId, lineId, resourceId, payload)" in api
     assert "syncProjectQuotaToEnterprise: (projectId, lineId, payload)" in api
+    assert "export async function budgetBlobErrorMessage" in api
+    assert "const text = await data.text()" in api
+    assert "BUDGET_PRICING_EXPORT_SOURCE_FILE_NOT_RETAINED" in api
+    assert "await budgetBlobErrorMessage(error, '原格式报价 Excel 导出失败')" in _source("BudgetProjectPricing.vue")
 
 
-def test_project_quota_row_and_standalone_resource_workbench_are_visible():
+def test_project_quota_row_and_inline_resource_workbench_are_visible():
     source = _source("BudgetProjectPricing.vue")
     template = source.split("<script setup>", 1)[0]
     projects = _source("BudgetProjects.vue")
 
     for label in (
-        "工料机明细",
-        "新增工料机",
-        "删除工料机",
+        "<strong>明细项</strong>",
+        "新增明细项",
         "保存并重算项目定额",
         "保存后同步到企业定额库",
-        "企业定额同步状态",
     ):
         assert label in template
+    assert "明细项（第三级）" not in template
+    assert "点击字段旁的编辑图标可单独修改" not in template
+    for detail_label in (
+        "费用类别",
+        "编码",
+        "名称",
+        "规格",
+        "品牌",
+        "单位",
+        "含量",
+        "单价",
+        "金额",
+    ):
+        assert f"label: '{detail_label}'" in source
+    detail_fields = source.split("const projectQuotaDetailFields =", 1)[1].split("]", 1)[0]
+    assert "label: '类型'" not in detail_fields
     for field in (
         "resource_code",
         "component_type",
@@ -103,12 +126,39 @@ def test_project_quota_row_and_standalone_resource_workbench_are_visible():
         assert f"projectQuotaEditor.form.{field}" in template
     assert ':show-header="false"' in source
     assert "matched-quota-aligned-table" in source
-    assert "projectQuotaMainItem(row)" in source
+    assert "projectQuotaMainItems(row)" in source
     assert 'class="project-quota-relation"' in source
-    assert 'class="budget-panel project-quota-resource-workbench"' in template
-    assert 'id="project-quota-resource-title"' in template
-    assert '@row-click="selectProjectQuota(row)"' in template
-    assert '@row-click="startEditProjectQuotaResource"' in template
+    assert '<Teleport' in template
+    assert ':to="projectQuotaInlineHost"' in template
+    assert ':ref="captureProjectQuotaInlineHost"' in template
+    assert 'class="project-quota-inline-workbench"' in template
+    assert 'id="project-quota-inline-host"' in template
+    assert template.count('id="project-quota-inline-host"') == 1
+    matched_table = template.split(':data="projectQuotaMainItems(row)"', 1)[1].split("</el-table>", 1)[0]
+    assert 'row-key="entry_key"' in matched_table
+    assert ':expand-row-keys="projectQuotaExpandedEntryKeys(row)"' in matched_table
+    assert 'type="expand" width="28" class-name="project-quota-detail-expand-cell"' in matched_table
+    assert 'v-if="isProjectQuotaRowActive(row) && isProjectQuotaItemActive(quotaRow)"' in matched_table
+    assert ':data-quota-entry-key="quotaRow.entry_key"' in matched_table
+    assert matched_table.index('id="project-quota-inline-host"') < matched_table.index('v-for="column in projectQuotaMainColumns"')
+    assert "function refreshProjectQuotaInlineHost()" in source
+    assert "document.getElementById('project-quota-inline-host')" in source
+    assert source.count("refreshProjectQuotaInlineHost()") >= 3
+    assert '@row-click="(quotaRow) => selectProjectQuota(row, quotaRow)"' in template
+    assert "beginProjectQuotaFieldEdit(resource, field)" in template
+    assert "saveProjectQuotaInlineField" in template
+    assert ':aria-label="`编辑${field.label}`"' in template
+    assert 'aria-label="保存字段修改"' in template
+    assert 'aria-label="取消字段修改"' in template
+    assert "@dblclick" not in template.split('class="project-quota-inline-workbench"', 1)[1].split("</Teleport>", 1)[0]
+    assert 'class="project-quota-detail-row project-quota-detail-row--item"' in template
+    workbench = template.split('class="project-quota-inline-workbench"', 1)[1].split("</Teleport>", 1)[0]
+    assert ">操作<" in workbench
+    assert ">添加明细<" in workbench
+    assert ">删除明细<" in workbench
+    assert '@command="(command) => handleProjectQuotaResourceAction(command, resource)"' in workbench
+    assert "企业定额同步状态" not in template
+    assert "<el-table" not in workbench
     assert "projectQuotaEditor.visible" in template
     assert "当前编辑的是项目定额工作副本" not in template
     assert "当前清单项目：" not in template
@@ -116,22 +166,160 @@ def test_project_quota_row_and_standalone_resource_workbench_are_visible():
     assert "<BudgetProjectPricing" in projects
 
 
-def test_project_quota_resource_row_click_toggles_editor_for_the_same_resource():
+def test_project_quota_resource_fields_use_independent_inline_editors():
     source = _source("BudgetProjectPricing.vue")
-    edit_handler = source.split(
-        "function startEditProjectQuotaResource(resource) {",
+    detail_cell = source.split(
+        'class="project-quota-detail-cell"',
         1,
     )[1].split(
-        "function recalculateProjectQuotaEditorAmount()",
+        'class="project-quota-inline-editor"',
+        1,
+    )[0]
+    edit_handler = source.split(
+        "async function saveProjectQuotaInlineField() {",
+        1,
+    )[1].split(
+        "const setProjectQuotaSnapshot",
         1,
     )[0]
 
-    assert '@row-click="startEditProjectQuotaResource"' in source
-    assert "projectQuotaEditor.resource === resource" in edit_handler
-    assert "projectQuotaEditor.resource.resource_uuid === resource.resource_uuid" in edit_handler
-    assert "projectQuotaEditor.visible && projectQuotaEditor.mode === 'edit' && isCurrentResource" in edit_handler
-    assert "projectQuotaEditor.visible = false" in edit_handler
-    assert "return" in edit_handler
+    assert '@click.stop="beginProjectQuotaFieldEdit(resource, field)"' in source
+    assert detail_cell.index('class="project-quota-field-edit"') < detail_cell.index('class="project-quota-detail-value"')
+    assert '@dblclick="projectQuotaCanEdit && startEditProjectQuotaResource(resource)"' not in source
+    assert '@row-click="startEditProjectQuotaResource"' not in source
+    assert "[field.key]: value" in edit_handler
+    assert "expected_snapshot_revision" in edit_handler
+    assert "expected_resource_revision" in edit_handler
+    assert "await loadDraft(true)" in edit_handler
+    assert "清单价格和统计信息已同步重算" in edit_handler
+    assert "grid-template-columns:54px 68px 86px 62px 58px 34px" in source
+    assert "gap:2px" in source
+    assert ".project-quota-detail-cell:nth-child(2) .project-quota-detail-value" in source
+    assert ".project-quota-detail-cell:nth-child(6) .project-quota-detail-value" in source
+    assert "text-overflow:clip" in source
+    assert "justify-content:flex-start;gap:1px" in source
+    assert ".project-quota-detail-row .is-number{justify-content:flex-end" in source
+
+
+def test_project_quota_actions_and_pinned_enterprise_picker_are_wired():
+    pricing = _source("BudgetProjectPricing.vue")
+    picker = _source("EnterpriseQuotaMiniPanel.vue")
+    quota_workbench = _source("EnterpriseQuotaWorkbench.vue")
+
+    for label in (">新增</el-button>", ">删除</el-button>", ">替换</el-button>"):
+        assert label in pricing
+    for handler in (
+        "openProjectQuotaAddition(row)",
+        "deleteCurrentProjectQuota(row, quotaRow)",
+        "openProjectQuotaReplacement(row, quotaRow)",
+        "applyProjectQuotaFromLibrary",
+    ):
+        assert handler in pricing
+    assert 'defer\n    v-if="pricingAvailable' in pricing
+    assert 'class="project-quota-name-cell"' in pricing
+    assert 'aria-label="定额项操作"' in pricing
+    assert ':disabled="!canManageDraft" @click.stop="deleteCurrentProjectQuota(row, quotaRow)"' in pricing
+    assert "if (!isProjectQuotaRowActive(row) || !projectQuotaWorkbench.snapshot)" in pricing
+    assert "await selectProjectQuota(row)" in pricing
+    assert 'v-if="hasProjectQuotaItem(row)"' in pricing
+    assert "暂无定额，当前清单价格已按剩余价格来源重新计算。" in pricing
+    assert "await loadDraft(true)\n    await nextTick()\n    ElMessage.success('定额已删除，清单价格、来源统计和费用汇总已同步更新')" in pricing
+    assert 'label="操作" width="205" fixed="right"' not in pricing
+    assert '.project-quota-inline-workbench{position:sticky;left:0;box-sizing:border-box;width:min(1360px,calc(100vw - 72px))' in pricing
+    assert 'position:fixed' in picker
+    assert 'z-index:2100' in picker
+    assert "emit('select', props.multiple ? selectedRows.value : selectedItem.value)" in picker
+    assert "{{ confirmLabel }}" in picker
+    assert "已选 {{ selectedRows.length }} 条" in picker
+    assert ":selectable=\"['add', 'replace'].includes(enterpriseQuotaPanel.mode)\"" in pricing
+    assert ':multiple="enterpriseQuotaPanel.mode === \'add\'"' in pricing
+    assert "enterpriseQuotaPanel.mode === 'add' ? '勾选新增' : '勾选替换'" in pricing
+    assert "budgetProjectApi.projectEnterpriseQuotaItems" in picker
+    assert ':project-id="projectId"' in pricing
+    assert 'overflow-x: hidden' in quota_workbench
+    assert 'width: 100%' in quota_workbench
+    assert "['11%', '7%', '17%', '14%', '14%', '7%', '9%', '18%']" in quota_workbench
+    assert 'width: 3%' in quota_workbench
+    assert 'restoreProjectQuotaInlineRow' in pricing
+    assert "const projectQuotaExpandedEntryKeys = (row)" in pricing
+    assert ':expand-row-keys="professionalExpandedRowKeys"' in pricing
+    assert '@expand-change="syncProfessionalExpandedRows"' in pricing
+    assert 'professionalExpandedRowKeys.value = [...professionalExpandedRowKeys.value, refreshedRowId]' in pricing
+
+
+def test_project_quota_resource_save_refreshes_prices_and_statistics_before_success():
+    pricing = _source("BudgetProjectPricing.vue")
+    save_handler = pricing.split(
+        "async function saveProjectQuotaResource() {",
+        1,
+    )[1].split(
+        "async function deleteProjectQuotaResourceRow() {",
+        1,
+    )[0]
+
+    refresh_index = save_handler.index("await loadDraft(true)")
+    render_index = save_handler.index("await nextTick()", refresh_index)
+    success_index = save_handler.index("ElMessage.success(", render_index)
+
+    assert refresh_index < render_index < success_index
+    assert "工料机已新增，清单价格、来源统计和费用汇总已同步更新" in save_handler
+    assert "工料机已更新，清单价格、来源统计和费用汇总已同步更新" in save_handler
+
+
+def test_project_quota_add_opens_multi_select_enterprise_picker_and_submits_items():
+    pricing = _source("BudgetProjectPricing.vue")
+    template = pricing.split("<script setup>", 1)[0]
+    add_handler = pricing.split(
+        "async function openProjectQuotaAddition(row) {",
+        1,
+    )[1].split(
+        "async function openProjectQuotaReplacement(row, quotaRow = null) {",
+        1,
+    )[0]
+    apply_handler = pricing.split(
+        "async function applyProjectQuotaFromLibrary(selection) {",
+        1,
+    )[1].split(
+        "async function deleteCurrentProjectQuota(row, quotaRow = null) {",
+        1,
+    )[0]
+
+    picker_index = add_handler.index("openEnterpriseQuotaPanel({")
+    assert "mode: 'add'" in add_handler
+    assert picker_index >= 0
+    assert "startCreateProjectQuotaResource()" not in add_handler
+    assert "disabledItemIds: existingIds" in add_handler
+    assert "const adding = enterpriseQuotaPanel.mode === 'add'" in apply_handler
+    assert "budgetProjectApi.addProjectQuota" in apply_handler
+    assert "pricing_mode: selectedDraftMode.value" in apply_handler
+    assert "enterprise_quota_item_ids: items.map" in apply_handler
+    assert "expected_snapshot_revision" in apply_handler
+    assert "row.has_project_quota = true" in apply_handler
+    assert "await loadDraft(true)" in apply_handler
+    assert "定额已新增，清单价格、统计信息和费用汇总已同步更新" in apply_handler
+    assert '@select="applyProjectQuotaFromLibrary"' in template
+
+
+def test_draft_reload_replaces_stale_breakdown_preview_after_project_quota_change():
+    pricing = _source("BudgetProjectPricing.vue")
+    refresh_handler = pricing.split(
+        "const refreshDraftBreakdownInputs = (row) => {",
+        1,
+    )[1].split(
+        "const draftBreakdownInputValue = (row, key) => {",
+        1,
+    )[0]
+    line_loader = pricing.split(
+        "async function loadDraftLines() {",
+        1,
+    )[1].split(
+        "async function saveDraftLinePrice(row, clear = false) {",
+        1,
+    )[0]
+
+    assert "draftBreakdownEditing[`${lineId}:${key}`] !== true" in refresh_handler
+    assert "draftBreakdownInputs[lineId][key] = draftBreakdownInitialValue(row, key)" in refresh_handler
+    assert "refreshDraftBreakdownInputs(row)" in line_loader
 
 
 def test_partial_pricing_and_backend_status_contracts_are_visible():
@@ -279,13 +467,19 @@ def test_budget_pricing_professional_fields_are_exact_and_ordered():
         "措施费",
         "管理费",
         "税费",
+        "报价来源",
     )
     positions = [professional.index(f'label="{label}"') for label in labels]
     assert positions == sorted(positions)
     assert 'ref="professionalTableRef"' in professional
     assert '@row-click="toggleProfessionalQuotaRow"' in professional
     assert professional.index('type="expand"') < professional.index('label="序号"')
-    assert 'fixed="left" class-name="project-quota-expand-cell"' in professional
+    assert 'type="expand" width="28" class-name="project-quota-expand-cell"' in professional
+    assert 'fixed="left"' not in professional
+    assert 'label="税费" min-width="31" align="right" show-overflow-tooltip' in professional
+    assert 'label="报价来源" min-width="102" class-name="professional-source-column"' in professional
+    assert 'label="名称" min-width="64" show-overflow-tooltip' in professional
+    assert 'label="项目特征" min-width="72" show-overflow-tooltip' in professional
     assert '<template #expand="{ expanded }">' in professional
     assert "{{ expanded ? '−' : '+' }}" in professional
     assert 'class="project-quota-relation" @click.stop' in professional
@@ -314,7 +508,11 @@ def test_budget_pricing_professional_fields_are_exact_and_ordered():
         "feeUnitValue(row, 'measure')",
         "feeUnitValue(row, 'management')",
         "draftPreviewTaxAmount(row) ?? taxAmount(row) ?? 0",
-        "selectProjectQuota(row)",
+        "draftPriceSourceLabel(row)",
+        "draftPriceSourceMeta(row)",
+        '@click.stop="openCostBasis(row)"',
+        '@keyup.enter="openCostBasis(row)"',
+        "selectProjectQuota(row, quotaRow)",
     ):
         assert expression in professional
     assert "professionalTableRef.value?.toggleRowExpansion(row)" in source
@@ -374,7 +572,7 @@ def test_matched_quota_main_fields_match_professional_fields():
     assert positions == sorted(positions)
     assert source.count('class="matched-quota-aligned-table"') == 1
     assert source.count('v-for="column in projectQuotaMainColumns"') == 1
-    assert quota_columns.index("key: '__expand_spacer'") < quota_columns.index("key: 'quota_code'")
+    assert "key: '__expand_spacer'" not in quota_columns
     assert ':show-header="false"' in source
     assert ':label="column.label"' not in source
     assert "projectQuotaMainFieldValue(quotaRow, column)" in source
@@ -382,6 +580,10 @@ def test_matched_quota_main_fields_match_professional_fields():
     assert "measure_fee:" in source
     assert "management_fee:" in source
     assert "tax_fee:" in source
+    assert 'type="expand" width="28" class-name="project-quota-detail-expand-cell"' in source
+    assert "{ key: 'quota_code', label: '定额编码', minWidth: 30" in quota_columns
+    assert "{ key: 'tax_fee', label: '税费', minWidth: 31" in quota_columns
+    assert "{ key: '__source_spacer', minWidth: 102" in quota_columns
     assert ".project-quota-relation-branch{" in source
     assert "border-bottom:2px solid #60a5fa" in source
     assert "border-left:2px solid #60a5fa" in source
@@ -636,15 +838,38 @@ def test_quick_review_explains_each_non_normal_risk():
 def test_project_quota_resource_workbench_only_shows_in_professional_view():
     source = _source("BudgetProjectPricing.vue")
     template = source.split("<script setup>", 1)[0]
-    workbench = template.split(
-        'class="budget-panel project-quota-resource-workbench"',
-        1,
-    )[0].rsplit(
-        "<section",
-        1,
-    )[1]
+    workbench = template.split('to="#project-quota-inline-host"', 1)[0].rsplit("<Teleport", 1)[1]
 
     assert "pricingWorkspaceView === 'professional'" in workbench
+
+
+def test_clicking_active_project_quota_row_collapses_its_details():
+    source = _source("BudgetProjectPricing.vue")
+    handler = source.split("async function selectProjectQuota(row, quotaRow = null) {", 1)[1].split(
+        "async function openProjectQuotaAddition(row)",
+        1,
+    )[0]
+    collapse = source.split("function collapseProjectQuotaDetails() {", 1)[1].split(
+        "async function selectProjectQuota",
+        1,
+    )[0]
+
+    assert '@row-click="(quotaRow) => selectProjectQuota(row, quotaRow)"' in source
+    assert "quotaRow" in handler
+    assert "projectQuotaWorkbench.snapshot" in handler
+    assert "isProjectQuotaRowActive(row)" in handler
+    assert "isProjectQuotaItemActive(quotaRow)" in handler
+    assert "collapseProjectQuotaDetails()" in handler
+    assert "return" in handler
+    for reset in (
+        "projectQuotaInlineReady.value = false",
+        "projectQuotaInlineHost.value = null",
+        "projectQuotaWorkbench.row = null",
+        "projectQuotaWorkbench.snapshot = null",
+        "projectQuotaWorkbench.entryKey = null",
+        "projectQuotaEditor.visible = false",
+    ):
+        assert reset in collapse
 
 
 def test_quick_review_cost_basis_opens_inline_source_drawer():
@@ -652,6 +877,7 @@ def test_quick_review_cost_basis_opens_inline_source_drawer():
     api = _source("budgetProjectApi.js")
     quota_workbench = _source("EnterpriseQuotaWorkbench.vue")
     quota_api = _source("enterpriseQuotaV2Api.js")
+    mini_panel = _source("EnterpriseQuotaMiniPanel.vue")
 
     for needle in (
         'class="source-basis-tag"',
@@ -661,32 +887,59 @@ def test_quick_review_cost_basis_opens_inline_source_drawer():
         "匹配到的企业定额项目",
         "匹配到的账户定额项目",
         "AI 估价依据",
-        "在当前生效企业定额库中查看",
+        "查看企业定额库",
         "openEnterpriseQuotaLibraryItem",
         "activeEnterpriseItemId",
         "activeEnterpriseVersionId",
         "item?.active_version",
         "该报价引用的条目不属于当前生效的企业定额版本，已阻止跳转。",
-        "enterprise_quota_item_id",
-        "enterprise_quota_version",
-        "enterprise_quota_version_id",
-        "window.open('', '_blank')",
-        "newPage.opener = null",
-        "newPage.location.href = url.toString()",
+        "EnterpriseQuotaMiniPanel",
+        "openEnterpriseQuotaPanel",
+        "enterpriseQuotaPanel.visible",
         "selected_account_quota_item_id",
         "selected_enterprise_quota_item_id",
     ):
         assert needle in pricing
 
+    assert "在当前生效企业定额库中查看" not in pricing
     assert 'label="成本依据"' not in pricing
     assert "window.open(`/admin/account-quotas" not in pricing
+    assert "window.open('', '_blank')" not in pricing
+    library_url = pricing.split("const enterpriseQuotaLibraryUrl = computed(() => {", 1)[1].split(
+        "const quickReviewLabel",
+        1,
+    )[0]
+    assert "enterprise_quota_version: 'active'" in library_url
+    assert "enterprise_quota_version_id: String(costBasisDrawer.activeEnterpriseVersionId)" in library_url
+    assert "enterprise_quota_item_id: String(costBasisDrawer.activeEnterpriseItemId)" in library_url
+    assert "window.open('about:blank', '_blank')" in library_url
+    assert "openedTab.location.replace(new URL(enterpriseQuotaLibraryUrl.value, window.location.origin).href)" in library_url
+    assert "浏览器阻止了新标签页，请允许弹出窗口后重试" in library_url
+    assert "openedTab.opener = null" not in library_url
+    assert "openEnterpriseQuotaPanel" not in library_url
+    assert 'class="enterprise-quota-mini"' in mini_panel
+    assert 'v-show="modelValue"' in mini_panel
+    assert '@click.stop="close"' in mini_panel
+    assert "悬浮窗已钉在报价页面" not in mini_panel
+    assert ">已钉住<" not in mini_panel
+    assert "当前生效：{{ activeVersionLabel }}" in mini_panel
+    assert 'response?.data?.active_version || data?.active_version || null' in mini_panel
+    assert "勾选替换" in mini_panel
+    assert "quotaV2Items" in mini_panel
+    assert "items.value = quotaV2Items(response)" in mini_panel
+    assert "masterItems" in quota_api
     assert "enterpriseQuotaItemDetail" in api
     assert "accountQuotaItemDetail" in api
     assert "routeRequiresActiveVersion" in quota_workbench
     assert "routeActiveVersionId" in quota_workbench
     assert "(routeRequiresActiveVersion ? routeActiveVersion : null)" in quota_workbench
     assert "applyActiveQuotaItemRoute" in quota_workbench
+    assert "'excel-row-route-target'" in quota_workbench
+    assert "Number(row.entity_id) === routeQuotaItemId" in quota_workbench
+    assert "document.querySelector('.excel-row-route-target')?.scrollIntoView({ block: 'center' })" in quota_workbench
+    assert "if (routeRequiresActiveVersion && routeQuotaItemId && window.opener) window.opener = null" in quota_workbench
     assert "activeItem" in quota_api
+    assert ':expected-version-id="readiness?.active_quota_version?.id"' in pricing
 
 
 def test_enterprise_quota_workbench_defaults_to_active_version_before_draft():
@@ -763,3 +1016,25 @@ def test_cost_db_page_removes_legacy_query_purchase_and_cost_items_workbenches()
     assert "await refreshCostMaster()" not in cost_db_loader
     assert "await loadCostItems()" not in cost_db_loader
     assert "openCostItemDetail" in cost_db_loader
+
+
+def test_attention_kpi_locates_the_pending_line_across_pages():
+    source = _source("BudgetProjectPricing.vue")
+
+    for needle in (
+        'class="warning attention-kpi"',
+        '@click="focusNextAttentionLine"',
+        ':row-class-name="professionalDraftRowClass"',
+        "const draftLineNeedsAttention = (line) =>",
+        "effectiveUnitPrice === null",
+        "line?.quantity_status !== 'valid'",
+        "calculationQuantity <= 0",
+        "async function allDraftLinesForAttention()",
+        "page_size: pageSize",
+        "draftLinePage.value = Math.floor(target.index / draftLinePageSize) + 1",
+        "pricingWorkspaceView.value = 'professional'",
+        "targetElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })",
+        "再次点击定位下一条",
+        "is-attention-focus",
+    ):
+        assert needle in source

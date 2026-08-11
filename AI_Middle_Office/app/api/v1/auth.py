@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.config import settings
 from app.core.responses import api_ok
-from app.dependencies import get_current_user, require_admin
+from app.dependencies import get_authenticated_user, require_admin
 from app.models.user import User, UserRole
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.services.rbac import get_effective_roles, serialize_user_for_rbac
@@ -28,6 +28,21 @@ class ChangePasswordRequest(BaseModel):
 
 class DingTalkVerifyRequest(BaseModel):
     code: str | None = None
+
+
+def _issue_access_token(user: User) -> tuple[str, list[str], int]:
+    roles = get_effective_roles(user)
+    role_version = int(user.role_version or 1)
+    access_token = create_access_token(
+        data={
+            "sub": user.username,
+            "role": user.role,
+            "roles": roles,
+            "role_version": role_version,
+            "password_change_required": bool(user.must_change_password),
+        }
+    )
+    return access_token, roles, role_version
 
 
 @router.post("/register", summary="注册新员工账号")
@@ -68,16 +83,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
         )
 
     # 签发包含用户身份的 JWT
-    roles = get_effective_roles(user)
-    role_version = int(user.role_version or 1)
-    access_token = create_access_token(
-        data={
-            "sub": user.username,
-            "role": user.role,
-            "roles": roles,
-            "role_version": role_version,
-        }
-    )
+    access_token, roles, role_version = _issue_access_token(user)
     data = {
         "access_token": access_token,
         "token_type": "bearer",
@@ -92,7 +98,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
 
 
 @router.get("/me", summary="获取当前登录用户")
-def read_current_user(current_user: User = Depends(get_current_user)):
+def read_current_user(current_user: User = Depends(get_authenticated_user)):
     data = serialize_user_for_rbac(current_user)
     return api_ok(data, **data)
 
@@ -100,10 +106,15 @@ def read_current_user(current_user: User = Depends(get_current_user)):
 @router.post("/change_password", summary="修改密码")
 def change_password(
     req: ChangePasswordRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.id == current_user.id).first()
+    user = (
+        db.query(User)
+        .options(selectinload(User.role_assignments))
+        .filter(User.id == current_user.id)
+        .first()
+    )
     if not user or not verify_password(req.old_password, user.hashed_password):
         raise HTTPException(status_code=400, detail="原密码错误")
     if len(req.new_password) < 6:
@@ -111,8 +122,20 @@ def change_password(
 
     user.hashed_password = get_password_hash(req.new_password)
     user.must_change_password = False
+    user.role_version = int(user.role_version or 1) + 1
     db.commit()
-    return api_ok(message="密码修改成功")
+    db.refresh(user)
+    access_token, roles, role_version = _issue_access_token(user)
+    data = {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": user.role,
+        "roles": roles,
+        "role_version": role_version,
+        "username": user.username,
+        "must_change_password": False,
+    }
+    return api_ok(data, message="密码修改成功", **data)
 
 
 @router.post("/dingtalk/verify", summary="钉钉登录二次验证")

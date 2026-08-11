@@ -12,9 +12,11 @@ from typing import Any
 from openpyxl import load_workbook
 from openpyxl.utils import column_index_from_string, get_column_letter
 
+from app.services.legacy_excel import LegacyExcelConversionError, normalize_excel_workbook_bytes
+
 
 STANDARDIZATION_VERSION = "biz2l-standard-v0"
-SUPPORTED_REQUIREMENT_EXTENSIONS = {".xlsx", ".xlsm"}
+SUPPORTED_REQUIREMENT_EXTENSIONS = {".xlsx", ".xlsm", ".xls"}
 MAX_SCAN_ROWS = 30
 MAX_ROWS_PER_SHEET = 800
 MAX_COLUMNS_PER_SHEET = 300
@@ -197,12 +199,15 @@ def standardize_requirement_excel_bytes(file_content: bytes, *, filename: str | 
 
     suffix = Path(filename or "").suffix.lower()
     if suffix and suffix not in SUPPORTED_REQUIREMENT_EXTENSIONS:
-        raise RequirementStandardizationError("BIZ-2l-1 只支持 .xlsx/.xlsm，旧 .xls 请另存后再解析")
+        raise RequirementStandardizationError("需求单仅支持 .xls/.xlsx/.xlsm 格式")
 
     try:
-        workbook = load_workbook(BytesIO(file_content), data_only=True, read_only=False)
+        normalized_content = normalize_excel_workbook_bytes(file_content, filename=filename)
+        workbook = load_workbook(BytesIO(normalized_content), data_only=True, read_only=False)
+    except LegacyExcelConversionError as exc:
+        raise RequirementStandardizationError(str(exc)) from exc
     except Exception as exc:  # pragma: no cover - openpyxl raises several implementation-specific errors.
-        raise RequirementStandardizationError(f"Excel 需求单读取失败，请确认文件为 .xlsx/.xlsm 格式: {exc}") from exc
+        raise RequirementStandardizationError(f"Excel 需求单读取失败，请确认文件为 .xls/.xlsx/.xlsm 格式: {exc}") from exc
 
     rows: list[dict[str, Any]] = []
     sheet_mappings: list[dict[str, Any]] = []

@@ -41,7 +41,12 @@ from app.services.quote_job_numbers import find_quote_job_by_identifier
 from app.services.rbac import has_admin_role, has_any_role
 
 
-router = APIRouter()
+def require_agent_module_access(current_user: User = Depends(get_current_user)) -> None:
+    if not has_any_role(current_user, {"system_admin", "admin", "quote_user", "quote_operator"}):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PERMISSION_DENIED")
+
+
+router = APIRouter(dependencies=[Depends(require_agent_module_access)])
 
 
 class QuoteReviewAgentRunIn(BaseModel):
@@ -542,7 +547,7 @@ async def final_confirm_agent_suggestion_endpoint(
 @router.get("/admin/agents/catalog", summary="查询可用 Agent 清单")
 async def get_agent_catalog(current_user: User = Depends(get_current_user)):
     _ensure_agent_enabled()
-    can_quote_review = has_any_role(current_user, {"staff", "quote_user", "quote_operator", "admin", "system_admin"})
+    can_quote_review = has_any_role(current_user, {"quote_user", "quote_operator", "admin", "system_admin"})
     return api_ok(
         [
             {

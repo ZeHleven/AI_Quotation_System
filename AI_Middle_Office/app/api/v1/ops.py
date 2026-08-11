@@ -93,5 +93,7 @@ async def test_alert(current_user: User = Depends(require_admin)):
     ]
     if not settings.alert_dingtalk_webhook:
         return api_ok(message="ALERT_DINGTALK_WEBHOOK 未配置，未发送")
-    await asyncio.to_thread(send_dingtalk_alerts, test_alerts)
-    return api_ok(message="测试告警已发送，请检查钉钉群")
+    if not settings.alert_dingtalk_secret:
+        return api_ok(message="ALERT_DINGTALK_SECRET 未配置，未发送")
+    sent = await asyncio.to_thread(send_dingtalk_alerts, test_alerts)
+    return api_ok(message="测试告警已发送，请检查钉钉群" if sent else "测试告警发送失败，请检查安全配置和服务日志")

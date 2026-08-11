@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { clearAuth, getToken } from './authStorage'
+import { clearAuth, getToken, isPasswordChangeRequiredError, redirectToPasswordChange } from './authStorage'
 
 const client = axios.create({ baseURL: '/api/v1' })
 
@@ -12,6 +12,10 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (isPasswordChangeRequiredError(error)) {
+      redirectToPasswordChange()
+      return Promise.reject(error)
+    }
     if (error.response?.status === 401) {
       clearAuth()
       window.location.href = '/login'
@@ -26,6 +30,7 @@ export const enterpriseQuotaV2Api = Object.freeze({
   versions: () => client.get('/admin/enterprise-quota-v2/versions'),
   version: (versionId) => client.get(`/admin/enterprise-quota-v2/versions/${versionId}`),
   activeItem: (itemId) => client.get(`/admin/cost-master/quota-items/${itemId}`),
+  masterItems: (params) => client.get('/admin/cost-master/quota-items', { params }),
   rows: (versionId, params) =>
     client.get(`/admin/enterprise-quota-v2/versions/${versionId}/rows`, { params }),
   updateResource: (versionId, resourceId, payload) =>

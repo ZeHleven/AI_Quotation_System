@@ -1,10 +1,9 @@
-import { createApp } from 'vue'
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
-import App from './App.vue'
-import './style.css'
+const bootstrapModule = window.location.pathname === '/login'
+  ? import('./loginBootstrap.js')
+  : import('./appBootstrap.js')
 
-const app = createApp(App)
-
-app.use(ElementPlus)
-app.mount('#app')
+bootstrapModule
+  .then(({ mount }) => mount('#app'))
+  .catch((error) => {
+    console.error('Failed to start the frontend', error)
+  })

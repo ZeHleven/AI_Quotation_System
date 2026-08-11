@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "rules": [
+    {
+      "name": "budget-pricing",
+      "patterns": [
+        "AI_Middle_Office/app/api/v1/budget_pricing.py",
+        "AI_Middle_Office/app/models/budget_pricing.py",
+        "AI_Middle_Office/app/models/budget_project_quota.py",
+        "AI_Middle_Office/app/services/budget_pricing*.py",
+        "AI_Middle_Office/app/services/budget_project_quota*.py",
+        "AI_Middle_Office/app/services/budget_pricing_*.py"
+      ],
+      "tests": [
+        "tests/test_budget_pricing_drafts_p2_2a.py",
+        "tests/test_budget_pricing_original_export.py",
+        "tests/test_budget_pricing_service_p2.py",
+        "tests/test_budget_pricing_frontend_contract.py"
+      ]
+    },
+    {
+      "name": "budget-projects",
+      "patterns": [
+        "AI_Middle_Office/app/api/v1/budget_projects.py",
+        "AI_Middle_Office/app/models/budget_project*.py",
+        "AI_Middle_Office/app/services/budget_project*.py"
+      ],
+      "tests": [
+        "tests/test_budget_projects_phase1.py",
+        "tests/test_budget_project_non_pollution_phase1.py",
+        "tests/test_budget_projects_frontend_contract.py"
+      ]
+    },
+    {
+      "name": "enterprise-quota",
+      "patterns": [
+        "AI_Middle_Office/app/api/v1/enterprise_quota*.py",
+        "AI_Middle_Office/app/models/enterprise_quota.py",
+        "AI_Middle_Office/app/services/enterprise_quota*.py"
+      ],
+      "tests": [
+        "tests/test_enterprise_quota_master_biz2x.py",
+        "tests/test_enterprise_quota_import_phase2_biz2x.py",
+        "tests/test_enterprise_quota_v2_workbench.py",
+        "tests/test_enterprise_quota_units_biz2x.py"
+      ]
+    },
+    {
+      "name": "auth-and-rbac",
+      "patterns": [
+        "AI_Middle_Office/app/api/v1/auth.py",
+        "AI_Middle_Office/app/api/v1/users.py",
+        "AI_Middle_Office/app/dependencies.py",
+        "AI_Middle_Office/app/services/rbac.py",
+        "AI_Middle_Office/app/models/user.py"
+      ],
+      "tests": [
+        "tests/test_rbac_phase0.py",
+        "tests/test_permissions_frontend_contract.py"
+      ]
+    },
+    {
+      "name": "release-tooling",
+      "patterns": [
+        "release.cmd",
+        "deploy/app-node/Dockerfile",
+        "deploy/app-node/release/**",
+        "AI_Middle_Office/tests/test_release_automation_contract.py"
+      ],
+      "tests": [
+        "tests/test_release_automation_contract.py"
+      ]
+    }
+  ]
+}

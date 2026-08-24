@@ -1,0 +1,64 @@
+{
+  "schema": "bid-assessment-phase4b1-deepseek-provider-profile-v1",
+  "profile_id": "bid-assessment-phase4b1-deepseek-v4-flash-v1",
+  "source_spec_version": "v0.1-r46",
+  "status": "validated_local_and_minimal_live",
+  "feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_DEEPSEEK_ADAPTER",
+  "requires": [
+    "FEATURE_BID_ASSESSMENT_PHASE4_MVP",
+    "FEATURE_BID_ASSESSMENT_PHASE4_MODEL_EXECUTOR"
+  ],
+  "provider": {
+    "provider_ref": "deepseek",
+    "adapter_kind": "openai_compatible_chat_completions",
+    "official_host": "api.deepseek.com",
+    "allowed_paths": [
+      "/chat/completions",
+      "/v1/chat/completions"
+    ],
+    "https_required": true,
+    "api_key_source": "BID_ASSESSMENT_MODEL_API_KEY_or_DEEPSEEK_API_KEY",
+    "idempotency_header": "X-Idempotency-Key"
+  },
+  "model": {
+    "model_ref": "deepseek-v4-flash",
+    "thinking_mode": "disabled",
+    "temperature": 0,
+    "response_format": "json_object",
+    "context_window_tokens": 1048576,
+    "model_action_schema": "bid.task.action.v1"
+  },
+  "governance": {
+    "model_profile_frozen_per_run": true,
+    "context_manifest_only": true,
+    "evidence_read_required_for_document_facts": true,
+    "direct_fact_or_report_write_forbidden": true,
+    "provider_io_outside_database_transaction": true,
+    "lease_heartbeat_fencing_required": true,
+    "checkpoint_resume_required": true,
+    "reasoning_content_persisted": false,
+    "raw_prompt_or_api_key_exposed_by_trace": false
+  },
+  "cost_schedule": {
+    "currency": "USD",
+    "unit": "microunits_per_million_tokens",
+    "price_version": "2026-08-16",
+    "input_cache_hit": 2800,
+    "input_cache_miss": 140000,
+    "output": 280000,
+    "missing_cache_breakdown_policy": "all_prompt_tokens_as_cache_miss"
+  },
+  "local_lab": {
+    "default_mode": "deterministic",
+    "opt_in_mode": "deepseek-v4-flash",
+    "localhost_only": true,
+    "isolated_sqlite_and_object_root": true,
+    "production_database_forbidden": true
+  },
+  "compatibility": {
+    "new_database_migration_required": false,
+    "alembic_head": "20260815_0103",
+    "legacy_bid_intake_modified": false,
+    "ecs_rollout_allowed": false
+  }
+}

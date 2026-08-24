@@ -1,0 +1,76 @@
+{
+  "schema": "bid-assessment-phase4c2-enterprise-baseline-acceptance-profile-v1",
+  "profile_id": "bid-assessment-phase4c2-enterprise-baseline-acceptance-v1",
+  "source_spec_version": "v0.1-r54",
+  "status": "locally_validated",
+  "requires": [
+    "contracts/bid_assessment/v1/phase4c1-enterprise-hard-gates-profile.json",
+    "schemas/bid_assessment/v1/enterprise-capability.schema.json",
+    "schemas/bid_assessment/v1/report.schema.json",
+    "contracts/bid_assessment/v1/error-codes.json"
+  ],
+  "baseline_validation": {
+    "schema": "bid.enterprise.baseline-validation.v1",
+    "path": "/api/v1/bid-assessment-runtime-lab/enterprise-baseline/validate",
+    "access": "local_execute_admin_only",
+    "persistence": "none",
+    "writes_object_storage": false,
+    "writes_database": false,
+    "writes_audit_or_outbox": false,
+    "slot_set": ["I01", "I02", "I03", "I04", "I05", "I06", "I07", "I08", "I09", "I10", "I11"],
+    "checks": [
+      "coverage_status",
+      "source_status",
+      "validity_window",
+      "payload_shape",
+      "stable_candidate_hash",
+      "current_snapshot_diff",
+      "hard_gate_enterprise_input_readiness"
+    ],
+    "unknown_policy": "explicit_and_never_coerced_to_zero",
+    "partial_policy": "freezable_but_not_acceptance_ready",
+    "source_acceptance_policy": "verified_or_imported_ready_self_reported_review_required",
+    "future_or_expired_policy": "review_required"
+  },
+  "freeze_guard": {
+    "path": "/api/v1/bid-assessment-runtime-lab/enterprise-snapshots",
+    "candidate_hash_header": "X-Enterprise-Candidate-Hash",
+    "candidate_hash_required_by_phase4c2_ui": true,
+    "server_recomputes_candidate_hash": true,
+    "mismatch_error": "BID_ENTERPRISE_CANDIDATE_HASH_MISMATCH",
+    "idempotency_required": true,
+    "immutability": "new_version_only"
+  },
+  "hard_gate_acceptance": {
+    "codes": ["HG01", "HG02", "HG03", "HG04", "HG05", "HG06", "HG07"],
+    "baseline_scope": "enterprise_inputs_only",
+    "hg01_policy": "deferred_until_tender_deadline_fact_is_bound_to_run",
+    "run_scope": "resolved_tender_and_enterprise_facts",
+    "result_fields": [
+      "label",
+      "explanation",
+      "required_fact_slots",
+      "unresolved_fact_slots",
+      "enterprise_slot_codes",
+      "next_actions"
+    ],
+    "unknown_policy": "never_promote_to_pass",
+    "comparison_authority": "bid-hard-gate-phase4c2-v3"
+  },
+  "runtime_lab": {
+    "source_status_choices": ["verified", "self_reported", "imported"],
+    "explicit_known_switches": ["I06", "I07", "I08"],
+    "validation_invalidated_on_form_change": true,
+    "view_only_write_blocked": true,
+    "view_only_secret_isolated": true,
+    "production_sources_accessed": false
+  },
+  "compatibility": {
+    "new_database_migration_required": false,
+    "alembic_head": "20260817_0104",
+    "legacy_bid_intake_modified": false,
+    "feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_CAPABILITY",
+    "feature_flag_default": false,
+    "ecs_rollout_allowed": false
+  }
+}

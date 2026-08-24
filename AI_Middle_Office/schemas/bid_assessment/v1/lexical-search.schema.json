@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/lexical-search.schema.json",
+  "title": "Bid Assessment RQ1-D Lexical Projection Metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "source_index_set_hash",
+    "projection_set_hash",
+    "projection_count",
+    "boilerplate_term_count",
+    "channels"
+  ],
+  "properties": {
+    "schema_version": {"const": "bid.evidence.lexical-search.v1"},
+    "profile_version": {"const": "bid-evidence-lexical-profile-v1-rq1d"},
+    "source_index_set_hash": {"$ref": "#/$defs/hash"},
+    "projection_set_hash": {"$ref": "#/$defs/hash"},
+    "projection_count": {"type": "integer", "minimum": 1, "maximum": 5000},
+    "boilerplate_term_count": {"type": "integer", "minimum": 0},
+    "channels": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "section_heading"},
+        {"const": "table_key"},
+        {"const": "table_value"},
+        {"const": "table_row"},
+        {"const": "body"}
+      ],
+      "items": false,
+      "minItems": 5,
+      "maxItems": 5
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

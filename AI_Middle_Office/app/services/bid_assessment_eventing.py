@@ -341,11 +341,16 @@ OUTBOX_PUBLIC_MAPPING: dict[str, tuple[str, str, str | None]] = {
     "bid.document.parsed.v1": ("document.parse.changed", "document_version", "document_version_id"),
     "bid.document.parse_failed.v1": ("document.parse.changed", "document_version", "document_version_id"),
     "bid.lots.detected.v1": ("lot.selection.required", "assessment", None),
+    "bid.lot_detection.failed.v1": ("operation.failed", "assessment", None),
     "bid.lot.selected.v1": ("lot.selected", "assessment", None),
     "bid.run.created.v1": ("run.status.changed", "run", "run_id"),
+    "bid.run.cancel_requested.v1": ("run.stage.changed", "run", "run_id"),
     "bid.run.cancelled.v1": ("run.status.changed", "run", "run_id"),
+    "bid.run.retry_requested.v1": ("run.status.changed", "run", "run_id"),
     "bid.run.succeeded.v1": ("run.status.changed", "run", "run_id"),
     "bid.run.failed.v1": ("run.status.changed", "run", "run_id"),
+    "bid.run.stale.v1": ("run.status.changed", "run", "run_id"),
+    "bid.plan.continuation_requested.v1": ("run.stage.changed", "run", "run_id"),
     "bid.task.ready.v1": ("run.stage.changed", "run", "run_id"),
     "bid.task.waiting_operation.v1": ("run.stage.changed", "run", "run_id"),
     "bid.task.waiting_input.v1": ("run.stage.changed", "run", "run_id"),
@@ -366,6 +371,11 @@ def _projection_for_event(event: BidOutboxEvent) -> PublicProjection | None:
         return None
     event_type, resource_type, resource_id_field = mapping
     payload = dict(event.payload_json or {})
+    if (
+        str(event.event_type) == "bid.lots.detected.v1"
+        and not bool(payload.get("selection_required"))
+    ):
+        return None
     required_fields = PUBLIC_REQUIRED_FIELDS[event_type]
     missing = [field for field in required_fields if field not in payload]
     if missing:

@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.bid_assessment import (
     BidAssessment,
     BidDocument,
@@ -29,6 +30,11 @@ from app.services.bid_assessment_eventing import (
 )
 from app.services.bid_assessment_idempotency import IdempotentCommandResult
 from app.services.bid_assessment_snapshots import build_assessment_snapshot
+from app.services.bid_document_parse_runs import ensure_document_parse_run
+from app.services.bid_lot_detection_runs import (
+    build_manifest_parse_set,
+    ensure_lot_detection_run,
+)
 from app.services.bid_upload_batch_snapshots import (
     build_upload_batch_snapshot,
     upload_batch_etag,
@@ -597,6 +603,26 @@ def commit_bid_upload_batch(
         run.row_version = int(run.row_version) + 1
         stale_run_rows.append(run)
 
+    if stale_run_rows and settings.feature_bid_assessment_phase4_preliminary_report:
+        # Phase 4 MVP-1 reports are immutable artifacts.  Superseding their
+        # frozen Manifest changes only the visibility status, never the body or
+        # hash, so historical evidence remains auditable without being shown as
+        # the current conclusion.
+        from app.models.bid_assessment_results import BidPreliminaryReport
+
+        stale_run_ids = tuple(str(run.id) for run in stale_run_rows)
+        stale_reports = (
+            db.query(BidPreliminaryReport)
+            .filter(
+                BidPreliminaryReport.run_id.in_(stale_run_ids),
+                BidPreliminaryReport.status == "ready",
+            )
+            .with_for_update()
+            .all()
+        )
+        for report in stale_reports:
+            report.status = "stale"
+
     assessment.current_manifest_id = str(manifest.id)
     assessment.active_run_id = None
     assessment.business_status = next_business_status
@@ -610,6 +636,19 @@ def commit_bid_upload_batch(
     batch.row_version = int(batch.row_version) + 1
     db.flush()
     db.refresh(manifest)
+
+    parse_schedules = [
+        (
+            member.document_version_id,
+            ensure_document_parse_run(
+                db,
+                document_version_id=member.document_version_id,
+                parser_profile_version=settings.bid_document_parser_profile_version,
+                requested_at=current_time,
+            ),
+        )
+        for member in manifest_members
+    ]
 
     operation_id = f"op_{uuid.uuid4().hex}"
     assessment_snapshot = build_assessment_snapshot(db, assessment)
@@ -733,30 +772,52 @@ def commit_bid_upload_batch(
         event_ordinal += 1
 
     parse_events = []
-    for _batch_file, _document, version in created_versions:
+    for document_version_id, schedule in parse_schedules:
+        if not schedule.created:
+            continue
         event = append_outbox_event(
             db,
             event_type="bid.document.parse_requested.v1",
             producer="bid-assessment-api-v1",
-            aggregate_type="document_version",
-            aggregate_id=str(version.id),
-            aggregate_version=int(version.version_no),
+            aggregate_type="document_parse_run",
+            aggregate_id=str(schedule.run.id),
+            aggregate_version=int(schedule.run.row_version),
             assessment_id=str(assessment.id),
             request_id=request_id,
             causation_event_id=previous_event_id,
             payload_schema="bid.document.parse_requested.v1.payload",
             payload={
+                "parse_run_id": str(schedule.run.id),
+                "document_version_id": str(document_version_id),
+                "input_hash": str(schedule.run.input_hash),
+                "parser_profile_version": str(
+                    schedule.run.parser_profile_version
+                ),
                 "batch_id": str(batch.id),
                 "manifest_id": str(manifest.id),
-                "document_version_id": str(version.id),
                 "operation_id": operation_id,
             },
-            dedupe_key=f"document-parse-requested:{manifest.id}:{version.id}",
+            dedupe_key=f"document-parse-requested:{schedule.run.id}",
             occurred_at=_event_time(current_time, event_ordinal),
         )
         parse_events.append(event)
         previous_event_id = event.event_id
         event_ordinal += 1
+
+    lot_detection_schedule = None
+    manifest_parse_set = build_manifest_parse_set(
+        db,
+        manifest_id=str(manifest.id),
+    )
+    if manifest_parse_set.status == "ready":
+        lot_detection_schedule = ensure_lot_detection_run(
+            db,
+            parse_set=manifest_parse_set,
+            assessment_id=str(assessment.id),
+            request_id=request_id,
+            causation_event_id=previous_event_id,
+            requested_at=_event_time(current_time, event_ordinal),
+        )
 
     for run in stale_run_rows:
         append_audit_log(
@@ -825,6 +886,28 @@ def commit_bid_upload_batch(
             "manifest_event_id": manifest_event.event_id,
             "stale_event_id": stale_event.event_id if stale_event is not None else None,
             "parse_event_ids": [event.event_id for event in parse_events],
+            "parse_run_ids": [
+                str(schedule.run.id)
+                for _document_version_id, schedule in parse_schedules
+            ],
+            "manifest_parse_set_status": manifest_parse_set.status,
+            "lot_detection_run_id": (
+                str(lot_detection_schedule.run.id)
+                if lot_detection_schedule is not None
+                else None
+            ),
+            "lot_detection_event_ids": (
+                [
+                    event_id
+                    for event_id in (
+                        lot_detection_schedule.ready_event_id,
+                        lot_detection_schedule.request_event_id,
+                    )
+                    if event_id is not None
+                ]
+                if lot_detection_schedule is not None
+                else []
+            ),
             "planning_event": "deferred_until_parse_and_scope_ready",
         },
         correlation_id=manifest_event.event_id,

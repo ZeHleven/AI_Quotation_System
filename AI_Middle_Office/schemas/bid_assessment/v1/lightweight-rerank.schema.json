@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/lightweight-rerank.schema.json",
+  "title": "Qisheng Bid Assessment RQ2-C Lightweight Rerank v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "profile_version",
+    "fusion_result_hash",
+    "query_plan_hash",
+    "model",
+    "candidate_window",
+    "top_k",
+    "baseline_child_keys",
+    "final_child_keys",
+    "protected_child_keys",
+    "promotion_count",
+    "candidates",
+    "result_hash"
+  ],
+  "properties": {
+    "contract_version": {"const": "bid.evidence.lightweight-rerank.v1"},
+    "profile_version": {"const": "bid-evidence-rerank-profile-v1-rq2c-bce"},
+    "fusion_result_hash": {"$ref": "#/$defs/Sha256"},
+    "query_plan_hash": {"$ref": "#/$defs/Sha256"},
+    "model": {"$ref": "#/$defs/ModelDescriptor"},
+    "candidate_window": {"type": "integer", "minimum": 1, "maximum": 20},
+    "top_k": {"type": "integer", "minimum": 1, "maximum": 8},
+    "baseline_child_keys": {"$ref": "#/$defs/SelectedKeys"},
+    "final_child_keys": {"$ref": "#/$defs/SelectedKeys"},
+    "protected_child_keys": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/ChildKey"}
+    },
+    "promotion_count": {"type": "integer", "minimum": 0, "maximum": 2},
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {"$ref": "#/$defs/RerankedCandidate"}
+    },
+    "result_hash": {"$ref": "#/$defs/Sha256"}
+  },
+  "$defs": {
+    "Sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "ChildKey": {"type": "string", "pattern": "^(child|chunk):[a-f0-9]{64}$"},
+    "SelectedKeys": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/ChildKey"}
+    },
+    "ModelDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider_id",
+        "model_id",
+        "model_revision",
+        "max_sequence_length",
+        "score_transform"
+      ],
+      "properties": {
+        "provider_id": {"const": "bce-cross-encoder-local"},
+        "model_id": {"const": "maidalun1020/bce-reranker-base_v1"},
+        "model_revision": {"const": "eb7650fca1d81e2856fbd0d522488844aa502735"},
+        "max_sequence_length": {"const": 512},
+        "score_transform": {"const": "sigmoid"}
+      }
+    },
+    "RerankedCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "child_key",
+        "fusion_rank",
+        "rerank_score",
+        "input_hash",
+        "protected_anchor",
+        "selected",
+        "final_rank",
+        "promotion_sequence",
+        "replaced_child_key"
+      ],
+      "properties": {
+        "child_key": {"$ref": "#/$defs/ChildKey"},
+        "fusion_rank": {"type": "integer", "minimum": 1, "maximum": 20},
+        "rerank_score": {"type": "number", "minimum": 0, "maximum": 1},
+        "input_hash": {"$ref": "#/$defs/Sha256"},
+        "protected_anchor": {"type": "boolean"},
+        "selected": {"type": "boolean"},
+        "final_rank": {"type": ["integer", "null"], "minimum": 1, "maximum": 8},
+        "promotion_sequence": {"type": ["integer", "null"], "minimum": 1, "maximum": 2},
+        "replaced_child_key": {
+          "oneOf": [
+            {"$ref": "#/$defs/ChildKey"},
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  }
+}

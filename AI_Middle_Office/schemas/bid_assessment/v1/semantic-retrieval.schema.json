@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/semantic-retrieval.schema.json",
+  "title": "Qisheng Bid Assessment RQ2-A Semantic Index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "semantic_profile_version",
+    "retrieval_index_id",
+    "source_result_hash",
+    "input_hash",
+    "vector_namespace",
+    "model",
+    "entries",
+    "result_hash"
+  ],
+  "properties": {
+    "contract_version": {"const": "bid.evidence.semantic-index.v1"},
+    "semantic_profile_version": {"const": "bid-evidence-semantic-profile-v1-rq2a-bce"},
+    "retrieval_index_id": {"type": "string", "minLength": 1, "maxLength": 36},
+    "source_result_hash": {"$ref": "#/$defs/Sha256"},
+    "input_hash": {"$ref": "#/$defs/Sha256"},
+    "vector_namespace": {
+      "type": "string",
+      "pattern": "^bid-sem-[a-f0-9]{64}$"
+    },
+    "model": {"$ref": "#/$defs/ModelDescriptor"},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/SemanticEntry"}
+    },
+    "result_hash": {"$ref": "#/$defs/Sha256"}
+  },
+  "$defs": {
+    "Sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "EvidenceKey": {
+      "type": "string",
+      "pattern": "^child:[a-f0-9]{64}$"
+    },
+    "ModelDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider_contract_version",
+        "provider_id",
+        "model_id",
+        "model_revision",
+        "dimension",
+        "distance_metric",
+        "normalized_embeddings"
+      ],
+      "properties": {
+        "provider_contract_version": {"const": "bid.semantic-vector-provider.v1"},
+        "provider_id": {"const": "bce-milvus"},
+        "model_id": {"const": "maidalun1020/bce-embedding-base_v1"},
+        "model_revision": {"const": "9c0d82af44af61abe171ffae23fde5740c0ec1a8"},
+        "dimension": {"const": 768},
+        "distance_metric": {"const": "COSINE"},
+        "normalized_embeddings": {"const": true}
+      }
+    },
+    "SemanticEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retrieval_child_key",
+        "source_entry_hash",
+        "embedding_text_hash",
+        "provider_record_id",
+        "vector_hash",
+        "vector_dimension",
+        "ordinal",
+        "entry_hash"
+      ],
+      "properties": {
+        "retrieval_child_key": {"$ref": "#/$defs/EvidenceKey"},
+        "source_entry_hash": {"$ref": "#/$defs/Sha256"},
+        "embedding_text_hash": {"$ref": "#/$defs/Sha256"},
+        "provider_record_id": {"$ref": "#/$defs/Sha256"},
+        "vector_hash": {"$ref": "#/$defs/Sha256"},
+        "vector_dimension": {"const": 768},
+        "ordinal": {"type": "integer", "minimum": 0},
+        "entry_hash": {"$ref": "#/$defs/Sha256"}
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema": "bid.skill.artifact.v1",
+  "skill_id": "bid-fact-resolution",
+  "skill_version": "1.0.0",
+  "executor_kind": "deterministic",
+  "task_bindings": {
+    "resolve_fact_conflicts": {
+      "action_contract": "bid.task.action.deterministic.v1",
+      "output_schema": "document_scope_result_v1"
+    }
+  }
+}

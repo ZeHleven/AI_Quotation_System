@@ -28,6 +28,7 @@ from app.services.bid_assessment_eventing import (
     append_outbox_event,
     append_stream_control_events,
     canonical_hash,
+    canonical_json,
     format_public_event_sse,
     list_public_events_after,
     process_outbox_event_once,
@@ -35,6 +36,7 @@ from app.services.bid_assessment_eventing import (
     resolve_sse_start_sequence,
     utc_now,
 )
+from app.services.bid_tool_execution import BidEvidenceMcpAdapter
 from app.services.bid_assessment_idempotency import (
     BidIdempotencyInProgress,
     BidIdempotencyKeyReused,
@@ -788,3 +790,281 @@ def test_api16_abandoned_cleanup_task_is_periodic_and_worker_loaded() -> None:
         }
     finally:
         object.__setattr__(settings, "feature_bid_assessment_v1_runtime", old_flag)
+
+
+def test_fixed_task_dag_maintenance_is_not_registered() -> None:
+    if celery_app is None:
+        pytest.skip("Celery optional dependency is unavailable")
+    assert "bid-maintain-task-runtime" not in celery_app.conf.beat_schedule
+    from app.tasks.bid_assessment_tasks import maintain_bid_task_runtime_task
+
+    assert maintain_bid_task_runtime_task is None
+
+
+def test_fixed_plan_continuation_is_not_registered() -> None:
+    if celery_app is None:
+        pytest.skip("Celery optional dependency is unavailable")
+    assert "bid-process-plan-continuation-queue" not in celery_app.conf.beat_schedule
+    from app.tasks.bid_assessment_tasks import (
+        process_bid_plan_continuation_queue_task,
+    )
+
+    assert process_bid_plan_continuation_queue_task is None
+
+
+def test_phase4a2_model_maintenance_is_periodic_and_fail_closed() -> None:
+    if celery_app is None:
+        pytest.skip("Celery optional dependency is unavailable")
+    assert celery_app.conf.beat_schedule["bid-maintain-model-calls"] == {
+        "task": "bid.maintain_model_calls",
+        "schedule": 30.0,
+        "options": {"expires": 25},
+    }
+    from app.tasks.bid_assessment_tasks import maintain_bid_model_calls_task
+
+    old_flag = settings.feature_bid_assessment_phase4_model_executor
+    object.__setattr__(settings, "feature_bid_assessment_phase4_model_executor", False)
+    try:
+        assert maintain_bid_model_calls_task.run(limit=1) == {
+            "scanned": 0,
+            "recovered": 0,
+            "uncertain": 0,
+            "failed": 0,
+        }
+    finally:
+        object.__setattr__(
+            settings,
+            "feature_bid_assessment_phase4_model_executor",
+            old_flag,
+        )
+
+
+def test_phase3d_run_lifecycle_maintenance_is_periodic_and_fail_closed() -> None:
+    if celery_app is None:
+        pytest.skip("Celery optional dependency is unavailable")
+    assert celery_app.conf.beat_schedule["bid-maintain-run-lifecycle"] == {
+        "task": "bid.maintain_run_lifecycle",
+        "schedule": 30.0,
+        "options": {"expires": 25},
+    }
+    from app.tasks.bid_assessment_tasks import maintain_bid_run_lifecycle_task
+
+    old_flag = settings.feature_bid_assessment_phase3_run_lifecycle
+    object.__setattr__(settings, "feature_bid_assessment_phase3_run_lifecycle", False)
+    try:
+        assert maintain_bid_run_lifecycle_task.run(limit=1) == {
+            "scanned": 0,
+            "cancelled": 0,
+            "tasks_cancelled": 0,
+            "attempts_cancelled": 0,
+            "operations_cancelled": 0,
+            "failed": 0,
+        }
+    finally:
+        object.__setattr__(
+            settings,
+            "feature_bid_assessment_phase3_run_lifecycle",
+            old_flag,
+        )
+
+
+def test_phase3e_tool_operation_maintenance_is_periodic_and_fail_closed() -> None:
+    if celery_app is None:
+        pytest.skip("Celery optional dependency is unavailable")
+    assert celery_app.conf.beat_schedule["bid-maintain-tool-operations"] == {
+        "task": "bid.maintain_tool_operations",
+        "schedule": 30.0,
+        "options": {"expires": 25},
+    }
+    from app.tasks.bid_assessment_tasks import maintain_bid_tool_operations_task
+
+    old_flag = settings.feature_bid_assessment_phase3_tool_context
+    object.__setattr__(settings, "feature_bid_assessment_phase3_tool_context", False)
+    try:
+        assert maintain_bid_tool_operations_task.run(limit=1) == {
+            "scanned": 0,
+            "timed_out": 0,
+            "recovered": 0,
+            "failed": 0,
+        }
+    finally:
+        object.__setattr__(
+            settings,
+            "feature_bid_assessment_phase3_tool_context",
+            old_flag,
+        )
+
+
+def test_phase3f_tool_dispatch_tasks_are_periodic_and_fail_closed() -> None:
+    if celery_app is None:
+        pytest.skip("Celery optional dependency is unavailable")
+    assert celery_app.conf.beat_schedule["bid-process-tool-dispatch-queue"] == {
+        "task": "bid.process_tool_dispatch_queue",
+        "schedule": 5.0,
+        "options": {"expires": 4},
+    }
+    assert celery_app.conf.beat_schedule["bid-maintain-tool-dispatches"] == {
+        "task": "bid.maintain_tool_dispatches",
+        "schedule": 30.0,
+        "options": {"expires": 25},
+    }
+    from app.tasks.bid_assessment_tasks import (
+        maintain_bid_tool_dispatches_task,
+        process_bid_tool_dispatch_queue_task,
+    )
+
+    old_executor = settings.feature_bid_assessment_phase3_tool_executor
+    object.__setattr__(settings, "feature_bid_assessment_phase3_tool_executor", False)
+    try:
+        assert process_bid_tool_dispatch_queue_task.run(limit=1) == {
+            "claimed": 0,
+            "succeeded": 0,
+            "retry_wait": 0,
+            "failed": 0,
+            "uncertain": 0,
+        }
+        assert maintain_bid_tool_dispatches_task.run(limit=1) == {
+            "scanned": 0,
+            "recovered": 0,
+            "uncertain": 0,
+            "failed": 0,
+        }
+    finally:
+        object.__setattr__(
+            settings,
+            "feature_bid_assessment_phase3_tool_executor",
+            old_executor,
+        )
+
+
+def test_evidence_search_transport_is_bounded_and_keeps_navigation_identity() -> None:
+    payload = {
+        "contract": "bid.evidence.mcp.search.v6",
+        "status": "ok",
+        "run_id": "run-1",
+        "manifest_id": "manifest-1",
+        "retrieval_mode": "rq2b",
+        "result_hash": "f" * 64,
+        "query_plan": {"original_query": "投标保证金金额及提交方式", "plan_hash": "e" * 64},
+        "warnings": [],
+        "hits": [
+            {
+                "evidence_id": f"child-{index}",
+                "fragment_role": "child",
+                "is_citable": False,
+                "document_version_id": "document-1",
+                "document_role": "tender",
+                "section_parent_id": "parent-1",
+                "fusion_rank": index + 1,
+                "fusion_score": 0.9,
+                "context_read": True,
+                "excerpt": "投标保证金" * 1000,
+                "source_atom_ids": [f"atom-{value}" for value in range(100)],
+                "locator": {
+                    "page_no": index + 1,
+                    "section_path": ["投标须知" * 100, "保证金" * 100],
+                    "unbounded_debug_metadata": "x" * 5000,
+                },
+            }
+            for index in range(40)
+        ],
+    }
+
+    compact = BidEvidenceMcpAdapter._compact_search_payload(payload)
+
+    assert len(canonical_json(compact).encode("utf-8")) <= 24 * 1024
+    assert len(compact["hits"]) == 8
+    assert compact["source_result_hash"] == "f" * 64
+    assert compact["hits"][0]["evidence_id"] == "child-0"
+    assert compact["hits"][0]["is_citable"] is False
+    assert "source_atom_ids" not in compact["hits"][0]
+    assert "RESULT_TRUNCATED" in compact["warnings"]
+
+
+def test_evidence_read_transport_is_bounded_and_remains_atom_only() -> None:
+    payload = {
+        "contract": "bid-assessment-evidence-mcp/v2",
+        "status": "ok",
+        "run_id": "run-1",
+        "manifest_id": "manifest-1",
+        "retrieval_profile_version": "role-aware",
+        "result_hash": "a" * 64,
+        "warnings": [],
+        "items": [
+            {
+                "evidence_id": f"atom-{index}",
+                "fragment_role": "evidence_atom",
+                "is_citable": True,
+                "context_read": True,
+                "document_version_id": "document-1",
+                "document_role": "tender",
+                "source_child_id": f"child-{index}",
+                "section_parent_id": "parent-1",
+                "text_hash": "b" * 64,
+                "text": "投标保证金及提交方式" * 1000,
+                "locator": {
+                    "page_no": index + 1,
+                    "block_type": "table_row",
+                    "section_path": ["投标须知" * 100, "保证金" * 100],
+                    "internal_layout_lineage": "x" * 5000,
+                },
+            }
+            for index in range(30)
+        ],
+    }
+
+    compact = BidEvidenceMcpAdapter._compact_read_payload(payload)
+
+    assert len(canonical_json(compact).encode("utf-8")) <= 24 * 1024
+    assert 1 <= len(compact["items"]) <= 12
+    assert all(item["fragment_role"] == "evidence_atom" for item in compact["items"])
+    assert all(item["is_citable"] is True for item in compact["items"])
+    assert all(item["context_read"] is True for item in compact["items"])
+    assert "internal_layout_lineage" not in compact["items"][0]["locator"]
+    assert "RESULT_TRUNCATED" in compact["warnings"]
+
+
+def test_phase3g_run_validation_tasks_are_periodic_and_fail_closed() -> None:
+    if celery_app is None:
+        pytest.skip("Celery optional dependency is unavailable")
+    assert celery_app.conf.beat_schedule["bid-process-run-validation-queue"] == {
+        "task": "bid.process_run_validation_queue",
+        "schedule": 5.0,
+        "options": {"expires": 4},
+    }
+    assert celery_app.conf.beat_schedule["bid-maintain-run-validations"] == {
+        "task": "bid.maintain_run_validations",
+        "schedule": 30.0,
+        "options": {"expires": 25},
+    }
+    from app.tasks.bid_assessment_tasks import (
+        maintain_bid_run_validations_task,
+        process_bid_run_validation_queue_task,
+    )
+
+    old_flag = settings.feature_bid_assessment_phase3_run_validation
+    object.__setattr__(settings, "feature_bid_assessment_phase3_run_validation", False)
+    try:
+        assert process_bid_run_validation_queue_task.run(limit=1) == {
+            "scanned": 0,
+            "claimed": 0,
+            "passed": 0,
+            "failed": 0,
+            "stale": 0,
+            "ignored": 0,
+            "errors": 0,
+        }
+        assert maintain_bid_run_validations_task.run(limit=1) == {
+            "scanned_events": 0,
+            "materialized": 0,
+            "duplicate": 0,
+            "recovered": 0,
+            "cancelled": 0,
+            "failed": 0,
+        }
+    finally:
+        object.__setattr__(
+            settings,
+            "feature_bid_assessment_phase3_run_validation",
+            old_flag,
+        )

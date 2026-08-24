@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/enterprise-capability.schema.json",
+  "title": "Bid Assessment Enterprise Capability v1",
+  "$defs": {
+    "SlotCode": {"enum": ["I01", "I02", "I03", "I04", "I05", "I06", "I07", "I08", "I09", "I10", "I11"]},
+    "RecordCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot_code", "coverage_status", "value", "source_record_id", "source_version", "source_status", "source_label", "valid_from", "valid_to", "checked_at"],
+      "properties": {
+        "slot_code": {"$ref": "#/$defs/SlotCode"},
+        "coverage_status": {"enum": ["supported", "partial", "unknown"]},
+        "value": {},
+        "source_record_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"},
+        "source_version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$"},
+        "source_status": {"enum": ["verified", "self_reported", "imported", "unknown"]},
+        "source_label": {"type": "string", "minLength": 1, "maxLength": 300},
+        "valid_from": {"type": ["string", "null"], "format": "date-time"},
+        "valid_to": {"type": ["string", "null"], "format": "date-time"},
+        "checked_at": {"type": ["string", "null"], "format": "date-time"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"coverage_status": {"const": "unknown"}}, "required": ["coverage_status"]},
+          "then": {"properties": {"value": {"type": "null"}}},
+          "else": {"properties": {"value": {"type": "object"}}}
+        }
+      ]
+    },
+    "SnapshotCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["as_of", "change_note", "records"],
+      "properties": {
+        "as_of": {"type": "string", "format": "date-time"},
+        "change_note": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "records": {"type": "array", "minItems": 11, "maxItems": 11, "items": {"$ref": "#/$defs/RecordCommand"}}
+      }
+    },
+    "SnapshotProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "snapshot_id", "version", "status", "as_of", "frozen_at", "source_catalog_version", "snapshot_hash", "record_count", "complete", "records"],
+      "properties": {
+        "schema": {"const": "bid.enterprise.capability-snapshot.v1"},
+        "snapshot_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "status": {"const": "frozen"},
+        "as_of": {"type": "string", "format": "date-time"},
+        "frozen_at": {"type": "string", "format": "date-time"},
+        "source_catalog_version": {"const": "bid-enterprise-capability-catalog-v1"},
+        "snapshot_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "record_count": {"const": 11},
+        "complete": {"const": true},
+        "created": {"type": "boolean"},
+        "records": {
+          "type": "array", "minItems": 11, "maxItems": 11,
+          "items": {
+            "type": "object",
+            "required": ["record_id", "slot_code", "slot_key", "source_record_id", "source_version", "source_status", "valid_from", "valid_to", "payload_hash"],
+            "properties": {
+              "record_id": {"type": "string"}, "slot_code": {"$ref": "#/$defs/SlotCode"}, "slot_key": {"type": "string"},
+              "source_record_id": {"type": "string"}, "source_version": {"type": "string"}, "source_status": {"type": "string"},
+              "valid_from": {"type": ["string", "null"]}, "valid_to": {"type": ["string", "null"]},
+              "payload_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "coverage_status": {"enum": ["supported", "partial", "unknown"]}, "value_type": {"type": "string"},
+              "value": {}, "source_label": {"type": "string"}, "checked_at": {"type": ["string", "null"]}
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "EnterpriseFactLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assertion_id", "snapshot_record_id", "snapshot_id", "record_type", "payload_hash", "link_hash"],
+      "properties": {
+        "assertion_id": {"type": "string"}, "snapshot_record_id": {"type": "string"}, "snapshot_id": {"type": "string"},
+        "record_type": {"$ref": "#/$defs/SlotCode"}, "payload_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "link_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "BaselineSlotValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot_code", "slot_key", "label", "coverage_status", "effective_status", "validation_status", "source_status", "change_type", "candidate_payload_hash", "previous_payload_hash", "reason_codes"],
+      "properties": {
+        "slot_code": {"$ref": "#/$defs/SlotCode"},
+        "slot_key": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "coverage_status": {"enum": ["supported", "partial", "unknown"]},
+        "effective_status": {"enum": ["supported", "partial", "unknown", "not_yet_valid", "expired"]},
+        "validation_status": {"enum": ["ready", "review_required"]},
+        "source_status": {"enum": ["verified", "self_reported", "imported", "unknown"]},
+        "change_type": {"enum": ["added", "changed", "unchanged"]},
+        "candidate_payload_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "previous_payload_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "reason_codes": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "BaselineGateReadiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate_code", "status", "enterprise_slot_codes", "unresolved_slot_codes", "reason_codes"],
+      "properties": {
+        "gate_code": {"enum": ["HG01", "HG02", "HG03", "HG04", "HG05", "HG06", "HG07"]},
+        "status": {"enum": ["ready", "review_required", "deferred_tender"]},
+        "enterprise_slot_codes": {"type": "array", "items": {"$ref": "#/$defs/SlotCode"}, "uniqueItems": true},
+        "unresolved_slot_codes": {"type": "array", "items": {"$ref": "#/$defs/SlotCode"}, "uniqueItems": true},
+        "reason_codes": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "BaselineValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "source_catalog_version", "as_of", "candidate_snapshot_hash", "base_snapshot", "no_change", "changed_slot_count", "coverage_counts", "can_freeze", "acceptance_ready", "slots", "hard_gate_readiness"],
+      "properties": {
+        "schema": {"const": "bid.enterprise.baseline-validation.v1"},
+        "source_catalog_version": {"const": "bid-enterprise-capability-catalog-v1"},
+        "as_of": {"type": "string", "format": "date-time"},
+        "candidate_snapshot_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "base_snapshot": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["snapshot_id", "version", "snapshot_hash"],
+              "properties": {
+                "snapshot_id": {"type": "string", "minLength": 1},
+                "version": {"type": "string", "minLength": 1},
+                "snapshot_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              }
+            }
+          ]
+        },
+        "no_change": {"type": "boolean"},
+        "changed_slot_count": {"type": "integer", "minimum": 0, "maximum": 11},
+        "coverage_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["supported", "partial", "unknown", "not_yet_valid", "expired"],
+          "properties": {
+            "supported": {"type": "integer", "minimum": 0, "maximum": 11},
+            "partial": {"type": "integer", "minimum": 0, "maximum": 11},
+            "unknown": {"type": "integer", "minimum": 0, "maximum": 11},
+            "not_yet_valid": {"type": "integer", "minimum": 0, "maximum": 11},
+            "expired": {"type": "integer", "minimum": 0, "maximum": 11}
+          }
+        },
+        "can_freeze": {"type": "boolean"},
+        "acceptance_ready": {"type": "boolean"},
+        "slots": {"type": "array", "minItems": 11, "maxItems": 11, "items": {"$ref": "#/$defs/BaselineSlotValidation"}},
+        "hard_gate_readiness": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"$ref": "#/$defs/BaselineGateReadiness"}}
+      }
+    },
+    "GateAcceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "explanation", "required_fact_slots", "unresolved_fact_slots", "enterprise_slot_codes", "next_actions"],
+      "properties": {
+        "label": {"type": "string", "minLength": 1, "maxLength": 120},
+        "explanation": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "required_fact_slots": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "unresolved_fact_slots": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "enterprise_slot_codes": {"type": "array", "items": {"$ref": "#/$defs/SlotCode"}, "uniqueItems": true},
+        "next_actions": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 1000}, "uniqueItems": true}
+      }
+    },
+    "GateComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["comparison_mode", "compared_item_count", "matched_item_count", "mismatched_item_count", "indeterminate_item_count"],
+      "properties": {
+        "comparison_mode": {"type": "string", "minLength": 1, "maxLength": 80},
+        "compared_item_count": {"type": "integer", "minimum": 0}, "matched_item_count": {"type": "integer", "minimum": 0},
+        "mismatched_item_count": {"type": "integer", "minimum": 0}, "indeterminate_item_count": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/SnapshotCommand"},
+    {"$ref": "#/$defs/SnapshotProjection"},
+    {"$ref": "#/$defs/BaselineValidation"},
+    {"$ref": "#/$defs/EnterpriseFactLink"},
+    {"$ref": "#/$defs/GateAcceptance"},
+    {"$ref": "#/$defs/GateComparison"}
+  ]
+}

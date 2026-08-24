@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_version": "bid.evidence.lexical-search.v1",
+  "profile_version": "bid-evidence-lexical-profile-v1-rq1d",
+  "source_retrieval_profile_version": "bid-evidence-retrieval-profile-v2-role-aware",
+  "source_query_profile_version": "bid-evidence-query-optimizer-profile-v1-rq1c",
+  "feature_flag": "FEATURE_BID_ASSESSMENT_RQ1D_FIELD_AWARE_LEXICAL",
+  "configuration": {
+    "profile_variable": "BID_EVIDENCE_LEXICAL_SEARCH_PROFILE_VERSION",
+    "default_profile": "bid-evidence-lexical-profile-v0-single-field",
+    "enabled_profile": "bid-evidence-lexical-profile-v1-rq1d"
+  },
+  "projection": {
+    "authority": "query_time_readonly_derivative",
+    "source_roles": ["section_parent", "retrieval_child", "evidence_atom"],
+    "channels": [
+      "section_heading",
+      "table_key",
+      "table_value",
+      "table_row",
+      "body"
+    ],
+    "table_key_value_policy": "conservative_structural_pair_else_table_row",
+    "normalization": "nfkc_whitespace_stable",
+    "projection_hash_required": true,
+    "source_entry_hash_required": true
+  },
+  "tokenization": {
+    "ascii": "lower_ascii_runs",
+    "cjk": "overlapping_bigram_and_trigram",
+    "pretokenize_once_per_projection": true
+  },
+  "bm25f": {
+    "k1": 1.2,
+    "b": 0.75,
+    "base_channel_weights": {
+      "section_heading": 1.35,
+      "table_key": 1.8,
+      "table_value": 1.35,
+      "table_row": 1.1,
+      "body": 1.0
+    },
+    "field_code_table_key_multiplier": 1.15,
+    "field_code_heading_multiplier": 1.08,
+    "value_shape_table_value_multiplier": 1.25,
+    "value_shape_table_row_multiplier": 1.08,
+    "text_shape_body_multiplier": 1.15,
+    "text_shape_heading_multiplier": 1.1,
+    "exact_phrase_bonus_max": 1.0
+  },
+  "boilerplate_suppression": {
+    "minimum_corpus_children": 4,
+    "document_frequency_ratio": 0.65,
+    "document_frequency_multiplier": 0.45,
+    "severe_frequency_ratio": 0.85,
+    "severe_frequency_multiplier": 0.2,
+    "deletes_evidence": false
+  },
+  "fusion": {
+    "query_fusion": "weighted_rrf",
+    "rrf_k": 60,
+    "legacy_child_bm25_baseline_weight": 1.0,
+    "field_aware_bm25f_weak_weight": 0.005,
+    "field_aware_bm25f_structured_table_weight": 0.1,
+    "structured_table_channels": ["table_key", "table_value", "table_row"],
+    "field_aware_policy": "bounded_structured_tie_breaker_not_baseline_replacement",
+    "original_query_anchor_weight": 0.45,
+    "original_query_anchor_source": "legacy_child_bm25_q1",
+    "parent_weight": 0.2,
+    "max_children_per_parent_before_fill": 2
+  },
+  "cache": {
+    "mode": "bounded_process_local_content_addressed",
+    "max_corpora": 8,
+    "key_inputs": [
+      "profile_version",
+      "index_set_hash",
+      "allowed_document_versions"
+    ],
+    "entry_hash_revalidation_required": true
+  },
+  "frozen_adapter": {
+    "tool_name": "evidence.search",
+    "adapter_name": "bid-evidence-mcp-rq1d-search",
+    "adapter_version": "v4-field-aware-lexical",
+    "mode": "local_readonly",
+    "replay_policy": "safe_idempotent"
+  },
+  "compatibility": {
+    "rq1c_search_unchanged_when_disabled": true,
+    "c3_index_reused_without_reindex": true,
+    "atom_only_read_unchanged": true,
+    "old_dispatch_keeps_frozen_adapter": true,
+    "new_database_migration_required": false,
+    "alembic_head": "20260814_0102"
+  },
+  "external_execution": {
+    "ocr_or_visual": false,
+    "model": false,
+    "embedding": false,
+    "vector_database": false,
+    "public_network": false,
+    "external_mcp": false,
+    "legacy_bid_intake_authority": false
+  }
+}

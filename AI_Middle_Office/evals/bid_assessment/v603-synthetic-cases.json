@@ -1,0 +1,74 @@
+{
+  "schema_version": "bid.pure_agent.v603.eval.v1",
+  "dataset_kind": "synthetic_only",
+  "intent_cases": [
+    {
+      "id": "I01_direct_bid_fact",
+      "user_message": "这份招标文件的投标截止时间是什么时候？",
+      "available_context": ["bid_documents"],
+      "expected": {"final_execution_mode": "direct", "clarification_needed": false, "required_source_hints": ["bid_documents"]}
+    },
+    {
+      "id": "I02_missing_assessment_context",
+      "user_message": "帮我判断这个项目值不值得投。",
+      "available_context": [],
+      "expected": {"final_execution_mode": "direct", "clarification_needed": true, "blocking_slot_name": "assessment.documents", "required_source_hints": []}
+    },
+    {
+      "id": "I03_cross_source_assessment",
+      "user_message": "对比招标资格门槛和企业资质，列出不满足、未知和主要风险。",
+      "available_context": ["bid_documents", "enterprise_knowledge"],
+      "expected": {"final_execution_mode": "planned", "clarification_needed": false, "required_source_hints": ["bid_documents", "enterprise_knowledge"]}
+    },
+    {
+      "id": "I04_conversation_follow_up",
+      "user_message": "请解释一下你刚才提到的履约保证金风险。",
+      "available_context": ["conversation", "existing_evidence"],
+      "expected": {"final_execution_mode": "direct", "clarification_needed": false, "required_source_hints": ["conversation"]}
+    },
+    {
+      "id": "I05_many_information_needs",
+      "user_message": "同时核对资格、商务、技术、工期和保证金要求，告诉我有哪些风险。",
+      "available_context": ["bid_documents"],
+      "expected": {"final_execution_mode": "planned", "clarification_needed": false, "required_source_hints": ["bid_documents"], "minimum_information_needs": 4}
+    },
+    {
+      "id": "I06_direct_enterprise_fact",
+      "user_message": "我们企业有没有建筑装修装饰工程专业承包一级资质？",
+      "available_context": ["enterprise_knowledge"],
+      "expected": {"final_execution_mode": "direct", "clarification_needed": false, "required_source_hints": ["enterprise_knowledge"]}
+    }
+  ],
+  "planner_cases": [
+    {
+      "id": "P01_cross_source_qualification",
+      "user_message": "对比招标资格门槛和企业资质，列出不满足、未知和主要风险。",
+      "visible_tool_names": ["documents_outline", "bid_document_search", "enterprise_knowledge_search", "evidence_read"],
+      "understanding": {
+        "goal_summary": "对比招标资格门槛与企业能力并识别投标风险",
+        "information_needs": ["招标资格条件", "企业资质与业绩", "不满足项", "未知项"],
+        "source_hints": ["bid_documents", "enterprise_knowledge"],
+        "clarification_needed": false,
+        "blocking_slot_name": null,
+        "execution_mode": "planned",
+        "rationale": "需要跨招标资料和企业知识进行证据化对比"
+      },
+      "expected": {"minimum_steps": 2, "maximum_steps": 8, "required_tool_hints": ["bid_document_search", "enterprise_knowledge_search"]}
+    },
+    {
+      "id": "P02_multi_dimension_bid_review",
+      "user_message": "核对资格、商务、技术、工期和保证金要求，形成风险与未知项。",
+      "visible_tool_names": ["documents_outline", "bid_document_search", "evidence_read"],
+      "understanding": {
+        "goal_summary": "从招标资料中识别多维要求、风险和未知项",
+        "information_needs": ["资格要求", "商务要求", "技术要求", "工期要求", "保证金要求"],
+        "source_hints": ["bid_documents"],
+        "clarification_needed": false,
+        "blocking_slot_name": null,
+        "execution_mode": "planned",
+        "rationale": "信息需求较多，需要有限滚动计划"
+      },
+      "expected": {"minimum_steps": 2, "maximum_steps": 8, "required_tool_hints": ["bid_document_search", "evidence_read"]}
+    }
+  ]
+}

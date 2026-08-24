@@ -1,0 +1,35 @@
+{
+  "schema": "bid-assessment-phase4a2-runtime-profile-v1",
+  "profile_id": "bid-assessment-phase4a2-model-langgraph-executor-v1",
+  "source_spec_version": "v0.1-r30",
+  "status": "verified_local_isolated",
+  "master_feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_MVP",
+  "slice_feature_flags": [
+    "FEATURE_BID_ASSESSMENT_PHASE4_LOCAL_AGENT",
+    "FEATURE_BID_ASSESSMENT_PHASE4_MODEL_EXECUTOR"
+  ],
+  "requires": [
+    "FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME",
+    "FEATURE_BID_ASSESSMENT_PHASE4_PLAN_CONTINUATION"
+  ],
+  "local_state_schema": "bid.local_agent.state.v1",
+  "model_action_schema": "bid.task.action.v1",
+  "executor_version": "bid-bounded-langgraph-executor-v1",
+  "run_validator_version": "bid-run-integrity-validator-v4",
+  "authority": [
+    "bid_model_calls",
+    "bid_model_call_attempts",
+    "bid_model_results"
+  ],
+  "checkpoint_authority": "bid_checkpoints",
+  "migration_head": "20260813_0099",
+  "external_execution": {
+    "provider_registered": false,
+    "real_model": false,
+    "ocr_or_visual": false,
+    "mcp": false,
+    "public_network": false,
+    "real_external_tool": false,
+    "real_object_storage": false
+  }
+}

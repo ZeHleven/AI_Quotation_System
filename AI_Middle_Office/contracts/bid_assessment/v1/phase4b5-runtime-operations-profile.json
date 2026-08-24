@@ -1,0 +1,57 @@
+{
+  "schema": "bid-assessment-phase4b5-runtime-operations-profile-v1",
+  "profile_id": "bid-assessment-phase4b5-runtime-operations-v1",
+  "source_spec_version": "v0.1-r50",
+  "status": "validated_isolated_local_runtime_operations",
+  "requires": [
+    "contracts/bid_assessment/v1/phase4-mvp1-runtime-profile.json",
+    "contracts/bid_assessment/v1/phase4b1-deepseek-v4-flash-profile.json",
+    "schemas/bid_assessment/v1/execute-preflight.schema.json"
+  ],
+  "execute_preflight": {
+    "schema": "bid.runtime.execute-preflight.v1",
+    "method": "GET",
+    "path": "/api/v1/bid-assessment-runtime-lab/execute-preflight",
+    "mutates_state": false,
+    "secret_values_returned": false,
+    "absolute_paths_returned": false,
+    "checks": [
+      "LOCAL_LAB_BOUNDARY",
+      "FROZEN_MODEL_PROFILE",
+      "LOCAL_OBJECT_STORE",
+      "MODEL_CREDENTIAL",
+      "RETRIEVAL_PROFILE",
+      "SEMANTIC_SNAPSHOT",
+      "RQ2_RUNTIME",
+      "RERANKER_SNAPSHOT",
+      "WORKER_LIFECYCLE",
+      "WRITE_AUTHORITY",
+      "VIEW_ONLY_SECRET_FENCE"
+    ]
+  },
+  "authority_transition": {
+    "browser_can_elevate": false,
+    "view_only_default": true,
+    "execute_requires_process_restart": true,
+    "frontend_rechecks_authority_before_submit": true,
+    "view_only_model_secrets_overridden_by_disabled_sentinel": true,
+    "dotenv_secret_fallback_fenced": true
+  },
+  "run_lifecycle_ui": {
+    "snapshot_api": "API-41",
+    "cancel_api": "API-42",
+    "retry_api": "API-43",
+    "strong_etag_required": true,
+    "idempotency_key_required": true,
+    "retry_mode": "from_latest_checkpoint",
+    "fencing_preserved": true,
+    "checkpoint_payload_exposed": false
+  },
+  "compatibility": {
+    "new_database_migration_required": false,
+    "alembic_head": "20260815_0103",
+    "legacy_bid_intake_modified": false,
+    "feature_flags_default_false": true,
+    "ecs_rollout_allowed": false
+  }
+}

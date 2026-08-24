@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/enterprise-evidence-import.schema.json",
+  "title": "Bid Assessment Enterprise Evidence Import v1",
+  "$defs": {
+    "SlotCode": {
+      "enum": ["I01", "I02", "I03", "I04", "I05", "I06", "I07", "I08", "I09", "I10", "I11"]
+    },
+    "EvidenceClass": {
+      "enum": ["official_document", "internal_system", "audited_record"]
+    },
+    "EvidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "evidence_item_id", "status", "evidence_class",
+        "source_record_id", "source_version", "source_label", "evidence_ref",
+        "original_filename", "mime_type", "size_bytes", "content_sha256",
+        "item_hash", "valid_from", "valid_to", "uploaded_at"
+      ],
+      "properties": {
+        "schema": {"const": "bid.enterprise.evidence-item.v1"},
+        "evidence_item_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "status": {"const": "frozen"},
+        "evidence_class": {"$ref": "#/$defs/EvidenceClass"},
+        "source_record_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "source_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "source_label": {"type": "string", "minLength": 1, "maxLength": 300},
+        "evidence_ref": {"type": "string", "minLength": 3, "maxLength": 193},
+        "original_filename": {"type": "string", "minLength": 1, "maxLength": 500},
+        "mime_type": {"type": "string", "minLength": 1, "maxLength": 160},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "item_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "valid_from": {"type": ["string", "null"], "format": "date-time"},
+        "valid_to": {"type": ["string", "null"], "format": "date-time"},
+        "uploaded_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "PackageSlotCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot_code", "evidence_item_ids", "note"],
+      "properties": {
+        "slot_code": {"$ref": "#/$defs/SlotCode"},
+        "evidence_item_ids": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 80}
+        },
+        "note": {"type": ["string", "null"], "maxLength": 1000}
+      }
+    },
+    "PackageCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_label", "as_of", "change_note", "slots"],
+      "properties": {
+        "package_label": {"type": "string", "minLength": 1, "maxLength": 300},
+        "as_of": {"type": "string", "format": "date-time"},
+        "change_note": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "slots": {
+          "type": "array",
+          "minItems": 11,
+          "maxItems": 11,
+          "items": {"$ref": "#/$defs/PackageSlotCommand"}
+        }
+      }
+    },
+    "PackageProjection": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schema", "evidence_package_id", "version", "status", "candidate_hash", "package_hash", "slots"],
+      "properties": {
+        "schema": {"const": "bid.enterprise.evidence-package.v1"},
+        "evidence_package_id": {"type": "string"},
+        "version": {"type": "string"},
+        "status": {"const": "frozen"},
+        "candidate_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "package_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "slots": {"type": "array", "minItems": 11, "maxItems": 11}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/EvidenceItem"},
+    {"$ref": "#/$defs/PackageCommand"},
+    {"$ref": "#/$defs/PackageProjection"}
+  ]
+}

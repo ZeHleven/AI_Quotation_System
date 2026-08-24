@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_version": "bid.evidence.retrieval-benchmark.v1",
+  "profile_version": "bid-evidence-retrieval-benchmark-profile-v1-rq2-closeout",
+  "source_spec_version": "v0.1-r45",
+  "status": "implementation_complete_validation_pending",
+  "purpose": "Freeze RQ2-C as the retrieval candidate and decide cross-project generalization without further tuning on the Hong Kong Centre document.",
+  "portfolio": {
+    "split_unit": "project_family",
+    "development": {
+      "minimum_project_count": 3,
+      "minimum_case_count": 60,
+      "minimum_cases_per_project": 20,
+      "annotation_status": "gold_approved",
+      "hong_kong_centre_policy": "eligible_only_after_independent_review_and_adjudication"
+    },
+    "holdout": {
+      "minimum_project_count": 2,
+      "minimum_case_count": 40,
+      "minimum_cases_per_project": 20,
+      "annotation_status": "holdout_sealed",
+      "prior_rq_exposure": "none",
+      "maximum_formal_execution_count": 1
+    },
+    "minimum_total_project_count": 5,
+    "minimum_total_case_count": 100,
+    "minimum_category_count_per_split": 5,
+    "benchmark_unit_v1": "exactly_one_primary_tender_pdf_per_project"
+  },
+  "gold_contract": {
+    "target_authority": "phrase_anchored_page_located_evidence_atom",
+    "positive_case_requires_target": true,
+    "expected_no_result_cases_in_scope": false,
+    "independent_reviewer_required": true,
+    "annotator_and_reviewer_must_differ": true,
+    "project_specific_query_hints_forbidden": true,
+    "old_bid_intake_evidence_ids_are_authoritative": false,
+    "old_agent_methodology_reused": [
+      "project_level_split",
+      "dataset_and_code_fingerprint",
+      "predeclared_thresholds",
+      "single_formal_holdout_execution",
+      "no_tuning_from_holdout_failures"
+    ]
+  },
+  "frozen_retrieval": {
+    "baseline_profile": "bid-evidence-candidate-fusion-profile-v1-rq2b",
+    "candidate_profile": "bid-evidence-rerank-profile-v1-rq2c-bce",
+    "candidate_adapter": "bid-evidence-mcp-rq2c-search@v7-bce-anchor-preserving-rerank",
+    "query_optimizer_profile": "bid-evidence-query-optimizer-profile-v1-rq1c",
+    "lexical_profile": "bid-evidence-lexical-profile-v1-rq1d",
+    "semantic_profile": "bid-evidence-semantic-profile-v1-rq2a-bce",
+    "retrieval_profile": "bid-evidence-retrieval-profile-v2-role-aware",
+    "parser_profile": "bid-document-parser-profile-v4-pdf-quality-gated-rq1b",
+    "parameter_change_allowed_after_freeze": false,
+    "new_project_specific_rule_allowed": false
+  },
+  "freeze_sequence": [
+    "gold_approved_development_dataset",
+    "immutable_development_snapshot",
+    "development_baseline_then_candidate",
+    "development_gate_passed",
+    "sealed_holdout_dataset",
+    "frozen_preholdout_with_development_report_hash",
+    "exclusive_holdout_execution_ledger",
+    "single_holdout_baseline_then_candidate",
+    "terminal_holdout_report"
+  ],
+  "primary_metrics": {
+    "aggregation": "macro_by_project",
+    "reported_also": ["micro_by_case", "worst_project", "macro_by_category"],
+    "metrics": [
+      "Hit@5",
+      "Target Recall@5",
+      "MRR@5",
+      "NDCG@5",
+      "Hit@8",
+      "Target Recall@8",
+      "Atom Read Target Recall@5",
+      "Citable Target Availability",
+      "Search P95",
+      "Paired Search Delta P95"
+    ]
+  },
+  "acceptance_thresholds": {
+    "macro_hit_at_5_min": 0.85,
+    "macro_target_recall_at_5_min": 0.78,
+    "macro_mrr_at_5_min": 0.55,
+    "macro_ndcg_at_5_min": 0.60,
+    "macro_hit_at_8_min": 0.92,
+    "macro_target_recall_at_8_min": 0.85,
+    "macro_read_target_recall_at_5_min": 0.75,
+    "macro_citable_target_availability_min": 0.98,
+    "worst_project_hit_at_5_min": 0.75,
+    "worst_project_target_recall_at_5_min": 0.65,
+    "macro_hit_at_5_delta_min": 0.0,
+    "macro_target_recall_at_5_delta_min": 0.0,
+    "macro_hit_at_8_delta_min": 0.0,
+    "macro_target_recall_at_8_delta_min": 0.0,
+    "macro_read_target_recall_at_5_delta_min": 0.0,
+    "per_case_quality_regression_count_max": 0,
+    "atom_only_violation_count_max": 0,
+    "candidate_search_p95_ms_max": 4500,
+    "paired_search_delta_p95_ms_max": 2500
+  },
+  "hard_invariants": {
+    "same_parse_and_index_authority_within_pair": true,
+    "frozen_rq2b_candidate_pool_identical": true,
+    "zero_promotion_identity": true,
+    "atom_only_read": true,
+    "deterministic_replay": true,
+    "project_family_overlap": 0,
+    "source_document_hash_overlap": 0,
+    "question_hash_overlap": 0
+  },
+  "holdout_policy": {
+    "development_gate_must_pass_before_holdout": true,
+    "baseline_before_candidate": true,
+    "maximum_formal_execution_count": 1,
+    "exclusive_execution_ledger_required": true,
+    "rerun_after_result_forbidden": true,
+    "threshold_change_after_freeze_forbidden": true,
+    "holdout_not_used_for_candidate_selection": true,
+    "holdout_not_used_for_parameter_tuning": true,
+    "holdout_failure_action": "create_new_development_cohort_and_new_holdout_version",
+    "holdout_failure_may_define_new_rules": false
+  },
+  "release_interpretation": {
+    "development_pass_only": "not_sufficient_for_release",
+    "holdout_pass_without_invariants": "not_sufficient_for_release",
+    "full_rq2_closeout": "development_and_single_holdout_pass_all_quality_latency_and_safety_gates",
+    "failed_holdout": "failed_final_for_this_freeze_version"
+  },
+  "compatibility": {
+    "new_database_migration_required": false,
+    "alembic_head": "20260815_0103",
+    "runtime_adapter_changed": false,
+    "historical_v4_v5_v6_v7_adapters_unchanged": true,
+    "legacy_bid_intake_authority_reused": false
+  },
+  "external_execution": {
+    "real_documents_required_for_formal_benchmark": true,
+    "local_embedding_model": true,
+    "local_cross_encoder": true,
+    "ocr_or_visual": false,
+    "generation_model": false,
+    "external_mcp": false,
+    "production_milvus": false,
+    "external_environment": false
+  }
+}

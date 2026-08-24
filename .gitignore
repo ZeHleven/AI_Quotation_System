@@ -67,6 +67,7 @@ AI_Middle_Office/nssm.exe
 node_modules/
 ai-web/node_modules/
 ai-web/dist/
+.pnpm-store/
 
 # Claude Code local settings
 .claude/
@@ -84,6 +85,22 @@ hatch_runs/
 
 # Local release/test scratch files are never part of an application release.
 /AI_Middle_Office/.tmp/
+/AI_Middle_Office/.local-mvp1/
+/AI_Middle_Office/.local-mvp1-deepseek-v4-flash/
+/AI_Middle_Office/.local-mvp1-deepseek-v4-flash-b2/
+/AI_Middle_Office/.local-mvp1-ds-b2/
+/AI_Middle_Office/.local-mvp1-real/
+/AI_Middle_Office/.local-mvp1-real-pdf-sources/
+/AI_Middle_Office/.local-mvp1-real-rq2b/
+/AI_Middle_Office/.local-mvp1-real-rq2c/
+/AI_Middle_Office/.local-mvp1-real-rq2b-zero-lot-diagnostic/
+/AI_Middle_Office/.local-mvp1-real-rq2b-large-result-diagnostic/
+/AI_Middle_Office/.local-mvp1-real-rq2b-token-budget-diagnostic/
+/AI_Middle_Office/.local-mvp1-real-rq2b-token-budget-32k-diagnostic/
+/AI_Middle_Office/.local-mvp1-real-rq2b-tool-loop-diagnostic/
+/AI_Middle_Office/.local-mvp1-real-rq2b-child-citation-diagnostic/
+/AI_Middle_Office/.local-mvp1-phase4c1*/
+/AI_Middle_Office/.local-mvp1-real-*-phase4c1*/
 
 # Separate video-production workspace and browser capture profiles.
 /video-promo-qisheng/

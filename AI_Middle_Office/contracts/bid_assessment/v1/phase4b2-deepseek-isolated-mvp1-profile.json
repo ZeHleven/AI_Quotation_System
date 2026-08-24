@@ -1,0 +1,106 @@
+{
+  "schema": "bid-assessment-phase4b2-deepseek-isolated-mvp1-profile-v1",
+  "profile_id": "bid-assessment-phase4b2-deepseek-isolated-mvp1-v1",
+  "source_spec_version": "v0.1-r47",
+  "status": "validated_isolated_live_synthetic_full_chain",
+  "requires": [
+    "contracts/bid_assessment/v1/phase4-mvp1-runtime-profile.json",
+    "contracts/bid_assessment/v1/phase4b1-deepseek-v4-flash-profile.json"
+  ],
+  "local_lab": {
+    "profile_version": "mvp1-local-deepseek-v4-flash-1.0.1",
+    "bind_host": "127.0.0.1",
+    "port": 9002,
+    "database_kind": "sqlite",
+    "object_storage_kind": "local",
+    "queue_kind": "in_process",
+    "isolated_root": ".local-mvp1-ds-b2",
+    "synthetic_text_only": true
+  },
+  "model_gateway": {
+    "provider_ref": "deepseek",
+    "model_ref": "deepseek-v4-flash",
+    "thinking_mode": "disabled",
+    "temperature": 0,
+    "max_attempts_per_logical_call": 3,
+    "logical_call_timeout_seconds": 180,
+    "gateway_owned_tool_call_id": true,
+    "safe_failed_response_accounting": true,
+    "raw_invalid_action_persisted": false,
+    "validation_issue_paths_only": true
+  },
+  "action_normalization": {
+    "utc_serialization": "rfc3339_z",
+    "retrieval_hint_fields_removed_before_tool_gateway": [
+      "field_aliases",
+      "primary_query",
+      "query_language_policy",
+      "no_result_policy"
+    ],
+    "lossless_cny_money_scale": 4,
+    "semantic_guessing_forbidden": true,
+    "unknown_tool_arguments_fail_closed": true
+  },
+  "evidence_mcp": {
+    "transport": "local_adapter_behind_tool_gateway",
+    "search_calls": 10,
+    "read_calls": 10,
+    "search_results_citable": false,
+    "read_results_atom_only": true,
+    "document_fact_requires_context_read": true,
+    "external_mcp_used": false
+  },
+  "validated_run": {
+    "fixture": "samples/mvp1-local-demo-tender.txt",
+    "fixture_sha256": "918b9380ab22ee987efa872aff594a5bdae524a9e254ec2bf084ffcc07482268",
+    "run_id": "run_96981075f4c0497d9ccf02fb8bddd4ae",
+    "run_status": "succeeded",
+    "report_status": "ready",
+    "decision": "insufficient",
+    "task_count": 26,
+    "succeeded_task_count": 26,
+    "model_call_count": 31,
+    "model_result_count": 31,
+    "model_action_counts": {
+      "request_tool": 20,
+      "submit_fact_candidates": 10,
+      "submit_claim_candidates": 1
+    },
+    "tool_call_count": 20,
+    "checkpoint_count": 88,
+    "fact_assertion_count": 12,
+    "fact_evidence_link_count": 12,
+    "resolved_fact_count": 18,
+    "run_validation_check_count": 51,
+    "run_validation_failed_check_count": 0
+  },
+  "usage_ledger": {
+    "logical_call_input_tokens": 170165,
+    "logical_call_output_tokens": 5730,
+    "logical_call_cost_microunits": 11430,
+    "immutable_result_input_tokens": 163766,
+    "immutable_result_output_tokens": 5338,
+    "immutable_result_cost_microunits": 10951,
+    "rejected_response_input_tokens": 6399,
+    "rejected_response_output_tokens": 392,
+    "rejected_response_cost_microunits": 479,
+    "currency": "USD",
+    "cost_usd": "0.011430"
+  },
+  "boundary": {
+    "real_pdf_used": false,
+    "ocr_used": false,
+    "vision_used": false,
+    "external_mcp_used": false,
+    "production_milvus_used": false,
+    "ecs_or_production_connected": false,
+    "official_deepseek_https_only": true,
+    "ecs_rollout_allowed": false
+  },
+  "compatibility": {
+    "new_database_migration_required": false,
+    "alembic_head": "20260815_0103",
+    "legacy_bid_intake_modified": false,
+    "feature_flags_default_false": true
+  }
+}

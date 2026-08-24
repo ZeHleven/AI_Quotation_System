@@ -417,9 +417,25 @@ class BidLotCandidate(Base):
     __tablename__ = "bid_lot_candidates"
     __table_args__ = (
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_bid_lot_candidates_confidence"),
-        UniqueConstraint("manifest_id", "normalized_lot_key", name="uq_bid_lot_candidates_key"),
-        UniqueConstraint("manifest_id", "candidate_hash", name="uq_bid_lot_candidates_hash"),
+        CheckConstraint(
+            "confidence_level IN ('high', 'medium', 'low')",
+            name="ck_bid_lot_candidates_confidence_level",
+        ),
+        CheckConstraint(
+            "source_status IN ('detected', 'system_scope')",
+            name="ck_bid_lot_candidates_source_status",
+        ),
+        ForeignKeyConstraint(
+            ["manifest_id", "detection_run_id"],
+            ["bid_lot_detection_runs.manifest_id", "bid_lot_detection_runs.id"],
+            name="fk_bid_lot_candidates_detection_run",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "manifest_id", name="uq_bid_lot_candidates_manifest_id"),
+        UniqueConstraint("detection_run_id", "normalized_lot_key", name="uq_bid_lot_candidates_key"),
+        UniqueConstraint("detection_run_id", "candidate_hash", name="uq_bid_lot_candidates_hash"),
         Index("ix_bid_lot_candidates_manifest", "manifest_id"),
+        Index("ix_bid_lot_candidates_detection_run", "detection_run_id"),
         TABLE_OPTIONS,
     )
 
@@ -429,12 +445,14 @@ class BidLotCandidate(Base):
         ForeignKey("bid_document_manifests.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    detection_run_id = Column(String(36), nullable=False)
     lot_code = Column(String(128), nullable=True)
     lot_name = Column(String(500), nullable=False)
     scope_summary = Column(Text, nullable=True)
     normalized_lot_key = Column(String(191), nullable=False)
     source_status = Column(String(32), nullable=False)
     confidence = Column(Numeric(10, 6), nullable=False)
+    confidence_level = Column(String(16), nullable=False)
     candidate_hash = Column(String(64), nullable=False)
     warnings_json = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

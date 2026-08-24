@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/parse-quality.schema.json",
+  "title": "Bid Assessment Parse Quality Gate v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "profile_version",
+    "parser_profile_version",
+    "status",
+    "score",
+    "grade",
+    "blocking_reasons",
+    "review_reasons",
+    "metrics",
+    "dimension_scores",
+    "consumer_gates",
+    "result_hash"
+  ],
+  "properties": {
+    "contract_version": {"const": "bid.parse.quality.v1"},
+    "profile_version": {"const": "bid-parse-quality-profile-v1"},
+    "parser_profile_version": {"const": "bid-document-parser-profile-v4-pdf-quality-gated-rq1b"},
+    "status": {"enum": ["pass", "review_required", "blocked"]},
+    "score": {"type": "integer", "minimum": 0, "maximum": 100},
+    "grade": {"enum": ["high", "medium", "low"]},
+    "blocking_reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "retrieval_child_missing",
+          "citable_atom_missing",
+          "missing_page_ratio_at_or_above_0_20",
+          "partial_page_ratio_at_or_above_0_20",
+          "citable_heading_ratio_below_0_90"
+        ]
+      }
+    },
+    "review_reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "partial_pages_present",
+          "ocr_pending_pages_present",
+          "undersized_child_ratio_above_0_35",
+          "warning_density_above_0_50_per_page",
+          "score_below_high_gate"
+        ]
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "page_count",
+        "missing_page_count",
+        "missing_page_ratio",
+        "partial_page_count",
+        "partial_page_ratio",
+        "ocr_pending_page_count",
+        "ocr_pending_page_ratio",
+        "retrieval_child_count",
+        "evidence_atom_count",
+        "heading_block_count",
+        "citable_heading_atom_count",
+        "citable_heading_ratio",
+        "undersized_non_isolated_child_count",
+        "undersized_non_isolated_child_ratio",
+        "actionable_warning_count",
+        "actionable_warning_density_per_page"
+      ],
+      "properties": {
+        "page_count": {"type": "integer", "minimum": 1},
+        "missing_page_count": {"type": "integer", "minimum": 0},
+        "missing_page_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "partial_page_count": {"type": "integer", "minimum": 0},
+        "partial_page_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "ocr_pending_page_count": {"type": "integer", "minimum": 0},
+        "ocr_pending_page_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "retrieval_child_count": {"type": "integer", "minimum": 0},
+        "evidence_atom_count": {"type": "integer", "minimum": 0},
+        "heading_block_count": {"type": "integer", "minimum": 0},
+        "citable_heading_atom_count": {"type": "integer", "minimum": 0},
+        "citable_heading_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "undersized_non_isolated_child_count": {"type": "integer", "minimum": 0},
+        "undersized_non_isolated_child_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "actionable_warning_count": {"type": "integer", "minimum": 0},
+        "actionable_warning_density_per_page": {"type": "number", "minimum": 0}
+      }
+    },
+    "dimension_scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["native_readiness", "structural_coherence", "citable_integrity", "warning_hygiene"],
+      "properties": {
+        "native_readiness": {"type": "integer", "minimum": 0, "maximum": 30},
+        "structural_coherence": {"type": "integer", "minimum": 0, "maximum": 35},
+        "citable_integrity": {"type": "integer", "minimum": 0, "maximum": 25},
+        "warning_hygiene": {"type": "integer", "minimum": 0, "maximum": 10}
+      }
+    },
+    "consumer_gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retrieval_index", "lot_detection", "automated_assessment"],
+      "properties": {
+        "retrieval_index": {"type": "boolean"},
+        "lot_detection": {"type": "boolean"},
+        "automated_assessment": {"type": "boolean"}
+      }
+    },
+    "result_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

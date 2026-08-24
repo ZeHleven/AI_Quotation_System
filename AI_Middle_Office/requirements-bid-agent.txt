@@ -1,0 +1,3 @@
+# Isolated bid-assessment Agent runtime dependencies.
+# Kept separate from the default-disabled API image until Agent release approval.
+langgraph==1.2.9

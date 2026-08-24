@@ -1,0 +1,86 @@
+{
+  "schema": "bid-assessment-phase4d3-fact-verification-comparability-profile-v1",
+  "profile_id": "bid-assessment-phase4d3-fact-verification-comparability-v1",
+  "source_spec_version": "v0.1-r62",
+  "status": "locally_validated_isolated_not_for_ecs",
+  "requires": [
+    "contracts/bid_assessment/v1/phase4d2-enterprise-evidence-import-profile.json",
+    "schemas/bid_assessment/v1/hard-gate-comparison-baseline.schema.json"
+  ],
+  "authority": {
+    "schema": "bid.hard-gate.comparison-baseline.v1",
+    "validation_schema": "bid.hard-gate.comparison-baseline-validation.v1",
+    "scope": "one_assessment_manifest_scope_and_enterprise_business_baseline",
+    "immutable": true,
+    "candidate_hash_stable": true,
+    "review_time_window_minutes": 15
+  },
+  "fact_set": {
+    "tender_slots": [
+      "tender.overview",
+      "tender.submission.deadline",
+      "tender.qualification.requirements",
+      "tender.guarantee.requirements",
+      "tender.schedule.site_constraints"
+    ],
+    "enterprise_slots": [
+      "enterprise.identity.legal_name",
+      "enterprise.qualifications.active_records",
+      "enterprise.safety_license.active_record",
+      "enterprise.performance.records",
+      "enterprise.personnel.available_records",
+      "enterprise.financial.capacity",
+      "enterprise.guarantee.capacity",
+      "enterprise.bid_preparation.capacity",
+      "enterprise.prohibited_risk.rules",
+      "enterprise.compliance.current_records",
+      "enterprise.client_risk.current_records"
+    ],
+    "verification_statuses": ["supported", "partial", "unknown"],
+    "all_slots_explicit_once": true,
+    "supported_requires_canonical_value_and_authoritative_evidence": true,
+    "partial_never_counts_as_hard_gate_supported": true,
+    "unknown_requires_null_value_and_explicit_note": true
+  },
+  "evidence_policy": {
+    "tender_supported_source": "current_manifest_current_parse_head_citable_atom_only",
+    "enterprise_supported_source": "same_business_baseline_evidence_package_same_I_slot_item_only",
+    "filename_mime_parser_hint_inference_forbidden": true,
+    "model_output_is_not_verification_authority": true,
+    "source_body_and_object_ref_omitted_from_api": true
+  },
+  "invalidation": {
+    "tender": ["assessment", "manifest_hash", "scope_hash", "parse_head", "atom_text_hash", "atom_locator_hash"],
+    "enterprise": ["snapshot_hash", "business_baseline_hash", "evidence_package_hash", "evidence_item_hash", "validity"],
+    "carry_forward": "forbidden_without_new_validate_and_freeze"
+  },
+  "runtime_binding": {
+    "run_columns": ["hard_gate_comparison_baseline_id", "hard_gate_comparison_baseline_hash"],
+    "run_input_fingerprint_binds": ["hard_gate_comparison_baseline_version", "hard_gate_comparison_baseline_hash"],
+    "verified_fact_precedence": "verified_comparison_fact_over_model_candidate",
+    "conflicting_model_candidate": "retained_for_audit_but_not_selected",
+    "hard_gate_engine": "existing_deterministic_HG01_HG07_comparator"
+  },
+  "runtime_lab": {
+    "get_path": "/api/v1/bid-assessment-runtime-lab/hard-gate-comparison-baseline",
+    "validate_path": "/api/v1/bid-assessment-runtime-lab/hard-gate-comparison-baselines/validate",
+    "freeze_path": "/api/v1/bid-assessment-runtime-lab/hard-gate-comparison-baselines",
+    "candidate_hash_header": "X-Hard-Gate-Comparison-Candidate-Hash",
+    "local_execute_admin_only": true,
+    "view_only_writes_blocked_server_side": true,
+    "idempotency_required": true
+  },
+  "compatibility": {
+    "new_database_migration_required": true,
+    "alembic_head": "20260818_0108",
+    "new_tables": [
+      "bid_hard_gate_comparison_baselines",
+      "bid_hard_gate_comparison_evidence_links",
+      "bid_fact_comparison_links"
+    ],
+    "legacy_bid_intake_modified": false,
+    "feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_FACT_VERIFICATION",
+    "feature_flag_default": false,
+    "ecs_rollout_allowed": false
+  }
+}

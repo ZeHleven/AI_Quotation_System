@@ -24,7 +24,13 @@
         "scoring_item_list",
         "deliverable_list",
         "payment_milestone_list",
-        "security"
+        "security",
+        "project_identity",
+        "enterprise_identity",
+        "enterprise_record",
+        "enterprise_record_list",
+        "enterprise_capacity",
+        "enterprise_rule_list"
       ]
     },
     "FactValue": {
@@ -78,7 +84,7 @@
           "then": {"properties": {"value": {"type": "array"}}}
         },
         {
-          "if": {"properties": {"value_type": {"enum": ["duration", "location", "endpoint", "security"]}}, "required": ["value_type"]},
+          "if": {"properties": {"value_type": {"enum": ["duration", "location", "endpoint", "security", "project_identity", "enterprise_identity", "enterprise_record", "enterprise_record_list", "enterprise_capacity", "enterprise_rule_list"]}}, "required": ["value_type"]},
           "then": {"properties": {"value": {"type": "object"}}}
         }
       ]

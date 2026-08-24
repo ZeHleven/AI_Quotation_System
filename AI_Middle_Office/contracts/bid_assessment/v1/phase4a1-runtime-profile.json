@@ -1,0 +1,26 @@
+{
+  "schema": "bid-assessment-phase4a1-runtime-profile-v1",
+  "profile_id": "bid-assessment-phase4a1-plan-continuation-skill-binding-v1",
+  "source_spec_version": "v0.1-r28",
+  "status": "verified_local_isolated",
+  "master_feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_MVP",
+  "slice_feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_PLAN_CONTINUATION",
+  "requires": ["FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME"],
+  "stages": ["P0", "P1", "P2", "P3", "P4"],
+  "continuation_event": "bid.plan.continuation_requested.v1",
+  "plan_envelope_schema": "bid.plan.commit.envelope.v2",
+  "planner_version": "bid-deterministic-stage-planner-v2",
+  "validator_version": "bid-plan-validator-v2",
+  "run_validator_version": "bid-run-integrity-validator-v3",
+  "skill_catalog": "contracts/bid_assessment/v1/skills/catalog-1.0.0.json",
+  "task_catalog": "contracts/bid_assessment/v1/task-catalog-1.0.0-draft.1.json",
+  "migration_head": "20260812_0098",
+  "external_execution": {
+    "real_model": false,
+    "ocr_or_visual": false,
+    "mcp": false,
+    "public_network": false,
+    "real_external_tool": false,
+    "real_object_storage": false
+  }
+}

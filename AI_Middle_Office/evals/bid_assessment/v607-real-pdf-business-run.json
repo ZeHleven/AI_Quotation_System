@@ -1,0 +1,163 @@
+{
+  "schema_version": "bid.pure_agent.v607.real_pdf_business_run.v1",
+  "dataset_kind": "authorized_real_business",
+  "description": "Pure Agent V607 isolated real-PDF business run over the frozen Hong Kong Centre tender and the frozen Phase 4D-3 enterprise comparison baseline.",
+  "execution_contract": {
+    "real_pdf_allowed": true,
+    "native_pdf_parse_allowed": true,
+    "offline_rag_allowed": true,
+    "local_embedding_allowed": true,
+    "local_reranker_allowed": true,
+    "deepseek_model_allowed": true,
+    "ocr_allowed": false,
+    "external_mcp_allowed": false,
+    "database_allowed": false,
+    "production_vector_store_allowed": false,
+    "ecs_allowed": false
+  },
+  "document": {
+    "safe_title": "东莞香港中心项目商业街区及6号楼32层办公区装修专业分包工程招标文件",
+    "sha256": "3e2d7a428df8ac72daec8b75124f0c470e8964b1c953d4799f163b75d1a0ad8f",
+    "page_count": 307,
+    "silver_dataset": "evals/bid_intake/retrieval/v1/private_pdf_c3_hong_kong_centre_silver_v1.json"
+  },
+  "enterprise_baseline": {
+    "safe_title": "旗胜企业资料包 v3 业务核验基线",
+    "version": "enterprise-business-20260818030437-cb6c17be2ff6",
+    "sha256": "66d001bb36574bc4eb2c7c2a1cc65a692450f93426a6646e1e527a9661ebc10c",
+    "verification_status": "verified_with_follow_up",
+    "raw_files_reparsed": false,
+    "facts": [
+      {
+        "id": "I01",
+        "status": "partial",
+        "title": "企业法定主体",
+        "text": "资料包包含1份营业执照并映射到企业法定主体，但本次V607不通过外部官方渠道重新核验当前登记状态。",
+        "locator": "I01 企业法定主体"
+      },
+      {
+        "id": "I02",
+        "status": "partial",
+        "title": "施工资质",
+        "text": "资料包记录建筑装修装饰工程专业承包一级资质，并记录建筑幕墙、机电安装、电子智能化二级资质；证书当前官方有效状态仍需复核。",
+        "locator": "I02 有效资质"
+      },
+      {
+        "id": "I03",
+        "status": "partial",
+        "title": "安全生产许可",
+        "text": "资料包记录安全生产许可证，证载有效期至2026年9月12日；存在临期续证跟进要求，当前官方状态仍需复核。",
+        "locator": "I03 安全生产许可"
+      },
+      {
+        "id": "I04",
+        "status": "partial",
+        "title": "类似项目业绩",
+        "text": "资料包包含14份历史合同PDF并映射到类似项目业绩，但尚未逐份核验严格近五年、合同主体、金额、范围、完工验收及与目标项目的相似性。",
+        "locator": "I04 类似项目业绩"
+      },
+      {
+        "id": "I05",
+        "status": "partial",
+        "title": "关键人员与证书",
+        "text": "资料包包含1份企业提供的人员与资格证书汇总图，只能证明存在人员证书清单线索；逐人证书原件、编号、有效状态、劳动社保关系和项目任命资格尚未核验。",
+        "locator": "I05 关键人员与人员证书"
+      },
+      {
+        "id": "I06",
+        "status": "unknown",
+        "title": "资金能力",
+        "text": "当前冻结企业基线没有足够资料核验本项目所需资金能力。",
+        "locator": "I06 资金能力"
+      },
+      {
+        "id": "I07",
+        "status": "unknown",
+        "title": "担保能力",
+        "text": "当前冻结企业基线没有足够资料核验投标担保与履约担保的开具能力。",
+        "locator": "I07 担保能力"
+      },
+      {
+        "id": "I08",
+        "status": "unknown",
+        "title": "投标准备能力",
+        "text": "当前冻结企业基线没有足够资料核验投标文件编制、盖章、授权和按期递交能力。",
+        "locator": "I08 投标准备能力"
+      },
+      {
+        "id": "I09",
+        "status": "unknown",
+        "title": "禁投规则",
+        "text": "当前冻结企业基线没有足够资料核验是否触发本项目禁投或关联限制。",
+        "locator": "I09 禁投规则"
+      },
+      {
+        "id": "I10",
+        "status": "unknown",
+        "title": "合规记录",
+        "text": "当前冻结企业基线没有足够资料核验处罚、失信和其他合规记录。",
+        "locator": "I10 合规记录"
+      },
+      {
+        "id": "I11",
+        "status": "unknown",
+        "title": "客户风险记录",
+        "text": "当前冻结企业基线没有足够资料核验与目标客户相关的历史履约或风险记录。",
+        "locator": "I11 客户风险记录"
+      }
+    ]
+  },
+  "conversation": [
+    {
+      "id": "T01_open_assessment",
+      "user_message": "请结合这份招标文件和我们的企业资料，判断目前是否适合投标，先给我关键结论和主要风险。",
+      "expected": {
+        "execution_mode": "planned",
+        "required_source_hints": ["bid_documents", "enterprise_knowledge"],
+        "required_search_tools": ["bid_document_search", "enterprise_knowledge_search"],
+        "minimum_citations": 2,
+        "requires_limitation": true
+      }
+    },
+    {
+      "id": "T02_guarantees_follow_up",
+      "user_message": "投标担保和履约担保分别是什么要求？",
+      "expected": {
+        "required_source_hints": ["bid_documents"],
+        "required_search_tools": ["bid_document_search"],
+        "minimum_citations": 2,
+        "requires_limitation": false
+      }
+    },
+    {
+      "id": "T03_deadline_unknown_follow_up",
+      "user_message": "那最终投标截止日期具体是几月几日几点？",
+      "expected": {
+        "required_source_hints": ["bid_documents"],
+        "required_search_tools": ["bid_document_search"],
+        "minimum_citations": 0,
+        "requires_limitation": true,
+        "required_epistemic_status": "unknown"
+      }
+    },
+    {
+      "id": "T04_qualification_match_follow_up",
+      "user_message": "我们的装修一级资质能满足这个项目的资质要求吗？",
+      "expected": {
+        "required_source_hints": ["bid_documents", "enterprise_knowledge"],
+        "required_search_tools": ["bid_document_search", "enterprise_knowledge_search"],
+        "minimum_citations": 2,
+        "requires_limitation": true
+      }
+    }
+  ],
+  "thresholds": {
+    "silver_page_recall_at_8_min": 0.84,
+    "silver_phrase_recall_at_8_min": 0.80,
+    "conversation_turn_pass_rate_min": 1.0,
+    "grounding_guard_acceptance_min": 1.0,
+    "citation_projection_acceptance_min": 1.0,
+    "unknown_safety_min": 1.0,
+    "continuous_context_min": 1.0
+  }
+}

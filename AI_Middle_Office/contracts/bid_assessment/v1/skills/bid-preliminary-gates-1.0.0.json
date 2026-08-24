@@ -1,0 +1,15 @@
+{
+  "schema": "bid.skill.artifact.v1",
+  "skill_id": "bid-preliminary-gates",
+  "skill_version": "1.0.0",
+  "executor_kind": "deterministic",
+  "task_bindings": {
+    "evaluate_deadline_gate": {"action_contract": "bid.task.action.deterministic.v1", "output_schema": "hard_gate_result_v1"},
+    "evaluate_qualification_gate": {"action_contract": "bid.task.action.deterministic.v1", "output_schema": "hard_gate_result_v1"},
+    "evaluate_personnel_performance_gate": {"action_contract": "bid.task.action.deterministic.v1", "output_schema": "hard_gate_result_v1"},
+    "evaluate_legal_compliance_gate": {"action_contract": "bid.task.action.deterministic.v1", "output_schema": "hard_gate_result_v1"},
+    "evaluate_guarantee_cash_gate": {"action_contract": "bid.task.action.deterministic.v1", "output_schema": "hard_gate_result_v1"},
+    "evaluate_minimum_bid_capacity_gate": {"action_contract": "bid.task.action.deterministic.v1", "output_schema": "hard_gate_result_v1"},
+    "evaluate_enterprise_prohibited_risk_gate": {"action_contract": "bid.task.action.deterministic.v1", "output_schema": "hard_gate_result_v1"}
+  }
+}

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -14,6 +17,8 @@ from sqlalchemy.orm import sessionmaker
 
 import app.models.registry  # noqa: F401 - register the complete FK graph
 from app.api.v1 import bid_assessments as assessments_api
+from app.api.v1 import bid_assessment_events as assessment_events_api
+from app.api.v1 import bid_assessment_reports as assessment_reports_api
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.dependencies import get_current_user
@@ -24,6 +29,7 @@ from app.models.bid_assessment import (
     BidDocumentManifest,
     BidDocumentVersion,
     BidFileObject,
+    BidLotCandidate,
     BidManifestDocument,
     BidUploadBatch,
     BidUploadBatchDeactivation,
@@ -45,7 +51,48 @@ from app.models.bid_assessment_eventing import (
     BidProcessedEvent,
     BidPublicEvent,
 )
-from app.models.bid_assessment_runtime import BidAnalysisRun
+from app.models.bid_assessment_runtime import (
+    BidAnalysisRun,
+    BidAsyncOperation,
+    BidCheckpoint,
+    BidPlanRevision,
+    BidTask,
+    BidTaskAttempt,
+    BidTaskDependency,
+)
+from app.models.bid_assessment_documents import (
+    BidDocumentParseHead,
+    BidDocumentParseRun,
+    BidDocumentParseUnit,
+    BidEvidenceFragment,
+)
+from app.models.bid_assessment_lots import (
+    BidLotCandidateEvidence,
+    BidLotDetectionHead,
+    BidLotDetectionRun,
+)
+from app.models.bid_assessment_tooling import (
+    BidContextManifest,
+    BidToolInvocation,
+    BidToolResult,
+)
+from app.models.bid_tool_execution import BidToolDispatch, BidToolDispatchAttempt
+from app.models.bid_run_validation import BidRunValidation, BidRunValidationAttempt
+from app.models.bid_model_execution import (
+    BidModelCall,
+    BidModelCallAttempt,
+    BidModelResult,
+)
+from app.models.bid_assessment_results import (
+    BidClaimCitation,
+    BidFactAssertion,
+    BidHardGateResult,
+    BidPreliminaryDecision,
+    BidPreliminaryReport,
+    BidReportClaim,
+    BidReportValidation,
+    BidResolvedFact,
+)
 from app.models.user import User
 from app.services import bid_assessments as assessment_commands
 from app.services import bid_upload_batch_abandonments as upload_abandon_commands
@@ -56,6 +103,8 @@ from app.services import bid_upload_batches as upload_commands
 from app.services import bid_upload_file_removals as upload_file_removal_commands
 from app.services import bid_upload_files as upload_file_commands
 from app.services.bid_assessment_eventing import (
+    append_outbox_event,
+    append_stream_control_events,
     canonical_hash,
     project_outbox_event_to_public,
 )
@@ -63,9 +112,113 @@ from app.services.bid_assessment_idempotency import begin_idempotent_request
 from app.services.bid_upload_batch_cleanup import cleanup_due_abandoned_upload_batches
 from app.services.bid_upload_file_storage import (
     BidUploadObjectCandidate,
+    BidUploadStorageError,
+    LocalBidUploadObjectStorage,
     StoredBidUploadObject,
 )
 from app.services.bid_upload_files import cleanup_orphaned_bid_upload_objects
+from app.services.bid_lot_detection_runs import build_manifest_parse_set
+from app.services.bid_lot_detector import (
+    LotDetectionEvidenceInput,
+    detect_lot_candidates,
+)
+from app.services.bid_run_bootstrap import (
+    BidRunInputNotReady,
+    consume_plan_requested_event,
+)
+from app.services.bid_plan_commit import consume_run_created_event
+from app.services.bid_plan_continuation import (
+    PLAN_CONTINUATION_CONSUMER,
+    consume_plan_continuation_requested_event,
+    process_pending_plan_continuations,
+)
+from app.services import bid_plan_continuation as plan_continuation_service
+from app.services import bid_plan_commit as plan_commit_service
+from app.services import bid_task_runtime as task_runtime_service
+from app.services import bid_run_lifecycle as run_lifecycle_service
+from app.services import bid_tool_context as tool_context_service
+from app.services import bid_tool_execution as tool_execution_service
+from app.services import bid_run_validation as run_validation_service
+from app.services import bid_model_execution as model_execution_service
+from app.services.bid_local_agent_executor import advance_local_agent_one_action
+from app.services.bid_model_execution import (
+    BidModelBudgetExhausted,
+    BidModelCallConflict,
+    BidModelFenceLost,
+    ModelProviderResult,
+    claim_model_call,
+    execute_model_call_claim,
+    fail_model_call_attempt,
+    heartbeat_model_call,
+    mark_model_call_sending,
+    recover_expired_model_calls,
+    schedule_model_call,
+    settle_model_call,
+)
+from app.services.bid_mvp1_executor import process_mvp1_model_queue, process_mvp1_task_queue
+from app.services.bid_mvp1_local_provider import DeterministicMvp1LocalProvider
+from mcp_servers.bid_assessment_evidence.service import (
+    BidEvidenceMcpError,
+    BidEvidenceMcpScope,
+    BidEvidenceMcpService,
+)
+from app.services.bid_plan_commit import (
+    PLAN_COMMIT_CONSUMER,
+    process_pending_plan_commits,
+)
+from app.services.bid_task_runtime import (
+    BidCheckpointConflict,
+    BidTaskFenceLost,
+    TaskCompletionReceipt,
+    complete_task_attempt,
+    fail_task_attempt,
+    heartbeat_task_attempt,
+    lease_next_ready_task,
+    maintain_task_runtime,
+    start_task_attempt,
+    write_task_checkpoint,
+    build_task_contract,
+)
+from app.services.bid_run_lifecycle import (
+    finalize_cancel_requested_run,
+    maintain_run_lifecycle,
+)
+from app.services.bid_tool_context import (
+    BidToolArgumentsInvalid,
+    BidToolBudgetExhausted,
+    BidToolInvocationConflict,
+    BidToolUnauthorized,
+    assemble_context_manifest,
+    authorize_tool_invocation,
+    complete_tool_invocation,
+    defer_tool_invocation,
+    read_tool_result_slice,
+    settle_async_tool_operation,
+    time_out_async_tool_operation,
+    validate_tool_arguments,
+    verify_tool_scope_token,
+)
+from app.services.bid_tool_execution import (
+    BidToolDispatchFenceLost,
+    ToolAdapterResult,
+    claim_next_tool_dispatch,
+    enqueue_tool_dispatch,
+    execute_tool_dispatch_claim,
+    mark_tool_dispatch_sending,
+    process_tool_dispatch_queue,
+    recover_expired_tool_dispatch,
+    settle_tool_dispatch,
+)
+from app.services.bid_run_validation import (
+    BidRunValidationFenceLost,
+    claim_next_run_validation,
+    consume_run_validation_requested_event,
+    execute_run_validation_claim,
+    heartbeat_run_validation,
+    maintain_run_validations,
+    process_run_validation_queue,
+    recover_expired_run_validation,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -126,6 +279,8 @@ def api_runtime(tmp_path):
 
     app = FastAPI()
     app.include_router(assessments_api.router, prefix="/api/v1")
+    app.include_router(assessment_events_api.router, prefix="/api/v1")
+    app.include_router(assessment_reports_api.router, prefix="/api/v1")
     app.state.active_user = {"value": user}
 
     def _override_user():
@@ -141,6 +296,9 @@ def api_runtime(tmp_path):
     app.dependency_overrides[get_current_user] = _override_user
     app.dependency_overrides[get_db] = _override_db
     old_flag = settings.feature_bid_assessment_v1_runtime
+    old_events_factory = assessment_events_api.SessionLocal
+    old_phase3_flag = settings.feature_bid_assessment_phase3_run_bootstrap
+    old_phase3_lifecycle_flag = settings.feature_bid_assessment_phase3_run_lifecycle
     old_upload_settings = {
         "bid_upload_batch_ttl_days": settings.bid_upload_batch_ttl_days,
         "bid_upload_max_files": settings.bid_upload_max_files,
@@ -154,6 +312,9 @@ def api_runtime(tmp_path):
         "bid_upload_orphan_grace_seconds": settings.bid_upload_orphan_grace_seconds,
     }
     object.__setattr__(settings, "feature_bid_assessment_v1_runtime", True)
+    assessment_events_api.SessionLocal = session_factory
+    object.__setattr__(settings, "feature_bid_assessment_phase3_run_bootstrap", True)
+    object.__setattr__(settings, "feature_bid_assessment_phase3_run_lifecycle", True)
     object.__setattr__(settings, "bid_upload_batch_ttl_days", 7)
     object.__setattr__(settings, "bid_upload_max_files", 100)
     object.__setattr__(settings, "bid_upload_max_file_bytes", 209715200)
@@ -172,7 +333,18 @@ def api_runtime(tmp_path):
         with TestClient(app) as client:
             yield client, session_factory, user
     finally:
+        assessment_events_api.SessionLocal = old_events_factory
         object.__setattr__(settings, "feature_bid_assessment_v1_runtime", old_flag)
+        object.__setattr__(
+            settings,
+            "feature_bid_assessment_phase3_run_bootstrap",
+            old_phase3_flag,
+        )
+        object.__setattr__(
+            settings,
+            "feature_bid_assessment_phase3_run_lifecycle",
+            old_phase3_lifecycle_flag,
+        )
         for name, value in old_upload_settings.items():
             object.__setattr__(settings, name, value)
         engine.dispose()
@@ -199,8 +371,11 @@ class _FakeBidUploadStorage:
         self.modified: dict[str, datetime] = {}
         self.put_calls: list[str] = []
         self.delete_calls: list[str] = []
+        self.open_read_calls: list[str] = []
+        self.opened_streams: list[BytesIO] = []
         self.fail_put = False
         self.fail_delete = False
+        self.fail_open_read = False
 
     def put(
         self,
@@ -235,6 +410,14 @@ class _FakeBidUploadStorage:
             raise RuntimeError("forced object delete failure")
         self.objects.pop(object_key, None)
         self.modified.pop(object_key, None)
+
+    def open_read(self, *, object_key: str):
+        self.open_read_calls.append(object_key)
+        if self.fail_open_read or object_key not in self.objects:
+            raise RuntimeError("forced object read failure")
+        stream = BytesIO(self.objects[object_key])
+        self.opened_streams.append(stream)
+        return stream
 
     def list_candidates(
         self,
@@ -3866,6 +4049,7 @@ def test_api15_merges_add_replace_deactivate_and_stales_old_run(
             "bid.assessment.input_stale.v1",
             "bid.document.parse_requested.v1",
             "bid.document.parse_requested.v1",
+            "bid.document.parse_requested.v1",
         ]
         assert commit_events[3].payload_json["stale_run_ids"] == [run_id]
         run_audit = (
@@ -5159,3 +5343,6415 @@ def test_api20_hides_cross_user_and_disabled_resources_but_allows_admin(
     visible = client.get(f"/api/v1/bid-assessments/{assessment_id}/documents")
     assert visible.status_code == 200
     assert visible.json()["total"] == 1
+
+
+def _document_version_fixture(
+    session_factory,
+    *,
+    document_id: str,
+) -> dict[str, str | int]:
+    db = session_factory()
+    try:
+        version, file_object = (
+            db.query(BidDocumentVersion, BidFileObject)
+            .join(
+                BidFileObject,
+                BidFileObject.id == BidDocumentVersion.file_object_id,
+            )
+            .filter(BidDocumentVersion.document_id == document_id)
+            .order_by(BidDocumentVersion.version_no.asc())
+            .first()
+        )
+        return {
+            "version_id": str(version.id),
+            "file_object_id": str(file_object.id),
+            "object_key": str(file_object.object_key),
+            "size_bytes": int(file_object.size_bytes),
+        }
+    finally:
+        db.close()
+
+
+def test_api21_manifest_authorization_source_redaction_parse_placeholder_and_etag(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    client, session_factory, owner = api_runtime
+    assessment = _create_assessment(client)
+    assessment_id = assessment.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    document_id = _attach_manifest_document(
+        session_factory,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    fixture = _document_version_fixture(
+        session_factory,
+        document_id=document_id,
+    )
+    version_id = str(fixture["version_id"])
+
+    db = session_factory()
+    try:
+        with db.begin():
+            version = (
+                db.query(BidDocumentVersion)
+                .filter(BidDocumentVersion.id == version_id)
+                .one()
+            )
+            version.source_metadata_json = {
+                "source": "bid_upload_batch",
+                "operation": "add",
+                "relative_path": "招标资料/原招标文件.pdf",
+                "batch_id": "secret-batch",
+                "batch_file_id": "secret-file",
+                "client_file_id": "secret-client",
+                "replace_document_id": "secret-document",
+                "sha256": "secret-hash-copy",
+            }
+    finally:
+        db.close()
+
+    monkeypatch.setattr(
+        assessments_api,
+        "get_bid_upload_object_storage",
+        lambda: (_ for _ in ()).throw(AssertionError("API-21 touched storage")),
+    )
+    response = client.get(f"/api/v1/bid-document-versions/{version_id}")
+
+    assert response.status_code == 200
+    _validate_contract("DocumentVersionResponse", response.json())
+    detail = response.json()["data"]
+    assert detail["version_id"] == version_id
+    assert detail["document"] == {
+        "document_id": document_id,
+        "logical_name": "原招标文件",
+        "document_type": "tender_document",
+    }
+    assert detail["sha256"] == str(fixture["file_object_id"]).replace("-", "") * 2
+    assert detail["upload_source"] == {
+        "source_type": "upload_batch",
+        "operation": "add",
+        "relative_path": "招标资料/原招标文件.pdf",
+    }
+    assert detail["parse_summary"] == {
+        "status": "not_requested",
+        "latest_run_id": None,
+        "requested_at": None,
+        "started_at": None,
+        "finished_at": None,
+        "quality": None,
+        "warnings": [],
+    }
+    assert detail["manifest_references"] == [
+        {
+            "assessment_id": assessment_id,
+            "assessment_url": f"/api/v1/bid-assessments/{assessment_id}",
+            "manifest_id": manifest_id,
+            "manifest_version": 1,
+            "is_current_manifest": True,
+            "role": "tender_document",
+            "order_no": 0,
+        }
+    ]
+    assert detail["allowed_actions"] == {
+        "download": True,
+        "download_url": f"/api/v1/bid-document-versions/{version_id}/download",
+    }
+    assert response.headers["cache-control"] == (
+        "private, no-cache, max-age=0, must-revalidate"
+    )
+    assert response.headers["vary"] == "Authorization"
+    assert response.headers["x-resource-version"] == "1"
+    assert response.headers["etag"].startswith(
+        f'"bid-document-version:{version_id}:'
+    )
+
+    unchanged = client.get(
+        f"/api/v1/bid-document-versions/{version_id}",
+        headers={"If-None-Match": f'W/{response.headers["etag"]}'},
+    )
+    assert unchanged.status_code == 304
+    assert unchanged.content == b""
+    assert unchanged.headers["etag"] == response.headers["etag"]
+
+    serialized = json.dumps(response.json(), ensure_ascii=False)
+    for forbidden in {
+        "object_key",
+        "storage_etag",
+        "storage_status",
+        "file_object_id",
+        "source_metadata_hash",
+        "source_metadata_json",
+        "parser_hint",
+        "logical_identity_key",
+        "created_by",
+        "secret-batch",
+        "secret-file",
+        "secret-client",
+        "secret-document",
+        "secret-hash-copy",
+        str(fixture["object_key"]),
+    }:
+        assert forbidden not in serialized
+
+
+def test_api21_filters_manifest_references_and_uses_uniform_not_found(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    owner_assessment = _create_assessment(client)
+    owner_assessment_id = owner_assessment.json()["data"]["assessment_id"]
+    owner_manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=owner_assessment_id,
+        actor_id=owner.id,
+    )
+    document_id = _attach_manifest_document(
+        session_factory,
+        manifest_id=owner_manifest_id,
+        actor_id=owner.id,
+    )
+    version_id = str(
+        _document_version_fixture(
+            session_factory,
+            document_id=document_id,
+        )["version_id"]
+    )
+
+    outsider = _create_user(session_factory)
+    client.app.state.active_user["value"] = outsider
+    outsider_assessment = _create_assessment(client)
+    outsider_assessment_id = outsider_assessment.json()["data"]["assessment_id"]
+    outsider_manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=outsider_assessment_id,
+        actor_id=outsider.id,
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            db.add(
+                BidManifestDocument(
+                    manifest_id=outsider_manifest_id,
+                    document_version_id=version_id,
+                    role="reference_document",
+                    order_no=0,
+                )
+            )
+    finally:
+        db.close()
+
+    outsider_view = client.get(f"/api/v1/bid-document-versions/{version_id}")
+    assert outsider_view.status_code == 200
+    assert {
+        reference["assessment_id"]
+        for reference in outsider_view.json()["data"]["manifest_references"]
+    } == {outsider_assessment_id}
+
+    unrelated = _create_user(session_factory)
+    client.app.state.active_user["value"] = unrelated
+    hidden = client.get(f"/api/v1/bid-document-versions/{version_id}")
+    invalid = client.get("/api/v1/bid-document-versions/bad%20id")
+    missing = client.get(f"/api/v1/bid-document-versions/{uuid.uuid4()}")
+    assert hidden.status_code == invalid.status_code == missing.status_code == 404
+    assert hidden.json()["error"]["error_code"] == "BID_RESOURCE_NOT_FOUND"
+    assert invalid.json()["error"]["error_code"] == "BID_RESOURCE_NOT_FOUND"
+    assert missing.json()["error"]["error_code"] == "BID_RESOURCE_NOT_FOUND"
+
+    admin = _create_user(session_factory, role="admin")
+    client.app.state.active_user["value"] = admin
+    admin_view = client.get(f"/api/v1/bid-document-versions/{version_id}")
+    assert admin_view.status_code == 200
+    assert {
+        reference["assessment_id"]
+        for reference in admin_view.json()["data"]["manifest_references"]
+    } == {owner_assessment_id, outsider_assessment_id}
+
+
+def test_api22_reauthorizes_streams_full_file_and_sanitizes_headers(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    client, session_factory, owner = api_runtime
+    assessment = _create_assessment(client)
+    assessment_id = assessment.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    document_id = _attach_manifest_document(
+        session_factory,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    fixture = _document_version_fixture(
+        session_factory,
+        document_id=document_id,
+    )
+    version_id = str(fixture["version_id"])
+    content = b"0123456789abcdef"
+
+    db = session_factory()
+    try:
+        with db.begin():
+            version = (
+                db.query(BidDocumentVersion)
+                .filter(BidDocumentVersion.id == version_id)
+                .one()
+            )
+            version.original_filename = "../危险\r\nX-Injected: yes.pdf"
+            file_object = (
+                db.query(BidFileObject)
+                .filter(BidFileObject.id == fixture["file_object_id"])
+                .one()
+            )
+            file_object.size_bytes = len(content)
+            file_object.mime_type = "application/pdf"
+    finally:
+        db.close()
+
+    storage = _FakeBidUploadStorage()
+    storage.objects[str(fixture["object_key"])] = content
+    monkeypatch.setattr(
+        assessments_api,
+        "get_bid_upload_object_storage",
+        lambda: storage,
+    )
+
+    response = client.get(
+        f"/api/v1/bid-document-versions/{version_id}/download",
+        headers={"Range": "bytes=2-5"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == content
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-length"] == str(len(content))
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["vary"] == "Authorization"
+    assert response.headers["accept-ranges"] == "none"
+    assert response.headers["content-security-policy"] == "sandbox"
+    disposition = response.headers["content-disposition"]
+    assert disposition.startswith("attachment;")
+    assert "filename*=UTF-8''" in disposition
+    assert "\r" not in disposition and "\n" not in disposition
+    assert "X-Injected:" not in disposition
+    assert storage.open_read_calls == [str(fixture["object_key"])]
+    assert len(storage.opened_streams) == 1
+    assert storage.opened_streams[0].closed is True
+    assert "minio" not in json.dumps(dict(response.headers)).lower()
+    assert str(fixture["object_key"]) not in json.dumps(dict(response.headers))
+
+
+def test_api22_blocks_cross_user_before_storage_and_maps_storage_failure(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    client, session_factory, owner = api_runtime
+    assessment = _create_assessment(client)
+    assessment_id = assessment.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    document_id = _attach_manifest_document(
+        session_factory,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    fixture = _document_version_fixture(
+        session_factory,
+        document_id=document_id,
+    )
+    version_id = str(fixture["version_id"])
+    storage = _FakeBidUploadStorage()
+    storage.fail_open_read = True
+    monkeypatch.setattr(
+        assessments_api,
+        "get_bid_upload_object_storage",
+        lambda: storage,
+    )
+
+    outsider = _create_user(session_factory)
+    client.app.state.active_user["value"] = outsider
+    hidden = client.get(
+        f"/api/v1/bid-document-versions/{version_id}/download"
+    )
+    assert hidden.status_code == 404
+    assert storage.open_read_calls == []
+
+    client.app.state.active_user["value"] = owner
+    failed = client.get(
+        f"/api/v1/bid-document-versions/{version_id}/download"
+    )
+    assert failed.status_code == 503
+    assert failed.json()["error"]["error_code"] == "BID_STORAGE_UNAVAILABLE"
+    assert str(fixture["object_key"]) not in json.dumps(failed.json())
+    assert storage.open_read_calls == [str(fixture["object_key"])]
+
+    db = session_factory()
+    try:
+        with db.begin():
+            file_object = (
+                db.query(BidFileObject)
+                .filter(BidFileObject.id == fixture["file_object_id"])
+                .one()
+            )
+            file_object.storage_status = "missing"
+    finally:
+        db.close()
+    storage.open_read_calls.clear()
+    unavailable = client.get(
+        f"/api/v1/bid-document-versions/{version_id}/download"
+    )
+    assert unavailable.status_code == 503
+    assert unavailable.json()["error"]["error_code"] == (
+        "BID_STORAGE_UNAVAILABLE"
+    )
+    assert storage.open_read_calls == []
+
+    detail = client.get(f"/api/v1/bid-document-versions/{version_id}")
+    assert detail.status_code == 200
+    assert detail.json()["data"]["allowed_actions"] == {
+        "download": False,
+        "download_url": None,
+    }
+
+
+def test_api21_api22_feature_gate_and_download_mime_fallback(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    client, session_factory, owner = api_runtime
+    assessment = _create_assessment(client)
+    assessment_id = assessment.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    document_id = _attach_manifest_document(
+        session_factory,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    fixture = _document_version_fixture(
+        session_factory,
+        document_id=document_id,
+    )
+    version_id = str(fixture["version_id"])
+    db = session_factory()
+    try:
+        with db.begin():
+            file_object = (
+                db.query(BidFileObject)
+                .filter(BidFileObject.id == fixture["file_object_id"])
+                .one()
+            )
+            file_object.mime_type = "text/html; charset=utf-8\r\nX-Test: injected"
+    finally:
+        db.close()
+
+    storage = _FakeBidUploadStorage()
+    storage.objects[str(fixture["object_key"])] = b"0123456789abcdef"
+    monkeypatch.setattr(
+        assessments_api,
+        "get_bid_upload_object_storage",
+        lambda: storage,
+    )
+    fallback = client.get(
+        f"/api/v1/bid-document-versions/{version_id}/download"
+    )
+    assert fallback.status_code == 200
+    assert fallback.headers["content-type"] == "application/octet-stream"
+    assert "X-Test" not in json.dumps(dict(fallback.headers))
+
+    object.__setattr__(settings, "feature_bid_assessment_v1_runtime", False)
+    try:
+        hidden_detail = client.get(f"/api/v1/bid-document-versions/{version_id}")
+        hidden_download = client.get(
+            f"/api/v1/bid-document-versions/{version_id}/download"
+        )
+    finally:
+        object.__setattr__(settings, "feature_bid_assessment_v1_runtime", True)
+    assert hidden_detail.status_code == hidden_download.status_code == 404
+    assert hidden_detail.json()["error"]["error_code"] == "BID_RESOURCE_NOT_FOUND"
+    assert hidden_download.json()["error"]["error_code"] == "BID_RESOURCE_NOT_FOUND"
+
+
+def _attach_phase2_lot_candidate(
+    session_factory,
+    *,
+    assessment_id: str,
+    manifest_id: str,
+    document_id: str,
+) -> tuple[str, str, str]:
+    fixture = _document_version_fixture(
+        session_factory,
+        document_id=document_id,
+    )
+    version_id = str(fixture["version_id"])
+    parse_run_id = f"dpr_{uuid.uuid4().hex}"
+    parse_unit_id = f"dpu_{uuid.uuid4().hex}"
+    evidence_id = f"bef_{uuid.uuid4().hex}"
+    detection_run_id = f"ldr_{uuid.uuid4().hex}"
+    lot_id = f"lot_{uuid.uuid4().hex}"
+    now = datetime.now(timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            assessment = (
+                db.query(BidAssessment)
+                .filter(BidAssessment.id == assessment_id)
+                .one()
+            )
+            assessment.business_status = "awaiting_lot_selection"
+            assessment.row_version = int(assessment.row_version) + 1
+            db.add(
+                BidDocumentParseRun(
+                    id=parse_run_id,
+                    document_version_id=version_id,
+                    parser_profile_version="bid-document-parser-profile-v1",
+                    input_hash="1" * 64,
+                    status="succeeded",
+                    retryable=False,
+                    requested_at=now - timedelta(seconds=2),
+                    started_at=now - timedelta(seconds=1),
+                    finished_at=now,
+                    result_hash="2" * 64,
+                    quality_grade="high",
+                    quality_score=95,
+                    page_count=1,
+                    sheet_count=0,
+                    ocr_status="not_applicable",
+                    warning_count=0,
+                    warnings_json=[],
+                    row_version=2,
+                )
+            )
+            db.flush()
+            db.add(
+                BidDocumentParseHead(
+                    document_version_id=version_id,
+                    current_run_id=parse_run_id,
+                    row_version=1,
+                )
+            )
+            db.add(
+                BidDocumentParseUnit(
+                    id=parse_unit_id,
+                    run_id=parse_run_id,
+                    unit_type="page",
+                    unit_key="page:1",
+                    ordinal=0,
+                    page_no=1,
+                    content_source="native",
+                    status="succeeded",
+                    text_hash="3" * 64,
+                    text_length=18,
+                    ocr_status="not_applicable",
+                )
+            )
+            db.flush()
+            db.add(
+                BidEvidenceFragment(
+                    id=evidence_id,
+                    parse_run_id=parse_run_id,
+                    document_version_id=version_id,
+                    parse_unit_id=parse_unit_id,
+                    locator_type="section",
+                    locator_json={"page_no": 1, "section_index": 0},
+                    locator_hash="4" * 64,
+                    normalized_text="第一标段：室内装饰工程",
+                    text_hash="5" * 64,
+                    ordinal=0,
+                )
+            )
+            db.flush()
+            parse_set = build_manifest_parse_set(db, manifest_id=manifest_id)
+            assert parse_set.status == "ready"
+            db.add(
+                BidLotDetectionRun(
+                    id=detection_run_id,
+                    manifest_id=manifest_id,
+                    parse_set_hash=parse_set.parse_set_hash,
+                    detector_version="bid-lot-detector-rules-v1",
+                    rule_set_version="bid-lot-rules-v1",
+                    normalizer_version="bid-lot-normalizer-v1",
+                    input_hash="6" * 64,
+                    status="succeeded",
+                    retryable=False,
+                    requested_at=now - timedelta(seconds=2),
+                    started_at=now - timedelta(seconds=1),
+                    finished_at=now,
+                    result_hash="7" * 64,
+                    candidate_count=1,
+                    warnings_json=[],
+                    row_version=2,
+                )
+            )
+            db.flush()
+            db.add(
+                BidLotDetectionHead(
+                    manifest_id=manifest_id,
+                    current_run_id=detection_run_id,
+                    row_version=1,
+                )
+            )
+            db.add(
+                BidLotCandidate(
+                    id=lot_id,
+                    manifest_id=manifest_id,
+                    detection_run_id=detection_run_id,
+                    lot_code="1",
+                    lot_name="室内装饰工程",
+                    scope_summary="正文明确列示第一标段",
+                    normalized_lot_key="标段:1",
+                    source_status="detected",
+                    confidence=Decimal("0.900000"),
+                    confidence_level="high",
+                    candidate_hash="8" * 64,
+                    warnings_json=[],
+                )
+            )
+            db.flush()
+            db.add(
+                BidLotCandidateEvidence(
+                    lot_candidate_id=lot_id,
+                    evidence_id=evidence_id,
+                    manifest_id=manifest_id,
+                    document_version_id=version_id,
+                    support_role="identity",
+                    display_order=0,
+                    display_label="第1页",
+                )
+            )
+        return lot_id, detection_run_id, evidence_id
+    finally:
+        db.close()
+
+
+PHASE3E_SCOPE_SIGNING_KEY = "phase3e-test-scope-signing-key-32-bytes-minimum"
+
+
+def test_phase3e_tool_argument_schema_is_strict_and_scope_free() -> None:
+    assert validate_tool_arguments(
+        "facts.query",
+        {"fact_slots": ["tender.deadline"]},
+    ) == {"fact_slots": ["tender.deadline"]}
+    with pytest.raises(BidToolArgumentsInvalid):
+        validate_tool_arguments(
+            "facts.query",
+            {"fact_slots": ["tender.deadline"], "assessment_id": "injected"},
+        )
+    with pytest.raises(BidToolArgumentsInvalid):
+        validate_tool_arguments("unknown.tool", {})
+
+
+def test_phase3e_context_tool_sync_fencing_budget_and_idempotency(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 12, 1, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(db, worker_id="phase3e-sync", now=now)
+            assert claim is not None
+            start_task_attempt(db, claim, now=now)
+            first_context = assemble_context_manifest(
+                db,
+                claim,
+                working_state={"step": "start"},
+                now=now,
+            )
+            replay_context = assemble_context_manifest(
+                db,
+                claim,
+                working_state={"step": "start"},
+                now=now,
+            )
+            assert replay_context.duplicate is True
+            assert replay_context.context_manifest_id == first_context.context_manifest_id
+            decision = authorize_tool_invocation(
+                db,
+                claim,
+                context_manifest_id=first_context.context_manifest_id,
+                tool_name="facts.query",
+                arguments={"fact_slots": ["tender.deadline"]},
+                idempotency_key="phase3e-sync-key-0001",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            assert verify_tool_scope_token(
+                db,
+                invocation_id=decision.invocation_id,
+                scope_token=decision.call_envelope["scope_token"],
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+            )
+            replay = authorize_tool_invocation(
+                db,
+                claim,
+                context_manifest_id=first_context.context_manifest_id,
+                tool_name="facts.query",
+                arguments={"fact_slots": ["tender.deadline"]},
+                idempotency_key="phase3e-sync-key-0001",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            assert replay.duplicate is True
+            with pytest.raises(BidToolInvocationConflict):
+                authorize_tool_invocation(
+                    db,
+                    claim,
+                    context_manifest_id=first_context.context_manifest_id,
+                    tool_name="facts.query",
+                    arguments={"fact_slots": ["tender.amount"]},
+                    idempotency_key="phase3e-sync-key-0001",
+                    scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                    now=now,
+                )
+            receipt = complete_tool_invocation(
+                db,
+                claim,
+                invocation_id=decision.invocation_id,
+                status="ok",
+                summary="No resolved facts yet",
+                data=[],
+                returned_items=0,
+                now=now,
+            )
+            result_replay = complete_tool_invocation(
+                db,
+                claim,
+                invocation_id=decision.invocation_id,
+                status="ok",
+                summary="No resolved facts yet",
+                data=[],
+                returned_items=0,
+                now=now,
+            )
+            assert result_replay.duplicate is True
+            page = read_tool_result_slice(
+                db,
+                claim,
+                result_ref_id=receipt.result_id,
+                now=now,
+            )
+            assert page["items"] == []
+            with pytest.raises(BidToolUnauthorized):
+                authorize_tool_invocation(
+                    db,
+                    claim,
+                    context_manifest_id=first_context.context_manifest_id,
+                    tool_name="enterprise.profile.query",
+                    arguments={"fields": ["legal_name"]},
+                    idempotency_key="phase3e-sync-key-deny",
+                    scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                    now=now,
+                )
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        assert db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one().status == "running"
+        assert db.query(BidContextManifest).count() == 1
+        assert db.query(BidToolInvocation).count() == 1
+        assert db.query(BidToolResult).count() == 1
+    finally:
+        db.close()
+
+
+def test_phase3e_async_operation_resumes_on_new_attempt_and_never_revives_old_fence(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, _run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 12, 2, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(db, worker_id="phase3e-async", now=now)
+            assert claim is not None
+            start_task_attempt(db, claim, now=now)
+            context = assemble_context_manifest(db, claim, now=now)
+            invocation = authorize_tool_invocation(
+                db,
+                claim,
+                context_manifest_id=context.context_manifest_id,
+                tool_name="facts.query",
+                arguments={"fact_slots": ["tender.deadline"]},
+                idempotency_key="phase3e-async-key-001",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            checkpoint = write_task_checkpoint(
+                db,
+                claim,
+                action_seq=0,
+                state={"pending_invocation_id": invocation.invocation_id},
+                context_manifest_id=context.context_manifest_id,
+                now=now,
+            )
+            pending = defer_tool_invocation(
+                db,
+                claim,
+                invocation_id=invocation.invocation_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                now=now,
+            )
+            operation_id = pending["operation_id"]
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            settled = settle_async_tool_operation(
+                db,
+                operation_id=operation_id,
+                status="ok",
+                summary="Async tool observation completed",
+                data=[{"slot": "tender.deadline", "status": "missing"}],
+                returned_items=1,
+                now=now,
+            )
+            assert settled.duplicate is False
+            async_result_id = settled.result_id
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            resumed = lease_next_ready_task(db, worker_id="phase3e-resumed", now=now)
+            assert resumed is not None
+            assert resumed.attempt_no == claim.attempt_no + 1
+            assert resumed.fencing_token == claim.fencing_token + 1
+            assert resumed.resume_checkpoint["checkpoint_id"] == checkpoint.checkpoint_id
+            start_task_attempt(db, resumed, now=now)
+            page = read_tool_result_slice(
+                db,
+                resumed,
+                result_ref_id=async_result_id,
+                now=now,
+            )
+            assert page["items"] == [{"slot": "tender.deadline", "status": "missing"}]
+            old_attempt = (
+                db.query(BidTaskAttempt)
+                .filter(BidTaskAttempt.id == claim.attempt_id)
+                .one()
+            )
+            assert old_attempt.status == "cancelled"
+            assert (
+                db.query(BidAsyncOperation)
+                .filter(BidAsyncOperation.id == operation_id)
+                .one()
+                .status
+                == "succeeded"
+            )
+    finally:
+        db.close()
+
+
+def test_phase3e_audit_failure_rolls_back_context_and_tool_rows(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 12, 3, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(db, worker_id="phase3e-rollback", now=now)
+            assert claim is not None
+            start_task_attempt(db, claim, now=now)
+    finally:
+        db.close()
+
+    def fail_audit(*_args, **_kwargs):
+        raise RuntimeError("synthetic-phase3e-audit-failure")
+
+    monkeypatch.setattr(tool_context_service, "append_audit_log", fail_audit)
+    db = session_factory()
+    try:
+        with pytest.raises(RuntimeError, match="synthetic-phase3e-audit-failure"):
+            with db.begin():
+                assemble_context_manifest(db, claim, now=now)
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        assert db.query(BidContextManifest).count() == 0
+        assert db.query(BidToolInvocation).count() == 0
+        assert db.query(BidToolResult).count() == 0
+    finally:
+        db.close()
+
+
+def test_phase3e_timeout_persists_failed_result_and_resumes_on_new_fence(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 12, 4, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(db, worker_id="phase3e-timeout", now=now)
+            assert claim is not None
+            start_task_attempt(db, claim, now=now)
+            context = assemble_context_manifest(db, claim, now=now)
+            invocation = authorize_tool_invocation(
+                db,
+                claim,
+                context_manifest_id=context.context_manifest_id,
+                tool_name="facts.query",
+                arguments={"fact_slots": ["tender.deadline"]},
+                idempotency_key="phase3e-timeout-key-001",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            checkpoint = write_task_checkpoint(
+                db,
+                claim,
+                action_seq=0,
+                state={"pending_invocation_id": invocation.invocation_id},
+                context_manifest_id=context.context_manifest_id,
+                now=now,
+            )
+            pending = defer_tool_invocation(
+                db,
+                claim,
+                invocation_id=invocation.invocation_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                timeout_seconds=30,
+                now=now,
+            )
+            operation_id = pending["operation_id"]
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            changed, receipt = time_out_async_tool_operation(
+                db,
+                operation_id=operation_id,
+                now=now + timedelta(seconds=31),
+            )
+            assert changed is True
+            assert receipt is not None
+        operation = (
+            db.query(BidAsyncOperation)
+            .filter(BidAsyncOperation.id == operation_id)
+            .one()
+        )
+        assert operation.status == "timed_out"
+        assert operation.error_code == "BID_TOOL_OPERATION_TIMED_OUT"
+        invocation_row = (
+            db.query(BidToolInvocation)
+            .filter(BidToolInvocation.id == invocation.invocation_id)
+            .one()
+        )
+        assert invocation_row.status == "failed"
+        assert invocation_row.error_code == "BID_TOOL_OPERATION_TIMED_OUT"
+    finally:
+        db.close()
+
+
+def test_phase3e_budget_and_old_fence_fail_closed(api_runtime) -> None:
+    _client, session_factory, _owner = api_runtime
+    _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 12, 5, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(db, worker_id="phase3e-budget", now=now)
+            assert claim is not None
+            start_task_attempt(db, claim, now=now)
+            context = assemble_context_manifest(db, claim, now=now)
+            max_calls = int(claim.task_contract["budget"]["max_tool_calls"])
+            for index in range(max_calls):
+                decision = authorize_tool_invocation(
+                    db,
+                    claim,
+                    context_manifest_id=context.context_manifest_id,
+                    tool_name="facts.query",
+                    arguments={"fact_slots": [f"tender.slot_{index}"]},
+                    idempotency_key=f"phase3e-budget-key-{index:04d}",
+                    scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                    now=now,
+                )
+                complete_tool_invocation(
+                    db,
+                    claim,
+                    invocation_id=decision.invocation_id,
+                    status="no_result",
+                    summary="No governed result",
+                    data=[],
+                    returned_items=0,
+                    now=now,
+                )
+            with pytest.raises(BidToolBudgetExhausted):
+                authorize_tool_invocation(
+                    db,
+                    claim,
+                    context_manifest_id=context.context_manifest_id,
+                    tool_name="facts.query",
+                    arguments={"fact_slots": ["tender.over_budget"]},
+                    idempotency_key="phase3e-budget-key-overflow",
+                    scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                    now=now,
+                )
+            claim_attempt_id = claim.attempt_id
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            attempt = (
+                db.query(BidTaskAttempt)
+                .filter(BidTaskAttempt.id == claim_attempt_id)
+                .one()
+            )
+            attempt.fencing_token = int(attempt.fencing_token) + 1
+            attempt.row_version = int(attempt.row_version) + 1
+        with pytest.raises(BidTaskFenceLost):
+            with db.begin():
+                assemble_context_manifest(db, claim, now=now)
+    finally:
+        db.close()
+
+
+def _prepare_phase3f_documents_outline(api_runtime, *, now: datetime):
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, run_id = _create_phase3c_committed_run(
+        api_runtime,
+        attach_document=True,
+    )
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        version_id = str(
+            db.query(BidManifestDocument.document_version_id)
+            .filter(BidManifestDocument.manifest_id == run.manifest_id)
+            .scalar()
+        )
+    finally:
+        db.close()
+    parse_run_id = str(uuid.uuid4())
+    db = session_factory()
+    try:
+        with db.begin():
+            db.add(
+                BidDocumentParseRun(
+                    id=parse_run_id,
+                    document_version_id=version_id,
+                    parser_profile_version="phase3f-local-outline-v1",
+                    input_hash="6" * 64,
+                    status="succeeded",
+                    retryable=False,
+                    requested_at=now - timedelta(seconds=2),
+                    started_at=now - timedelta(seconds=1),
+                    finished_at=now,
+                    result_ref="local://phase3f/outline",
+                    result_hash="7" * 64,
+                    quality_grade="high",
+                    quality_score=100,
+                    page_count=1,
+                    sheet_count=0,
+                    ocr_status="not_applicable",
+                    warning_count=0,
+                    warnings_json=[],
+                    row_version=1,
+                )
+            )
+            db.flush()
+            db.add(
+                BidDocumentParseHead(
+                    document_version_id=version_id,
+                    current_run_id=parse_run_id,
+                    row_version=1,
+                )
+            )
+            db.add(
+                BidDocumentParseUnit(
+                    id=str(uuid.uuid4()),
+                    run_id=parse_run_id,
+                    unit_type="page",
+                    unit_key="page:1",
+                    ordinal=0,
+                    page_no=1,
+                    section_path_json=["投标须知", "重要时间"],
+                    content_source="native",
+                    status="succeeded",
+                    text_hash="8" * 64,
+                    text_length=24,
+                    ocr_status="not_applicable",
+                )
+            )
+    finally:
+        db.close()
+    return session_factory, run_id, version_id
+
+
+def _enqueue_phase3f_outline_dispatch(
+    api_runtime,
+    *,
+    now: datetime,
+    idempotency_key: str,
+):
+    session_factory, run_id, version_id = _prepare_phase3f_documents_outline(
+        api_runtime,
+        now=now,
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            task_claim = lease_next_ready_task(
+                db,
+                worker_id=f"phase3f-setup-{idempotency_key}"[:128],
+                now=now,
+            )
+            assert task_claim is not None
+            start_task_attempt(db, task_claim, now=now)
+            context = assemble_context_manifest(db, task_claim, now=now)
+            invocation = authorize_tool_invocation(
+                db,
+                task_claim,
+                context_manifest_id=context.context_manifest_id,
+                tool_name="documents.outline",
+                arguments={"document_version_id": version_id},
+                idempotency_key=idempotency_key,
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            checkpoint = write_task_checkpoint(
+                db,
+                task_claim,
+                action_seq=0,
+                state={"pending_invocation_id": invocation.invocation_id},
+                context_manifest_id=context.context_manifest_id,
+                now=now,
+            )
+            dispatch = enqueue_tool_dispatch(
+                db,
+                task_claim,
+                invocation_id=invocation.invocation_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                scope_token=invocation.call_envelope["scope_token"],
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                timeout_seconds=60,
+                now=now,
+            )
+            return session_factory, run_id, dispatch
+    finally:
+        db.close()
+
+
+def test_phase3f_local_outline_dispatch_end_to_end_and_new_fence_resume(
+    api_runtime,
+) -> None:
+    now = datetime(2026, 8, 12, 6, 0, tzinfo=timezone.utc)
+    session_factory, _run_id, version_id = _prepare_phase3f_documents_outline(
+        api_runtime,
+        now=now,
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(db, worker_id="phase3f-enqueue", now=now)
+            assert claim is not None
+            start_task_attempt(db, claim, now=now)
+            context = assemble_context_manifest(db, claim, now=now)
+            invocation = authorize_tool_invocation(
+                db,
+                claim,
+                context_manifest_id=context.context_manifest_id,
+                tool_name="documents.outline",
+                arguments={"document_version_id": version_id, "max_depth": 4},
+                idempotency_key="phase3f-outline-key-0001",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            checkpoint = write_task_checkpoint(
+                db,
+                claim,
+                action_seq=0,
+                state={"pending_invocation_id": invocation.invocation_id},
+                context_manifest_id=context.context_manifest_id,
+                now=now,
+            )
+            dispatch = enqueue_tool_dispatch(
+                db,
+                claim,
+                invocation_id=invocation.invocation_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                scope_token=invocation.call_envelope["scope_token"],
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            assert dispatch.status == "queued"
+            duplicate_dispatch = enqueue_tool_dispatch(
+                db,
+                claim,
+                invocation_id=invocation.invocation_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                scope_token=invocation.call_envelope["scope_token"],
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            assert duplicate_dispatch.dispatch_id == dispatch.dispatch_id
+            assert duplicate_dispatch.duplicate is True
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            dispatch_claim = claim_next_tool_dispatch(
+                db,
+                worker_id="phase3f-dispatcher",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            assert dispatch_claim is not None
+            assert dispatch_claim.fencing_token == 1
+            assert dispatch_claim.adapter_mode == "local_readonly"
+    finally:
+        db.close()
+    assert (
+        execute_tool_dispatch_claim(
+            session_factory=session_factory,
+            claim=dispatch_claim,
+            now=now,
+        )
+        == "succeeded"
+    )
+
+    db = session_factory()
+    try:
+        stored_dispatch = db.query(BidToolDispatch).one()
+        result = db.query(BidToolResult).one()
+        assert stored_dispatch.status == "succeeded"
+        assert stored_dispatch.provider_receipt_id.startswith("local:bid-tool:")
+        assert result.inline_data_json["items"][0]["section_path"] == [
+            "投标须知",
+            "重要时间",
+        ]
+        db.rollback()
+        with db.begin():
+            resumed = lease_next_ready_task(
+                db,
+                worker_id="phase3f-resumed",
+                now=now + timedelta(seconds=1),
+            )
+            assert resumed is not None
+            assert resumed.fencing_token == claim.fencing_token + 1
+            assert resumed.resume_checkpoint["checkpoint_id"] == checkpoint.checkpoint_id
+    finally:
+        db.close()
+
+
+def test_phase3f_dispatch_enqueue_rolls_back_and_old_fence_cannot_settle(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    now = datetime(2026, 8, 12, 7, 0, tzinfo=timezone.utc)
+    session_factory, _run_id, version_id = _prepare_phase3f_documents_outline(
+        api_runtime,
+        now=now,
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(db, worker_id="phase3f-rollback", now=now)
+            assert claim is not None
+            start_task_attempt(db, claim, now=now)
+            context = assemble_context_manifest(db, claim, now=now)
+            invocation = authorize_tool_invocation(
+                db,
+                claim,
+                context_manifest_id=context.context_manifest_id,
+                tool_name="documents.outline",
+                arguments={"document_version_id": version_id},
+                idempotency_key="phase3f-outline-key-rollback",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+            checkpoint = write_task_checkpoint(
+                db,
+                claim,
+                action_seq=0,
+                state={"pending_invocation_id": invocation.invocation_id},
+                context_manifest_id=context.context_manifest_id,
+                now=now,
+            )
+    finally:
+        db.close()
+
+    original_audit = tool_execution_service.append_audit_log
+    monkeypatch.setattr(
+        tool_execution_service,
+        "append_audit_log",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("phase3f-audit")),
+    )
+    db = session_factory()
+    try:
+        with pytest.raises(RuntimeError, match="phase3f-audit"):
+            with db.begin():
+                enqueue_tool_dispatch(
+                    db,
+                    claim,
+                    invocation_id=invocation.invocation_id,
+                    checkpoint_id=checkpoint.checkpoint_id,
+                    scope_token=invocation.call_envelope["scope_token"],
+                    scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                    now=now,
+                )
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        assert db.query(BidToolDispatch).count() == 0
+        assert db.query(BidAsyncOperation).count() == 0
+        assert db.query(BidToolInvocation).one().status == "accepted"
+    finally:
+        db.close()
+
+    monkeypatch.setattr(tool_execution_service, "append_audit_log", original_audit)
+    db = session_factory()
+    try:
+        with db.begin():
+            enqueue_tool_dispatch(
+                db,
+                claim,
+                invocation_id=invocation.invocation_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                scope_token=invocation.call_envelope["scope_token"],
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now,
+            )
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        with db.begin():
+            first = claim_next_tool_dispatch(
+                db,
+                worker_id="phase3f-fence-one",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                lease_seconds=15,
+                now=now,
+            )
+            assert first is not None
+            mark_tool_dispatch_sending(db, first, now=now)
+        with db.begin():
+            assert (
+                recover_expired_tool_dispatch(
+                    db,
+                    dispatch_id=first.dispatch_id,
+                    now=now + timedelta(seconds=16),
+                )
+                == "recovered"
+            )
+        with db.begin():
+            second = claim_next_tool_dispatch(
+                db,
+                worker_id="phase3f-fence-two",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now + timedelta(seconds=17),
+            )
+            assert second is not None
+            assert second.fencing_token == first.fencing_token + 1
+            mark_tool_dispatch_sending(db, second, now=now + timedelta(seconds=17))
+        with pytest.raises(BidToolDispatchFenceLost):
+            with db.begin():
+                settle_tool_dispatch(
+                    db,
+                    first,
+                    ToolAdapterResult(
+                        status="ok",
+                        summary="late old-fence result",
+                        data={},
+                    ),
+                    now=now + timedelta(seconds=18),
+                )
+        with db.begin():
+            current_dispatch = (
+                db.query(BidToolDispatch)
+                .filter(BidToolDispatch.id == second.dispatch_id)
+                .one()
+            )
+            current_dispatch.replay_policy = "reconcile_required"
+            assert (
+                recover_expired_tool_dispatch(
+                    db,
+                    dispatch_id=second.dispatch_id,
+                    now=now + timedelta(seconds=90),
+                )
+                == "uncertain"
+            )
+            assert current_dispatch.status == "uncertain"
+            assert current_dispatch.last_error_code == (
+                "BID_TOOL_DISPATCH_OUTCOME_UNCERTAIN"
+            )
+    finally:
+        db.close()
+
+
+def test_phase3f_timeout_fences_queued_dispatch(api_runtime) -> None:
+    now = datetime(2026, 8, 12, 8, 0, tzinfo=timezone.utc)
+    session_factory, _timeout_run_id, timeout_dispatch = (
+        _enqueue_phase3f_outline_dispatch(
+            api_runtime,
+            now=now,
+            idempotency_key="phase3f-timeout-key-0001",
+        )
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            changed, _receipt = time_out_async_tool_operation(
+                db,
+                operation_id=timeout_dispatch.operation_id,
+                now=now + timedelta(seconds=61),
+            )
+            assert changed is True
+        timed_out = (
+            db.query(BidToolDispatch)
+            .filter(BidToolDispatch.id == timeout_dispatch.dispatch_id)
+            .one()
+        )
+        assert timed_out.status == "failed"
+        assert timed_out.last_error_code == "BID_TOOL_OPERATION_TIMED_OUT"
+    finally:
+        db.close()
+
+
+def test_phase3f_run_cancel_fences_sending_dispatch_and_attempt(api_runtime) -> None:
+    cancel_now = datetime(2026, 8, 12, 8, 5, tzinfo=timezone.utc)
+    session_factory, cancel_run_id, cancel_dispatch = _enqueue_phase3f_outline_dispatch(
+        api_runtime,
+        now=cancel_now,
+        idempotency_key="phase3f-cancel-key-0001",
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            dispatch_claim = claim_next_tool_dispatch(
+                db,
+                worker_id="phase3f-cancel-sending",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=cancel_now,
+            )
+            assert dispatch_claim is not None
+            mark_tool_dispatch_sending(db, dispatch_claim, now=cancel_now)
+        with db.begin():
+            run = (
+                db.query(BidAnalysisRun)
+                .filter(BidAnalysisRun.id == cancel_run_id)
+                .with_for_update()
+                .one()
+            )
+            run.cancel_requested_at = cancel_now + timedelta(seconds=1)
+            run.row_version = int(run.row_version) + 1
+            changed, _tasks, _attempts, _operations = finalize_cancel_requested_run(
+                db,
+                run_id=cancel_run_id,
+                now=cancel_now + timedelta(seconds=1),
+            )
+            assert changed is True
+        cancelled = (
+            db.query(BidToolDispatch)
+            .filter(BidToolDispatch.id == cancel_dispatch.dispatch_id)
+            .one()
+        )
+        cancelled_attempt = (
+            db.query(BidToolDispatchAttempt)
+            .filter(BidToolDispatchAttempt.dispatch_id == cancelled.id)
+            .one()
+        )
+        assert cancelled.status == "cancelled"
+        assert cancelled_attempt.status == "cancelled"
+        assert execute_tool_dispatch_claim(
+            session_factory=session_factory,
+            claim=dispatch_claim,
+            now=cancel_now + timedelta(seconds=2),
+        ) == "cancelled"
+    finally:
+        db.close()
+
+
+def _create_phase3c_committed_run(
+    api_runtime,
+    *,
+    attach_document: bool = False,
+    phase4_plan_continuation: bool = False,
+    phase4_model_gateway: bool = False,
+) -> tuple[str, str]:
+    client, session_factory, owner = api_runtime
+    created = _create_assessment(client)
+    assessment_id = created.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    if attach_document:
+        _attach_manifest_document(
+            session_factory,
+            manifest_id=manifest_id,
+            actor_id=owner.id,
+        )
+    _attach_phase3_scope(
+        session_factory,
+        assessment_id=assessment_id,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    _activate_phase3_frozen_versions(
+        session_factory,
+        actor_id=owner.id,
+        phase4_model_gateway=phase4_model_gateway,
+    )
+    current = client.get(f"/api/v1/bid-assessments/{assessment_id}")
+    started = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs",
+        headers={"Idempotency-Key": _key(), "If-Match": current.headers["etag"]},
+        json={
+            "manifest_id": manifest_id,
+            "reason": "manual_restart",
+            "note": "Phase 3C task runtime",
+        },
+    )
+    assert started.status_code == 202
+    run_id = started.json()["data"]["run_id"]
+    db = session_factory()
+    try:
+        event_id = str(
+            db.query(BidOutboxEvent.event_id)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.run.created.v1",
+            )
+            .scalar()
+        )
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        with db.begin():
+            result = consume_run_created_event(
+                db,
+                event_id=event_id,
+                phase4_plan_continuation=phase4_plan_continuation,
+            )
+        assert result.value["committed"] is True
+    finally:
+        db.close()
+    return assessment_id, run_id
+
+
+def test_phase3c_task_contract_lease_checkpoint_completion_and_dependency_release(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 11, 12, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(
+                db,
+                worker_id="phase3c-worker-1",
+                now=now,
+            )
+            assert claim is not None
+            assert claim.attempt_no == claim.fencing_token == 1
+            assert claim.task_contract["task_type"] == "bind_assessment_snapshot"
+            assert claim.task_contract["budget"]["max_iterations"] == 3
+            assert claim.task_contract_hash == canonical_hash(claim.task_contract)
+            start_task_attempt(db, claim, now=now + timedelta(seconds=1))
+            lease_until = heartbeat_task_attempt(
+                db,
+                claim,
+                now=now + timedelta(seconds=30),
+            )
+            assert lease_until == now + timedelta(seconds=210)
+            checkpoint = write_task_checkpoint(
+                db,
+                claim,
+                action_seq=0,
+                state={"phase": "bound", "input_hash": claim.task_contract_hash},
+                tool_refs=[],
+                budget_usage={"iterations": 1, "tool_calls": 0},
+                candidate_output_ref="task-output:test:1",
+                next_state="succeeded",
+                now=now + timedelta(seconds=31),
+            )
+            replay = write_task_checkpoint(
+                db,
+                claim,
+                action_seq=0,
+                state={"phase": "bound", "input_hash": claim.task_contract_hash},
+                tool_refs=[],
+                budget_usage={"iterations": 1, "tool_calls": 0},
+                candidate_output_ref="task-output:test:1",
+                next_state="succeeded",
+                now=now + timedelta(seconds=32),
+            )
+            assert replay.duplicate is True
+            with pytest.raises(BidCheckpointConflict):
+                write_task_checkpoint(
+                    db,
+                    claim,
+                    action_seq=2,
+                    state={"phase": "invalid-gap"},
+                    now=now + timedelta(seconds=32),
+                )
+            completed = complete_task_attempt(
+                db,
+                claim,
+                completion=TaskCompletionReceipt(
+                    checkpoint_id=checkpoint.checkpoint_id,
+                    state_hash=checkpoint.state_hash,
+                    output_hash="a" * 64,
+                    completion_contract=claim.task_contract["completion_contract"],
+                    validator_version="bid-task-output-validator-v1",
+                    output_ref="task-output:test:1",
+                ),
+                now=now + timedelta(seconds=33),
+            )
+            assert completed.status == "succeeded"
+            assert len(completed.released_task_ids) == 1
+            assert completed.validation_requested is False
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        tasks = db.query(BidTask).filter(BidTask.run_id == run_id).all()
+        assert [task.status for task in tasks].count("succeeded") == 1
+        assert [task.status for task in tasks].count("ready") == 1
+        assert db.query(BidTaskAttempt).filter_by(id=claim.attempt_id).one().status == (
+            "succeeded"
+        )
+        assert db.query(BidCheckpoint).filter_by(id=checkpoint.checkpoint_id).count() == 1
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.task.succeeded.v1",
+            )
+            .count()
+            == 1
+        )
+    finally:
+        db.close()
+
+
+def test_phase3c_retry_then_fail_and_transaction_rollback_boundaries(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 11, 12, 30, tzinfo=timezone.utc)
+
+    def _raise_audit_failure(*_args, **_kwargs):
+        raise RuntimeError("synthetic-task-runtime-audit-failure")
+
+    monkeypatch.setattr(
+        task_runtime_service,
+        "append_audit_log",
+        _raise_audit_failure,
+    )
+    db = session_factory()
+    try:
+        with pytest.raises(RuntimeError, match="synthetic-task-runtime-audit-failure"):
+            with db.begin():
+                lease_next_ready_task(
+                    db,
+                    worker_id="phase3c-rollback-worker",
+                    now=now,
+                )
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        assert run.status == "queued"
+        assert db.query(BidTaskAttempt).count() == 0
+        assert db.query(BidTask).filter(BidTask.status == "ready").count() == 1
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(BidOutboxEvent.event_type == "bid.task.leased.v1")
+            .count()
+            == 0
+        )
+    finally:
+        db.close()
+
+    monkeypatch.undo()
+    db = session_factory()
+    try:
+        with db.begin():
+            first = lease_next_ready_task(
+                db,
+                worker_id="phase3c-retry-worker",
+                now=now + timedelta(seconds=1),
+            )
+            assert first is not None
+            start_task_attempt(db, first, now=now + timedelta(seconds=2))
+            failed = fail_task_attempt(
+                db,
+                first,
+                error_code="BID_QUEUE_UNAVAILABLE",
+                retryable=True,
+                max_attempts=2,
+                now=now + timedelta(seconds=3),
+            )
+            assert failed.retry_scheduled is True
+            assert failed.task_status == "ready"
+            assert failed.run_status == "running"
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            second = lease_next_ready_task(
+                db,
+                worker_id="phase3c-retry-worker",
+                now=now + timedelta(seconds=4),
+            )
+            assert second is not None
+            start_task_attempt(db, second, now=now + timedelta(seconds=5))
+            exhausted = fail_task_attempt(
+                db,
+                second,
+                error_code="BID_QUEUE_UNAVAILABLE",
+                retryable=True,
+                max_attempts=2,
+                now=now + timedelta(seconds=6),
+            )
+            assert exhausted.retry_scheduled is False
+            assert exhausted.task_status == "failed"
+            assert exhausted.run_status == "failed"
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        assert run.status == "failed"
+        assert run.retryable is True
+        assert (
+            db.query(BidTaskAttempt)
+            .filter(BidTaskAttempt.task_id == second.task_id)
+            .count()
+            == 2
+        )
+    finally:
+        db.close()
+
+
+def test_phase3c_expired_lease_creates_new_fence_and_rejects_old_worker(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, _run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 11, 13, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            first = lease_next_ready_task(
+                db,
+                worker_id="phase3c-worker-old",
+                lease_seconds=30,
+                now=now,
+            )
+            assert first is not None
+            start_task_attempt(db, first, now=now + timedelta(seconds=1))
+    finally:
+        db.close()
+
+    maintenance = maintain_task_runtime(
+        session_factory=session_factory,
+        now=now + timedelta(seconds=31),
+    )
+    assert maintenance.scanned == maintenance.recovered == 1
+    assert maintenance.retry_scheduled == 1
+    db = session_factory()
+    try:
+        with db.begin():
+            second = lease_next_ready_task(
+                db,
+                worker_id="phase3c-worker-new",
+                now=now + timedelta(seconds=32),
+            )
+            assert second is not None
+            assert second.task_id == first.task_id
+            assert second.attempt_no == 2
+            assert second.fencing_token == 2
+            with pytest.raises(BidTaskFenceLost):
+                heartbeat_task_attempt(
+                    db,
+                    first,
+                    now=now + timedelta(seconds=33),
+                )
+    finally:
+        db.close()
+
+
+def test_phase3c_dag_completion_requests_validation_without_running_a_model(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 11, 14, 0, tzinfo=timezone.utc)
+    completed_task_ids: list[str] = []
+    for index in range(8):
+        db = session_factory()
+        try:
+            with db.begin():
+                claim = lease_next_ready_task(
+                    db,
+                    worker_id="phase3c-deterministic-worker",
+                    now=now + timedelta(seconds=index * 10),
+                )
+                assert claim is not None
+                start_task_attempt(
+                    db,
+                    claim,
+                    now=now + timedelta(seconds=index * 10 + 1),
+                )
+                checkpoint = write_task_checkpoint(
+                    db,
+                    claim,
+                    action_seq=0,
+                    state={"deterministic_test": True, "task_id": claim.task_id},
+                    budget_usage={"iterations": 1, "tool_calls": 0},
+                    next_state="succeeded",
+                    now=now + timedelta(seconds=index * 10 + 2),
+                )
+                result = complete_task_attempt(
+                    db,
+                    claim,
+                    completion=TaskCompletionReceipt(
+                        checkpoint_id=checkpoint.checkpoint_id,
+                        state_hash=checkpoint.state_hash,
+                        output_hash=canonical_hash({"task_id": claim.task_id}),
+                        completion_contract=claim.task_contract["completion_contract"],
+                        validator_version="bid-task-output-validator-v1",
+                    ),
+                    now=now + timedelta(seconds=index * 10 + 3),
+                )
+                completed_task_ids.append(result.task_id)
+        finally:
+            db.close()
+    assert len(set(completed_task_ids)) == 8
+    assert result.validation_requested is True
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        assert run.status == "validating"
+        assert run.current_stage == "validation"
+        assert db.query(BidTask).filter(BidTask.run_id == run_id, BidTask.status == "succeeded").count() == 8
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.run.validation_requested.v1",
+            )
+            .count()
+            == 1
+        )
+    finally:
+        db.close()
+
+
+def test_phase4a1_plan_continuation_freezes_skills_and_validates_only_after_p4(
+    api_runtime,
+) -> None:
+    client, session_factory, _owner = api_runtime
+    assessment_id, run_id = _create_phase3c_committed_run(
+        api_runtime,
+        phase4_plan_continuation=True,
+    )
+    now = datetime(2026, 8, 12, 18, 0, tzinfo=timezone.utc)
+    stage_counts = {"P0": 8, "P1": 6, "P2": 7, "P3": 4, "P4": 1}
+    completed_count = 0
+    first_task_id: str | None = None
+
+    for stage_index, (stage_code, stage_task_count) in enumerate(stage_counts.items()):
+        db = session_factory()
+        try:
+            current_plan = (
+                db.query(BidPlanRevision)
+                .filter(
+                    BidPlanRevision.run_id == run_id,
+                    BidPlanRevision.status == "committed",
+                    BidPlanRevision.committed_slot_key == "committed",
+                )
+                .one()
+            )
+            assert current_plan.revision_no == stage_index + 1
+            assert current_plan.proposal_json["schema"] == "bid.plan.commit.envelope.v2"
+            assert current_plan.proposal_json["stage"] == stage_code
+            assert current_plan.proposal_json["final_stage"] is (stage_code == "P4")
+            stage_tasks = (
+                db.query(BidTask)
+                .filter(BidTask.plan_revision_id == current_plan.id)
+                .all()
+            )
+            assert len(stage_tasks) == stage_task_count
+            for task in stage_tasks:
+                contract = build_task_contract(db, task)
+                assert contract["skill_binding"]["skill_hash"]
+                assert contract["allowed_tools"]
+            if first_task_id is None:
+                first_task_id = str(stage_tasks[0].id)
+        finally:
+            db.close()
+
+        last_completion = None
+        for _ in range(stage_task_count):
+            task_time = now + timedelta(seconds=completed_count * 10)
+            db = session_factory()
+            try:
+                with db.begin():
+                    claim = lease_next_ready_task(
+                        db,
+                        worker_id="phase4a1-deterministic-worker",
+                        now=task_time,
+                    )
+                    assert claim is not None
+                    assert claim.task_contract["skill_binding"]["skill_hash"]
+                    start_task_attempt(db, claim, now=task_time + timedelta(seconds=1))
+                    checkpoint = write_task_checkpoint(
+                        db,
+                        claim,
+                        action_seq=0,
+                        state={
+                            "phase4a1_static_fixture": True,
+                            "stage": stage_code,
+                            "task_id": claim.task_id,
+                        },
+                        budget_usage={"iterations": 1, "tool_calls": 0},
+                        next_state="succeeded",
+                        now=task_time + timedelta(seconds=2),
+                    )
+                    last_completion = complete_task_attempt(
+                        db,
+                        claim,
+                        completion=TaskCompletionReceipt(
+                            checkpoint_id=checkpoint.checkpoint_id,
+                            state_hash=checkpoint.state_hash,
+                            output_hash=canonical_hash(
+                                {"stage": stage_code, "task_id": claim.task_id}
+                            ),
+                            completion_contract=claim.task_contract[
+                                "completion_contract"
+                            ],
+                            validator_version="bid-task-output-validator-v1",
+                        ),
+                        plan_continuation_enabled=True,
+                        now=task_time + timedelta(seconds=3),
+                    )
+                completed_count += 1
+            finally:
+                db.close()
+
+        assert last_completion is not None
+        if stage_code == "P4":
+            assert last_completion.validation_requested is True
+            continue
+        assert last_completion.validation_requested is False
+
+        db = session_factory()
+        try:
+            continuation_events = (
+                db.query(BidOutboxEvent)
+                .filter(
+                    BidOutboxEvent.run_id == run_id,
+                    BidOutboxEvent.event_type
+                    == "bid.plan.continuation_requested.v1",
+                )
+                .all()
+            )
+            continuation_event = next(
+                row
+                for row in continuation_events
+                if row.payload_json["completed_stage"] == stage_code
+            )
+            continuation_event_id = str(continuation_event.event_id)
+        finally:
+            db.close()
+
+        db = session_factory()
+        try:
+            with db.begin():
+                projected = project_outbox_event_to_public(
+                    db,
+                    event_id=continuation_event_id,
+                )
+            assert projected.duplicate is False
+        finally:
+            db.close()
+
+        db = session_factory()
+        try:
+            with db.begin():
+                continued = consume_plan_continuation_requested_event(
+                    db,
+                    event_id=continuation_event_id,
+                    committed_at=now
+                    + timedelta(seconds=(completed_count - 1) * 10 + 4),
+                )
+            assert continued.duplicate is False
+            assert continued.value["committed"] is True
+            with db.begin():
+                replay = consume_plan_continuation_requested_event(
+                    db,
+                    event_id=continuation_event_id,
+                    committed_at=now
+                    + timedelta(seconds=(completed_count - 1) * 10 + 5),
+                )
+            assert replay.duplicate is True
+        finally:
+            db.close()
+
+        db = session_factory()
+        try:
+            revisions = (
+                db.query(BidPlanRevision)
+                .filter(BidPlanRevision.run_id == run_id)
+                .order_by(BidPlanRevision.revision_no.asc())
+                .all()
+            )
+            assert [row.status for row in revisions[:-1]] == [
+                "superseded"
+            ] * (len(revisions) - 1)
+            assert revisions[-1].status == "committed"
+            assert first_task_id is not None
+            assert build_task_contract(
+                db,
+                db.query(BidTask).filter(BidTask.id == first_task_id).one(),
+            )["skill_binding"]["skill_id"]
+        finally:
+            db.close()
+
+    assert completed_count == 26
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        assert run.status == "validating"
+        assert run.current_stage == "validation"
+        assert db.query(BidPlanRevision).filter_by(run_id=run_id).count() == 5
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.plan.continuation_requested.v1",
+            )
+            .count()
+            == 4
+        )
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.run.validation_requested.v1",
+            )
+            .count()
+            == 1
+        )
+        validation_event_id = str(
+            db.query(BidOutboxEvent.event_id)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.run.validation_requested.v1",
+            )
+            .scalar()
+        )
+        public_stage_events = (
+            db.query(BidPublicEvent)
+            .filter(
+                BidPublicEvent.assessment_id == assessment_id,
+                BidPublicEvent.event_type == "run.stage.changed",
+            )
+            .count()
+        )
+        assert public_stage_events >= 4
+    finally:
+        db.close()
+
+    validation_time = now + timedelta(seconds=260)
+    db = session_factory()
+    try:
+        with db.begin():
+            materialized = consume_run_validation_requested_event(
+                db,
+                event_id=validation_event_id,
+                now=validation_time,
+            )
+            assert materialized.duplicate is False
+            claim = claim_next_run_validation(
+                db,
+                worker_id="phase4a1-run-validator",
+                now=validation_time + timedelta(seconds=1),
+            )
+            assert claim is not None
+            validation_result = execute_run_validation_claim(
+                db,
+                claim,
+                now=validation_time + timedelta(seconds=2),
+            )
+            assert validation_result.outcome == "passed"
+            assert validation_result.run_status == "succeeded"
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        validation = db.query(BidRunValidation).filter_by(run_id=run_id).one()
+        assert validation.validator_version == "bid-run-integrity-validator-v4"
+        assert validation.result_json["outcome"] == "passed"
+        assert db.query(BidAnalysisRun).filter_by(id=run_id).one().status == "succeeded"
+    finally:
+        db.close()
+
+    progress = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    assert progress.status_code == 200
+    assert progress.json()["data"]["status"] == "succeeded"
+
+
+def test_phase4a1_plan_continuation_rolls_back_and_maintenance_recovers(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, run_id = _create_phase3c_committed_run(
+        api_runtime,
+        phase4_plan_continuation=True,
+    )
+    now = datetime(2026, 8, 12, 19, 0, tzinfo=timezone.utc)
+
+    for index in range(8):
+        task_time = now + timedelta(seconds=index * 10)
+        db = session_factory()
+        try:
+            with db.begin():
+                claim = lease_next_ready_task(
+                    db,
+                    worker_id="phase4a1-recovery-worker",
+                    now=task_time,
+                )
+                assert claim is not None
+                start_task_attempt(db, claim, now=task_time + timedelta(seconds=1))
+                checkpoint = write_task_checkpoint(
+                    db,
+                    claim,
+                    action_seq=0,
+                    state={"phase4a1_recovery": True, "task_id": claim.task_id},
+                    budget_usage={"iterations": 1, "tool_calls": 0},
+                    next_state="succeeded",
+                    now=task_time + timedelta(seconds=2),
+                )
+                complete_task_attempt(
+                    db,
+                    claim,
+                    completion=TaskCompletionReceipt(
+                        checkpoint_id=checkpoint.checkpoint_id,
+                        state_hash=checkpoint.state_hash,
+                        output_hash=canonical_hash({"task_id": claim.task_id}),
+                        completion_contract=claim.task_contract["completion_contract"],
+                        validator_version="bid-task-output-validator-v1",
+                    ),
+                    plan_continuation_enabled=True,
+                    now=task_time + timedelta(seconds=3),
+                )
+        finally:
+            db.close()
+
+    db = session_factory()
+    try:
+        continuation_event = (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.plan.continuation_requested.v1",
+            )
+            .one()
+        )
+        continuation_event_id = str(continuation_event.event_id)
+    finally:
+        db.close()
+
+    original_append_audit_log = plan_continuation_service.append_audit_log
+
+    def _fail_audit(*_args, **_kwargs):
+        raise RuntimeError("phase4a1 forced audit failure")
+
+    monkeypatch.setattr(plan_continuation_service, "append_audit_log", _fail_audit)
+    db = session_factory()
+    try:
+        with pytest.raises(RuntimeError, match="forced audit failure"):
+            with db.begin():
+                consume_plan_continuation_requested_event(
+                    db,
+                    event_id=continuation_event_id,
+                    committed_at=now + timedelta(seconds=85),
+                )
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        plans = db.query(BidPlanRevision).filter_by(run_id=run_id).all()
+        assert len(plans) == 1
+        assert plans[0].status == "committed"
+        assert plans[0].proposal_json["stage"] == "P0"
+        assert (
+            db.query(BidProcessedEvent)
+            .filter_by(
+                consumer_name=PLAN_CONTINUATION_CONSUMER,
+                event_id=continuation_event_id,
+            )
+            .count()
+            == 0
+        )
+    finally:
+        db.close()
+
+    monkeypatch.setattr(
+        plan_continuation_service,
+        "append_audit_log",
+        original_append_audit_log,
+    )
+    recovered = process_pending_plan_continuations(
+        session_factory=session_factory,
+        limit=20,
+    )
+    assert recovered.scanned == 1
+    assert recovered.committed == 1
+    assert recovered.duplicate == 0
+    assert recovered.ignored == 0
+    assert recovered.failed == 0
+
+    db = session_factory()
+    try:
+        plans = (
+            db.query(BidPlanRevision)
+            .filter_by(run_id=run_id)
+            .order_by(BidPlanRevision.revision_no.asc())
+            .all()
+        )
+        assert [(row.proposal_json["stage"], row.status) for row in plans] == [
+            ("P0", "superseded"),
+            ("P1", "committed"),
+        ]
+        historical_task = (
+            db.query(BidTask)
+            .filter(BidTask.plan_revision_id == plans[0].id)
+            .order_by(BidTask.task_key.asc())
+            .first()
+        )
+        assert historical_task is not None
+        assert build_task_contract(db, historical_task)["skill_binding"]["skill_hash"]
+    finally:
+        db.close()
+
+    replay = process_pending_plan_continuations(
+        session_factory=session_factory,
+        limit=20,
+    )
+    assert replay.scanned == 0
+
+
+def _prepare_phase4a2_pending_model_call(api_runtime, *, now: datetime):
+    _client, session_factory, _owner = api_runtime
+    assessment_id, run_id = _create_phase3c_committed_run(
+        api_runtime,
+        phase4_plan_continuation=True,
+        phase4_model_gateway=True,
+    )
+    for index in range(3):
+        task_time = now + timedelta(seconds=index * 10)
+        db = session_factory()
+        try:
+            with db.begin():
+                claim = lease_next_ready_task(
+                    db,
+                    worker_id="phase4a2-prerequisite-worker",
+                    now=task_time,
+                )
+                assert claim is not None
+                assert claim.task_contract["skill_binding"]["executor_kind"] == "deterministic"
+                start_task_attempt(db, claim, now=task_time + timedelta(seconds=1))
+                checkpoint = write_task_checkpoint(
+                    db,
+                    claim,
+                    action_seq=0,
+                    state={"phase4a2_prerequisite": True, "task_id": claim.task_id},
+                    budget_usage={"iterations": 1, "tool_calls": 0},
+                    next_state="succeeded",
+                    now=task_time + timedelta(seconds=2),
+                )
+                complete_task_attempt(
+                    db,
+                    claim,
+                    completion=TaskCompletionReceipt(
+                        checkpoint_id=checkpoint.checkpoint_id,
+                        state_hash=checkpoint.state_hash,
+                        output_hash=canonical_hash({"task_id": claim.task_id}),
+                        completion_contract=claim.task_contract["completion_contract"],
+                        validator_version="bid-task-output-validator-v1",
+                    ),
+                    plan_continuation_enabled=True,
+                    now=task_time + timedelta(seconds=3),
+                )
+        finally:
+            db.close()
+
+    first_step_time = now + timedelta(seconds=35)
+    db = session_factory()
+    try:
+        with db.begin():
+            task_claim = lease_next_ready_task(
+                db,
+                worker_id="phase4a2-langgraph-worker",
+                now=first_step_time,
+            )
+            assert task_claim is not None
+            assert task_claim.task_contract["skill_binding"]["executor_kind"] == "langgraph"
+            start_task_attempt(db, task_claim, now=first_step_time + timedelta(seconds=1))
+            first_step = advance_local_agent_one_action(
+                db,
+                task_claim,
+                tool_scope_signing_key="phase4a2-local-test-signing-key-32chars",
+                now=first_step_time + timedelta(seconds=2),
+            )
+            assert first_step.operation_type == "request_model"
+            assert first_step.operation_ref is not None
+    finally:
+        db.close()
+    return assessment_id, run_id, task_claim, first_step_time, first_step
+
+
+def test_phase4a2_model_budget_failure_rolls_back_claim_and_settlement(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, _run_id, task_claim, step_time, first_step = (
+        _prepare_phase4a2_pending_model_call(
+            api_runtime,
+            now=datetime.now(timezone.utc) + timedelta(minutes=1),
+        )
+    )
+    db = session_factory()
+    try:
+        with pytest.raises(BidModelBudgetExhausted):
+            with db.begin():
+                call = db.query(BidModelCall).filter_by(task_id=task_claim.task_id).one()
+                replay = schedule_model_call(
+                    db,
+                    task_claim,
+                    context_manifest_id=str(call.context_manifest_id),
+                    checkpoint_id=str(first_step.checkpoint_id),
+                    action_seq=int(call.action_seq),
+                    idempotency_key=str(call.idempotency_key),
+                    now=step_time + timedelta(seconds=3),
+                )
+                assert replay.duplicate is True
+                model_claim = claim_model_call(
+                    db,
+                    worker_id="phase4a2-budget-worker",
+                    now=step_time + timedelta(seconds=4),
+                )
+                assert model_claim is not None
+                mark_model_call_sending(
+                    db,
+                    model_claim,
+                    now=step_time + timedelta(seconds=5),
+                )
+                settle_model_call(
+                    db,
+                    model_claim,
+                    provider_result=ModelProviderResult(
+                        action={
+                            "action_type": "finish",
+                            "completion_summary": "must roll back",
+                            "output_candidate": None,
+                            "reason_codes": ["TASK_ACTION_READY"],
+                        },
+                        usage={
+                            "input_tokens": int(call.reserved_input_tokens) + 1,
+                            "output_tokens": 1,
+                        },
+                        finish_reason="stop",
+                    ),
+                    now=step_time + timedelta(seconds=6),
+                )
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        call = db.query(BidModelCall).filter_by(task_id=task_claim.task_id).one()
+        assert call.status == "accepted"
+        assert call.attempt_count == 0
+        assert db.query(BidModelCallAttempt).filter_by(model_call_id=call.id).count() == 0
+        assert db.query(BidModelResult).filter_by(model_call_id=call.id).count() == 0
+    finally:
+        db.close()
+
+
+def test_phase4a2_model_heartbeat_fencing_and_send_unknown_recovery(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, _run_id, task_claim, step_time, _first_step = (
+        _prepare_phase4a2_pending_model_call(
+            api_runtime,
+            now=datetime.now(timezone.utc) + timedelta(minutes=1),
+        )
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            first_claim = claim_model_call(
+                db,
+                worker_id="phase4a2-fence-worker",
+                lease_seconds=15,
+                now=step_time + timedelta(seconds=4),
+            )
+            assert first_claim is not None
+            extended = heartbeat_model_call(
+                db,
+                first_claim,
+                lease_seconds=30,
+                now=step_time + timedelta(seconds=10),
+            )
+            assert extended == step_time + timedelta(seconds=40)
+            with pytest.raises(BidModelFenceLost):
+                heartbeat_model_call(
+                    db,
+                    replace(first_claim, fencing_token=first_claim.fencing_token + 1),
+                    now=step_time + timedelta(seconds=11),
+                )
+            mark_model_call_sending(
+                db,
+                first_claim,
+                now=step_time + timedelta(seconds=12),
+            )
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            recovered = recover_expired_model_calls(
+                db,
+                now=step_time + timedelta(seconds=41),
+            )
+            assert recovered.scanned == 1
+            assert recovered.recovered == 1
+            assert recovered.uncertain == 1
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            second_claim = claim_model_call(
+                db,
+                worker_id="phase4a2-fence-worker",
+                now=step_time + timedelta(seconds=42),
+            )
+            assert second_claim is not None
+            assert second_claim.fencing_token == first_claim.fencing_token + 1
+            assert second_claim.provider_request_id != first_claim.provider_request_id
+            with pytest.raises(BidModelFenceLost):
+                settle_model_call(
+                    db,
+                    first_claim,
+                    provider_result=ModelProviderResult(
+                        action={
+                            "action_type": "finish",
+                            "completion_summary": "stale result",
+                            "output_candidate": None,
+                            "reason_codes": ["STALE_ATTEMPT"],
+                        },
+                        usage={"input_tokens": 1, "output_tokens": 1},
+                        finish_reason="stop",
+                    ),
+                    now=step_time + timedelta(seconds=43),
+                )
+            mark_model_call_sending(
+                db,
+                second_claim,
+                now=step_time + timedelta(seconds=44),
+            )
+            settled = settle_model_call(
+                db,
+                second_claim,
+                provider_result=ModelProviderResult(
+                    action={
+                        "action_type": "finish",
+                        "completion_summary": "retry settled",
+                        "output_candidate": {"status": "candidate_only"},
+                        "reason_codes": ["TASK_ACTION_READY"],
+                    },
+                    usage={"input_tokens": 10, "output_tokens": 5},
+                    finish_reason="stop",
+                    provider_receipt_id="phase4a2-retry-receipt",
+                    actual_cost_microunits=10,
+                ),
+                now=step_time + timedelta(seconds=45),
+            )
+            assert settled.duplicate is False
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        attempts = (
+            db.query(BidModelCallAttempt)
+            .join(BidModelCall, BidModelCall.id == BidModelCallAttempt.model_call_id)
+            .filter(BidModelCall.task_id == task_claim.task_id)
+            .order_by(BidModelCallAttempt.attempt_no.asc())
+            .all()
+        )
+        assert [row.status for row in attempts] == ["uncertain", "succeeded"]
+    finally:
+        db.close()
+
+
+def test_phase4a2_unclaimed_model_timeout_resumes_task_for_recovery(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, run_id, task_claim, step_time, _first_step = (
+        _prepare_phase4a2_pending_model_call(
+            api_runtime,
+            now=datetime.now(timezone.utc) + timedelta(minutes=1),
+        )
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            result = recover_expired_model_calls(
+                db,
+                now=step_time + timedelta(seconds=123),
+            )
+            assert result.scanned == 1
+            assert result.failed == 1
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        call = db.query(BidModelCall).filter_by(task_id=task_claim.task_id).one()
+        task = db.query(BidTask).filter_by(id=task_claim.task_id).one()
+        attempt = db.query(BidTaskAttempt).filter_by(id=task_claim.attempt_id).one()
+        operation = db.query(BidAsyncOperation).filter_by(id=call.async_operation_id).one()
+        run = db.query(BidAnalysisRun).filter_by(id=run_id).one()
+        assert (call.status, call.last_error_code) == (
+            "failed",
+            "BID_MODEL_OPERATION_TIMEOUT",
+        )
+        assert operation.status == "failed"
+        assert attempt.status == "cancelled"
+        assert task.status == "ready"
+        assert run.status == "queued"
+    finally:
+        db.close()
+
+
+def test_phase4a2_injected_provider_io_runs_after_sending_commit(api_runtime) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, _run_id, task_claim, step_time, _first_step = (
+        _prepare_phase4a2_pending_model_call(
+            api_runtime,
+            now=datetime.now(timezone.utc) - timedelta(minutes=1),
+        )
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            model_claim = claim_model_call(
+                db,
+                worker_id="phase4a2-provider-boundary-worker",
+                now=step_time + timedelta(seconds=4),
+            )
+            assert model_claim is not None
+    finally:
+        db.close()
+
+    class InspectingProvider:
+        def execute(self, *, request_envelope, provider_request_id):
+            provider_db = session_factory()
+            try:
+                call = (
+                    provider_db.query(BidModelCall)
+                    .filter_by(id=request_envelope["model_call_id"])
+                    .one()
+                )
+                attempt = (
+                    provider_db.query(BidModelCallAttempt)
+                    .filter_by(provider_request_id=provider_request_id)
+                    .one()
+                )
+                operation = (
+                    provider_db.query(BidAsyncOperation)
+                    .filter_by(id=call.async_operation_id)
+                    .one()
+                )
+                assert call.status == "sending"
+                assert attempt.status == "sending"
+                assert operation.status == "running"
+                assert provider_db.query(BidModelResult).filter_by(model_call_id=call.id).count() == 0
+            finally:
+                provider_db.close()
+            return ModelProviderResult(
+                action={
+                    "action_type": "finish",
+                    "completion_summary": "provider transaction boundary verified",
+                    "output_candidate": {"status": "candidate_only"},
+                    "reason_codes": ["TASK_ACTION_READY"],
+                },
+                usage={"input_tokens": 20, "output_tokens": 5},
+                finish_reason="stop",
+                provider_receipt_id="phase4a2-boundary-receipt",
+                actual_cost_microunits=20,
+            )
+
+    receipt = execute_model_call_claim(
+        session_factory,
+        claim=model_claim,
+        provider=InspectingProvider(),
+    )
+    assert receipt.duplicate is False
+    db = session_factory()
+    try:
+        call = db.query(BidModelCall).filter_by(task_id=task_claim.task_id).one()
+        assert call.status == "succeeded"
+        assert db.query(BidModelResult).filter_by(model_call_id=call.id).count() == 1
+    finally:
+        db.close()
+
+
+def test_phase4b2_rejected_provider_response_is_accounted_before_retry(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, _run_id, task_claim, step_time, _first_step = (
+        _prepare_phase4a2_pending_model_call(
+            api_runtime,
+            now=datetime.now(timezone.utc) + timedelta(minutes=1),
+        )
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            first_claim = claim_model_call(
+                db,
+                worker_id="phase4b2-accounting-worker",
+                now=step_time + timedelta(seconds=4),
+            )
+            assert first_claim is not None
+            mark_model_call_sending(
+                db,
+                first_claim,
+                now=step_time + timedelta(seconds=5),
+            )
+            status = fail_model_call_attempt(
+                db,
+                first_claim,
+                error_code="BID_MODEL_ACTION_INVALID",
+                retryable=True,
+                send_started=False,
+                retry_delay_seconds=1,
+                provider_result=ModelProviderResult(
+                    action={"action_type": "finish", "summary": "invalid"},
+                    usage={"input_tokens": 20, "output_tokens": 5},
+                    finish_reason="stop",
+                    provider_receipt_id="phase4b2-rejected-receipt",
+                    actual_cost_microunits=7,
+                ),
+                validation_issues=[
+                    {
+                        "loc": ["finish", "completion_summary"],
+                        "type": "missing",
+                        "message": "Field required",
+                    }
+                ],
+                now=step_time + timedelta(seconds=6),
+            )
+            assert status == "retry_wait"
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            second_claim = claim_model_call(
+                db,
+                worker_id="phase4b2-accounting-worker",
+                now=step_time + timedelta(seconds=8),
+            )
+            assert second_claim is not None
+            assert second_claim.model_call_id == first_claim.model_call_id
+            mark_model_call_sending(
+                db,
+                second_claim,
+                now=step_time + timedelta(seconds=9),
+            )
+            receipt = settle_model_call(
+                db,
+                second_claim,
+                provider_result=ModelProviderResult(
+                    action={
+                        "action_type": "finish",
+                        "completion_summary": "retry settled",
+                        "output_candidate": None,
+                        "reason_codes": ["TASK_ACTION_READY"],
+                    },
+                    usage={"input_tokens": 10, "output_tokens": 4},
+                    finish_reason="stop",
+                    provider_receipt_id="phase4b2-success-receipt",
+                    actual_cost_microunits=3,
+                ),
+                now=step_time + timedelta(seconds=10),
+            )
+            assert receipt.duplicate is False
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        call = db.query(BidModelCall).filter_by(task_id=task_claim.task_id).one()
+        attempts = (
+            db.query(BidModelCallAttempt)
+            .filter_by(model_call_id=call.id)
+            .order_by(BidModelCallAttempt.attempt_no.asc())
+            .all()
+        )
+        result = db.query(BidModelResult).filter_by(model_call_id=call.id).one()
+        assert call.status == "succeeded"
+        assert (
+            call.actual_input_tokens,
+            call.actual_output_tokens,
+            call.actual_cost_microunits,
+        ) == (30, 9, 10)
+        assert (result.input_tokens, result.output_tokens, result.actual_cost_microunits) == (
+            10,
+            4,
+            3,
+        )
+        assert [row.status for row in attempts] == ["failed", "succeeded"]
+        assert attempts[0].detail_json["validation_issues"][0]["type"] == "missing"
+        assert attempts[0].detail_json["usage"] == {
+            "input_tokens": 20,
+            "output_tokens": 5,
+        }
+        assert attempts[1].detail_json["usage"] == {
+            "input_tokens": 10,
+            "output_tokens": 4,
+        }
+    finally:
+        db.close()
+
+
+def test_phase4a2_provider_exception_without_stable_code_is_normalized(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, _run_id, task_claim, step_time, _first_step = (
+        _prepare_phase4a2_pending_model_call(
+            api_runtime,
+            now=datetime.now(timezone.utc) - timedelta(minutes=1),
+        )
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            model_claim = claim_model_call(
+                db,
+                worker_id="phase4a2-provider-error-worker",
+                now=step_time + timedelta(seconds=4),
+            )
+            assert model_claim is not None
+    finally:
+        db.close()
+
+    class ProviderFailureWithoutCode:
+        def execute(self, *, request_envelope, provider_request_id):
+            del request_envelope, provider_request_id
+            error = RuntimeError("synthetic provider failure")
+            error.code = None
+            error.retryable = False
+            raise error
+
+    assert execute_model_call_claim(
+        session_factory,
+        claim=model_claim,
+        provider=ProviderFailureWithoutCode(),
+    ) == "uncertain"
+    db = session_factory()
+    try:
+        call = db.query(BidModelCall).filter_by(task_id=task_claim.task_id).one()
+        attempt = (
+            db.query(BidModelCallAttempt)
+            .filter_by(model_call_id=call.id)
+            .one()
+        )
+        task = db.query(BidTask).filter_by(id=task_claim.task_id).one()
+        assert call.last_error_code == "BID_MODEL_PROVIDER_ERROR"
+        assert attempt.error_code == "BID_MODEL_PROVIDER_ERROR"
+        assert task.status == "ready"
+    finally:
+        db.close()
+
+
+def test_phase4a2_run_cancel_fences_sending_model_attempt(api_runtime) -> None:
+    client, session_factory, _owner = api_runtime
+    assessment_id, run_id, task_claim, step_time, _first_step = (
+        _prepare_phase4a2_pending_model_call(
+            api_runtime,
+            now=datetime.now(timezone.utc) + timedelta(minutes=1),
+        )
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            model_claim = claim_model_call(
+                db,
+                worker_id="phase4a2-cancel-worker",
+                now=step_time + timedelta(seconds=4),
+            )
+            assert model_claim is not None
+            mark_model_call_sending(
+                db,
+                model_claim,
+                now=step_time + timedelta(seconds=5),
+            )
+    finally:
+        db.close()
+
+    progress = client.get(f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}")
+    requested = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/cancel",
+        headers={"Idempotency-Key": _key(), "If-Match": progress.headers["etag"]},
+        json={"reason": "phase4a2 governed model cancellation"},
+    )
+    assert requested.status_code == 202
+    maintenance = maintain_run_lifecycle(
+        session_factory=session_factory,
+        now=step_time + timedelta(seconds=10),
+    )
+    assert maintenance.cancelled == 1
+
+    db = session_factory()
+    try:
+        call = db.query(BidModelCall).filter_by(task_id=task_claim.task_id).one()
+        attempt = (
+            db.query(BidModelCallAttempt)
+            .filter_by(model_call_id=call.id)
+            .one()
+        )
+        operation = db.query(BidAsyncOperation).filter_by(id=call.async_operation_id).one()
+        assert call.status == "cancelled"
+        assert attempt.status == "cancelled"
+        assert operation.status == "cancelled"
+        with pytest.raises(BidModelFenceLost):
+            settle_model_call(
+                db,
+                model_claim,
+                provider_result=ModelProviderResult(
+                    action={
+                        "action_type": "finish",
+                        "completion_summary": "late result",
+                        "output_candidate": None,
+                        "reason_codes": ["LATE_RESULT"],
+                    },
+                    usage={"input_tokens": 1, "output_tokens": 1},
+                    finish_reason="stop",
+                ),
+                now=step_time + timedelta(seconds=11),
+            )
+    finally:
+        db.close()
+
+
+def test_phase4a2_model_gateway_resumes_one_bounded_langgraph_action(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    _assessment_id, run_id = _create_phase3c_committed_run(
+        api_runtime,
+        phase4_plan_continuation=True,
+        phase4_model_gateway=True,
+    )
+    now = datetime.now(timezone.utc) + timedelta(minutes=1)
+
+    # P0 begins with three deterministic control tasks.  Complete only those
+    # prerequisites, then hand the first LangGraph-bound extraction Task to A-2.
+    for index in range(3):
+        task_time = now + timedelta(seconds=index * 10)
+        db = session_factory()
+        try:
+            with db.begin():
+                claim = lease_next_ready_task(
+                    db,
+                    worker_id="phase4a2-deterministic-worker",
+                    now=task_time,
+                )
+                assert claim is not None
+                assert claim.task_contract["skill_binding"]["executor_kind"] == "deterministic"
+                start_task_attempt(db, claim, now=task_time + timedelta(seconds=1))
+                checkpoint = write_task_checkpoint(
+                    db,
+                    claim,
+                    action_seq=0,
+                    state={"phase4a2_prerequisite": True, "task_id": claim.task_id},
+                    budget_usage={"iterations": 1, "tool_calls": 0},
+                    next_state="succeeded",
+                    now=task_time + timedelta(seconds=2),
+                )
+                complete_task_attempt(
+                    db,
+                    claim,
+                    completion=TaskCompletionReceipt(
+                        checkpoint_id=checkpoint.checkpoint_id,
+                        state_hash=checkpoint.state_hash,
+                        output_hash=canonical_hash({"task_id": claim.task_id}),
+                        completion_contract=claim.task_contract["completion_contract"],
+                        validator_version="bid-task-output-validator-v1",
+                    ),
+                    plan_continuation_enabled=True,
+                    now=task_time + timedelta(seconds=3),
+                )
+        finally:
+            db.close()
+
+    first_step_time = now + timedelta(seconds=35)
+    db = session_factory()
+    try:
+        with db.begin():
+            task_claim = lease_next_ready_task(
+                db,
+                worker_id="phase4a2-langgraph-worker",
+                now=first_step_time,
+            )
+            assert task_claim is not None
+            assert task_claim.task_contract["skill_binding"]["executor_kind"] == "langgraph"
+            start_task_attempt(db, task_claim, now=first_step_time + timedelta(seconds=1))
+            first_step = advance_local_agent_one_action(
+                db,
+                task_claim,
+                tool_scope_signing_key="phase4a2-local-test-signing-key-32chars",
+                now=first_step_time + timedelta(seconds=2),
+            )
+            assert first_step.operation_type == "request_model"
+            assert first_step.action_seq == 1
+            assert first_step.operation_ref is not None
+    finally:
+        db.close()
+
+    provider_time = first_step_time + timedelta(seconds=4)
+    db = session_factory()
+    try:
+        with db.begin():
+            model_claim = claim_model_call(
+                db,
+                worker_id="phase4a2-model-worker",
+                now=provider_time,
+            )
+            assert model_claim is not None
+            assert model_claim.provider_ref == "local-test-provider"
+            mark_model_call_sending(
+                db,
+                model_claim,
+                now=provider_time + timedelta(seconds=1),
+            )
+            provider_result = ModelProviderResult(
+                action={
+                    "action_type": "finish",
+                    "completion_summary": "Bounded extraction candidate is ready",
+                    "output_candidate": {"status": "candidate_only"},
+                    "reason_codes": ["TASK_ACTION_READY"],
+                },
+                usage={"input_tokens": 120, "output_tokens": 40},
+                finish_reason="stop",
+                provider_receipt_id="local-receipt-01",
+                actual_cost_microunits=1200,
+            )
+            result = settle_model_call(
+                db,
+                model_claim,
+                provider_result=provider_result,
+                now=provider_time + timedelta(seconds=2),
+            )
+            replay = settle_model_call(
+                db,
+                model_claim,
+                provider_result=provider_result,
+                now=provider_time + timedelta(seconds=3),
+            )
+            assert result.duplicate is False
+            assert replay.duplicate is True
+            assert replay.result_hash == result.result_hash
+    finally:
+        db.close()
+
+    resume_time = provider_time + timedelta(seconds=5)
+    db = session_factory()
+    try:
+        with db.begin():
+            resumed_claim = lease_next_ready_task(
+                db,
+                worker_id="phase4a2-langgraph-worker",
+                allowed_task_types=[task_claim.task_contract["task_type"]],
+                now=resume_time,
+            )
+            assert resumed_claim is not None
+            assert resumed_claim.task_id == task_claim.task_id
+            assert resumed_claim.attempt_no == task_claim.attempt_no + 1
+            assert resumed_claim.fencing_token > task_claim.fencing_token
+            start_task_attempt(db, resumed_claim, now=resume_time + timedelta(seconds=1))
+            resumed = advance_local_agent_one_action(
+                db,
+                resumed_claim,
+                tool_scope_signing_key="phase4a2-local-test-signing-key-32chars",
+                now=resume_time + timedelta(seconds=2),
+            )
+            duplicate = advance_local_agent_one_action(
+                db,
+                resumed_claim,
+                tool_scope_signing_key="phase4a2-local-test-signing-key-32chars",
+                now=resume_time + timedelta(seconds=3),
+            )
+            assert resumed.operation_type == "finish"
+            assert resumed.completion_ready is True
+            assert duplicate == resumed
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        assert db.query(BidModelCall).filter_by(run_id=run_id).count() == 1
+        assert db.query(BidModelCallAttempt).count() == 1
+        assert db.query(BidModelResult).count() == 1
+        task = db.query(BidTask).filter_by(id=task_claim.task_id).one()
+        assert task.status == "running"
+    finally:
+        db.close()
+
+
+def _complete_phase3c_dag_for_phase3g(api_runtime, *, now: datetime):
+    _assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    _client, session_factory, _owner = api_runtime
+    for index in range(8):
+        db = session_factory()
+        try:
+            with db.begin():
+                claim = lease_next_ready_task(
+                    db,
+                    worker_id="phase3g-task-worker",
+                    now=now + timedelta(seconds=index * 10),
+                )
+                assert claim is not None
+                start_task_attempt(
+                    db,
+                    claim,
+                    now=now + timedelta(seconds=index * 10 + 1),
+                )
+                checkpoint = write_task_checkpoint(
+                    db,
+                    claim,
+                    action_seq=0,
+                    state={"phase3g": True, "task_id": claim.task_id},
+                    budget_usage={"iterations": 1, "tool_calls": 0},
+                    next_state="succeeded",
+                    now=now + timedelta(seconds=index * 10 + 2),
+                )
+                completion = complete_task_attempt(
+                    db,
+                    claim,
+                    completion=TaskCompletionReceipt(
+                        checkpoint_id=checkpoint.checkpoint_id,
+                        state_hash=checkpoint.state_hash,
+                        output_hash=canonical_hash({"task_id": claim.task_id}),
+                        completion_contract=claim.task_contract["completion_contract"],
+                        validator_version="bid-task-output-validator-v1",
+                    ),
+                    now=now + timedelta(seconds=index * 10 + 3),
+                )
+        finally:
+            db.close()
+    assert completion.validation_requested is True
+    db = session_factory()
+    try:
+        event = (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.run.validation_requested.v1",
+            )
+            .one()
+        )
+        return run_id, str(event.event_id)
+    finally:
+        db.close()
+
+
+def test_phase3g_validation_materializes_idempotently_and_converges_success(
+    api_runtime,
+) -> None:
+    client, session_factory, _owner = api_runtime
+    now = datetime(2026, 8, 12, 16, 0, tzinfo=timezone.utc)
+    run_id, event_id = _complete_phase3c_dag_for_phase3g(api_runtime, now=now)
+    db = session_factory()
+    try:
+        with db.begin():
+            first = consume_run_validation_requested_event(
+                db,
+                event_id=event_id,
+                now=now + timedelta(seconds=90),
+            )
+            assert first.duplicate is False
+        with db.begin():
+            replay = consume_run_validation_requested_event(
+                db,
+                event_id=event_id,
+                now=now + timedelta(seconds=91),
+            )
+            assert replay.duplicate is True
+        with db.begin():
+            claim = claim_next_run_validation(
+                db,
+                worker_id="phase3g-validator",
+                now=now + timedelta(seconds=92),
+            )
+            assert claim is not None
+            heartbeat_run_validation(
+                db,
+                claim,
+                now=now + timedelta(seconds=93),
+            )
+            result = execute_run_validation_claim(
+                db,
+                claim,
+                now=now + timedelta(seconds=94),
+            )
+            assert result.outcome == "passed"
+            assert result.run_status == "succeeded"
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        validation = db.query(BidRunValidation).filter_by(run_id=run_id).one()
+        run = db.query(BidAnalysisRun).filter_by(id=run_id).one()
+        assessment = db.query(BidAssessment).filter_by(id=run.assessment_id).one()
+        assert validation.status == "passed"
+        assert validation.result_hash
+        assert run.status == "succeeded"
+        assert assessment.business_status == "deep_ready"
+        succeeded_event = (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.run.succeeded.v1",
+            )
+            .one()
+        )
+        succeeded_event_id = str(succeeded_event.event_id)
+        assessment_id = str(run.assessment_id)
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        with db.begin():
+            projected = project_outbox_event_to_public(
+                db,
+                event_id=succeeded_event_id,
+            )
+            assert projected.duplicate is False
+    finally:
+        db.close()
+    progress = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    assert progress.status_code == 200
+    assert progress.json()["data"]["status"] == "succeeded"
+    assert progress.json()["data"]["latest_event"]["event_type"] == (
+        "run.status.changed"
+    )
+    assert progress.json()["data"]["latest_event"]["resource_version"] == (
+        progress.json()["data"]["row_version"]
+    )
+
+
+def test_phase3g_validation_integrity_failure_converges_failed(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    now = datetime(2026, 8, 12, 16, 30, tzinfo=timezone.utc)
+    run_id, event_id = _complete_phase3c_dag_for_phase3g(api_runtime, now=now)
+    db = session_factory()
+    try:
+        with db.begin():
+            consume_run_validation_requested_event(
+                db,
+                event_id=event_id,
+                now=now + timedelta(seconds=90),
+            )
+            claim = claim_next_run_validation(
+                db,
+                worker_id="phase3g-integrity-validator",
+                now=now + timedelta(seconds=91),
+            )
+            assert claim is not None
+            task = (
+                db.query(BidTask)
+                .filter(BidTask.run_id == run_id)
+                .order_by(BidTask.task_key.asc())
+                .first()
+            )
+            assert task is not None
+            assert task.current_attempt_id is not None
+            db.add(
+                BidAsyncOperation(
+                    id=str(uuid.uuid4()),
+                    task_id=str(task.id),
+                    task_attempt_id=str(task.current_attempt_id),
+                    operation_type="phase3g_integrity_probe",
+                    status="submitted",
+                    input_hash=canonical_hash({"run_id": run_id, "task_id": task.id}),
+                    retry_count=0,
+                    submitted_at=now + timedelta(seconds=92),
+                    row_version=1,
+                )
+            )
+            result = execute_run_validation_claim(
+                db,
+                claim,
+                now=now + timedelta(seconds=93),
+            )
+            assert result.outcome == "failed"
+            assert result.run_status == "failed"
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        validation = db.query(BidRunValidation).filter_by(run_id=run_id).one()
+        run = db.query(BidAnalysisRun).filter_by(id=run_id).one()
+        assessment = db.query(BidAssessment).filter_by(id=run.assessment_id).one()
+        assert validation.status == "failed"
+        assert validation.failure_code == "BID_RUN_VALIDATION_INPUT_DRIFT"
+        assert validation.result_json["summary"]["failed_codes"] == [
+            "NO_ACTIVE_ASYNC_OPERATIONS",
+            "VALIDATION_INPUT_IMMUTABLE",
+        ]
+        assert run.status == "failed"
+        assert run.retryable is False
+        assert assessment.business_status == "failed"
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.run.failed.v1",
+            )
+            .count()
+            == 1
+        )
+    finally:
+        db.close()
+
+
+def test_phase3g_validation_stale_fails_closed_and_fences_old_worker(
+    api_runtime,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    now = datetime(2026, 8, 12, 17, 0, tzinfo=timezone.utc)
+    run_id, event_id = _complete_phase3c_dag_for_phase3g(api_runtime, now=now)
+    db = session_factory()
+    try:
+        with db.begin():
+            consume_run_validation_requested_event(
+                db,
+                event_id=event_id,
+                now=now + timedelta(seconds=90),
+            )
+            first = claim_next_run_validation(
+                db,
+                worker_id="phase3g-old-validator",
+                lease_seconds=15,
+                now=now + timedelta(seconds=91),
+            )
+            assert first is not None
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        with db.begin():
+            assert recover_expired_run_validation(
+                db,
+                validation_id=first.validation_id,
+                now=now + timedelta(seconds=107),
+            ) == "recovered"
+            second = claim_next_run_validation(
+                db,
+                worker_id="phase3g-new-validator",
+                now=now + timedelta(seconds=108),
+            )
+            assert second is not None
+            assert second.fencing_token == first.fencing_token + 1
+            with pytest.raises(BidRunValidationFenceLost):
+                heartbeat_run_validation(
+                    db,
+                    first,
+                    now=now + timedelta(seconds=109),
+                )
+            run = db.query(BidAnalysisRun).filter_by(id=run_id).one()
+            assessment = db.query(BidAssessment).filter_by(id=run.assessment_id).one()
+            assessment.current_manifest_id = None
+            assessment.row_version = int(assessment.row_version) + 1
+            result = execute_run_validation_claim(
+                db,
+                second,
+                now=now + timedelta(seconds=110),
+            )
+            assert result.outcome == "stale"
+            assert result.run_status == "stale"
+    finally:
+        db.close()
+
+
+def test_phase3g_validation_transaction_rollback_and_maintenance_recovery(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    now = datetime(2026, 8, 12, 18, 0, tzinfo=timezone.utc)
+    run_id, event_id = _complete_phase3c_dag_for_phase3g(api_runtime, now=now)
+
+    def _raise_audit(*_args, **_kwargs):
+        raise RuntimeError("phase3g-audit-rollback")
+
+    monkeypatch.setattr(run_validation_service, "append_audit_log", _raise_audit)
+    db = session_factory()
+    try:
+        with pytest.raises(RuntimeError, match="phase3g-audit-rollback"):
+            with db.begin():
+                consume_run_validation_requested_event(
+                    db,
+                    event_id=event_id,
+                    now=now + timedelta(seconds=90),
+                )
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        assert db.query(BidRunValidation).filter_by(run_id=run_id).count() == 0
+        assert (
+            db.query(BidProcessedEvent)
+            .filter_by(
+                consumer_name="bid-run-validation-v1",
+                event_id=event_id,
+            )
+            .count()
+            == 0
+        )
+    finally:
+        db.close()
+    monkeypatch.undo()
+    maintenance = maintain_run_validations(
+        session_factory=session_factory,
+        now=now + timedelta(seconds=91),
+    )
+    assert maintenance.scanned_events == 1
+    assert maintenance.materialized == 1
+
+
+def test_phase3g_run_cancel_fences_active_validation_attempt(
+    api_runtime,
+) -> None:
+    client, session_factory, _owner = api_runtime
+    now = datetime(2026, 8, 12, 18, 30, tzinfo=timezone.utc)
+    run_id, event_id = _complete_phase3c_dag_for_phase3g(api_runtime, now=now)
+    db = session_factory()
+    try:
+        with db.begin():
+            consume_run_validation_requested_event(
+                db,
+                event_id=event_id,
+                now=now + timedelta(seconds=90),
+            )
+            claim = claim_next_run_validation(
+                db,
+                worker_id="phase3g-cancelled-validator",
+                now=now + timedelta(seconds=91),
+            )
+            assert claim is not None
+            heartbeat_run_validation(
+                db,
+                claim,
+                now=now + timedelta(seconds=92),
+            )
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter_by(id=run_id).one()
+        assessment_id = str(run.assessment_id)
+    finally:
+        db.close()
+    run_url = f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    progress = client.get(run_url)
+    assert progress.status_code == 200
+    requested = client.post(
+        f"{run_url}/cancel",
+        headers={
+            "Idempotency-Key": _key(),
+            "If-Match": progress.headers["etag"],
+        },
+        json={"reason": "operator cancelled during run validation"},
+    )
+    assert requested.status_code == 202
+    maintenance = maintain_run_lifecycle(
+        session_factory=session_factory,
+        now=now + timedelta(seconds=100),
+    )
+    assert maintenance.scanned == maintenance.cancelled == 1
+
+    db = session_factory()
+    try:
+        validation = db.query(BidRunValidation).filter_by(run_id=run_id).one()
+        attempt = (
+            db.query(BidRunValidationAttempt)
+            .filter_by(validation_id=validation.id, id=claim.attempt_id)
+            .one()
+        )
+        run = db.query(BidAnalysisRun).filter_by(id=run_id).one()
+        assessment = db.query(BidAssessment).filter_by(id=assessment_id).one()
+        assert validation.status == "cancelled"
+        assert validation.failure_code == "BID_RUN_CANCELLED"
+        assert validation.lease_owner is None
+        assert validation.lease_until is None
+        assert attempt.status == "cancelled"
+        assert attempt.error_code == "BID_RUN_CANCELLED"
+        assert run.status == "cancelled"
+        assert assessment.business_status == "cancelled"
+        with pytest.raises(BidRunValidationFenceLost):
+            with db.begin_nested():
+                heartbeat_run_validation(db, claim)
+    finally:
+        db.close()
+
+
+def test_phase3_closeout_api40_tool_checkpoint_validation_api41_sse_chain(
+    api_runtime,
+) -> None:
+    """Exercise the complete deterministic A-G control-plane path without external I/O."""
+
+    client, session_factory, _owner = api_runtime
+    now = datetime(2026, 8, 12, 20, 0, tzinfo=timezone.utc)
+    session_factory, run_id, version_id = _prepare_phase3f_documents_outline(
+        api_runtime,
+        now=now,
+    )
+
+    db = session_factory()
+    try:
+        with db.begin():
+            first_claim = lease_next_ready_task(
+                db,
+                worker_id="phase3-closeout-tool-task",
+                now=now,
+            )
+            assert first_claim is not None
+            start_task_attempt(db, first_claim, now=now + timedelta(seconds=1))
+            context = assemble_context_manifest(
+                db,
+                first_claim,
+                working_state={"phase3_closeout": "tool_dispatch"},
+                now=now + timedelta(seconds=1),
+            )
+            invocation = authorize_tool_invocation(
+                db,
+                first_claim,
+                context_manifest_id=context.context_manifest_id,
+                tool_name="documents.outline",
+                arguments={"document_version_id": version_id, "max_depth": 4},
+                idempotency_key="phase3-closeout-outline-0001",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now + timedelta(seconds=2),
+            )
+            pending_checkpoint = write_task_checkpoint(
+                db,
+                first_claim,
+                action_seq=0,
+                state={"pending_invocation_id": invocation.invocation_id},
+                context_manifest_id=context.context_manifest_id,
+                budget_usage={"iterations": 1, "tool_calls": 1},
+                now=now + timedelta(seconds=2),
+            )
+            dispatch = enqueue_tool_dispatch(
+                db,
+                first_claim,
+                invocation_id=invocation.invocation_id,
+                checkpoint_id=pending_checkpoint.checkpoint_id,
+                scope_token=invocation.call_envelope["scope_token"],
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                timeout_seconds=60,
+                now=now + timedelta(seconds=2),
+            )
+            assert dispatch.status == "queued"
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            dispatch_claim = claim_next_tool_dispatch(
+                db,
+                worker_id="phase3-closeout-tool-executor",
+                scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+                now=now + timedelta(seconds=3),
+            )
+            assert dispatch_claim is not None
+    finally:
+        db.close()
+    assert execute_tool_dispatch_claim(
+        session_factory=session_factory,
+        claim=dispatch_claim,
+        now=now + timedelta(seconds=4),
+    ) == "succeeded"
+
+    db = session_factory()
+    try:
+        result_row = db.query(BidToolResult).one()
+        result_id = str(result_row.id)
+        result_hash = str(result_row.result_hash)
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            resumed = lease_next_ready_task(
+                db,
+                worker_id="phase3-closeout-resumed-task",
+                now=now + timedelta(seconds=5),
+            )
+            assert resumed is not None
+            assert resumed.task_id == first_claim.task_id
+            assert resumed.attempt_no == first_claim.attempt_no + 1
+            assert resumed.fencing_token == first_claim.fencing_token + 1
+            assert resumed.resume_checkpoint["checkpoint_id"] == (
+                pending_checkpoint.checkpoint_id
+            )
+            start_task_attempt(db, resumed, now=now + timedelta(seconds=6))
+            result_slice = read_tool_result_slice(
+                db,
+                resumed,
+                result_ref_id=result_id,
+                now=now + timedelta(seconds=6),
+            )
+            assert result_slice["result_hash"] == result_hash
+            final_checkpoint = write_task_checkpoint(
+                db,
+                resumed,
+                action_seq=0,
+                state={
+                    "phase3_closeout": "tool_result_consumed",
+                    "result_hash": result_hash,
+                },
+                tool_refs=[{"result_id": result_id, "result_hash": result_hash}],
+                budget_usage={"iterations": 2, "tool_calls": 1},
+                next_state="succeeded",
+                now=now + timedelta(seconds=7),
+            )
+            completion = complete_task_attempt(
+                db,
+                resumed,
+                completion=TaskCompletionReceipt(
+                    checkpoint_id=final_checkpoint.checkpoint_id,
+                    state_hash=final_checkpoint.state_hash,
+                    output_hash=canonical_hash(
+                        {"task_id": resumed.task_id, "result_hash": result_hash}
+                    ),
+                    completion_contract=resumed.task_contract["completion_contract"],
+                    validator_version="bid-task-output-validator-v1",
+                ),
+                now=now + timedelta(seconds=8),
+            )
+            assert completion.validation_requested is False
+    finally:
+        db.close()
+
+    completed_task_ids = {first_claim.task_id}
+    completion = None
+    for index in range(7):
+        task_now = now + timedelta(seconds=20 + index * 10)
+        db = session_factory()
+        try:
+            with db.begin():
+                claim = lease_next_ready_task(
+                    db,
+                    worker_id=f"phase3-closeout-task-{index}",
+                    now=task_now,
+                )
+                assert claim is not None
+                start_task_attempt(db, claim, now=task_now + timedelta(seconds=1))
+                checkpoint = write_task_checkpoint(
+                    db,
+                    claim,
+                    action_seq=0,
+                    state={"phase3_closeout": True, "task_id": claim.task_id},
+                    budget_usage={"iterations": 1, "tool_calls": 0},
+                    next_state="succeeded",
+                    now=task_now + timedelta(seconds=2),
+                )
+                completion = complete_task_attempt(
+                    db,
+                    claim,
+                    completion=TaskCompletionReceipt(
+                        checkpoint_id=checkpoint.checkpoint_id,
+                        state_hash=checkpoint.state_hash,
+                        output_hash=canonical_hash({"task_id": claim.task_id}),
+                        completion_contract=claim.task_contract["completion_contract"],
+                        validator_version="bid-task-output-validator-v1",
+                    ),
+                    now=task_now + timedelta(seconds=3),
+                )
+                completed_task_ids.add(claim.task_id)
+        finally:
+            db.close()
+    assert len(completed_task_ids) == 8
+    assert completion is not None and completion.validation_requested is True
+
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter_by(id=run_id).one()
+        assessment_id = str(run.assessment_id)
+        validation_event = (
+            db.query(BidOutboxEvent)
+            .filter_by(
+                run_id=run_id,
+                event_type="bid.run.validation_requested.v1",
+            )
+            .one()
+        )
+        validation_event_id = str(validation_event.event_id)
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            materialized = consume_run_validation_requested_event(
+                db,
+                event_id=validation_event_id,
+                now=now + timedelta(seconds=100),
+            )
+            assert materialized.duplicate is False
+            claim = claim_next_run_validation(
+                db,
+                worker_id="phase3-closeout-validator",
+                now=now + timedelta(seconds=101),
+            )
+            assert claim is not None
+            validation_result = execute_run_validation_claim(
+                db,
+                claim,
+                now=now + timedelta(seconds=102),
+            )
+            assert validation_result.outcome == "passed"
+            assert validation_result.run_status == "succeeded"
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            _previous_sequence, snapshot_rows = append_stream_control_events(
+                db,
+                assessment_id=assessment_id,
+                request_id="phase3-closeout-sse-snapshot",
+                now=now + timedelta(seconds=103),
+            )
+            snapshot_event_id = str(snapshot_rows[0].event_id)
+            terminal_event = (
+                db.query(BidOutboxEvent)
+                .filter_by(run_id=run_id, event_type="bid.run.succeeded.v1")
+                .one()
+            )
+            projected = project_outbox_event_to_public(
+                db,
+                event_id=str(terminal_event.event_id),
+                now=now + timedelta(seconds=104),
+            )
+            assert projected.duplicate is False
+            sequence_no = int(
+                db.query(func.max(BidPublicEvent.sequence_no))
+                .filter(BidPublicEvent.assessment_id == assessment_id)
+                .scalar()
+                or 0
+            ) + 1
+            closed_payload = {"reason": "run_terminal", "terminal": True}
+            db.add(
+                BidPublicEvent(
+                    id=str(uuid.uuid4()),
+                    assessment_id=assessment_id,
+                    sequence_no=sequence_no,
+                    event_id=f"aevt_{uuid.uuid4().hex}",
+                    origin_type="stream_control",
+                    source_event_id=None,
+                    projection_key=f"stream:phase3-closeout:{run_id}",
+                    event_type="stream.closed",
+                    resource_type="assessment",
+                    resource_id=assessment_id,
+                    resource_version=int(terminal_event.aggregate_version),
+                    request_id="phase3-closeout-sse-closed",
+                    payload_json=closed_payload,
+                    payload_hash=canonical_hash(closed_payload),
+                    occurred_at=now + timedelta(seconds=105),
+                    expires_at=now + timedelta(days=7),
+                )
+            )
+    finally:
+        db.close()
+
+    progress = client.get(f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}")
+    assert progress.status_code == 200
+    assert progress.json()["data"]["status"] == "succeeded"
+    assert progress.json()["data"]["latest_event"]["event_type"] == (
+        "run.status.changed"
+    )
+    stream = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/events",
+        headers={"Accept": "text/event-stream", "Last-Event-ID": snapshot_event_id},
+    )
+    assert stream.status_code == 200
+    assert "event: run.status.changed" in stream.text
+    assert '"to":"succeeded"' in stream.text
+    assert "event: stream.closed" in stream.text
+
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter_by(id=run_id).one()
+        validation = db.query(BidRunValidation).filter_by(run_id=run_id).one()
+        assert run.status == "succeeded"
+        assert validation.status == "passed"
+        assert validation.validator_version == "bid-run-integrity-validator-v2"
+        assert validation.result_json["summary"]["failed_codes"] == []
+        checks_by_code = {
+            row["code"]: row["passed"]
+            for row in validation.result_json["checks"]
+        }
+        lineage_checks = {
+            "TASK_ATTEMPT_CHAINS_MONOTONIC",
+            "CONTEXT_MANIFEST_LINEAGE_VALID",
+            "TOOL_INVOCATION_LINEAGE_VALID",
+            "ASYNC_OPERATION_LINEAGE_VALID",
+            "TOOL_DISPATCH_LINEAGE_VALID",
+            "TOOL_DISPATCH_ATTEMPT_CHAINS_MONOTONIC",
+            "TOOL_RESULTS_IMMUTABLE_AND_SCOPED",
+            "CHECKPOINT_TOOL_REFS_VALID",
+        }
+        assert lineage_checks <= set(checks_by_code)
+        assert all(checks_by_code[code] for code in lineage_checks)
+        assert db.query(BidPlanRevision).filter_by(run_id=run_id, status="committed").count() == 1
+        assert db.query(BidTask).filter_by(run_id=run_id, status="succeeded").count() == 8
+        assert db.query(BidContextManifest).filter_by(run_id=run_id).count() == 1
+        assert db.query(BidToolInvocation).filter_by(run_id=run_id, status="succeeded").count() == 1
+        assert db.query(BidToolDispatch).filter_by(status="succeeded").count() == 1
+        assert db.query(BidToolResult).count() == 1
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type.in_(
+                    (
+                        "bid.run.succeeded.v1",
+                        "bid.run.failed.v1",
+                        "bid.run.stale.v1",
+                        "bid.run.cancelled.v1",
+                    )
+                ),
+            )
+            .count()
+            == 1
+        )
+    finally:
+        db.close()
+
+
+def test_phase3d_api42_api43_enforce_command_headers_and_strict_bodies(
+    api_runtime,
+) -> None:
+    client, _session_factory, _owner = api_runtime
+    assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    run_url = f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    progress = client.get(run_url)
+    assert progress.status_code == 200
+    etag = progress.headers["etag"]
+
+    missing_key = client.post(
+        f"{run_url}/cancel",
+        headers={"If-Match": etag},
+        json={"reason": "负责人取消"},
+    )
+    assert missing_key.status_code == 422
+    assert missing_key.json()["error"]["error_code"] == "BID_REQUEST_VALIDATION_FAILED"
+
+    missing_etag = client.post(
+        f"{run_url}/cancel",
+        headers={"Idempotency-Key": _key()},
+        json={"reason": "负责人取消"},
+    )
+    assert missing_etag.status_code == 428
+    assert missing_etag.json()["error"]["error_code"] == "BID_PRECONDITION_REQUIRED"
+
+    weak_etag = client.post(
+        f"{run_url}/cancel",
+        headers={"Idempotency-Key": _key(), "If-Match": f"W/{etag}"},
+        json={"reason": "负责人取消"},
+    )
+    assert weak_etag.status_code == 400
+    assert weak_etag.json()["error"]["error_code"] == "BID_REQUEST_MALFORMED"
+
+    blank_reason = client.post(
+        f"{run_url}/cancel",
+        headers={"Idempotency-Key": _key(), "If-Match": etag},
+        json={"reason": "   "},
+    )
+    assert blank_reason.status_code == 422
+
+    invalid_retry_mode = client.post(
+        f"{run_url}/retry",
+        headers={"Idempotency-Key": _key(), "If-Match": etag},
+        json={"retry_mode": "restart_from_beginning", "note": None},
+    )
+    assert invalid_retry_mode.status_code == 422
+
+
+def test_phase3d_api42_cancel_is_idempotent_fences_worker_and_settles_atomically(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 11, 15, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(
+                db,
+                worker_id="phase3d-cancel-worker",
+                now=now,
+            )
+            assert claim is not None
+            start_task_attempt(db, claim, now=now + timedelta(seconds=1))
+            db.add(
+                BidAsyncOperation(
+                    id=str(uuid.uuid4()),
+                    task_id=claim.task_id,
+                    task_attempt_id=claim.attempt_id,
+                    operation_type="phase3d_test_operation",
+                    status="submitted",
+                    input_hash=canonical_hash({"attempt_id": claim.attempt_id}),
+                    retry_count=0,
+                    submitted_at=now + timedelta(seconds=2),
+                    row_version=1,
+                )
+            )
+    finally:
+        db.close()
+
+    progress = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    assert progress.status_code == 200
+    outsider = _create_user(session_factory)
+    client.app.state.active_user["value"] = outsider
+    hidden = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/cancel",
+        headers={"Idempotency-Key": _key(), "If-Match": progress.headers["etag"]},
+        json={"reason": "不属于该用户"},
+    )
+    assert hidden.status_code == 404
+
+    client.app.state.active_user["value"] = owner
+    key = _key()
+    requested = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/cancel",
+        headers={"Idempotency-Key": key, "If-Match": progress.headers["etag"]},
+        json={"reason": "负责人决定暂不继续"},
+    )
+    assert requested.status_code == 202
+    _validate_contract("RunResponse", requested.json())
+    requested_snapshot = requested.json()["data"]
+    assert requested_snapshot["status"] == "running"
+    assert requested_snapshot["current_stage"] == "cancelling"
+    assert requested_snapshot["stages"][0]["status"] == "running"
+    assert requested_snapshot["cancel_requested_at"] is not None
+    assert [row["code"] for row in requested_snapshot["allowed_actions"]] == [
+        "run.view_progress"
+    ]
+    replay = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/cancel",
+        headers={"Idempotency-Key": key, "If-Match": progress.headers["etag"]},
+        json={"reason": "负责人决定暂不继续"},
+    )
+    assert replay.status_code == 202
+    assert replay.headers["idempotent-replay"] == "true"
+    assert replay.json() == requested.json()
+    key_reuse = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/cancel",
+        headers={"Idempotency-Key": key, "If-Match": progress.headers["etag"]},
+        json={"reason": "同一键不得更换取消原因"},
+    )
+    assert key_reuse.status_code == 409
+    assert key_reuse.json()["error"]["error_code"] == "BID_IDEMPOTENCY_KEY_REUSED"
+
+    db = session_factory()
+    try:
+        with pytest.raises(BidTaskFenceLost):
+            with db.begin():
+                heartbeat_task_attempt(
+                    db,
+                    claim,
+                    now=now + timedelta(seconds=10),
+                )
+    finally:
+        db.close()
+
+    maintenance = maintain_run_lifecycle(
+        session_factory=session_factory,
+        now=now + timedelta(seconds=11),
+    )
+    assert maintenance.scanned == maintenance.cancelled == 1
+    assert maintenance.tasks_cancelled == 8
+    assert maintenance.attempts_cancelled == 1
+    assert maintenance.operations_cancelled == 1
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        assessment = (
+            db.query(BidAssessment)
+            .filter(BidAssessment.id == assessment_id)
+            .one()
+        )
+        assert run.status == "cancelled"
+        assert run.retryable is False
+        assert run.finished_at is not None
+        assert assessment.business_status == "cancelled"
+        assert db.query(BidTask).filter(BidTask.run_id == run_id, BidTask.status == "cancelled").count() == 8
+        assert db.query(BidTaskAttempt).filter_by(id=claim.attempt_id).one().status == "cancelled"
+        assert (
+            db.query(BidAsyncOperation)
+            .filter(BidAsyncOperation.task_attempt_id == claim.attempt_id)
+            .one()
+            .status
+            == "cancelled"
+        )
+        events = (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type.in_(
+                    ("bid.run.cancel_requested.v1", "bid.run.cancelled.v1")
+                ),
+            )
+            .order_by(BidOutboxEvent.occurred_at.asc(), BidOutboxEvent.event_id.asc())
+            .all()
+        )
+        event_ids_by_type = {str(row.event_type): str(row.event_id) for row in events}
+        assert set(event_ids_by_type) == {
+            "bid.run.cancel_requested.v1",
+            "bid.run.cancelled.v1",
+        }
+    finally:
+        db.close()
+    for event_type in ("bid.run.cancel_requested.v1", "bid.run.cancelled.v1"):
+        db = session_factory()
+        try:
+            with db.begin():
+                project_outbox_event_to_public(
+                    db,
+                    event_id=event_ids_by_type[event_type],
+                )
+        finally:
+            db.close()
+    final_snapshot = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    assert final_snapshot.status_code == 200
+    assert final_snapshot.json()["data"]["status"] == "cancelled"
+    assert final_snapshot.json()["data"]["latest_event"]["event_type"] == (
+        "run.status.changed"
+    )
+
+
+def test_phase3d_api43_creates_attempt_reuses_fence_and_exposes_resume_checkpoint(
+    api_runtime,
+) -> None:
+    client, session_factory, _owner = api_runtime
+    assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 11, 16, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            first = lease_next_ready_task(
+                db,
+                worker_id="phase3d-retry-old",
+                now=now,
+            )
+            assert first is not None
+            start_task_attempt(db, first, now=now + timedelta(seconds=1))
+            checkpoint = write_task_checkpoint(
+                db,
+                first,
+                action_seq=0,
+                state={"phase": "recoverable"},
+                tool_refs=[],
+                budget_usage={"iterations": 1, "tool_calls": 0},
+                next_state="running",
+                now=now + timedelta(seconds=2),
+            )
+            failed = fail_task_attempt(
+                db,
+                first,
+                error_code="BID_QUEUE_UNAVAILABLE",
+                retryable=True,
+                max_attempts=1,
+                now=now + timedelta(seconds=3),
+            )
+            assert failed.run_status == "failed"
+            assert failed.retry_scheduled is False
+    finally:
+        db.close()
+
+    failed_snapshot = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    assert failed_snapshot.status_code == 200
+    action_codes = {
+        row["code"] for row in failed_snapshot.json()["data"]["allowed_actions"]
+    }
+    assert {"run.cancel", "run.retry_from_checkpoint"}.issubset(action_codes)
+    key = _key()
+    retried = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/retry",
+        headers={
+            "Idempotency-Key": key,
+            "If-Match": failed_snapshot.headers["etag"],
+        },
+        json={"retry_mode": "from_latest_checkpoint", "note": "恢复失败任务"},
+    )
+    assert retried.status_code == 202
+    _validate_contract("RunResponse", retried.json())
+    assert retried.json()["data"]["status"] == "queued"
+    assert retried.json()["data"]["retryable"] is False
+    replay = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/retry",
+        headers={
+            "Idempotency-Key": key,
+            "If-Match": failed_snapshot.headers["etag"],
+        },
+        json={"retry_mode": "from_latest_checkpoint", "note": "恢复失败任务"},
+    )
+    assert replay.status_code == 202
+    assert replay.headers["idempotent-replay"] == "true"
+    assert replay.json() == retried.json()
+    key_reuse = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/retry",
+        headers={
+            "Idempotency-Key": key,
+            "If-Match": failed_snapshot.headers["etag"],
+        },
+        json={"retry_mode": "from_latest_checkpoint", "note": "改变备注"},
+    )
+    assert key_reuse.status_code == 409
+    assert key_reuse.json()["error"]["error_code"] == "BID_IDEMPOTENCY_KEY_REUSED"
+    stale_etag = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/retry",
+        headers={
+            "Idempotency-Key": _key(),
+            "If-Match": failed_snapshot.headers["etag"],
+        },
+        json={"retry_mode": "from_latest_checkpoint", "note": None},
+    )
+    assert stale_etag.status_code == 412
+
+    db = session_factory()
+    try:
+        attempts = (
+            db.query(BidTaskAttempt)
+            .filter(BidTaskAttempt.task_id == first.task_id)
+            .order_by(BidTaskAttempt.attempt_no.asc())
+            .all()
+        )
+        assert [row.attempt_no for row in attempts] == [1, 2]
+        assert [row.fencing_token for row in attempts] == [1, 2]
+        assert attempts[0].status == "failed"
+        assert attempts[1].status == "created"
+        created_attempt_id = str(attempts[1].id)
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.run.retry_requested.v1",
+            )
+            .count()
+            == 1
+        )
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        with db.begin():
+            second = lease_next_ready_task(
+                db,
+                worker_id="phase3d-retry-new",
+                now=now + timedelta(seconds=20),
+            )
+            assert second is not None
+            assert second.attempt_id == created_attempt_id
+            assert second.attempt_no == second.fencing_token == 2
+            assert second.resume_checkpoint is not None
+            assert second.resume_checkpoint["checkpoint_id"] == checkpoint.checkpoint_id
+            assert second.resume_checkpoint["state_hash"] == checkpoint.state_hash
+            with pytest.raises(BidTaskFenceLost):
+                heartbeat_task_attempt(
+                    db,
+                    first,
+                    now=now + timedelta(seconds=21),
+                )
+    finally:
+        db.close()
+
+    current = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    not_retryable = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/retry",
+        headers={"Idempotency-Key": _key(), "If-Match": current.headers["etag"]},
+        json={"retry_mode": "from_latest_checkpoint", "note": None},
+    )
+    assert not_retryable.status_code == 409
+    assert not_retryable.json()["error"]["error_code"] == "BID_RUN_NOT_RETRYABLE"
+
+
+def test_phase3d_api43_rejects_stale_input_without_creating_attempt(api_runtime) -> None:
+    client, session_factory, _owner = api_runtime
+    assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 11, 17, 0, tzinfo=timezone.utc)
+    db = session_factory()
+    try:
+        with db.begin():
+            claim = lease_next_ready_task(db, worker_id="phase3d-stale", now=now)
+            assert claim is not None
+            start_task_attempt(db, claim, now=now + timedelta(seconds=1))
+            fail_task_attempt(
+                db,
+                claim,
+                error_code="BID_QUEUE_UNAVAILABLE",
+                retryable=True,
+                max_attempts=1,
+                now=now + timedelta(seconds=2),
+            )
+    finally:
+        db.close()
+    failed_snapshot = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            assessment = (
+                db.query(BidAssessment)
+                .filter(BidAssessment.id == assessment_id)
+                .one()
+            )
+            assessment.business_status = "stale_input"
+            assessment.row_version = int(assessment.row_version) + 1
+    finally:
+        db.close()
+    response = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/retry",
+        headers={
+            "Idempotency-Key": _key(),
+            "If-Match": failed_snapshot.headers["etag"],
+        },
+        json={"retry_mode": "from_latest_checkpoint", "note": None},
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["error_code"] == "BID_RUN_INPUT_STALE"
+    db = session_factory()
+    try:
+        assert (
+            db.query(BidTaskAttempt)
+            .filter(BidTaskAttempt.task_id == claim.task_id)
+            .count()
+            == 1
+        )
+    finally:
+        db.close()
+
+
+def test_phase3d_cancel_audit_failure_rolls_back_run_outbox_and_idempotency(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    client, session_factory, _owner = api_runtime
+    assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    progress = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    key = _key()
+
+    def _raise_audit_failure(*_args, **_kwargs):
+        raise RuntimeError("synthetic-run-lifecycle-audit-failure")
+
+    monkeypatch.setattr(
+        run_lifecycle_service,
+        "append_audit_log",
+        _raise_audit_failure,
+    )
+    response = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}/cancel",
+        headers={"Idempotency-Key": key, "If-Match": progress.headers["etag"]},
+        json={"reason": "验证事务回滚"},
+    )
+    assert response.status_code == 503
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        assert run.cancel_requested_at is None
+        assert run.current_stage == "fact_baseline"
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.run.cancel_requested.v1",
+            )
+            .count()
+            == 0
+        )
+        assert (
+            db.query(BidIdempotencyRecord)
+            .filter(BidIdempotencyRecord.idempotency_key == key)
+            .count()
+            == 0
+        )
+    finally:
+        db.close()
+
+
+def test_phase3b_plan_commit_is_atomic_deterministic_and_exactly_once(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    created = _create_assessment(client)
+    assessment_id = created.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    _attach_phase3_scope(
+        session_factory,
+        assessment_id=assessment_id,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    _activate_phase3_frozen_versions(session_factory, actor_id=owner.id)
+    current = client.get(f"/api/v1/bid-assessments/{assessment_id}")
+    started = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs",
+        headers={"Idempotency-Key": _key(), "If-Match": current.headers["etag"]},
+        json={
+            "manifest_id": manifest_id,
+            "reason": "manual_restart",
+            "note": "Phase 3B deterministic plan commit",
+        },
+    )
+    assert started.status_code == 202
+    run_id = started.json()["data"]["run_id"]
+
+    db = session_factory()
+    try:
+        created_event = (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.event_type == "bid.run.created.v1",
+                BidOutboxEvent.run_id == run_id,
+            )
+            .one()
+        )
+        created_event_id = str(created_event.event_id)
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            first = consume_run_created_event(db, event_id=created_event_id)
+        assert first.duplicate is False
+        assert first.value["committed"] is True
+        assert first.value["task_count"] == 8
+        assert first.value["ready_task_count"] == 1
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        plan = (
+            db.query(BidPlanRevision)
+            .filter(BidPlanRevision.run_id == run_id)
+            .one()
+        )
+        tasks = (
+            db.query(BidTask)
+            .filter(BidTask.run_id == run_id)
+            .order_by(BidTask.task_key.asc())
+            .all()
+        )
+        assert run.status == "queued"
+        assert run.current_stage == "fact_baseline"
+        assert run.row_version == 4
+        assert plan.status == "committed"
+        assert plan.committed_slot_key == "committed"
+        assert plan.row_version == 3
+        assert plan.proposal_json["schema"] == "bid.plan.commit.envelope.v1"
+        assert plan.proposal_json["validation"]["validated_hash"] == plan.validated_hash
+        assert len(tasks) == 8
+        assert [task.status for task in tasks].count("ready") == 1
+        assert [task.status for task in tasks].count("blocked") == 7
+        assert (
+            db.query(BidTaskDependency)
+            .filter(BidTaskDependency.run_id == run_id)
+            .count()
+            == 7
+        )
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.plan.committed.v1",
+            )
+            .count()
+            == 1
+        )
+        ready_event = (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type == "bid.task.ready.v1",
+            )
+            .one()
+        )
+        assert ready_event.payload_json["resource_version"] == run.row_version
+        ready_event_id = str(ready_event.event_id)
+        assert (
+            db.query(BidAuditLog)
+            .filter(
+                BidAuditLog.action == "plan.commit",
+                BidAuditLog.entity_id == plan.id,
+            )
+            .count()
+            == 1
+        )
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            replay = consume_run_created_event(db, event_id=created_event_id)
+        assert replay.duplicate is True
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            projected = project_outbox_event_to_public(db, event_id=ready_event_id)
+        assert projected.duplicate is False
+    finally:
+        db.close()
+    progress = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    assert progress.status_code == 200
+    assert progress.json()["data"]["status"] == "queued"
+    assert progress.json()["data"]["current_stage"] == "fact_baseline"
+    assert progress.json()["data"]["latest_event"]["event_type"] == (
+        "run.stage.changed"
+    )
+
+
+def test_phase3b_plan_commit_rolls_back_all_writes_on_audit_failure(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    client, session_factory, owner = api_runtime
+    created = _create_assessment(client)
+    assessment_id = created.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    _attach_phase3_scope(
+        session_factory,
+        assessment_id=assessment_id,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    _activate_phase3_frozen_versions(session_factory, actor_id=owner.id)
+    current = client.get(f"/api/v1/bid-assessments/{assessment_id}")
+    started = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs",
+        headers={"Idempotency-Key": _key(), "If-Match": current.headers["etag"]},
+        json={
+            "manifest_id": manifest_id,
+            "reason": "manual_restart",
+            "note": "Phase 3B rollback boundary",
+        },
+    )
+    assert started.status_code == 202
+    run_id = started.json()["data"]["run_id"]
+
+    db = session_factory()
+    try:
+        created_event_id = str(
+            db.query(BidOutboxEvent.event_id)
+            .filter(
+                BidOutboxEvent.event_type == "bid.run.created.v1",
+                BidOutboxEvent.run_id == run_id,
+            )
+            .scalar()
+        )
+    finally:
+        db.close()
+
+    def _raise_audit_failure(*_args, **_kwargs):
+        raise RuntimeError("synthetic-plan-audit-failure")
+
+    monkeypatch.setattr(
+        plan_commit_service,
+        "append_audit_log",
+        _raise_audit_failure,
+    )
+    db = session_factory()
+    try:
+        with pytest.raises(RuntimeError, match="synthetic-plan-audit-failure"):
+            with db.begin():
+                consume_run_created_event(db, event_id=created_event_id)
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        assert run.status == "created"
+        assert run.current_stage == "planning"
+        assert run.row_version == 1
+        assert db.query(BidPlanRevision).filter(BidPlanRevision.run_id == run_id).count() == 0
+        assert db.query(BidTask).filter(BidTask.run_id == run_id).count() == 0
+        assert (
+            db.query(BidTaskDependency)
+            .filter(BidTaskDependency.run_id == run_id)
+            .count()
+            == 0
+        )
+        assert (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.run_id == run_id,
+                BidOutboxEvent.event_type.in_(
+                    {"bid.plan.committed.v1", "bid.task.ready.v1"}
+                ),
+            )
+            .count()
+            == 0
+        )
+        assert (
+            db.query(BidProcessedEvent)
+            .filter(
+                BidProcessedEvent.consumer_name == PLAN_COMMIT_CONSUMER,
+                BidProcessedEvent.event_id == created_event_id,
+            )
+            .count()
+            == 0
+        )
+    finally:
+        db.close()
+
+
+def test_phase3b_maintenance_scan_recovers_unprocessed_run_created_event(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    created = _create_assessment(client)
+    assessment_id = created.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    _attach_phase3_scope(
+        session_factory,
+        assessment_id=assessment_id,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    _activate_phase3_frozen_versions(session_factory, actor_id=owner.id)
+    current = client.get(f"/api/v1/bid-assessments/{assessment_id}")
+    started = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs",
+        headers={"Idempotency-Key": _key(), "If-Match": current.headers["etag"]},
+        json={
+            "manifest_id": manifest_id,
+            "reason": "manual_restart",
+            "note": "Phase 3B maintenance recovery",
+        },
+    )
+    assert started.status_code == 202
+    run_id = started.json()["data"]["run_id"]
+
+    first = process_pending_plan_commits(
+        session_factory=session_factory,
+        limit=20,
+    )
+    assert first.scanned == 1
+    assert first.committed == 1
+    assert first.duplicate == 0
+    assert first.ignored == 0
+    assert first.failed == 0
+
+    replay = process_pending_plan_commits(
+        session_factory=session_factory,
+        limit=20,
+    )
+    assert replay.scanned == 0
+    assert replay.committed == 0
+    assert replay.failed == 0
+
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        assert run.status == "queued"
+        assert (
+            db.query(BidPlanRevision)
+            .filter(
+                BidPlanRevision.run_id == run_id,
+                BidPlanRevision.status == "committed",
+            )
+            .count()
+            == 1
+        )
+        assert (
+            db.query(BidProcessedEvent)
+            .filter(BidProcessedEvent.consumer_name == PLAN_COMMIT_CONSUMER)
+            .count()
+            == 1
+        )
+    finally:
+        db.close()
+
+
+def _attach_phase3_scope(
+    session_factory,
+    *,
+    assessment_id: str,
+    manifest_id: str,
+    actor_id: int,
+) -> dict[str, str]:
+    marker = uuid.uuid4().hex
+    scope_id = str(uuid.uuid4())
+    lot_id = f"lot-{marker}"
+    snapshot = {
+        "schema_version": "bid-assessment-lot-scope-v1",
+        "assessment_id": assessment_id,
+        "manifest_id": manifest_id,
+        "lot_id": lot_id,
+        "lot_name": "Phase 3A 测试标段",
+        "operation_id": f"op-{marker}",
+    }
+    db = session_factory()
+    try:
+        with db.begin():
+            assessment = (
+                db.query(BidAssessment)
+                .filter(BidAssessment.id == assessment_id)
+                .one()
+            )
+            db.add(
+                BidAssessmentScope(
+                    id=scope_id,
+                    assessment_id=assessment_id,
+                    version=1,
+                    scope_type="lot",
+                    source_lot_candidate_id=None,
+                    selected_lot_snapshot_json=snapshot,
+                    scope_hash=canonical_hash(snapshot),
+                    created_by=actor_id,
+                )
+            )
+            assessment.business_status = "preliminary_ready"
+            assessment.row_version = int(assessment.row_version) + 1
+        return {"scope_id": scope_id, "lot_id": lot_id}
+    finally:
+        db.close()
+
+
+def _activate_phase3_frozen_versions(
+    session_factory,
+    *,
+    actor_id: int,
+    phase4_model_gateway: bool = False,
+) -> dict[str, str]:
+    marker = uuid.uuid4().hex
+    now = datetime.now(timezone.utc)
+    governed_at = now - timedelta(minutes=5)
+    versions = {
+        "enterprise_snapshot_version": f"enterprise-{marker}",
+        "rule_set_version": f"rules-{marker}",
+        "fact_catalog_version": f"facts-{marker}",
+        "prompt_bundle_version": f"prompts-{marker}",
+        "tool_registry_version": f"tools-{marker}",
+        "model_profile_version": f"models-{marker}",
+        "formula_catalog_version": f"formulas-{marker}",
+    }
+    db = session_factory()
+    try:
+        with db.begin():
+            enterprise = BidEnterpriseSnapshot(
+                id=str(uuid.uuid4()),
+                version=versions["enterprise_snapshot_version"],
+                as_of=governed_at,
+                snapshot_hash=canonical_hash(
+                    {"marker": marker, "type": "enterprise"}
+                ),
+                source_catalog_version="test-catalog-v1",
+                status="frozen",
+                error_code=None,
+                created_by=actor_id,
+                frozen_by=actor_id,
+                frozen_at=governed_at,
+                row_version=1,
+            )
+            common = {
+                "status": "active",
+                "active_slot_key": "active",
+                "authored_by": actor_id,
+                "reviewed_by": actor_id,
+                "reviewed_at": governed_at,
+                "activated_at": governed_at,
+                "row_version": 1,
+            }
+            rule_set = BidRuleSet(
+                id=str(uuid.uuid4()),
+                version=versions["rule_set_version"],
+                artifact_ref=f"memory://rules/{marker}",
+                artifact_hash=canonical_hash({"marker": marker, "type": "rules"}),
+                effective_from=governed_at,
+                effective_to=None,
+                test_cases_ref=f"memory://rules/{marker}/tests",
+                **common,
+            )
+            fact_catalog = BidFactCatalogVersion(
+                id=str(uuid.uuid4()),
+                version=versions["fact_catalog_version"],
+                artifact_ref=f"memory://facts/{marker}",
+                artifact_hash=canonical_hash({"marker": marker, "type": "facts"}),
+                schema_version="v1",
+                **common,
+            )
+            prompt_bundle = BidPromptBundle(
+                id=str(uuid.uuid4()),
+                version=versions["prompt_bundle_version"],
+                artifact_ref=f"memory://prompts/{marker}",
+                artifact_hash=canonical_hash({"marker": marker, "type": "prompts"}),
+                bundle_schema_version="v1",
+                **common,
+            )
+            tool_registry = BidToolRegistryVersion(
+                id=str(uuid.uuid4()),
+                version=versions["tool_registry_version"],
+                artifact_ref=f"memory://tools/{marker}",
+                artifact_hash=canonical_hash({"marker": marker, "type": "tools"}),
+                registry_schema_version="v1",
+                **common,
+            )
+            provider_identifiers = (
+                {
+                    "local-test-provider": {
+                        "adapter_kind": "injected_test_provider",
+                        "endpoint_class": "local_only",
+                    }
+                }
+                if phase4_model_gateway
+                else {}
+            )
+            model_identifiers = (
+                {
+                    "local-action-model": {
+                        "provider_ref": "local-test-provider",
+                        "capability": "closed_task_action",
+                    }
+                }
+                if phase4_model_gateway
+                else {}
+            )
+            role_routing = (
+                {
+                    role: {
+                        "provider_ref": "local-test-provider",
+                        "model_ref": "local-action-model",
+                        "prompt_role": f"{role}.task-action.v1",
+                        "action_schema": "bid.task.action.v1",
+                        "replay_policy": "safe_idempotent",
+                        "max_attempts": 2,
+                        "timeout_seconds": 120,
+                        "reserved_cost_microunits": 100000,
+                    }
+                    for role in (
+                        "local_research",
+                        "synthesizer",
+                        "evidence_validator",
+                        "report_writer",
+                    )
+                }
+                if phase4_model_gateway
+                else {}
+            )
+            model_profile = BidModelProfileVersion(
+                id=str(uuid.uuid4()),
+                version=versions["model_profile_version"],
+                artifact_ref=f"memory://models/{marker}",
+                artifact_hash=canonical_hash(
+                    {
+                        "role_routing": role_routing,
+                        "provider_identifiers": provider_identifiers,
+                        "model_identifiers": model_identifiers,
+                    }
+                ),
+                role_routing_json=role_routing,
+                provider_identifiers_json=provider_identifiers,
+                model_identifiers_json=model_identifiers,
+                **common,
+            )
+            formula_catalog = BidFormulaCatalogVersion(
+                id=str(uuid.uuid4()),
+                version=versions["formula_catalog_version"],
+                artifact_ref=f"memory://formulas/{marker}",
+                artifact_hash=canonical_hash(
+                    {"marker": marker, "type": "formulas"}
+                ),
+                rounding_policy_json={},
+                **common,
+            )
+            db.add_all(
+                [
+                    enterprise,
+                    rule_set,
+                    fact_catalog,
+                    prompt_bundle,
+                    tool_registry,
+                    model_profile,
+                    formula_catalog,
+                ]
+            )
+        return versions
+    finally:
+        db.close()
+
+
+def _phase2_lot_selection_fixture(
+    client: TestClient,
+    session_factory,
+    *,
+    owner: User,
+) -> dict[str, str]:
+    assessment = _create_assessment(client)
+    assessment_id = assessment.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    document_id = _attach_manifest_document(
+        session_factory,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    lot_id, detection_run_id, evidence_id = _attach_phase2_lot_candidate(
+        session_factory,
+        assessment_id=assessment_id,
+        manifest_id=manifest_id,
+        document_id=document_id,
+    )
+    snapshot = client.get(f"/api/v1/bid-assessments/{assessment_id}")
+    assert snapshot.status_code == 200
+    candidates = client.get(f"/api/v1/bid-assessments/{assessment_id}/lots")
+    assert candidates.status_code == 200
+    assert candidates.json()["data"]["selection_required"] is True
+    return {
+        "assessment_id": assessment_id,
+        "manifest_id": manifest_id,
+        "lot_id": lot_id,
+        "detection_run_id": detection_run_id,
+        "evidence_id": evidence_id,
+        "etag": snapshot.headers["etag"],
+    }
+
+
+def _attach_additional_phase2_lot_candidate(
+    session_factory,
+    *,
+    manifest_id: str,
+    detection_run_id: str,
+    evidence_id: str,
+) -> str:
+    lot_id = f"lot_{uuid.uuid4().hex}"
+    db = session_factory()
+    try:
+        with db.begin():
+            evidence = (
+                db.query(BidEvidenceFragment)
+                .filter(BidEvidenceFragment.id == evidence_id)
+                .one()
+            )
+            detection_run = (
+                db.query(BidLotDetectionRun)
+                .filter(BidLotDetectionRun.id == detection_run_id)
+                .one()
+            )
+            candidate_payload = {
+                "lot_code": "2",
+                "lot_name": "机电安装工程",
+                "normalized_lot_key": "标段:2",
+            }
+            db.add(
+                BidLotCandidate(
+                    id=lot_id,
+                    manifest_id=manifest_id,
+                    detection_run_id=detection_run_id,
+                    lot_code="2",
+                    lot_name="机电安装工程",
+                    scope_summary="正文明确列示第二标段",
+                    normalized_lot_key="标段:2",
+                    source_status="detected",
+                    confidence=Decimal("0.880000"),
+                    confidence_level="high",
+                    candidate_hash=canonical_hash(candidate_payload),
+                    warnings_json=[],
+                )
+            )
+            db.flush()
+            db.add(
+                BidLotCandidateEvidence(
+                    lot_candidate_id=lot_id,
+                    evidence_id=evidence_id,
+                    manifest_id=manifest_id,
+                    document_version_id=str(evidence.document_version_id),
+                    support_role="identity",
+                    display_order=0,
+                    display_label="第1页—第二标段",
+                )
+            )
+            detection_run.candidate_count = int(detection_run.candidate_count) + 1
+            detection_run.result_hash = canonical_hash(
+                {
+                    "previous_result_hash": detection_run.result_hash,
+                    "additional_lot_id": lot_id,
+                }
+            )
+        return lot_id
+    finally:
+        db.close()
+
+
+def test_api30_not_started_is_read_only_private_and_conditionally_cached(
+    api_runtime,
+) -> None:
+    client, session_factory, _owner = api_runtime
+    assessment = _create_assessment(client)
+    assessment_id = assessment.json()["data"]["assessment_id"]
+    before = _counts(session_factory)
+
+    response = client.get(f"/api/v1/bid-assessments/{assessment_id}/lots")
+
+    assert response.status_code == 200
+    _validate_contract("LotCandidatePageResponse", response.json())
+    assert response.json()["data"]["manifest"] is None
+    assert response.json()["data"]["generation"]["status"] == "not_started"
+    assert response.json()["data"]["candidates"] == []
+    assert response.json()["data"]["blocking_reason"]["code"] == (
+        "manifest_not_available"
+    )
+    assert response.headers["cache-control"] == (
+        "private, no-cache, max-age=0, must-revalidate"
+    )
+    assert response.headers["vary"] == "Authorization"
+    unchanged = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/lots",
+        headers={"If-None-Match": f'W/{response.headers["etag"]}'},
+    )
+    assert unchanged.status_code == 304
+    assert unchanged.content == b""
+    assert _counts(session_factory) == before
+
+
+def test_api30_projects_evidence_selection_and_scope_without_storage_access(
+    api_runtime,
+    monkeypatch,
+) -> None:
+    client, session_factory, owner = api_runtime
+    assessment = _create_assessment(client)
+    assessment_id = assessment.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    document_id = _attach_manifest_document(
+        session_factory,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    lot_id, detection_run_id, evidence_id = _attach_phase2_lot_candidate(
+        session_factory,
+        assessment_id=assessment_id,
+        manifest_id=manifest_id,
+        document_id=document_id,
+    )
+    monkeypatch.setattr(
+        assessments_api,
+        "get_bid_upload_object_storage",
+        lambda: (_ for _ in ()).throw(AssertionError("API-30 touched storage")),
+    )
+
+    response = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/lots",
+        params={"manifest_id": manifest_id},
+    )
+
+    assert response.status_code == 200
+    _validate_contract("LotCandidatePageResponse", response.json())
+    page = response.json()["data"]
+    assert page["generation"]["status"] == "succeeded"
+    assert page["generation"]["detection_run_id"] == detection_run_id
+    assert page["generation"]["candidate_count"] == 1
+    assert page["selection_required"] is True
+    assert page["blocking_reason"] is None
+    assert [action["code"] for action in page["allowed_actions"]] == ["lot.select"]
+    assert page["candidates"] == [
+        {
+            "lot_id": lot_id,
+            "detection_run_id": detection_run_id,
+            "lot_code": "1",
+            "lot_name": "室内装饰工程",
+            "scope_summary": "正文明确列示第一标段",
+            "status": "candidate",
+            "confidence": "high",
+            "confidence_score": "0.9",
+            "evidence_refs": [
+                {
+                    "evidence_id": evidence_id,
+                    "display_label": "第1页",
+                    "detail_url": f"/api/v1/bid-evidence/{evidence_id}",
+                }
+            ],
+            "warnings": [],
+        }
+    ]
+
+    db = session_factory()
+    try:
+        with db.begin():
+            current = (
+                db.query(BidAssessment)
+                .filter(BidAssessment.id == assessment_id)
+                .one()
+            )
+            db.add(
+                BidAssessmentScope(
+                    id=f"scope_{uuid.uuid4().hex[:30]}",
+                    assessment_id=assessment_id,
+                    version=1,
+                    scope_type="lot",
+                    source_lot_candidate_id=lot_id,
+                    selected_lot_snapshot_json={
+                        "lot_id": lot_id,
+                        "lot_code": "1",
+                        "lot_name": "室内装饰工程",
+                    },
+                    scope_hash="9" * 64,
+                    created_by=owner.id,
+                )
+            )
+            current.business_status = "preliminary_analyzing"
+            current.row_version = int(current.row_version) + 1
+    finally:
+        db.close()
+
+    selected = client.get(f"/api/v1/bid-assessments/{assessment_id}/lots")
+    assert selected.status_code == 200
+    _validate_contract("LotCandidatePageResponse", selected.json())
+    selected_page = selected.json()["data"]
+    assert selected_page["selection_required"] is False
+    assert selected_page["selected_lot_id"] == lot_id
+    assert selected_page["candidates"][0]["status"] == "selected"
+    assert [action["code"] for action in selected_page["allowed_actions"]] == [
+        "assessment.create_for_other_lot"
+    ]
+    assert selected.headers["etag"] != response.headers["etag"]
+
+
+def test_api31_atomically_binds_scope_projects_reads_events_and_domain_retries(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    fixture = _phase2_lot_selection_fixture(
+        client,
+        session_factory,
+        owner=owner,
+    )
+    key = _key()
+    body = {
+        "manifest_id": fixture["manifest_id"],
+        "lot_id": fixture["lot_id"],
+        "selection_note": "  首次选择，以正文标段证据为准  ",
+    }
+    before = _counts(session_factory)
+
+    selected = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/lot-selection",
+        headers={"Idempotency-Key": key, "If-Match": fixture["etag"]},
+        json=body,
+    )
+
+    assert selected.status_code == 202
+    _validate_contract("LotSelectionResponse", selected.json())
+    result = selected.json()["data"]
+    assert result["scope"]["lot_id"] == fixture["lot_id"]
+    assert result["scope"]["scope_version"] == 1
+    assert result["accepted_operation"]["status"] == "accepted"
+    assert result["run"] is None
+    assert result["assessment"]["business_status"] == "preliminary_analyzing"
+    assert result["assessment"]["active_run"] is None
+    assert result["assessment"]["scope"] == result["scope"]
+    assert selected.headers["location"] == (
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}"
+    )
+    assert selected.headers["etag"] != fixture["etag"]
+    assert selected.headers["x-resource-version"] == str(
+        result["assessment"]["row_version"]
+    )
+    assert selected.headers["cache-control"] == "private, no-store"
+    assert "idempotent-replay" not in selected.headers
+
+    after = _counts(session_factory)
+    assert after == {
+        **before,
+        "run": before["run"],
+        "outbox": before["outbox"] + 2,
+        "audit": before["audit"] + 1,
+        "idempotency": before["idempotency"] + 1,
+    }
+    db = session_factory()
+    try:
+        scope = db.query(BidAssessmentScope).one()
+        assessment_row = (
+            db.query(BidAssessment)
+            .filter(BidAssessment.id == fixture["assessment_id"])
+            .one()
+        )
+        events = {
+            row.event_type: row
+            for row in (
+                db.query(BidOutboxEvent)
+                .filter(
+                    BidOutboxEvent.event_type.in_(
+                        ["bid.lot.selected.v1", "bid.plan.requested.v1"]
+                    )
+                )
+                .all()
+            )
+        }
+        audit = (
+            db.query(BidAuditLog)
+            .filter(BidAuditLog.action == "lot.select")
+            .one()
+        )
+        idempotency = (
+            db.query(BidIdempotencyRecord)
+            .filter(BidIdempotencyRecord.idempotency_key == key)
+            .one()
+        )
+        snapshot = dict(scope.selected_lot_snapshot_json)
+        assert scope.id == result["scope"]["scope_id"]
+        assert scope.source_lot_candidate_id == fixture["lot_id"]
+        assert scope.scope_hash == canonical_hash(snapshot)
+        assert snapshot["manifest_id"] == fixture["manifest_id"]
+        assert snapshot["detection_run_id"] == fixture["detection_run_id"]
+        assert snapshot["evidence_ids"] == [fixture["evidence_id"]]
+        assert snapshot["selection_note"] == "首次选择，以正文标段证据为准"
+        assert snapshot["operation_id"] == result["accepted_operation"]["operation_id"]
+        assert assessment_row.active_run_id is None
+        assert db.query(BidAnalysisRun).count() == 0
+        lot_event = events["bid.lot.selected.v1"]
+        plan_event = events["bid.plan.requested.v1"]
+        assert lot_event.aggregate_type == plan_event.aggregate_type == "scope"
+        assert lot_event.aggregate_id == plan_event.aggregate_id == scope.id
+        assert lot_event.payload_json["scope_id"] == scope.id
+        assert lot_event.payload_json["lot_id"] == fixture["lot_id"]
+        assert lot_event.payload_json["from"] == "awaiting_lot_selection"
+        assert lot_event.payload_json["to"] == "preliminary_analyzing"
+        assert plan_event.causation_event_id == lot_event.event_id
+        assert plan_event.payload_json["requested_run_kind"] == "preliminary"
+        assert plan_event.payload_json["operation_id"] == snapshot["operation_id"]
+        assert audit.entity_id == scope.id
+        assert audit.correlation_id == plan_event.event_id
+        assert idempotency.status == "completed"
+        assert idempotency.resource_type == "scope"
+        assert idempotency.resource_id == scope.id
+        lot_event_id = lot_event.event_id
+    finally:
+        db.close()
+
+    api03 = client.get(f"/api/v1/bid-assessments/{fixture['assessment_id']}")
+    assert api03.status_code == 200
+    _validate_contract("AssessmentResponse", api03.json())
+    assert api03.json()["data"]["scope"] == result["scope"]
+    assert api03.json()["data"]["business_status"] == "preliminary_analyzing"
+    api30 = client.get(f"/api/v1/bid-assessments/{fixture['assessment_id']}/lots")
+    assert api30.status_code == 200
+    _validate_contract("LotCandidatePageResponse", api30.json())
+    assert api30.json()["data"]["selection_required"] is False
+    assert api30.json()["data"]["selected_lot_id"] == fixture["lot_id"]
+    assert api30.json()["data"]["candidates"][0]["status"] == "selected"
+    assert [
+        action["code"] for action in api30.json()["data"]["allowed_actions"]
+    ] == ["assessment.create_for_other_lot"]
+
+    db = session_factory()
+    try:
+        with db.begin():
+            projection = project_outbox_event_to_public(db, event_id=lot_event_id)
+        assert projection.duplicate is False
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        public = (
+            db.query(BidPublicEvent)
+            .filter(BidPublicEvent.source_event_id == lot_event_id)
+            .one()
+        )
+        assert public.event_type == "lot.selected"
+        assert public.resource_type == "assessment"
+        assert public.resource_id == fixture["assessment_id"]
+        assert public.resource_version == result["assessment"]["row_version"]
+        assert public.payload_json == {
+            "scope_id": result["scope"]["scope_id"],
+            "lot_id": fixture["lot_id"],
+        }
+    finally:
+        db.close()
+
+    replay = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/lot-selection",
+        headers={"Idempotency-Key": key, "If-Match": fixture["etag"]},
+        json=body,
+    )
+    assert replay.status_code == 202
+    assert replay.headers["idempotent-replay"] == "true"
+    assert replay.json() == selected.json()
+    after_replay = _counts(session_factory)
+    assert after_replay == after
+
+    domain_retry = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/lot-selection",
+        headers={"Idempotency-Key": _key(), "If-Match": selected.headers["etag"]},
+        json={**body, "selection_note": "不会改写首次快照"},
+    )
+    assert domain_retry.status_code == 202
+    _validate_contract("LotSelectionResponse", domain_retry.json())
+    assert domain_retry.json()["data"]["scope"] == result["scope"]
+    assert domain_retry.json()["data"]["accepted_operation"] == result[
+        "accepted_operation"
+    ]
+    final_counts = _counts(session_factory)
+    assert final_counts["outbox"] == after["outbox"]
+    assert final_counts["audit"] == after["audit"]
+    assert final_counts["run"] == 0
+    assert final_counts["idempotency"] == after["idempotency"] + 1
+
+
+def test_api31_rejects_stale_version_unready_candidates_and_other_scope(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    assessment = _create_assessment(client)
+    assessment_id = assessment.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            current = (
+                db.query(BidAssessment)
+                .filter(BidAssessment.id == assessment_id)
+                .one()
+            )
+            current.business_status = "awaiting_lot_selection"
+            current.row_version = int(current.row_version) + 1
+    finally:
+        db.close()
+    current = client.get(f"/api/v1/bid-assessments/{assessment_id}")
+    assert current.status_code == 200
+    request_body = {
+        "manifest_id": manifest_id,
+        "lot_id": "lot_not_ready",
+        "selection_note": None,
+    }
+
+    stale = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/lot-selection",
+        headers={
+            "Idempotency-Key": _key(),
+            "If-Match": f'"bid-assessment:{assessment_id}:1"',
+        },
+        json=request_body,
+    )
+    assert stale.status_code == 412
+    _validate_contract("ErrorEnvelope", stale.json())
+    assert stale.json()["error"]["error_code"] == "BID_RESOURCE_VERSION_MISMATCH"
+    assert stale.headers["etag"] == current.headers["etag"]
+
+    not_ready = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/lot-selection",
+        headers={"Idempotency-Key": _key(), "If-Match": current.headers["etag"]},
+        json=request_body,
+    )
+    assert not_ready.status_code == 409
+    _validate_contract("ErrorEnvelope", not_ready.json())
+    assert not_ready.json()["error"]["error_code"] == (
+        "BID_LOT_CANDIDATES_NOT_READY"
+    )
+    assert not_ready.json()["error"]["retryable"] is True
+
+    fixture = _phase2_lot_selection_fixture(
+        client,
+        session_factory,
+        owner=owner,
+    )
+    selected = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/lot-selection",
+        headers={"Idempotency-Key": _key(), "If-Match": fixture["etag"]},
+        json={
+            "manifest_id": fixture["manifest_id"],
+            "lot_id": fixture["lot_id"],
+            "selection_note": None,
+        },
+    )
+    assert selected.status_code == 202
+    other_scope = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/lot-selection",
+        headers={"Idempotency-Key": _key(), "If-Match": selected.headers["etag"]},
+        json={
+            "manifest_id": fixture["manifest_id"],
+            "lot_id": "lot_other_candidate",
+            "selection_note": None,
+        },
+    )
+    assert other_scope.status_code == 409
+    _validate_contract("ErrorEnvelope", other_scope.json())
+    assert other_scope.json()["error"]["error_code"] == (
+        "BID_LOT_SCOPE_ALREADY_BOUND"
+    )
+    assert other_scope.json()["error"]["recovery"]["action"] == (
+        "assessment.create_for_other_lot"
+    )
+
+
+def test_api32_creates_independent_manifest_scope_acl_and_replays(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    fixture = _phase2_lot_selection_fixture(
+        client,
+        session_factory,
+        owner=owner,
+    )
+    other_lot_id = _attach_additional_phase2_lot_candidate(
+        session_factory,
+        manifest_id=fixture["manifest_id"],
+        detection_run_id=fixture["detection_run_id"],
+        evidence_id=fixture["evidence_id"],
+    )
+    selected = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/lot-selection",
+        headers={"Idempotency-Key": _key(), "If-Match": fixture["etag"]},
+        json={
+            "manifest_id": fixture["manifest_id"],
+            "lot_id": fixture["lot_id"],
+            "selection_note": None,
+        },
+    )
+    assert selected.status_code == 202
+    source_etag = selected.headers["etag"]
+    body = {
+        "source_manifest_id": fixture["manifest_id"],
+        "lot_id": other_lot_id,
+        "title": "  某办公楼—机电标段投标研判  ",
+    }
+    key = _key()
+    db = session_factory()
+    try:
+        source_version_ids = {
+            str(row[0])
+            for row in (
+                db.query(BidManifestDocument.document_version_id)
+                .filter(BidManifestDocument.manifest_id == fixture["manifest_id"])
+                .all()
+            )
+        }
+        file_object_count = db.query(BidFileObject).count()
+        document_version_count = db.query(BidDocumentVersion).count()
+    finally:
+        db.close()
+    before = _counts(session_factory)
+
+    cloned = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/clone-for-lot",
+        headers={"Idempotency-Key": key, "If-Match": source_etag},
+        json=body,
+    )
+
+    assert cloned.status_code == 201
+    _validate_contract("AssessmentResponse", cloned.json())
+    snapshot = cloned.json()["data"]
+    cloned_assessment_id = snapshot["assessment_id"]
+    cloned_manifest_id = snapshot["current_manifest"]["manifest_id"]
+    assert cloned_assessment_id != fixture["assessment_id"]
+    assert snapshot["title"] == "某办公楼—机电标段投标研判"
+    assert snapshot["client_name"] == "某甲方"
+    assert snapshot["internal_note"] == "内部跟进"
+    assert snapshot["business_status"] == "preliminary_analyzing"
+    assert snapshot["row_version"] == 1
+    assert snapshot["active_run"] is None
+    assert snapshot["scope"]["lot_id"] == other_lot_id
+    assert snapshot["current_manifest"]["version"] == 1
+    assert cloned.headers["location"] == (
+        f"/api/v1/bid-assessments/{cloned_assessment_id}"
+    )
+    assert cloned.headers["etag"] == (
+        f'"bid-assessment:{cloned_assessment_id}:1"'
+    )
+    assert cloned.headers["x-resource-version"] == "1"
+    assert cloned.headers["cache-control"] == "private, no-store"
+    assert "idempotent-replay" not in cloned.headers
+
+    after = _counts(session_factory)
+    assert after == {
+        **before,
+        "assessment": before["assessment"] + 1,
+        "manifest": before["manifest"] + 1,
+        "run": before["run"],
+        "outbox": before["outbox"] + 2,
+        "audit": before["audit"] + 1,
+        "idempotency": before["idempotency"] + 1,
+    }
+    db = session_factory()
+    try:
+        source = (
+            db.query(BidAssessment)
+            .filter(BidAssessment.id == fixture["assessment_id"])
+            .one()
+        )
+        cloned_row = (
+            db.query(BidAssessment)
+            .filter(BidAssessment.id == cloned_assessment_id)
+            .one()
+        )
+        manifest = (
+            db.query(BidDocumentManifest)
+            .filter(BidDocumentManifest.id == cloned_manifest_id)
+            .one()
+        )
+        cloned_version_ids = {
+            str(row[0])
+            for row in (
+                db.query(BidManifestDocument.document_version_id)
+                .filter(BidManifestDocument.manifest_id == cloned_manifest_id)
+                .all()
+            )
+        }
+        scope = (
+            db.query(BidAssessmentScope)
+            .filter(BidAssessmentScope.assessment_id == cloned_assessment_id)
+            .one()
+        )
+        events = {
+            event.event_type: event
+            for event in (
+                db.query(BidOutboxEvent)
+                .filter(BidOutboxEvent.assessment_id == cloned_assessment_id)
+                .all()
+            )
+        }
+        audit = (
+            db.query(BidAuditLog)
+            .filter(BidAuditLog.action == "assessment.clone_for_lot")
+            .one()
+        )
+        assert source.row_version == int(selected.json()["data"]["assessment"]["row_version"])
+        assert source.current_manifest_id == fixture["manifest_id"]
+        assert cloned_row.created_by == owner.id
+        assert cloned_row.external_ref is None
+        assert manifest.assessment_id == cloned_assessment_id
+        assert manifest.manifest_hash != (
+            db.query(BidDocumentManifest.manifest_hash)
+            .filter(BidDocumentManifest.id == fixture["manifest_id"])
+            .scalar()
+        )
+        assert cloned_version_ids == source_version_ids
+        assert db.query(BidFileObject).count() == file_object_count
+        assert db.query(BidDocumentVersion).count() == document_version_count
+        assert scope.source_lot_candidate_id is None
+        scope_snapshot = dict(scope.selected_lot_snapshot_json)
+        assert scope.scope_hash == canonical_hash(scope_snapshot)
+        assert scope_snapshot["source_assessment_id"] == fixture["assessment_id"]
+        assert scope_snapshot["source_manifest_id"] == fixture["manifest_id"]
+        assert scope_snapshot["source_detection_run_id"] == fixture["detection_run_id"]
+        assert scope_snapshot["lot_id"] == other_lot_id
+        assert scope_snapshot["evidence_ids"] == [fixture["evidence_id"]]
+        assert set(events) == {
+            "bid.assessment.created.v1",
+            "bid.plan.requested.v1",
+        }
+        created_event = events["bid.assessment.created.v1"]
+        plan_event = events["bid.plan.requested.v1"]
+        assert plan_event.causation_event_id == created_event.event_id
+        assert plan_event.payload_json["source_assessment_id"] == (
+            fixture["assessment_id"]
+        )
+        assert audit.assessment_id == cloned_assessment_id
+        assert audit.correlation_id == plan_event.event_id
+        assert db.query(BidAnalysisRun).count() == 0
+        document_version_id = next(iter(cloned_version_ids))
+        created_event_id = created_event.event_id
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            projection = project_outbox_event_to_public(
+                db,
+                event_id=created_event_id,
+            )
+        assert projection.duplicate is False
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        public = (
+            db.query(BidPublicEvent)
+            .filter(BidPublicEvent.source_event_id == created_event_id)
+            .one()
+        )
+        assert public.assessment_id == cloned_assessment_id
+        assert public.resource_id == cloned_assessment_id
+        assert public.event_type == "assessment.snapshot"
+        assert public.payload_json["snapshot"]["assessment_id"] == (
+            cloned_assessment_id
+        )
+        assert public.payload_json["snapshot"]["scope"]["lot_id"] == (
+            other_lot_id
+        )
+    finally:
+        db.close()
+
+    projected = client.get(
+        f"/api/v1/bid-assessments/{cloned_assessment_id}/lots"
+    )
+    assert projected.status_code == 200
+    _validate_contract("LotCandidatePageResponse", projected.json())
+    page = projected.json()["data"]
+    assert page["generation"]["status"] == "not_started"
+    assert page["candidates"] == []
+    assert page["selection_required"] is False
+    assert page["selected_lot_id"] == other_lot_id
+    assert page["blocking_reason"] is None
+    assert page["allowed_actions"] == []
+
+    replay = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/clone-for-lot",
+        headers={"Idempotency-Key": key, "If-Match": source_etag},
+        json=body,
+    )
+    assert replay.status_code == 201
+    assert replay.headers["idempotent-replay"] == "true"
+    assert replay.json() == cloned.json()
+    assert _counts(session_factory) == after
+
+    db = session_factory()
+    try:
+        with db.begin():
+            source = (
+                db.query(BidAssessment)
+                .filter(BidAssessment.id == fixture["assessment_id"])
+                .one()
+            )
+            source.lifecycle_status = "archived"
+            source.archived_at = datetime.now(timezone.utc)
+            source.row_version = int(source.row_version) + 1
+    finally:
+        db.close()
+    assert client.get(
+        f"/api/v1/bid-assessments/{cloned_assessment_id}"
+    ).status_code == 200
+    assert client.get(
+        f"/api/v1/bid-document-versions/{document_version_id}"
+    ).status_code == 200
+
+    outsider = _create_user(session_factory)
+    client.app.state.active_user["value"] = outsider
+    hidden = client.get(f"/api/v1/bid-assessments/{cloned_assessment_id}")
+    hidden_document = client.get(
+        f"/api/v1/bid-document-versions/{document_version_id}"
+    )
+    assert hidden.status_code == hidden_document.status_code == 404
+    assert hidden.json()["error"]["error_code"] == "BID_RESOURCE_NOT_FOUND"
+    assert hidden_document.json()["error"]["error_code"] == (
+        "BID_RESOURCE_NOT_FOUND"
+    )
+
+
+def test_api32_rejects_same_lot_missing_scope_and_stale_source_version(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    fixture = _phase2_lot_selection_fixture(
+        client,
+        session_factory,
+        owner=owner,
+    )
+    body = {
+        "source_manifest_id": fixture["manifest_id"],
+        "lot_id": fixture["lot_id"],
+        "title": "同标段研判",
+    }
+    no_scope = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/clone-for-lot",
+        headers={"Idempotency-Key": _key(), "If-Match": fixture["etag"]},
+        json=body,
+    )
+    assert no_scope.status_code == 409
+    _validate_contract("ErrorEnvelope", no_scope.json())
+    assert no_scope.json()["error"]["error_code"] == (
+        "BID_ASSESSMENT_STATE_CONFLICT"
+    )
+    assert no_scope.json()["error"]["details"]["reason"] == (
+        "source_scope_required"
+    )
+
+    selected = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/lot-selection",
+        headers={"Idempotency-Key": _key(), "If-Match": fixture["etag"]},
+        json={
+            "manifest_id": fixture["manifest_id"],
+            "lot_id": fixture["lot_id"],
+            "selection_note": None,
+        },
+    )
+    assert selected.status_code == 202
+    stale = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/clone-for-lot",
+        headers={"Idempotency-Key": _key(), "If-Match": fixture["etag"]},
+        json=body,
+    )
+    assert stale.status_code == 412
+    _validate_contract("ErrorEnvelope", stale.json())
+    assert stale.json()["error"]["error_code"] == (
+        "BID_RESOURCE_VERSION_MISMATCH"
+    )
+    same_lot = client.post(
+        f"/api/v1/bid-assessments/{fixture['assessment_id']}/clone-for-lot",
+        headers={"Idempotency-Key": _key(), "If-Match": selected.headers["etag"]},
+        json=body,
+    )
+    assert same_lot.status_code == 409
+    _validate_contract("ErrorEnvelope", same_lot.json())
+    assert same_lot.json()["error"]["details"]["reason"] == (
+        "same_lot_not_allowed"
+    )
+    assert _counts(session_factory)["assessment"] == 1
+
+
+def test_phase2_lot_detector_accepts_only_explicit_content_evidence() -> None:
+    unrelated = detect_lot_candidates(
+        (
+            LotDetectionEvidenceInput(
+                evidence_id="bef_unrelated",
+                document_version_id="version_unrelated",
+                role="tender_document",
+                text="本项目包含装饰工程、机电工程及配套服务。",
+                locator={"page_no": 1},
+            ),
+        )
+    )
+    explicit = detect_lot_candidates(
+        (
+            LotDetectionEvidenceInput(
+                evidence_id="bef_explicit",
+                document_version_id="version_explicit",
+                role="tender_document",
+                text="第一标段：室内装饰工程",
+                locator={"page_no": 2},
+            ),
+        )
+    )
+
+    assert unrelated == ()
+    assert len(explicit) == 1
+    assert explicit[0].lot_code == "一"
+    assert explicit[0].lot_name == "室内装饰工程"
+    assert [row.evidence_id for row in explicit[0].evidence] == ["bef_explicit"]
+
+
+def test_api40_api41_bootstrap_frozen_run_idempotency_acl_and_etag(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    created = _create_assessment(client)
+    assessment_id = created.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    scope = _attach_phase3_scope(
+        session_factory,
+        assessment_id=assessment_id,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    frozen_versions = _activate_phase3_frozen_versions(
+        session_factory,
+        actor_id=owner.id,
+    )
+    current = client.get(f"/api/v1/bid-assessments/{assessment_id}")
+    assert current.status_code == 200
+
+    key = _key()
+    body = {
+        "manifest_id": manifest_id,
+        "reason": "rule_reanalysis",
+        "note": "使用当前已评审规则重新研判",
+    }
+    started = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs",
+        headers={"Idempotency-Key": key, "If-Match": current.headers["etag"]},
+        json=body,
+    )
+    assert started.status_code == 202
+    _validate_contract("RunResponse", started.json())
+    snapshot = started.json()["data"]
+    run_id = snapshot["run_id"]
+    assert started.headers["location"].endswith(f"/runs/{run_id}")
+    assert started.headers["cache-control"] == "private, no-store"
+    assert snapshot["assessment_id"] == assessment_id
+    assert snapshot["status"] == "created"
+    assert snapshot["run_kind"] == "reanalysis"
+    assert snapshot["current_stage"] == "planning"
+    assert snapshot["latest_event"] is None
+    assert snapshot["input_versions"]["manifest_id"] == manifest_id
+    assert snapshot["input_versions"]["scope_id"] == scope["scope_id"]
+    for field, version in frozen_versions.items():
+        assert snapshot["input_versions"][field] == version
+
+    replay = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs",
+        headers={"Idempotency-Key": key, "If-Match": current.headers["etag"]},
+        json=body,
+    )
+    assert replay.status_code == 202
+    assert replay.headers["idempotent-replay"] == "true"
+    assert replay.json() == started.json()
+
+    progress = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    assert progress.status_code == 200
+    _validate_contract("RunResponse", progress.json())
+    assert progress.headers["etag"] == started.headers["etag"]
+    unchanged = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}",
+        headers={"If-None-Match": progress.headers["etag"]},
+    )
+    assert unchanged.status_code == 304
+    assert unchanged.headers["etag"] == progress.headers["etag"]
+
+    db = session_factory()
+    try:
+        run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+        assessment = (
+            db.query(BidAssessment)
+            .filter(BidAssessment.id == assessment_id)
+            .one()
+        )
+        created_event = (
+            db.query(BidOutboxEvent)
+            .filter(
+                BidOutboxEvent.event_type == "bid.run.created.v1",
+                BidOutboxEvent.run_id == run_id,
+            )
+            .one()
+        )
+        assert assessment.active_run_id == run_id
+        assert run.scope_id == scope["scope_id"]
+        assert created_event.payload_json["input_hash"] == run.input_hash
+        assert (
+            db.query(BidAuditLog)
+            .filter(
+                BidAuditLog.action == "run.bootstrap.create",
+                BidAuditLog.entity_id == run_id,
+            )
+            .count()
+            == 1
+        )
+        created_event_id = str(created_event.event_id)
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with db.begin():
+            project_outbox_event_to_public(db, event_id=created_event_id)
+    finally:
+        db.close()
+    changed = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}",
+        headers={"If-None-Match": progress.headers["etag"]},
+    )
+    assert changed.status_code == 200
+    assert changed.headers["etag"] != progress.headers["etag"]
+    assert changed.json()["data"]["latest_event"]["event_type"] == (
+        "run.status.changed"
+    )
+
+    outsider = _create_user(session_factory)
+    client.app.state.active_user["value"] = outsider
+    hidden = client.get(
+        f"/api/v1/bid-assessments/{assessment_id}/runs/{run_id}"
+    )
+    assert hidden.status_code == 404
+    assert hidden.json()["error"]["error_code"] == "BID_RESOURCE_NOT_FOUND"
+
+    client.app.state.active_user["value"] = owner
+    db = session_factory()
+    try:
+        with db.begin():
+            run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+            run.status = "failed"
+            run.retryable = True
+            run.row_version = int(run.row_version) + 1
+    finally:
+        db.close()
+    latest_assessment = client.get(f"/api/v1/bid-assessments/{assessment_id}")
+    blocked_by_retryable_run = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs",
+        headers={
+            "Idempotency-Key": _key(),
+            "If-Match": latest_assessment.headers["etag"],
+        },
+        json=body,
+    )
+    assert blocked_by_retryable_run.status_code == 409
+    assert blocked_by_retryable_run.json()["error"]["error_code"] == (
+        "BID_ACTIVE_RUN_EXISTS"
+    )
+
+
+def test_api40_input_not_ready_does_not_create_placeholder_run(api_runtime) -> None:
+    client, session_factory, owner = api_runtime
+    created = _create_assessment(client)
+    assessment_id = created.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    _attach_phase3_scope(
+        session_factory,
+        assessment_id=assessment_id,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    current = client.get(f"/api/v1/bid-assessments/{assessment_id}")
+    response = client.post(
+        f"/api/v1/bid-assessments/{assessment_id}/runs",
+        headers={"Idempotency-Key": _key(), "If-Match": current.headers["etag"]},
+        json={
+            "manifest_id": manifest_id,
+            "reason": "manual_restart",
+            "note": None,
+        },
+    )
+    assert response.status_code == 409
+    _validate_contract("ErrorEnvelope", response.json())
+    assert response.json()["error"]["error_code"] == "BID_RUN_INPUT_NOT_READY"
+    assert _counts(session_factory)["run"] == 0
+
+
+def test_plan_requested_bootstrap_is_exactly_once_and_waits_for_frozen_inputs(
+    api_runtime,
+) -> None:
+    client, session_factory, owner = api_runtime
+    created = _create_assessment(client)
+    assessment_id = created.json()["data"]["assessment_id"]
+    manifest_id = _attach_current_manifest(
+        session_factory,
+        assessment_id=assessment_id,
+        actor_id=owner.id,
+    )
+    scope = _attach_phase3_scope(
+        session_factory,
+        assessment_id=assessment_id,
+        manifest_id=manifest_id,
+        actor_id=owner.id,
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            plan_event = append_outbox_event(
+                db,
+                event_type="bid.plan.requested.v1",
+                producer="bid-assessment-api-v1",
+                aggregate_type="scope",
+                aggregate_id=scope["scope_id"],
+                aggregate_version=1,
+                assessment_id=assessment_id,
+                request_id=f"req-{uuid.uuid4().hex}",
+                payload_schema="bid.plan.requested.v1.payload",
+                payload={
+                    "operation_id": f"op-{uuid.uuid4().hex}",
+                    "assessment_id": assessment_id,
+                    "scope_id": scope["scope_id"],
+                    "manifest_id": manifest_id,
+                    "lot_id": scope["lot_id"],
+                    "requested_run_kind": "preliminary",
+                    "resource_version": 1,
+                },
+                dedupe_key=f"plan-requested:{scope['scope_id']}",
+            )
+            event_id = str(plan_event.event_id)
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        with pytest.raises(BidRunInputNotReady):
+            with db.begin():
+                consume_plan_requested_event(db, event_id=event_id)
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        assert db.query(BidAnalysisRun).count() == 0
+        assert (
+            db.query(BidProcessedEvent)
+            .filter(BidProcessedEvent.event_id == event_id)
+            .count()
+            == 0
+        )
+    finally:
+        db.close()
+
+    _activate_phase3_frozen_versions(session_factory, actor_id=owner.id)
+    db = session_factory()
+    try:
+        with db.begin():
+            first = consume_plan_requested_event(db, event_id=event_id)
+        assert first.duplicate is False
+        assert first.value["created"] is True
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        with db.begin():
+            replay = consume_plan_requested_event(db, event_id=event_id)
+        assert replay.duplicate is True
+    finally:
+        db.close()
+    db = session_factory()
+    try:
+        assert db.query(BidAnalysisRun).count() == 1
+        assert (
+            db.query(BidProcessedEvent)
+            .filter(BidProcessedEvent.event_id == event_id)
+            .count()
+            == 1
+        )
+    finally:
+        db.close()
+
+
+def test_mvp1_local_upload_storage_is_bounded_and_path_scoped(tmp_path) -> None:
+    storage = LocalBidUploadObjectStorage(tmp_path / "objects")
+    content = b"local-isolated-bid-document"
+    stored = storage.put(
+        stream=BytesIO(content),
+        object_key="bid-assessment/uploading/v1/batch/file",
+        size_bytes=len(content),
+        mime_type="text/plain",
+    )
+    assert stored.size_bytes == len(content)
+    assert len(str(stored.storage_etag)) == 64
+    with storage.open_read(object_key=stored.object_key) as stream:
+        assert stream.read() == content
+    assert [row.object_key for row in storage.list_candidates(
+        prefix="bid-assessment/uploading/v1",
+        limit=10,
+    )] == [stored.object_key]
+    with pytest.raises(BidUploadStorageError, match="BID_UPLOAD_OBJECT_KEY_INVALID"):
+        storage.open_read(object_key="../outside")
+    with pytest.raises(BidUploadStorageError, match="BID_UPLOAD_OBJECT_SIZE_MISMATCH"):
+        storage.put(
+            stream=BytesIO(content + b"-extra"),
+            object_key="bid-assessment/uploading/v1/batch/oversized",
+            size_bytes=len(content),
+            mime_type="text/plain",
+        )
+    storage.delete(object_key=stored.object_key)
+    assert storage.list_candidates(prefix="bid-assessment/uploading/v1", limit=10) == []
+
+
+def test_mvp1_evidence_mcp_is_manifest_and_current_parse_head_scoped(api_runtime) -> None:
+    _client, session_factory, _owner = api_runtime
+    now = datetime(2026, 8, 13, 9, 0, tzinfo=timezone.utc)
+    session_factory, run_id, version_id = _prepare_phase3f_documents_outline(
+        api_runtime,
+        now=now,
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+            parse_head = (
+                db.query(BidDocumentParseHead)
+                .filter(BidDocumentParseHead.document_version_id == version_id)
+                .one()
+            )
+            parse_unit = (
+                db.query(BidDocumentParseUnit)
+                .filter(BidDocumentParseUnit.run_id == parse_head.current_run_id)
+                .one()
+            )
+            evidence_id = str(uuid.uuid4())
+            text = "本项目投标截止时间为2026年8月18日09时30分，逾期递交将被拒绝。"
+            locator = {"page_no": 1, "section_path": ["投标须知", "重要时间"]}
+            db.add(
+                BidEvidenceFragment(
+                    id=evidence_id,
+                    parse_run_id=str(parse_head.current_run_id),
+                    document_version_id=version_id,
+                    parse_unit_id=str(parse_unit.id),
+                    locator_type="page_bbox",
+                    locator_json=locator,
+                    locator_hash=canonical_hash(locator),
+                    normalized_text=text,
+                    text_hash=canonical_hash({"text": text}),
+                    parent_id=None,
+                    ordinal=0,
+                    object_ref=None,
+                )
+            )
+            manifest_id = str(run.manifest_id)
+            assessment_id = str(run.assessment_id)
+    finally:
+        db.close()
+
+    db = session_factory()
+    try:
+        service = BidEvidenceMcpService(
+            db,
+            scope=BidEvidenceMcpScope(
+                assessment_id=assessment_id,
+                run_id=run_id,
+                manifest_id=manifest_id,
+            ),
+        )
+        search = service.search({"query": "投标截止时间", "top_k": 5})
+        assert search["status"] == "ok"
+        assert search["retrieval_mode"] == "bm25_rrf"
+        assert search["hits"][0]["evidence_id"] == evidence_id
+        assert search["hits"][0]["context_read"] is False
+        read = service.read(
+            {"evidence_ids": [evidence_id], "expansion": "neighbors", "radius": 1}
+        )
+        assert read["status"] == "ok"
+        assert read["items"][0]["evidence_id"] == evidence_id
+        assert read["items"][0]["context_read"] is True
+        assert service.search(
+            {
+                "query": "投标截止时间",
+                "top_k": 5,
+                "document_version_ids": [str(uuid.uuid4())],
+            }
+        )["status"] == "no_result"
+        with pytest.raises(BidEvidenceMcpError, match="BID_EVIDENCE_REFERENCE_OUT_OF_SCOPE"):
+            service.read({"evidence_ids": [str(uuid.uuid4())]})
+        with pytest.raises(BidEvidenceMcpError, match="BID_EVIDENCE_SCOPE_INVALID"):
+            BidEvidenceMcpService(
+                db,
+                scope=BidEvidenceMcpScope(
+                    assessment_id=assessment_id,
+                    run_id=run_id,
+                    manifest_id=str(uuid.uuid4()),
+                ),
+            )
+    finally:
+        db.close()
+
+
+def test_mvp1_deterministic_local_profile_converges_full_p0_p4_run(
+    api_runtime, request
+) -> None:
+    _client, session_factory, _owner = api_runtime
+    old_evidence_mcp_flag = settings.feature_bid_assessment_phase4_evidence_mcp
+    object.__setattr__(settings, "feature_bid_assessment_phase4_evidence_mcp", True)
+    request.addfinalizer(
+        lambda: object.__setattr__(
+            settings,
+            "feature_bid_assessment_phase4_evidence_mcp",
+            old_evidence_mcp_flag,
+        )
+    )
+    assessment_id, run_id = _create_phase3c_committed_run(
+        api_runtime,
+        attach_document=True,
+        phase4_plan_continuation=True,
+        phase4_model_gateway=True,
+    )
+    now = datetime(2026, 8, 13, 11, 0, tzinfo=timezone.utc)
+    document_text = (
+        "项目概况与招标范围：办公楼装饰工程。投标截止时间为2026年8月18日09时30分，"
+        "开标时间同日。资格要求包含建筑装修装饰资质。否决投标条款要求文件完整。"
+        "投标保证金人民币壹万元。评标办法采用综合评分法。工程量以清单为准。"
+        "中标后提交材料样品和竣工成果。合同付款按节点执行。工期60日，现场封闭施工。"
+    )
+    db = session_factory()
+    try:
+        with db.begin():
+            run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+            version_id = str(
+                db.query(BidManifestDocument.document_version_id)
+                .filter(BidManifestDocument.manifest_id == run.manifest_id)
+                .scalar()
+            )
+            parse_run_id = str(uuid.uuid4())
+            parse_unit_id = str(uuid.uuid4())
+            db.add(
+                BidDocumentParseRun(
+                    id=parse_run_id,
+                    document_version_id=version_id,
+                    parser_profile_version="mvp1-local-deterministic-v1",
+                    input_hash=canonical_hash({"version_id": version_id, "text": document_text}),
+                    status="succeeded",
+                    retryable=False,
+                    requested_at=now - timedelta(seconds=2),
+                    started_at=now - timedelta(seconds=1),
+                    finished_at=now,
+                    result_ref="local://mvp1/deterministic",
+                    result_hash=canonical_hash({"text": document_text}),
+                    quality_grade="high",
+                    quality_score=100,
+                    page_count=1,
+                    sheet_count=0,
+                    ocr_status="not_applicable",
+                    warning_count=0,
+                    warnings_json=[],
+                    row_version=1,
+                )
+            )
+            db.flush()
+            db.add(
+                BidDocumentParseHead(
+                    document_version_id=version_id,
+                    current_run_id=parse_run_id,
+                    row_version=1,
+                )
+            )
+            db.add(
+                BidDocumentParseUnit(
+                    id=parse_unit_id,
+                    run_id=parse_run_id,
+                    unit_type="page",
+                    unit_key="page:1",
+                    ordinal=0,
+                    page_no=1,
+                    section_path_json=["本地隔离样例"],
+                    content_source="native",
+                    status="succeeded",
+                    text_hash=canonical_hash({"text": document_text}),
+                    text_length=len(document_text),
+                    ocr_status="not_applicable",
+                )
+            )
+            db.flush()
+            locator = {"page_no": 1, "section_path": ["本地隔离样例"]}
+            db.add(
+                BidEvidenceFragment(
+                    id=str(uuid.uuid4()),
+                    parse_run_id=parse_run_id,
+                    document_version_id=version_id,
+                    parse_unit_id=parse_unit_id,
+                    locator_type="page_bbox",
+                    locator_json=locator,
+                    locator_hash=canonical_hash(locator),
+                    normalized_text=document_text,
+                    text_hash=canonical_hash({"normalized_text": document_text}),
+                    parent_id=None,
+                    ordinal=0,
+                    object_ref=None,
+                )
+            )
+    finally:
+        db.close()
+
+    provider = DeterministicMvp1LocalProvider(session_factory=session_factory)
+    totals = {"task_failed": 0, "model_failed": 0, "tool_failed": 0, "validation_errors": 0}
+    task_error_codes: list[str] = []
+    terminal_status = None
+    for cycle in range(160):
+        task_batch = process_mvp1_task_queue(
+            session_factory=session_factory,
+            worker_id=f"mvp1-local-task-{cycle}",
+            tool_scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+            limit=100,
+        )
+        model_batch = process_mvp1_model_queue(
+            session_factory=session_factory,
+            worker_id=f"mvp1-local-model-{cycle}",
+            provider=provider,
+            limit=50,
+        )
+        tool_batch = process_tool_dispatch_queue(
+            session_factory=session_factory,
+            worker_id=f"mvp1-local-tool-{cycle}",
+            scope_signing_key=PHASE3E_SCOPE_SIGNING_KEY,
+            limit=100,
+        )
+        process_pending_plan_continuations(session_factory=session_factory, limit=20)
+        maintain_run_validations(session_factory=session_factory, limit=20)
+        validation_batch = process_run_validation_queue(
+            session_factory=session_factory,
+            worker_id=f"mvp1-local-validation-{cycle}",
+            limit=20,
+        )
+        totals["task_failed"] += int(task_batch.failed)
+        task_error_codes.extend(task_batch.error_codes)
+        totals["model_failed"] += int(model_batch.failed)
+        totals["tool_failed"] += int(tool_batch.failed)
+        totals["validation_errors"] += int(validation_batch.errors)
+        db = session_factory()
+        try:
+            terminal_status = str(
+                db.query(BidAnalysisRun.status).filter(BidAnalysisRun.id == run_id).scalar()
+            )
+            report_count = db.query(BidPreliminaryReport).filter(
+                BidPreliminaryReport.run_id == run_id,
+                BidPreliminaryReport.status == "ready",
+            ).count()
+        finally:
+            db.close()
+        if terminal_status in {"succeeded", "failed", "stale", "cancelled"}:
+            break
+    db = session_factory()
+    try:
+        diagnostics = {
+            "task_error_codes": task_error_codes,
+            "tasks": [
+                (str(task.task_type), str(task.status), str(task.current_attempt_id or ""))
+                for task in db.query(BidTask)
+                .filter(BidTask.run_id == run_id, BidTask.status != "succeeded")
+                .order_by(BidTask.task_key.asc())
+                .all()
+            ],
+            "attempts": [
+                (str(attempt.task_id), str(attempt.status), attempt.error_code)
+                for attempt in db.query(BidTaskAttempt)
+                .join(BidTask, BidTask.id == BidTaskAttempt.task_id)
+                .filter(BidTask.run_id == run_id, BidTaskAttempt.status == "failed")
+                .order_by(BidTaskAttempt.created_at.asc())
+                .all()
+            ],
+            "dispatches": [
+                (
+                    str(dispatch.adapter_name),
+                    str(dispatch.status),
+                    dispatch.last_error_code,
+                )
+                for dispatch in db.query(BidToolDispatch)
+                .join(BidTask, BidTask.id == BidToolDispatch.task_id)
+                .filter(BidTask.run_id == run_id, BidToolDispatch.status != "succeeded")
+                .order_by(BidToolDispatch.created_at.asc())
+                .all()
+            ],
+            "invocations": [
+                (
+                    str(invocation.tool_name),
+                    str(invocation.status),
+                    invocation.error_code,
+                )
+                for invocation in db.query(BidToolInvocation)
+                .filter(
+                    BidToolInvocation.run_id == run_id,
+                    BidToolInvocation.status != "succeeded",
+                )
+                .order_by(BidToolInvocation.created_at.asc())
+                .all()
+            ],
+            "model_calls": [
+                (
+                    str(call.task_id),
+                    int(call.action_seq),
+                    str(call.status),
+                    call.last_error_code,
+                )
+                for call in db.query(BidModelCall)
+                .join(BidTask, BidTask.id == BidModelCall.task_id)
+                .filter(BidTask.run_id == run_id, BidModelCall.status != "succeeded")
+                .order_by(BidModelCall.created_at.asc())
+                .all()
+            ],
+            "model_attempts": [
+                (
+                    str(attempt.model_call_id),
+                    int(attempt.attempt_no),
+                    str(attempt.status),
+                    attempt.error_code,
+                    dict(attempt.detail_json or {}),
+                )
+                for attempt in db.query(BidModelCallAttempt)
+                .join(BidModelCall, BidModelCall.id == BidModelCallAttempt.model_call_id)
+                .join(BidTask, BidTask.id == BidModelCall.task_id)
+                .filter(BidTask.run_id == run_id, BidModelCall.status != "succeeded")
+                .order_by(BidModelCallAttempt.created_at.asc())
+                .all()
+            ],
+        }
+    finally:
+        db.close()
+    assert totals == {
+        "task_failed": 0,
+        "model_failed": 0,
+        "tool_failed": 0,
+        "validation_errors": 0,
+    }, json.dumps(diagnostics, ensure_ascii=False, default=str)
+    assert terminal_status == "succeeded", json.dumps(
+        diagnostics, ensure_ascii=False, default=str
+    )
+    assert report_count == 1, json.dumps(diagnostics, ensure_ascii=False, default=str)
+    db = session_factory()
+    try:
+        assert db.query(BidFactAssertion).filter(
+            BidFactAssertion.run_id == run_id,
+            BidFactAssertion.status == "accepted",
+        ).count() >= 10
+        assert db.query(BidResolvedFact).filter(BidResolvedFact.run_id == run_id).count() >= 10
+        assert db.query(BidHardGateResult).filter(BidHardGateResult.run_id == run_id).count() == 7
+        assert (
+            db.query(BidClaimCitation)
+            .join(BidReportClaim, BidReportClaim.id == BidClaimCitation.claim_id)
+            .filter(BidReportClaim.run_id == run_id)
+            .count()
+            >= 1
+        )
+        assert db.query(BidTask).filter(BidTask.run_id == run_id, BidTask.status != "succeeded").count() == 0
+        assert {
+            str(row[0])
+            for row in db.query(BidToolDispatch.adapter_mode)
+            .join(BidTask, BidTask.id == BidToolDispatch.task_id)
+            .filter(
+                BidTask.run_id == run_id,
+                BidToolDispatch.adapter_name.in_(
+                    ("bid-evidence-mcp-search", "bid-evidence-mcp-read")
+                ),
+            )
+            .all()
+        } == {"local_readonly"}
+        report = db.query(BidPreliminaryReport).filter(BidPreliminaryReport.run_id == run_id).one()
+        assert report.assessment_id == assessment_id
+        assert report.report_json["decision"]["code"] in {
+            "bid",
+            "no_bid",
+            "conditional",
+            "insufficient",
+        }
+    finally:
+        db.close()
+
+
+def test_api60_api61_report_acl_etag_status_and_feature_gates(api_runtime) -> None:
+    client, session_factory, owner = api_runtime
+    assessment_id, run_id = _create_phase3c_committed_run(api_runtime)
+    now = datetime(2026, 8, 13, 10, 0, tzinfo=timezone.utc)
+    report_id = str(uuid.uuid4())
+    report_json = {
+        "schema": "bid.preliminary.report.mvp1.v1",
+        "decision": {"code": "insufficient", "investment_level": "hold"},
+        "hard_gates": [
+            {"gate_code": "HG01", "status": "unknown"},
+            {"gate_code": "HG02", "status": "pass"},
+        ],
+        "claims": [],
+        "citations": [],
+    }
+    db = session_factory()
+    try:
+        with db.begin():
+            run = db.query(BidAnalysisRun).filter(BidAnalysisRun.id == run_id).one()
+            task = (
+                db.query(BidTask)
+                .filter(BidTask.run_id == run_id)
+                .order_by(BidTask.task_key.asc())
+                .first()
+            )
+            decision = BidPreliminaryDecision(
+                id=str(uuid.uuid4()),
+                run_id=run_id,
+                task_id=str(task.id),
+                rule_set_id=str(run.rule_set_id),
+                formula_catalog_version_id=str(run.formula_catalog_version_id),
+                decision="insufficient",
+                investment_level="hold",
+                failed_gate_count=0,
+                unknown_gate_count=1,
+                unknown_fact_count=1,
+                summary="资料不足，暂缓投入。",
+                reason_codes_json=["CRITICAL_FACT_UNKNOWN"],
+                input_hash=canonical_hash({"run_id": run_id, "kind": "decision-input"}),
+                decision_hash=canonical_hash({"run_id": run_id, "kind": "decision"}),
+            )
+            validation = BidReportValidation(
+                id=str(uuid.uuid4()),
+                run_id=run_id,
+                task_id=str(task.id),
+                status="passed",
+                validator_version="bid-claim-evidence-validator-mvp1-v1",
+                checks_json=[{"code": "REPORT_SCHEMA", "status": "passed"}],
+                input_hash=canonical_hash({"run_id": run_id, "kind": "validation-input"}),
+                result_hash=canonical_hash({"run_id": run_id, "kind": "validation"}),
+            )
+            db.add_all([decision, validation])
+            db.flush()
+            db.add(
+                BidPreliminaryReport(
+                    id=report_id,
+                    assessment_id=assessment_id,
+                    run_id=run_id,
+                    decision_id=str(decision.id),
+                    validation_id=str(validation.id),
+                    report_version=1,
+                    status="ready",
+                    title="投标机会初筛报告",
+                    executive_summary="资料不足，暂缓投入。",
+                    report_json=report_json,
+                    report_hash=canonical_hash(report_json),
+                    generated_at=now,
+                )
+            )
+    finally:
+        db.close()
+
+    previous = {
+        "feature_bid_assessment_phase4_mvp": settings.feature_bid_assessment_phase4_mvp,
+        "feature_bid_assessment_phase4_preliminary_report": (
+            settings.feature_bid_assessment_phase4_preliminary_report
+        ),
+    }
+    object.__setattr__(settings, "feature_bid_assessment_phase4_mvp", True)
+    object.__setattr__(settings, "feature_bid_assessment_phase4_preliminary_report", True)
+    try:
+        listed = client.get(f"/api/v1/bid-assessments/{assessment_id}/reports")
+        assert listed.status_code == 200
+        assert listed.headers["cache-control"] == "private, no-store"
+        assert listed.json()["data"]["total"] == 1
+        assert listed.json()["data"]["items"][0]["gate_summary"] == {
+            "pass": 1,
+            "fail": 0,
+            "unknown": 1,
+        }
+
+        detail = client.get(f"/api/v1/bid-reports/{report_id}")
+        assert detail.status_code == 200
+        assert detail.json()["data"]["report"] == report_json
+        etag = detail.headers["etag"]
+        assert client.get(
+            f"/api/v1/bid-reports/{report_id}",
+            headers={"If-None-Match": etag},
+        ).status_code == 304
+
+        outsider = _create_user(session_factory)
+        client.app.state.active_user["value"] = outsider
+        assert client.get(f"/api/v1/bid-assessments/{assessment_id}/reports").status_code == 404
+        assert client.get(f"/api/v1/bid-reports/{report_id}").status_code == 404
+        admin = _create_user(session_factory, role="admin")
+        client.app.state.active_user["value"] = admin
+        assert client.get(f"/api/v1/bid-reports/{report_id}").status_code == 200
+
+        db = session_factory()
+        try:
+            with db.begin():
+                db.query(BidPreliminaryReport).filter(
+                    BidPreliminaryReport.id == report_id
+                ).update({BidPreliminaryReport.status: "invalid"})
+        finally:
+            db.close()
+        client.app.state.active_user["value"] = owner
+        assert client.get(f"/api/v1/bid-assessments/{assessment_id}/reports").json()["data"][
+            "total"
+        ] == 0
+        assert client.get(f"/api/v1/bid-reports/{report_id}").status_code == 404
+
+        object.__setattr__(settings, "feature_bid_assessment_phase4_mvp", False)
+        assert client.get(f"/api/v1/bid-reports/{report_id}").status_code == 404
+    finally:
+        client.app.state.active_user["value"] = owner
+        for name, value in previous.items():
+            object.__setattr__(settings, name, value)

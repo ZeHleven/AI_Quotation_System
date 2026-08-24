@@ -110,6 +110,13 @@ class BidAnalysisRun(Base):
         ),
         CheckConstraint("run_sequence >= 1", name="ck_bid_analysis_runs_sequence"),
         CheckConstraint("row_version >= 1", name="ck_bid_analysis_runs_row_version"),
+        CheckConstraint(
+            "((hard_gate_comparison_baseline_id IS NULL AND "
+            "hard_gate_comparison_baseline_hash IS NULL) OR "
+            "(hard_gate_comparison_baseline_id IS NOT NULL AND "
+            "hard_gate_comparison_baseline_hash IS NOT NULL))",
+            name="ck_bid_analysis_runs_hg_comparison_pair",
+        ),
         ForeignKeyConstraint(
             ["assessment_id"],
             ["bid_assessments.id"],
@@ -167,6 +174,12 @@ class BidAnalysisRun(Base):
         ForeignKey("bid_enterprise_snapshots.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    hard_gate_comparison_baseline_id = Column(
+        String(36),
+        ForeignKey("bid_hard_gate_comparison_baselines.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    hard_gate_comparison_baseline_hash = Column(String(64), nullable=True)
     rule_set_id = Column(
         String(36), ForeignKey("bid_rule_sets.id", ondelete="RESTRICT"), nullable=False
     )
@@ -391,8 +404,18 @@ class BidCheckpoint(Base):
     __table_args__ = (
         CheckConstraint("action_seq >= 0", name="ck_bid_checkpoints_action_seq"),
         CheckConstraint("fencing_token >= 1", name="ck_bid_checkpoints_fencing"),
+        ForeignKeyConstraint(
+            ["context_manifest_id"],
+            ["bid_context_manifests.id"],
+            name="fk_bid_checkpoints_context_manifest",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("task_attempt_id", "action_seq", name="uq_bid_checkpoints_action"),
+        UniqueConstraint(
+            "task_attempt_id", "id", name="uq_bid_checkpoints_attempt_id"
+        ),
         Index("ix_bid_checkpoints_attempt_created", "task_attempt_id", "created_at"),
+        Index("ix_bid_checkpoints_context_manifest", "context_manifest_id"),
         TABLE_OPTIONS,
     )
 
@@ -438,6 +461,12 @@ class BidAsyncOperation(Base):
             "operation_type",
             "input_hash",
             name="uq_bid_async_operations_task_input",
+        ),
+        UniqueConstraint(
+            "task_id",
+            "task_attempt_id",
+            "id",
+            name="uq_bid_async_operations_task_attempt_id",
         ),
         Index("ix_bid_async_operations_status_timeout", "status", "timeout_at"),
         Index("ix_bid_async_operations_attempt", "task_attempt_id"),

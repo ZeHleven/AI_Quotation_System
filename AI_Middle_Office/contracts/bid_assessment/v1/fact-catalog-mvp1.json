@@ -1,0 +1,24 @@
+{
+  "schema": "bid.fact.catalog.mvp1.v1",
+  "version": "1.0.0",
+  "slots": [
+    {"slot": "tender.overview", "task_type": "extract_tender_overview", "value_types": ["text", "string"]},
+    {"slot": "tender.submission.deadline", "task_type": "extract_critical_dates", "value_types": ["datetime", "date", "text"]},
+    {"slot": "tender.opening.datetime", "task_type": "extract_critical_dates", "value_types": ["datetime", "date", "text"]},
+    {"slot": "tender.qualification.requirements", "task_type": "extract_qualification_requirements", "value_types": ["requirement_list", "text"]},
+    {"slot": "tender.rejection.clauses", "task_type": "extract_rejection_clauses", "value_types": ["clause_list", "text"]},
+    {"slot": "tender.guarantee.requirements", "task_type": "extract_guarantees_and_fees", "value_types": ["requirement_list", "money", "text"]},
+    {"slot": "tender.fees.requirements", "task_type": "extract_guarantees_and_fees", "value_types": ["requirement_list", "money", "text"]},
+    {"slot": "tender.evaluation.method", "task_type": "extract_evaluation_method", "value_types": ["scoring_item_list", "text"]},
+    {"slot": "tender.scope.quantities", "task_type": "extract_scope_and_quantities", "value_types": ["requirement_list", "text"]},
+    {"slot": "tender.deliverables.samples", "task_type": "extract_deliverables_and_samples", "value_types": ["deliverable_list", "text"]},
+    {"slot": "tender.contract.terms", "task_type": "extract_contract_terms", "value_types": ["clause_list", "text"]},
+    {"slot": "tender.schedule.site_constraints", "task_type": "extract_schedule_and_site_constraints", "value_types": ["requirement_list", "duration", "location", "text"]},
+    {"slot": "enterprise.qualification.match", "task_type": "enterprise_governed_read", "value_types": ["boolean"]},
+    {"slot": "enterprise.personnel_performance.match", "task_type": "enterprise_governed_read", "value_types": ["boolean"]},
+    {"slot": "enterprise.legal_compliance.match", "task_type": "enterprise_governed_read", "value_types": ["boolean"]},
+    {"slot": "enterprise.guarantee_cash.capacity", "task_type": "enterprise_governed_read", "value_types": ["boolean"]},
+    {"slot": "enterprise.minimum_bid.capacity", "task_type": "enterprise_governed_read", "value_types": ["boolean"]},
+    {"slot": "enterprise.prohibited_risk.present", "task_type": "enterprise_governed_read", "value_types": ["boolean"]}
+  ]
+}

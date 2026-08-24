@@ -1,0 +1,18 @@
+{
+  "schema": "bid.skill.artifact.v1",
+  "skill_id": "bid-tender-fact-extraction",
+  "skill_version": "1.0.0",
+  "executor_kind": "langgraph",
+  "task_bindings": {
+    "extract_tender_overview": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"},
+    "extract_critical_dates": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"},
+    "extract_qualification_requirements": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"},
+    "extract_rejection_clauses": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"},
+    "extract_guarantees_and_fees": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"},
+    "extract_evaluation_method": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"},
+    "extract_scope_and_quantities": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"},
+    "extract_deliverables_and_samples": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"},
+    "extract_contract_terms": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"},
+    "extract_schedule_and_site_constraints": {"action_contract": "bid.task.action.v1", "output_schema": "fact_assertion_candidates_v1"}
+  }
+}

@@ -1,0 +1,316 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/retrieval-benchmark.schema.json",
+  "title": "Qisheng Bid Assessment RQ2 Cross-project Retrieval Benchmark v1",
+  "oneOf": [
+    {"$ref": "#/$defs/BenchmarkDataset"},
+    {"$ref": "#/$defs/DevelopmentSnapshot"},
+    {"$ref": "#/$defs/BenchmarkFreeze"},
+    {"$ref": "#/$defs/BenchmarkReportManifest"},
+    {"$ref": "#/$defs/ExecutionLedger"}
+  ],
+  "$defs": {
+    "Sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "NonEmptyString": {"type": "string", "minLength": 1},
+    "SourceDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document_id", "role", "sha256", "page_count"],
+      "properties": {
+        "document_id": {"$ref": "#/$defs/NonEmptyString"},
+        "role": {"enum": ["primary_tender", "clarification", "addendum", "contract", "bill_of_quantities", "other"]},
+        "sha256": {"$ref": "#/$defs/Sha256"},
+        "page_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "BenchmarkProject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_id", "project_family_hash", "prior_rq_exposure", "source_documents"],
+      "properties": {
+        "project_id": {"$ref": "#/$defs/NonEmptyString"},
+        "project_family_hash": {"$ref": "#/$defs/Sha256"},
+        "prior_rq_exposure": {"enum": ["none", "development"]},
+        "source_documents": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/SourceDocument"}
+        }
+      }
+    },
+    "GoldTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "evidence_role", "required_text_fragments", "page_numbers", "match_policy"],
+      "properties": {
+        "target_id": {"$ref": "#/$defs/NonEmptyString"},
+        "evidence_role": {"const": "evidence_atom"},
+        "required_text_fragments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {"$ref": "#/$defs/NonEmptyString"}
+        },
+        "page_numbers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "match_policy": {"const": "all_fragments_same_atom"}
+      }
+    },
+    "Annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "annotator_hash", "reviewer_hash"],
+      "properties": {
+        "status": {"enum": ["approved", "adjudicated"]},
+        "annotator_hash": {"$ref": "#/$defs/Sha256"},
+        "reviewer_hash": {"$ref": "#/$defs/Sha256"},
+        "adjudicator_hash": {"$ref": "#/$defs/Sha256"},
+        "note": {"type": "string", "maxLength": 2000}
+      }
+    },
+    "BenchmarkCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "project_id", "category", "difficulty", "question", "answer_status", "targets", "annotation"],
+      "properties": {
+        "case_id": {"$ref": "#/$defs/NonEmptyString"},
+        "project_id": {"$ref": "#/$defs/NonEmptyString"},
+        "category": {"$ref": "#/$defs/NonEmptyString"},
+        "difficulty": {"enum": ["easy", "medium", "hard"]},
+        "question": {"type": "string", "minLength": 2, "maxLength": 500},
+        "answer_status": {"enum": ["answerable", "insufficient"]},
+        "targets": {"type": "array", "items": {"$ref": "#/$defs/GoldTarget"}},
+        "annotation": {"$ref": "#/$defs/Annotation"}
+      }
+    },
+    "BenchmarkDataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "dataset_id", "dataset_version", "split", "status", "sealed", "maximum_formal_execution_count", "privacy", "projects", "cases", "dataset_hash"],
+      "properties": {
+        "schema_version": {"const": "bid.evidence.retrieval-benchmark-dataset.v1"},
+        "dataset_id": {"$ref": "#/$defs/NonEmptyString"},
+        "dataset_version": {"$ref": "#/$defs/NonEmptyString"},
+        "split": {"enum": ["development", "holdout"]},
+        "status": {"enum": ["gold_approved", "holdout_sealed"]},
+        "sealed": {"type": "boolean"},
+        "maximum_formal_execution_count": {"type": "integer", "minimum": 0, "maximum": 1},
+        "privacy": {"const": "private_restricted"},
+        "projects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/BenchmarkProject"}},
+        "cases": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/BenchmarkCase"}},
+        "dataset_hash": {"$ref": "#/$defs/Sha256"}
+      }
+    },
+    "DatasetReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_id", "dataset_hash", "file_sha256", "project_count", "case_count", "restricted_path"],
+      "properties": {
+        "dataset_id": {"$ref": "#/$defs/NonEmptyString"},
+        "dataset_hash": {"$ref": "#/$defs/Sha256"},
+        "file_sha256": {"$ref": "#/$defs/Sha256"},
+        "project_count": {"type": "integer", "minimum": 1},
+        "case_count": {"type": "integer", "minimum": 1},
+        "restricted_path": {"$ref": "#/$defs/NonEmptyString"}
+      }
+    },
+    "HashMap": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/Sha256"}
+    },
+    "AcceptanceThresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "macro_hit_at_5_min", "macro_target_recall_at_5_min", "macro_mrr_at_5_min", "macro_ndcg_at_5_min",
+        "macro_hit_at_8_min", "macro_target_recall_at_8_min", "macro_read_target_recall_at_5_min",
+        "macro_citable_target_availability_min", "worst_project_hit_at_5_min", "worst_project_target_recall_at_5_min",
+        "macro_hit_at_5_delta_min", "macro_target_recall_at_5_delta_min", "macro_hit_at_8_delta_min",
+        "macro_target_recall_at_8_delta_min", "macro_read_target_recall_at_5_delta_min",
+        "per_case_quality_regression_count_max", "atom_only_violation_count_max", "candidate_search_p95_ms_max",
+        "paired_search_delta_p95_ms_max"
+      ],
+      "properties": {
+        "macro_hit_at_5_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "macro_target_recall_at_5_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "macro_mrr_at_5_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "macro_ndcg_at_5_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "macro_hit_at_8_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "macro_target_recall_at_8_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "macro_read_target_recall_at_5_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "macro_citable_target_availability_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "worst_project_hit_at_5_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "worst_project_target_recall_at_5_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "macro_hit_at_5_delta_min": {"type": "number", "minimum": -1, "maximum": 1},
+        "macro_target_recall_at_5_delta_min": {"type": "number", "minimum": -1, "maximum": 1},
+        "macro_hit_at_8_delta_min": {"type": "number", "minimum": -1, "maximum": 1},
+        "macro_target_recall_at_8_delta_min": {"type": "number", "minimum": -1, "maximum": 1},
+        "macro_read_target_recall_at_5_delta_min": {"type": "number", "minimum": -1, "maximum": 1},
+        "per_case_quality_regression_count_max": {"type": "integer", "minimum": 0},
+        "atom_only_violation_count_max": {"type": "integer", "minimum": 0},
+        "candidate_search_p95_ms_max": {"type": "number", "minimum": 0},
+        "paired_search_delta_p95_ms_max": {"type": "number", "minimum": 0}
+      }
+    },
+    "DevelopmentSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "profile_version", "snapshot_id", "status", "dataset", "retrieval_profiles", "acceptance_thresholds", "anti_leakage", "frozen_artifacts", "snapshot_hash"],
+      "properties": {
+        "schema_version": {"const": "bid.evidence.retrieval-benchmark-development-snapshot.v1"},
+        "profile_version": {"const": "bid-evidence-retrieval-benchmark-profile-v1-rq2-closeout"},
+        "snapshot_id": {"$ref": "#/$defs/NonEmptyString"},
+        "status": {"const": "frozen_predevelopment"},
+        "dataset": {"$ref": "#/$defs/DatasetReference"},
+        "retrieval_profiles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["baseline", "candidate"],
+          "properties": {
+            "baseline": {"const": "bid-evidence-candidate-fusion-profile-v1-rq2b"},
+            "candidate": {"const": "bid-evidence-rerank-profile-v1-rq2c-bce"}
+          }
+        },
+        "acceptance_thresholds": {"$ref": "#/$defs/AcceptanceThresholds"},
+        "anti_leakage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["project_specific_query_hints_forbidden", "threshold_change_after_snapshot_forbidden", "code_or_profile_change_requires_new_snapshot"],
+          "properties": {
+            "project_specific_query_hints_forbidden": {"const": true},
+            "threshold_change_after_snapshot_forbidden": {"const": true},
+            "code_or_profile_change_requires_new_snapshot": {"const": true}
+          }
+        },
+        "frozen_artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code_sha256", "contract_sha256", "dependency_sha256"],
+          "properties": {"code_sha256": {"$ref": "#/$defs/HashMap"}, "contract_sha256": {"$ref": "#/$defs/HashMap"}, "dependency_sha256": {"$ref": "#/$defs/HashMap"}}
+        },
+        "snapshot_hash": {"$ref": "#/$defs/Sha256"}
+      }
+    },
+    "BenchmarkFreeze": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "profile_version", "freeze_id", "status", "datasets", "retrieval_profiles", "acceptance_thresholds", "development_acceptance", "holdout_execution", "anti_leakage", "frozen_artifacts", "freeze_hash"],
+      "properties": {
+        "schema_version": {"const": "bid.evidence.retrieval-benchmark-freeze.v1"},
+        "profile_version": {"const": "bid-evidence-retrieval-benchmark-profile-v1-rq2-closeout"},
+        "freeze_id": {"$ref": "#/$defs/NonEmptyString"},
+        "status": {"const": "frozen_preholdout"},
+        "datasets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["development", "holdout"],
+          "properties": {"development": {"$ref": "#/$defs/DatasetReference"}, "holdout": {"$ref": "#/$defs/DatasetReference"}}
+        },
+        "retrieval_profiles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["baseline", "candidate"],
+          "properties": {
+            "baseline": {"const": "bid-evidence-candidate-fusion-profile-v1-rq2b"},
+            "candidate": {"const": "bid-evidence-rerank-profile-v1-rq2c-bce"}
+          }
+        },
+        "acceptance_thresholds": {"$ref": "#/$defs/AcceptanceThresholds"},
+        "development_acceptance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "report_sha256", "snapshot_hash"],
+          "properties": {
+            "status": {"const": "passed"},
+            "report_sha256": {"$ref": "#/$defs/Sha256"},
+            "snapshot_hash": {"$ref": "#/$defs/Sha256"}
+          }
+        },
+        "holdout_execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maximum_formal_execution_count", "baseline_before_candidate", "rerun_after_result_forbidden", "result_may_not_change_thresholds"],
+          "properties": {
+            "maximum_formal_execution_count": {"const": 1},
+            "baseline_before_candidate": {"const": true},
+            "rerun_after_result_forbidden": {"const": true},
+            "result_may_not_change_thresholds": {"const": true}
+          }
+        },
+        "anti_leakage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["project_level_split", "project_family_overlap_forbidden", "source_document_overlap_forbidden", "project_specific_query_hints_forbidden", "holdout_not_used_for_tuning", "holdout_failures_may_not_define_new_rules", "threshold_change_after_freeze_forbidden"],
+          "properties": {
+            "project_level_split": {"const": true},
+            "project_family_overlap_forbidden": {"const": true},
+            "source_document_overlap_forbidden": {"const": true},
+            "project_specific_query_hints_forbidden": {"const": true},
+            "holdout_not_used_for_tuning": {"const": true},
+            "holdout_failures_may_not_define_new_rules": {"const": true},
+            "threshold_change_after_freeze_forbidden": {"const": true}
+          }
+        },
+        "frozen_artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code_sha256", "contract_sha256", "dependency_sha256"],
+          "properties": {"code_sha256": {"$ref": "#/$defs/HashMap"}, "contract_sha256": {"$ref": "#/$defs/HashMap"}, "dependency_sha256": {"$ref": "#/$defs/HashMap"}}
+        },
+        "freeze_hash": {"$ref": "#/$defs/Sha256"}
+      }
+    },
+    "ProjectReportReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_id", "dataset_hash", "document_sha256", "baseline_summary_path", "candidate_summary_path", "ab_summary_path"],
+      "properties": {
+        "project_id": {"$ref": "#/$defs/NonEmptyString"},
+        "dataset_hash": {"$ref": "#/$defs/Sha256"},
+        "document_sha256": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Sha256"}},
+        "baseline_summary_path": {"$ref": "#/$defs/NonEmptyString"},
+        "candidate_summary_path": {"$ref": "#/$defs/NonEmptyString"},
+        "ab_summary_path": {"$ref": "#/$defs/NonEmptyString"}
+      }
+    },
+    "BenchmarkReportManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "evaluation_binding_kind", "evaluation_binding_hash", "dataset_hash", "split", "formal_execution_id", "formal_execution_count", "projects"],
+      "properties": {
+        "schema_version": {"const": "bid.evidence.retrieval-benchmark-report-manifest.v1"},
+        "evaluation_binding_kind": {"enum": ["development_snapshot", "holdout_freeze"]},
+        "evaluation_binding_hash": {"$ref": "#/$defs/Sha256"},
+        "dataset_hash": {"$ref": "#/$defs/Sha256"},
+        "split": {"enum": ["development", "holdout"]},
+        "formal_execution_id": {"$ref": "#/$defs/NonEmptyString"},
+        "formal_execution_count": {"type": "integer", "minimum": 0, "maximum": 1},
+        "projects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/ProjectReportReference"}}
+      }
+    },
+    "ExecutionLedger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "formal_execution_id", "formal_execution_count", "freeze_id", "freeze_hash", "dataset_id", "dataset_hash", "authorization_record", "baseline_before_candidate", "rerun_after_result_forbidden", "report_hash", "ledger_hash"],
+      "properties": {
+        "schema_version": {"const": "bid.evidence.retrieval-benchmark-execution-ledger.v1"},
+        "status": {"enum": ["started", "completed"]},
+        "formal_execution_id": {"$ref": "#/$defs/NonEmptyString"},
+        "formal_execution_count": {"const": 1},
+        "freeze_id": {"$ref": "#/$defs/NonEmptyString"},
+        "freeze_hash": {"$ref": "#/$defs/Sha256"},
+        "dataset_id": {"$ref": "#/$defs/NonEmptyString"},
+        "dataset_hash": {"$ref": "#/$defs/Sha256"},
+        "authorization_record": {"$ref": "#/$defs/NonEmptyString"},
+        "baseline_before_candidate": {"const": true},
+        "rerun_after_result_forbidden": {"const": true},
+        "report_hash": {"oneOf": [{"$ref": "#/$defs/Sha256"}, {"type": "null"}]},
+        "ledger_hash": {"$ref": "#/$defs/Sha256"}
+      }
+    }
+  }
+}

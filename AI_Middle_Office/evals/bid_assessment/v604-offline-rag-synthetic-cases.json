@@ -1,0 +1,195 @@
+{
+  "schema_version": "bid.pure_agent.v604.offline_rag.v1",
+  "dataset_kind": "synthetic_only",
+  "description": "Pure Agent V604 deterministic offline RAG and recall cases. All names, identifiers, dates and amounts are fictional.",
+  "domains": [
+    {
+      "domain": "bid_document",
+      "document_label": "合成招标文件-A",
+      "source_scope_ref": "document:synthetic-bid-a",
+      "source_version_ref": "document-version:synthetic-bid-a-v1",
+      "blocks": [
+        {
+          "block_key": "bid_heading",
+          "text": "第三章 投标人须知",
+          "block_type": "heading",
+          "page_no": 1,
+          "ordinal": 0,
+          "section_path": ["第三章", "投标人须知"],
+          "active": true
+        },
+        {
+          "block_key": "bid_qualification",
+          "text": "投标人须具备建筑装修装饰工程专业承包一级资质。",
+          "block_type": "clause",
+          "page_no": 2,
+          "ordinal": 1,
+          "section_path": ["第三章", "资格条件"],
+          "active": true
+        },
+        {
+          "block_key": "bid_deadline",
+          "text": "投标截止时间 | 2026年9月30日10时00分",
+          "block_type": "table_row",
+          "page_no": 3,
+          "ordinal": 2,
+          "section_path": ["第三章", "时间安排"],
+          "active": true
+        },
+        {
+          "block_key": "bid_guarantee",
+          "text": "投标保证金为人民币50万元，须在投标截止时间前到账。",
+          "block_type": "clause",
+          "page_no": 4,
+          "ordinal": 3,
+          "section_path": ["第三章", "担保要求"],
+          "active": true
+        },
+        {
+          "block_key": "bid_performance",
+          "text": "近五年完成不少于2项合同额3000万元以上的公共建筑装修项目。",
+          "block_type": "clause",
+          "page_no": 5,
+          "ordinal": 4,
+          "section_path": ["第三章", "业绩要求"],
+          "active": true
+        },
+        {
+          "block_key": "bid_revoked",
+          "text": "境外工程特级许可编号REVOKED-9000。",
+          "block_type": "clause",
+          "page_no": 6,
+          "ordinal": 5,
+          "section_path": ["第三章", "已撤销补遗"],
+          "active": false
+        }
+      ]
+    },
+    {
+      "domain": "enterprise_knowledge",
+      "document_label": "合成企业知识-A",
+      "source_scope_ref": "enterprise-scope:synthetic-a",
+      "source_version_ref": "enterprise-version:synthetic-a-v1",
+      "blocks": [
+        {
+          "block_key": "enterprise_heading",
+          "text": "企业能力资料",
+          "block_type": "heading",
+          "page_no": 1,
+          "ordinal": 0,
+          "section_path": ["企业能力资料"],
+          "active": true
+        },
+        {
+          "block_key": "enterprise_qualification",
+          "text": "企业持有建筑装修装饰工程专业承包一级资质，有效期至2028年12月31日，内部合成编号QS-ENT-2028-X9。",
+          "block_type": "clause",
+          "page_no": 2,
+          "ordinal": 1,
+          "section_path": ["企业能力资料", "资质"],
+          "active": true
+        },
+        {
+          "block_key": "enterprise_performance",
+          "text": "2024年完成一项公共建筑装修改造项目，合同额3500万元。",
+          "block_type": "clause",
+          "page_no": 3,
+          "ordinal": 2,
+          "section_path": ["企业能力资料", "业绩"],
+          "active": true
+        },
+        {
+          "block_key": "enterprise_revoked",
+          "text": "旧版安全许可编号ENT-OLD-0001。",
+          "block_type": "clause",
+          "page_no": 4,
+          "ordinal": 3,
+          "section_path": ["企业能力资料", "历史作废"],
+          "active": false
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "R01_bid_deadline_lexical",
+      "domain": "bid_document",
+      "query": "投标截止时间 2026年9月30日",
+      "field_codes": ["submission.deadline"],
+      "answer_shapes": ["datetime"],
+      "semantic_block_ranking": [],
+      "expected_block_keys": ["bid_deadline"]
+    },
+    {
+      "id": "R02_bid_guarantee_hybrid_overlap",
+      "domain": "bid_document",
+      "query": "投标保证金50万元",
+      "field_codes": ["commercial.bid_security"],
+      "answer_shapes": ["money"],
+      "semantic_block_ranking": ["bid_guarantee"],
+      "expected_block_keys": ["bid_guarantee"],
+      "expected_top_channels": ["lexical_bm25f", "semantic_bce"]
+    },
+    {
+      "id": "R03_bid_performance_semantic_synonym",
+      "domain": "bid_document",
+      "query": "可核验的既往相似案例",
+      "field_codes": ["qualification.similar_performance"],
+      "answer_shapes": ["text"],
+      "semantic_block_ranking": ["bid_performance"],
+      "expected_block_keys": ["bid_performance"],
+      "expect_lexical_miss": true
+    },
+    {
+      "id": "R04_enterprise_qualification_lexical",
+      "domain": "enterprise_knowledge",
+      "query": "建筑装修装饰工程专业承包一级资质",
+      "field_codes": ["enterprise.qualification"],
+      "answer_shapes": ["text"],
+      "semantic_block_ranking": [],
+      "expected_block_keys": ["enterprise_qualification"]
+    },
+    {
+      "id": "R05_enterprise_performance_lexical",
+      "domain": "enterprise_knowledge",
+      "query": "2024年公共建筑装修改造合同额3500万元",
+      "field_codes": ["enterprise.performance"],
+      "answer_shapes": ["money", "text"],
+      "semantic_block_ranking": [],
+      "expected_block_keys": ["enterprise_performance"]
+    },
+    {
+      "id": "R06_zero_result_is_not_failure",
+      "domain": "bid_document",
+      "query": "火星基地专项许可证MARS-7788",
+      "field_codes": [],
+      "answer_shapes": ["text"],
+      "semantic_block_ranking": [],
+      "expected_block_keys": []
+    },
+    {
+      "id": "R07_revoked_bid_block_excluded",
+      "domain": "bid_document",
+      "query": "REVOKED-9000",
+      "field_codes": [],
+      "answer_shapes": ["identifier"],
+      "semantic_block_ranking": [],
+      "expected_block_keys": []
+    },
+    {
+      "id": "R08_domain_scope_prevents_cross_leakage",
+      "domain": "bid_document",
+      "query": "QS-ENT-2028-X9",
+      "field_codes": [],
+      "answer_shapes": ["identifier"],
+      "semantic_block_ranking": [],
+      "expected_block_keys": []
+    }
+  ],
+  "thresholds": {
+    "recall_at_3_min": 1.0,
+    "mean_reciprocal_rank_min": 1.0,
+    "zero_result_precision_min": 1.0,
+    "atom_upgrade_success_min": 1.0
+  }
+}

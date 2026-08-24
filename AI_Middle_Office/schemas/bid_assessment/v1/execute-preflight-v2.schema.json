@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/execute-preflight-v2.schema.json",
+  "title": "Bid Assessment Local Execute Preflight v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "local_lab", "access_mode", "model_provider", "retrieval_mode", "launch_ready", "current_process_ready", "restart_required", "blocking_codes", "deferred_codes", "authority_fingerprint", "checks"],
+  "properties": {
+    "schema": {"const": "bid.runtime.execute-preflight.v2"},
+    "local_lab": {"type": "boolean"},
+    "access_mode": {"enum": ["view-only", "execute"]},
+    "model_provider": {"type": "string", "minLength": 1, "maxLength": 80},
+    "retrieval_mode": {"enum": ["legacy", "rq2b", "rq2c", "configured"]},
+    "launch_ready": {"type": "boolean"}, "current_process_ready": {"type": "boolean"}, "restart_required": {"type": "boolean"},
+    "blocking_codes": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"}},
+    "deferred_codes": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"}},
+    "authority_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "checks": {
+      "type": "array", "minItems": 12, "maxItems": 15,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["code", "label", "status", "required", "detail"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"}, "label": {"type": "string", "minLength": 1, "maxLength": 80},
+          "status": {"enum": ["ready", "blocked", "deferred", "inactive"]}, "required": {"type": "boolean"},
+          "detail": {"type": "string", "minLength": 1, "maxLength": 240}
+        }
+      }
+    }
+  }
+}

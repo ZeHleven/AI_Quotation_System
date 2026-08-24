@@ -123,11 +123,356 @@ class Settings:
     pricing_agent_archive_max_indexed_rows: int = _env_int("PRICING_AGENT_ARCHIVE_MAX_INDEXED_ROWS", 100000)
     feature_bidding_mvp: bool = _env_bool("FEATURE_BIDDING_MVP", False)
     feature_bidding_llm_review: bool = _env_bool("FEATURE_BIDDING_LLM_REVIEW", False)
-    # New bid-assessment v1 runtime. It stays fail-closed until 0083-0086 are
-    # migrated and the dedicated API/worker rollout gate is approved.
+    # New bid-assessment v1 runtime. It stays fail-closed until the complete
+    # 0083-0099 Agent increment passes its dedicated migration and rollout gate.
     feature_bid_assessment_v1_runtime: bool = _env_bool(
         "FEATURE_BID_ASSESSMENT_V1_RUNTIME",
         False,
+    )
+    # Pure Agent v0.1 is a separate, local-only development surface. It must
+    # not inherit or replace the legacy bid-assessment runtime switch.
+    feature_bid_assessment_pure_agent: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PURE_AGENT",
+        False,
+    )
+    # Conversation/API visibility and Agent execution authority are separate.
+    # Local runtime pulses stay disabled even when the view/API surface is open.
+    feature_bid_assessment_pure_agent_runtime: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PURE_AGENT_RUNTIME",
+        False,
+    )
+    bid_assessment_pure_agent_continuation_secret: str = _env(
+        "BID_ASSESSMENT_PURE_AGENT_CONTINUATION_SECRET",
+        "",
+    )
+    feature_bid_assessment_phase2_document_worker: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE2_DOCUMENT_WORKER",
+        False,
+    )
+    feature_bid_assessment_pdf_c2_native_layout: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PDF_C2_NATIVE_LAYOUT",
+        False,
+    )
+    feature_bid_assessment_rq1a_structure_aggregation: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_RQ1A_STRUCTURE_AGGREGATION",
+        False,
+    )
+    feature_bid_assessment_rq1b_parse_quality_gate: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_RQ1B_PARSE_QUALITY_GATE",
+        False,
+    )
+    feature_bid_assessment_pdf_c3_role_aware_retrieval: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PDF_C3_ROLE_AWARE_RETRIEVAL",
+        False,
+    )
+    feature_bid_assessment_rq1c_query_optimizer: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_RQ1C_QUERY_OPTIMIZER",
+        False,
+    )
+    feature_bid_assessment_rq1d_field_aware_lexical: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_RQ1D_FIELD_AWARE_LEXICAL",
+        False,
+    )
+    feature_bid_assessment_rq2a_semantic_recall: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_RQ2A_SEMANTIC_RECALL",
+        False,
+    )
+    feature_bid_assessment_rq2b_candidate_fusion: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_RQ2B_CANDIDATE_FUSION",
+        False,
+    )
+    feature_bid_assessment_rq2c_lightweight_rerank: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_RQ2C_LIGHTWEIGHT_RERANK",
+        False,
+    )
+    bid_document_parser_profile_version: str = _env(
+        "BID_DOCUMENT_PARSER_PROFILE_VERSION",
+        "bid-document-parser-profile-v1",
+    )
+    bid_evidence_retrieval_profile_version: str = _env(
+        "BID_EVIDENCE_RETRIEVAL_PROFILE_VERSION",
+        "bid-evidence-retrieval-profile-v1-legacy",
+    )
+    bid_evidence_query_optimizer_profile_version: str = _env(
+        "BID_EVIDENCE_QUERY_OPTIMIZER_PROFILE_VERSION",
+        "tender-query-planner-v1",
+    )
+    bid_evidence_lexical_search_profile_version: str = _env(
+        "BID_EVIDENCE_LEXICAL_SEARCH_PROFILE_VERSION",
+        "bid-evidence-lexical-profile-v0-single-field",
+    )
+    bid_evidence_semantic_search_profile_version: str = _env(
+        "BID_EVIDENCE_SEMANTIC_SEARCH_PROFILE_VERSION",
+        "bid-evidence-semantic-profile-v0-disabled",
+    )
+    bid_evidence_candidate_fusion_profile_version: str = _env(
+        "BID_EVIDENCE_CANDIDATE_FUSION_PROFILE_VERSION",
+        "bid-evidence-candidate-fusion-profile-v0-disabled",
+    )
+    bid_evidence_rerank_profile_version: str = _env(
+        "BID_EVIDENCE_RERANK_PROFILE_VERSION",
+        "bid-evidence-rerank-profile-v0-disabled",
+    )
+    bid_evidence_reranker_provider_id: str = _env(
+        "BID_EVIDENCE_RERANK_PROVIDER_ID",
+        "disabled",
+    )
+    bid_evidence_reranker_model_id: str = _env(
+        "BID_EVIDENCE_RERANK_MODEL_ID",
+        "maidalun1020/bce-reranker-base_v1",
+    )
+    bid_evidence_reranker_model_revision: str = _env(
+        "BID_EVIDENCE_RERANK_MODEL_REVISION",
+        "eb7650fca1d81e2856fbd0d522488844aa502735",
+    )
+    bid_evidence_reranker_model_path: str = _env(
+        "BID_EVIDENCE_RERANK_MODEL_PATH",
+        "",
+    )
+    bid_evidence_reranker_model_cache_dir: str = _env(
+        "BID_EVIDENCE_RERANK_MODEL_CACHE_DIR",
+        "",
+    )
+    bid_evidence_reranker_offline: bool = _env_bool(
+        "BID_EVIDENCE_RERANK_OFFLINE",
+        True,
+    )
+    bid_evidence_reranker_batch_size: int = _env_int(
+        "BID_EVIDENCE_RERANK_BATCH_SIZE",
+        8,
+    )
+    bid_evidence_semantic_provider_id: str = _env(
+        "BID_EVIDENCE_SEMANTIC_PROVIDER_ID",
+        "disabled",
+    )
+    bid_evidence_semantic_model_id: str = _env(
+        "BID_EVIDENCE_SEMANTIC_MODEL_ID",
+        "maidalun1020/bce-embedding-base_v1",
+    )
+    bid_evidence_semantic_model_revision: str = _env(
+        "BID_EVIDENCE_SEMANTIC_MODEL_REVISION",
+        "9c0d82af44af61abe171ffae23fde5740c0ec1a8",
+    )
+    bid_evidence_semantic_dimension: int = _env_int(
+        "BID_EVIDENCE_SEMANTIC_DIMENSION",
+        768,
+    )
+    bid_evidence_semantic_model_path: str = _env(
+        "BID_EVIDENCE_SEMANTIC_MODEL_PATH",
+        "",
+    )
+    bid_evidence_semantic_model_cache_dir: str = _env(
+        "BID_EVIDENCE_SEMANTIC_MODEL_CACHE_DIR",
+        "",
+    )
+    bid_evidence_semantic_model_offline: bool = _env_bool(
+        "BID_EVIDENCE_SEMANTIC_MODEL_OFFLINE",
+        True,
+    )
+    bid_evidence_semantic_milvus_host: str = _env(
+        "BID_EVIDENCE_SEMANTIC_MILVUS_HOST",
+        "ai-milvus",
+    )
+    bid_evidence_semantic_milvus_port: int = _env_int(
+        "BID_EVIDENCE_SEMANTIC_MILVUS_PORT",
+        19530,
+    )
+    bid_evidence_semantic_collection: str = _env(
+        "BID_EVIDENCE_SEMANTIC_COLLECTION",
+        "bid_assessment_evidence_semantic_v1",
+    )
+    bid_evidence_semantic_connect_timeout_seconds: int = _env_int(
+        "BID_EVIDENCE_SEMANTIC_CONNECT_TIMEOUT_SECONDS",
+        10,
+    )
+    bid_evidence_semantic_search_timeout_seconds: int = _env_int(
+        "BID_EVIDENCE_SEMANTIC_SEARCH_TIMEOUT_SECONDS",
+        20,
+    )
+    bid_evidence_semantic_lease_seconds: int = _env_int(
+        "BID_EVIDENCE_SEMANTIC_LEASE_SECONDS",
+        900,
+    )
+    bid_evidence_semantic_max_attempts: int = _env_int(
+        "BID_EVIDENCE_SEMANTIC_MAX_ATTEMPTS",
+        5,
+    )
+    bid_document_parse_lease_seconds: int = _env_int(
+        "BID_DOCUMENT_PARSE_LEASE_SECONDS",
+        300,
+    )
+    bid_document_parse_max_attempts: int = _env_int(
+        "BID_DOCUMENT_PARSE_MAX_ATTEMPTS",
+        5,
+    )
+    bid_document_parse_max_bytes: int = _env_int(
+        "BID_DOCUMENT_PARSE_MAX_BYTES",
+        83886080,
+    )
+    bid_document_parse_min_lot_quality_score: int = _env_int(
+        "BID_DOCUMENT_PARSE_MIN_LOT_QUALITY_SCORE",
+        40,
+    )
+    feature_bid_assessment_phase2_lot_worker: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE2_LOT_WORKER",
+        False,
+    )
+    feature_bid_assessment_phase3_complete_runtime: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME",
+        False,
+    )
+    feature_bid_assessment_phase3_run_bootstrap: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE3_RUN_BOOTSTRAP",
+        False,
+    )
+    feature_bid_assessment_phase3_planner: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE3_PLANNER",
+        False,
+    )
+    feature_bid_assessment_phase3_task_runtime: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE3_TASK_RUNTIME",
+        False,
+    )
+    feature_bid_assessment_phase3_run_lifecycle: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE3_RUN_LIFECYCLE",
+        False,
+    )
+    feature_bid_assessment_phase3_tool_context: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_CONTEXT",
+        False,
+    )
+    feature_bid_assessment_phase3_tool_executor: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_EXECUTOR",
+        False,
+    )
+    feature_bid_assessment_phase3_run_validation: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE3_RUN_VALIDATION",
+        False,
+    )
+    feature_bid_assessment_phase4_mvp: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_MVP",
+        False,
+    )
+    feature_bid_assessment_phase4_plan_continuation: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_PLAN_CONTINUATION",
+        False,
+    )
+    feature_bid_assessment_phase4_local_agent: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_LOCAL_AGENT",
+        False,
+    )
+    feature_bid_assessment_phase4_evidence_mcp: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_EVIDENCE_MCP",
+        False,
+    )
+    feature_bid_assessment_phase4_model_executor: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_MODEL_EXECUTOR",
+        False,
+    )
+    feature_bid_assessment_phase4_deepseek_adapter: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_DEEPSEEK_ADAPTER",
+        False,
+    )
+    feature_bid_assessment_phase4_fact_authority: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_FACT_AUTHORITY",
+        False,
+    )
+    feature_bid_assessment_phase4_preliminary_report: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_PRELIMINARY_REPORT",
+        False,
+    )
+    feature_bid_assessment_phase4_enterprise_capability: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_CAPABILITY",
+        False,
+    )
+    feature_bid_assessment_phase4_mvp_release_candidate: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_MVP_RELEASE_CANDIDATE",
+        False,
+    )
+    feature_bid_assessment_phase4_business_baseline: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_BUSINESS_BASELINE",
+        False,
+    )
+    feature_bid_assessment_phase4_enterprise_evidence_import: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_EVIDENCE_IMPORT",
+        False,
+    )
+    feature_bid_assessment_phase4_fact_verification: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_FACT_VERIFICATION",
+        False,
+    )
+    feature_bid_assessment_phase4_mvp0_trace: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PHASE4_MVP0_TRACE",
+        False,
+    )
+    bid_run_validation_lease_seconds: int = _env_int(
+        "BID_RUN_VALIDATION_LEASE_SECONDS",
+        90,
+    )
+    bid_tool_scope_signing_key: str = _env("BID_TOOL_SCOPE_SIGNING_KEY", "")
+    bid_tool_dispatch_lease_seconds: int = _env_int(
+        "BID_TOOL_DISPATCH_LEASE_SECONDS",
+        60,
+    )
+    bid_model_call_lease_seconds: int = _env_int(
+        "BID_MODEL_CALL_LEASE_SECONDS",
+        120,
+    )
+    bid_task_runtime_lease_seconds: int = _env_int(
+        "BID_TASK_RUNTIME_LEASE_SECONDS",
+        180,
+    )
+    bid_assessment_model_provider_ref: str = _env(
+        "BID_ASSESSMENT_MODEL_PROVIDER_REF",
+        "deepseek",
+    )
+    bid_assessment_model_id: str = _env(
+        "BID_ASSESSMENT_MODEL_ID",
+        "deepseek-v4-flash",
+    )
+    bid_assessment_model_api_key: str = _env(
+        "BID_ASSESSMENT_MODEL_API_KEY",
+        _env("DEEPSEEK_API_KEY", ""),
+    )
+    bid_assessment_model_chat_url: str = _env(
+        "BID_ASSESSMENT_MODEL_CHAT_URL",
+        _env("DEEPSEEK_CHAT_URL", "https://api.deepseek.com/chat/completions"),
+    )
+    bid_assessment_model_timeout_seconds: int = _env_int(
+        "BID_ASSESSMENT_MODEL_TIMEOUT_SECONDS",
+        120,
+    )
+    bid_assessment_model_thinking_mode: str = _env(
+        "BID_ASSESSMENT_MODEL_THINKING_MODE",
+        "disabled",
+    )
+    bid_mvp1_local_model_mode: str = _env(
+        "BID_MVP1_LOCAL_MODEL_MODE",
+        "deterministic",
+    )
+    bid_task_runtime_max_attempts: int = _env_int(
+        "BID_TASK_RUNTIME_MAX_ATTEMPTS",
+        3,
+    )
+    bid_lot_detector_version: str = _env(
+        "BID_LOT_DETECTOR_VERSION",
+        "bid-lot-detector-rules-v1",
+    )
+    bid_lot_rule_set_version: str = _env(
+        "BID_LOT_RULE_SET_VERSION",
+        "bid-lot-rules-v1",
+    )
+    bid_lot_normalizer_version: str = _env(
+        "BID_LOT_NORMALIZER_VERSION",
+        "bid-lot-normalizer-v1",
+    )
+    bid_lot_detection_lease_seconds: int = _env_int(
+        "BID_LOT_DETECTION_LEASE_SECONDS",
+        120,
+    )
+    bid_lot_detection_max_attempts: int = _env_int(
+        "BID_LOT_DETECTION_MAX_ATTEMPTS",
+        3,
     )
     bid_outbox_poll_seconds: float = _env_float("BID_OUTBOX_POLL_SECONDS", 1.0)
     bid_outbox_batch_size: int = _env_int("BID_OUTBOX_BATCH_SIZE", 20)
@@ -158,6 +503,14 @@ class Settings:
     bid_upload_object_prefix: str = _env(
         "BID_UPLOAD_OBJECT_PREFIX",
         "bid-assessment/uploading/v1",
+    )
+    bid_upload_storage_backend: str = _env(
+        "BID_UPLOAD_STORAGE_BACKEND",
+        "minio",
+    )
+    bid_upload_local_root: str = _env(
+        "BID_UPLOAD_LOCAL_ROOT",
+        str(BASE_DIR / "runtime" / "bid_assessment_uploads"),
     )
     bid_upload_orphan_grace_seconds: int = _env_int(
         "BID_UPLOAD_ORPHAN_GRACE_SECONDS",
@@ -378,6 +731,589 @@ class Settings:
             or uses_external_database
             or self.public_access_enabled
         )
+        phase3_requirements = {
+            "FEATURE_BID_ASSESSMENT_V1_RUNTIME": self.feature_bid_assessment_v1_runtime,
+            "FEATURE_BID_ASSESSMENT_PHASE3_RUN_BOOTSTRAP": self.feature_bid_assessment_phase3_run_bootstrap,
+            "FEATURE_BID_ASSESSMENT_PHASE3_PLANNER": self.feature_bid_assessment_phase3_planner,
+            "FEATURE_BID_ASSESSMENT_PHASE3_TASK_RUNTIME": self.feature_bid_assessment_phase3_task_runtime,
+            "FEATURE_BID_ASSESSMENT_PHASE3_RUN_LIFECYCLE": self.feature_bid_assessment_phase3_run_lifecycle,
+            "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_CONTEXT": self.feature_bid_assessment_phase3_tool_context,
+            "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_EXECUTOR": self.feature_bid_assessment_phase3_tool_executor,
+            "FEATURE_BID_ASSESSMENT_PHASE3_RUN_VALIDATION": self.feature_bid_assessment_phase3_run_validation,
+        }
+        pdf_c2_profile = "bid-document-parser-profile-v2-pdf-native-layout"
+        rq1a_profile = "bid-document-parser-profile-v3-pdf-structure-rq1a"
+        rq1b_profile = "bid-document-parser-profile-v4-pdf-quality-gated-rq1b"
+        rq1a_structure_profiles = {rq1a_profile, rq1b_profile}
+        native_pdf_profiles = {pdf_c2_profile, *rq1a_structure_profiles}
+        pdf_c3_profile = "bid-evidence-retrieval-profile-v2-role-aware"
+        legacy_query_profile = "tender-query-planner-v1"
+        rq1c_query_profile = "bid-evidence-query-optimizer-profile-v1-rq1c"
+        legacy_lexical_profile = "bid-evidence-lexical-profile-v0-single-field"
+        rq1d_lexical_profile = "bid-evidence-lexical-profile-v1-rq1d"
+        disabled_semantic_profile = "bid-evidence-semantic-profile-v0-disabled"
+        rq2a_semantic_profile = "bid-evidence-semantic-profile-v1-rq2a-bce"
+        disabled_fusion_profile = (
+            "bid-evidence-candidate-fusion-profile-v0-disabled"
+        )
+        rq2b_fusion_profile = (
+            "bid-evidence-candidate-fusion-profile-v1-rq2b"
+        )
+        disabled_rerank_profile = "bid-evidence-rerank-profile-v0-disabled"
+        rq2c_rerank_profile = "bid-evidence-rerank-profile-v1-rq2c-bce"
+        if self.feature_bid_assessment_pdf_c2_native_layout:
+            if not self.feature_bid_assessment_v1_runtime:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PDF_C2_NATIVE_LAYOUT requires "
+                    "FEATURE_BID_ASSESSMENT_V1_RUNTIME"
+                )
+            if not self.feature_bid_assessment_phase2_document_worker:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PDF_C2_NATIVE_LAYOUT requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE2_DOCUMENT_WORKER"
+                )
+            if self.bid_document_parser_profile_version not in native_pdf_profiles:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PDF_C2_NATIVE_LAYOUT requires "
+                    "a supported native-layout BID_DOCUMENT_PARSER_PROFILE_VERSION"
+                )
+            if (
+                self.feature_bid_assessment_phase4_evidence_mcp
+                and not self.feature_bid_assessment_pdf_c3_role_aware_retrieval
+            ):
+                raise RuntimeError(
+                    "Invalid production configuration: PDF-C2 native hierarchy "
+                    "cannot be combined with FEATURE_BID_ASSESSMENT_PHASE4_EVIDENCE_MCP "
+                    "until the PDF-C3 role-aware retrieval profile is enabled"
+                )
+        elif self.bid_document_parser_profile_version in native_pdf_profiles:
+            raise RuntimeError(
+                "Invalid production configuration: "
+                "BID_DOCUMENT_PARSER_PROFILE_VERSION="
+                + self.bid_document_parser_profile_version
+                + " requires FEATURE_BID_ASSESSMENT_PDF_C2_NATIVE_LAYOUT"
+            )
+        if self.feature_bid_assessment_rq1a_structure_aggregation:
+            if not self.feature_bid_assessment_pdf_c2_native_layout:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ1A_STRUCTURE_AGGREGATION requires "
+                    "FEATURE_BID_ASSESSMENT_PDF_C2_NATIVE_LAYOUT"
+                )
+            if self.bid_document_parser_profile_version not in rq1a_structure_profiles:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ1A_STRUCTURE_AGGREGATION requires "
+                    "an RQ1-A-compatible BID_DOCUMENT_PARSER_PROFILE_VERSION"
+                )
+        elif self.bid_document_parser_profile_version in rq1a_structure_profiles:
+            raise RuntimeError(
+                "Invalid production configuration: "
+                "BID_DOCUMENT_PARSER_PROFILE_VERSION="
+                + self.bid_document_parser_profile_version
+                + " requires FEATURE_BID_ASSESSMENT_RQ1A_STRUCTURE_AGGREGATION"
+            )
+        if self.feature_bid_assessment_rq1b_parse_quality_gate:
+            if not self.feature_bid_assessment_rq1a_structure_aggregation:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ1B_PARSE_QUALITY_GATE requires "
+                    "FEATURE_BID_ASSESSMENT_RQ1A_STRUCTURE_AGGREGATION"
+                )
+            if self.bid_document_parser_profile_version != rq1b_profile:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ1B_PARSE_QUALITY_GATE requires "
+                    "BID_DOCUMENT_PARSER_PROFILE_VERSION=" + rq1b_profile
+                )
+        elif self.bid_document_parser_profile_version == rq1b_profile:
+            raise RuntimeError(
+                "Invalid production configuration: "
+                "BID_DOCUMENT_PARSER_PROFILE_VERSION="
+                + rq1b_profile
+                + " requires FEATURE_BID_ASSESSMENT_RQ1B_PARSE_QUALITY_GATE"
+            )
+        if self.feature_bid_assessment_pdf_c3_role_aware_retrieval:
+            if not self.feature_bid_assessment_pdf_c2_native_layout:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PDF_C3_ROLE_AWARE_RETRIEVAL requires "
+                    "FEATURE_BID_ASSESSMENT_PDF_C2_NATIVE_LAYOUT"
+                )
+            if not self.feature_bid_assessment_phase4_evidence_mcp:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PDF_C3_ROLE_AWARE_RETRIEVAL requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_EVIDENCE_MCP"
+                )
+            if self.bid_evidence_retrieval_profile_version != pdf_c3_profile:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PDF_C3_ROLE_AWARE_RETRIEVAL requires "
+                    "BID_EVIDENCE_RETRIEVAL_PROFILE_VERSION=" + pdf_c3_profile
+                )
+        elif self.bid_evidence_retrieval_profile_version == pdf_c3_profile:
+            raise RuntimeError(
+                "Invalid production configuration: "
+                "BID_EVIDENCE_RETRIEVAL_PROFILE_VERSION="
+                + pdf_c3_profile
+                + " requires FEATURE_BID_ASSESSMENT_PDF_C3_ROLE_AWARE_RETRIEVAL"
+            )
+        if self.feature_bid_assessment_rq1c_query_optimizer:
+            if not self.feature_bid_assessment_pdf_c3_role_aware_retrieval:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ1C_QUERY_OPTIMIZER requires "
+                    "FEATURE_BID_ASSESSMENT_PDF_C3_ROLE_AWARE_RETRIEVAL"
+                )
+            if not self.feature_bid_assessment_rq1b_parse_quality_gate:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ1C_QUERY_OPTIMIZER requires "
+                    "FEATURE_BID_ASSESSMENT_RQ1B_PARSE_QUALITY_GATE"
+                )
+            if (
+                self.bid_evidence_query_optimizer_profile_version
+                != rq1c_query_profile
+            ):
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ1C_QUERY_OPTIMIZER requires "
+                    "BID_EVIDENCE_QUERY_OPTIMIZER_PROFILE_VERSION="
+                    + rq1c_query_profile
+                )
+        elif self.bid_evidence_query_optimizer_profile_version != legacy_query_profile:
+            raise RuntimeError(
+                "Invalid production configuration: "
+                "BID_EVIDENCE_QUERY_OPTIMIZER_PROFILE_VERSION="
+                + self.bid_evidence_query_optimizer_profile_version
+                + " requires FEATURE_BID_ASSESSMENT_RQ1C_QUERY_OPTIMIZER"
+            )
+        if self.feature_bid_assessment_rq1d_field_aware_lexical:
+            if not self.feature_bid_assessment_rq1c_query_optimizer:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ1D_FIELD_AWARE_LEXICAL requires "
+                    "FEATURE_BID_ASSESSMENT_RQ1C_QUERY_OPTIMIZER"
+                )
+            if (
+                self.bid_evidence_lexical_search_profile_version
+                != rq1d_lexical_profile
+            ):
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ1D_FIELD_AWARE_LEXICAL requires "
+                    "BID_EVIDENCE_LEXICAL_SEARCH_PROFILE_VERSION="
+                    + rq1d_lexical_profile
+                )
+        elif (
+            self.bid_evidence_lexical_search_profile_version
+            != legacy_lexical_profile
+        ):
+            raise RuntimeError(
+                "Invalid production configuration: "
+                "BID_EVIDENCE_LEXICAL_SEARCH_PROFILE_VERSION="
+                + self.bid_evidence_lexical_search_profile_version
+                + " requires FEATURE_BID_ASSESSMENT_RQ1D_FIELD_AWARE_LEXICAL"
+            )
+        if self.feature_bid_assessment_rq2a_semantic_recall:
+            if not self.feature_bid_assessment_rq1d_field_aware_lexical:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ2A_SEMANTIC_RECALL requires "
+                    "FEATURE_BID_ASSESSMENT_RQ1D_FIELD_AWARE_LEXICAL"
+                )
+            if (
+                self.bid_evidence_semantic_search_profile_version
+                != rq2a_semantic_profile
+            ):
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ2A_SEMANTIC_RECALL requires "
+                    "BID_EVIDENCE_SEMANTIC_SEARCH_PROFILE_VERSION="
+                    + rq2a_semantic_profile
+                )
+            frozen_semantic_provider = {
+                "provider_id": "bce-milvus",
+                "model_id": "maidalun1020/bce-embedding-base_v1",
+                "model_revision": "9c0d82af44af61abe171ffae23fde5740c0ec1a8",
+                "dimension": 768,
+            }
+            actual_semantic_provider = {
+                "provider_id": self.bid_evidence_semantic_provider_id,
+                "model_id": self.bid_evidence_semantic_model_id,
+                "model_revision": self.bid_evidence_semantic_model_revision,
+                "dimension": self.bid_evidence_semantic_dimension,
+            }
+            if actual_semantic_provider != frozen_semantic_provider:
+                raise RuntimeError(
+                    "Invalid production configuration: RQ2-A requires the "
+                    "frozen BCE embedding provider/model/revision/dimension"
+                )
+            model_path = self.bid_evidence_semantic_model_path.strip()
+            normalized_model_path = model_path.replace("\\", "/")
+            if (
+                not self.bid_evidence_semantic_model_offline
+                or (
+                    model_path
+                    and model_path != self.bid_evidence_semantic_model_id
+                    and self.bid_evidence_semantic_model_revision
+                    not in normalized_model_path.split("/")
+                )
+            ):
+                raise RuntimeError(
+                    "Invalid production configuration: RQ2-A requires "
+                    "offline loading from the frozen model revision"
+                )
+            if (
+                not self.bid_evidence_semantic_milvus_host.strip()
+                or self.bid_evidence_semantic_collection
+                != "bid_assessment_evidence_semantic_v1"
+                or not 1 <= self.bid_evidence_semantic_milvus_port <= 65535
+                or not 1
+                <= self.bid_evidence_semantic_connect_timeout_seconds
+                <= 60
+                or not 1
+                <= self.bid_evidence_semantic_search_timeout_seconds
+                <= 120
+                or not 60 <= self.bid_evidence_semantic_lease_seconds <= 3600
+                or not 1 <= self.bid_evidence_semantic_max_attempts <= 20
+            ):
+                raise RuntimeError(
+                    "Invalid production configuration: RQ2-A semantic "
+                    "Milvus/lease settings are invalid"
+                )
+        elif (
+            self.bid_evidence_semantic_search_profile_version
+            != disabled_semantic_profile
+            or self.bid_evidence_semantic_provider_id != "disabled"
+        ):
+            raise RuntimeError(
+                "Invalid production configuration: semantic profile/provider "
+                "requires FEATURE_BID_ASSESSMENT_RQ2A_SEMANTIC_RECALL"
+            )
+        if self.feature_bid_assessment_rq2b_candidate_fusion:
+            if not self.feature_bid_assessment_rq2a_semantic_recall:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ2B_CANDIDATE_FUSION requires "
+                    "FEATURE_BID_ASSESSMENT_RQ2A_SEMANTIC_RECALL"
+                )
+            if (
+                self.bid_evidence_candidate_fusion_profile_version
+                != rq2b_fusion_profile
+            ):
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ2B_CANDIDATE_FUSION requires "
+                    "BID_EVIDENCE_CANDIDATE_FUSION_PROFILE_VERSION="
+                    + rq2b_fusion_profile
+                )
+        elif (
+            self.bid_evidence_candidate_fusion_profile_version
+            != disabled_fusion_profile
+        ):
+            raise RuntimeError(
+                "Invalid production configuration: candidate fusion profile "
+                "requires FEATURE_BID_ASSESSMENT_RQ2B_CANDIDATE_FUSION"
+            )
+        if self.feature_bid_assessment_rq2c_lightweight_rerank:
+            if not self.feature_bid_assessment_rq2b_candidate_fusion:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ2C_LIGHTWEIGHT_RERANK requires "
+                    "FEATURE_BID_ASSESSMENT_RQ2B_CANDIDATE_FUSION"
+                )
+            if self.bid_evidence_rerank_profile_version != rq2c_rerank_profile:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_RQ2C_LIGHTWEIGHT_RERANK requires "
+                    "BID_EVIDENCE_RERANK_PROFILE_VERSION=" + rq2c_rerank_profile
+                )
+            frozen_reranker = {
+                "provider_id": "bce-cross-encoder-local",
+                "model_id": "maidalun1020/bce-reranker-base_v1",
+                "model_revision": "eb7650fca1d81e2856fbd0d522488844aa502735",
+            }
+            actual_reranker = {
+                "provider_id": self.bid_evidence_reranker_provider_id,
+                "model_id": self.bid_evidence_reranker_model_id,
+                "model_revision": self.bid_evidence_reranker_model_revision,
+            }
+            if actual_reranker != frozen_reranker:
+                raise RuntimeError(
+                    "Invalid production configuration: RQ2-C requires the "
+                    "frozen BCE reranker provider/model/revision"
+                )
+            reranker_path = self.bid_evidence_reranker_model_path.strip()
+            normalized_reranker_path = reranker_path.replace("\\", "/")
+            if (
+                not self.bid_evidence_reranker_offline
+                or not 1 <= self.bid_evidence_reranker_batch_size <= 20
+                or (
+                    reranker_path
+                    and reranker_path != self.bid_evidence_reranker_model_id
+                    and self.bid_evidence_reranker_model_revision
+                    not in normalized_reranker_path.split("/")
+                )
+            ):
+                raise RuntimeError(
+                    "Invalid production configuration: RQ2-C requires "
+                    "offline loading from the frozen model revision and a "
+                    "batch size between 1 and 20"
+                )
+        elif (
+            self.bid_evidence_rerank_profile_version != disabled_rerank_profile
+            or self.bid_evidence_reranker_provider_id != "disabled"
+        ):
+            raise RuntimeError(
+                "Invalid production configuration: rerank profile/provider "
+                "requires FEATURE_BID_ASSESSMENT_RQ2C_LIGHTWEIGHT_RERANK"
+            )
+        if self.feature_bid_assessment_phase3_complete_runtime:
+            missing = [name for name, enabled in phase3_requirements.items() if not enabled]
+            if missing:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME requires "
+                    + ", ".join(missing)
+                )
+        elif all(phase3_requirements.values()):
+            raise RuntimeError(
+                "Invalid production configuration: enabling the complete Phase 3 "
+                "A-G chain requires FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME"
+            )
+        if self.feature_bid_assessment_phase3_run_validation:
+            if not self.feature_bid_assessment_phase3_task_runtime:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE3_RUN_VALIDATION requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE3_TASK_RUNTIME"
+                )
+            if not self.feature_bid_assessment_phase3_run_lifecycle:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE3_RUN_VALIDATION requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE3_RUN_LIFECYCLE"
+                )
+        if self.feature_bid_assessment_phase3_tool_executor:
+            if not self.feature_bid_assessment_phase3_tool_context:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_EXECUTOR requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_CONTEXT"
+                )
+            if not self.feature_bid_assessment_phase3_task_runtime:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_EXECUTOR requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE3_TASK_RUNTIME"
+                )
+            if len(self.bid_tool_scope_signing_key.strip()) < 32:
+                raise RuntimeError(
+                    "Invalid production configuration: BID_TOOL_SCOPE_SIGNING_KEY "
+                    "must be set to at least 32 characters when the Phase 3F "
+                    "executor is enabled"
+                )
+        phase4_requirements = {
+            "FEATURE_BID_ASSESSMENT_PHASE4_PLAN_CONTINUATION": self.feature_bid_assessment_phase4_plan_continuation,
+            "FEATURE_BID_ASSESSMENT_PHASE4_LOCAL_AGENT": self.feature_bid_assessment_phase4_local_agent,
+            "FEATURE_BID_ASSESSMENT_PHASE4_EVIDENCE_MCP": self.feature_bid_assessment_phase4_evidence_mcp,
+            "FEATURE_BID_ASSESSMENT_PHASE4_MODEL_EXECUTOR": self.feature_bid_assessment_phase4_model_executor,
+            "FEATURE_BID_ASSESSMENT_PHASE4_FACT_AUTHORITY": self.feature_bid_assessment_phase4_fact_authority,
+            "FEATURE_BID_ASSESSMENT_PHASE4_PRELIMINARY_REPORT": self.feature_bid_assessment_phase4_preliminary_report,
+        }
+        enabled_phase4 = [name for name, enabled in phase4_requirements.items() if enabled]
+        if enabled_phase4 and not self.feature_bid_assessment_phase3_complete_runtime:
+            raise RuntimeError(
+                "Invalid production configuration: "
+                + ", ".join(enabled_phase4)
+                + " require FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME"
+            )
+        if self.feature_bid_assessment_phase4_local_agent:
+            if not self.feature_bid_assessment_phase4_plan_continuation:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_LOCAL_AGENT requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_PLAN_CONTINUATION"
+                )
+            if not self.feature_bid_assessment_phase4_model_executor:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_LOCAL_AGENT requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_MODEL_EXECUTOR"
+                )
+        if self.feature_bid_assessment_phase4_model_executor:
+            if not self.feature_bid_assessment_phase4_plan_continuation:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_MODEL_EXECUTOR requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_PLAN_CONTINUATION"
+                )
+            if not self.feature_bid_assessment_phase4_local_agent:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_MODEL_EXECUTOR requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_LOCAL_AGENT"
+                )
+        if self.feature_bid_assessment_phase4_deepseek_adapter:
+            if not self.feature_bid_assessment_phase4_model_executor:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_DEEPSEEK_ADAPTER requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_MODEL_EXECUTOR"
+                )
+            if (
+                self.bid_assessment_model_provider_ref != "deepseek"
+                or self.bid_assessment_model_id != "deepseek-v4-flash"
+                or self.bid_assessment_model_thinking_mode != "disabled"
+                or self.bid_assessment_model_chat_url
+                not in {
+                    "https://api.deepseek.com/chat/completions",
+                    "https://api.deepseek.com/v1/chat/completions",
+                }
+            ):
+                raise RuntimeError(
+                    "Invalid production configuration: the Phase 4B-1 "
+                    "DeepSeek adapter requires the official endpoint, "
+                    "provider=deepseek, model=deepseek-v4-flash and "
+                    "thinking_mode=disabled"
+                )
+        local_model_mode = self.bid_mvp1_local_model_mode.strip().lower()
+        if local_model_mode not in {"deterministic", "deepseek-v4-flash"}:
+            raise RuntimeError(
+                "Invalid production configuration: BID_MVP1_LOCAL_MODEL_MODE "
+                "must be deterministic or deepseek-v4-flash"
+            )
+        if (
+            local_model_mode == "deepseek-v4-flash"
+            and not self.feature_bid_assessment_phase4_deepseek_adapter
+        ):
+            raise RuntimeError(
+                "Invalid production configuration: deepseek-v4-flash local mode "
+                "requires FEATURE_BID_ASSESSMENT_PHASE4_DEEPSEEK_ADAPTER"
+            )
+        phase4_dependencies = (
+            (
+                "FEATURE_BID_ASSESSMENT_PHASE4_EVIDENCE_MCP",
+                self.feature_bid_assessment_phase4_evidence_mcp,
+                "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_EXECUTOR",
+                self.feature_bid_assessment_phase3_tool_executor,
+            ),
+            (
+                "FEATURE_BID_ASSESSMENT_PHASE4_FACT_AUTHORITY",
+                self.feature_bid_assessment_phase4_fact_authority,
+                "FEATURE_BID_ASSESSMENT_PHASE4_EVIDENCE_MCP",
+                self.feature_bid_assessment_phase4_evidence_mcp,
+            ),
+            (
+                "FEATURE_BID_ASSESSMENT_PHASE4_PRELIMINARY_REPORT",
+                self.feature_bid_assessment_phase4_preliminary_report,
+                "FEATURE_BID_ASSESSMENT_PHASE4_FACT_AUTHORITY",
+                self.feature_bid_assessment_phase4_fact_authority,
+            ),
+        )
+        for name, enabled, dependency, dependency_enabled in phase4_dependencies:
+            if enabled and not dependency_enabled:
+                raise RuntimeError(
+                    f"Invalid production configuration: {name} requires {dependency}"
+                )
+        if self.feature_bid_assessment_phase4_mvp:
+            missing = [name for name, enabled in phase4_requirements.items() if not enabled]
+            if missing or not self.feature_bid_assessment_phase3_complete_runtime:
+                raise RuntimeError(
+                    "Invalid production configuration: FEATURE_BID_ASSESSMENT_PHASE4_MVP "
+                    "requires the complete Phase 3 runtime and "
+                    + ", ".join(missing or ["FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME"])
+                )
+        elif all(phase4_requirements.values()):
+            raise RuntimeError(
+                "Invalid production configuration: enabling the complete Phase 4 MVP "
+                "chain requires FEATURE_BID_ASSESSMENT_PHASE4_MVP"
+            )
+        if self.feature_bid_assessment_phase4_enterprise_capability:
+            if not self.feature_bid_assessment_phase4_mvp:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_CAPABILITY requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_MVP"
+                )
+            if not self.feature_bid_assessment_phase4_fact_authority:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_CAPABILITY requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_FACT_AUTHORITY"
+                )
+        if self.feature_bid_assessment_phase4_mvp_release_candidate:
+            if not self.feature_bid_assessment_phase4_enterprise_capability:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_MVP_RELEASE_CANDIDATE requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_CAPABILITY"
+                )
+            if not self.feature_bid_assessment_phase4_preliminary_report:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_MVP_RELEASE_CANDIDATE requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_PRELIMINARY_REPORT"
+                )
+        if self.feature_bid_assessment_phase4_business_baseline:
+            if not self.feature_bid_assessment_phase4_enterprise_capability:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_BUSINESS_BASELINE requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_CAPABILITY"
+                )
+            if not self.feature_bid_assessment_phase4_mvp_release_candidate:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_BUSINESS_BASELINE requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_MVP_RELEASE_CANDIDATE"
+                )
+        if self.feature_bid_assessment_phase4_enterprise_evidence_import:
+            if not self.feature_bid_assessment_phase4_business_baseline:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_EVIDENCE_IMPORT "
+                    "requires FEATURE_BID_ASSESSMENT_PHASE4_BUSINESS_BASELINE"
+                )
+            if not self.feature_bid_assessment_phase4_enterprise_capability:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_EVIDENCE_IMPORT "
+                    "requires FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_CAPABILITY"
+                )
+        if self.feature_bid_assessment_phase4_fact_verification:
+            if not self.feature_bid_assessment_phase4_enterprise_evidence_import:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_FACT_VERIFICATION requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_EVIDENCE_IMPORT"
+                )
+            if not self.feature_bid_assessment_phase4_business_baseline:
+                raise RuntimeError(
+                    "Invalid production configuration: "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_FACT_VERIFICATION requires "
+                    "FEATURE_BID_ASSESSMENT_PHASE4_BUSINESS_BASELINE"
+                )
+        upload_backend = self.bid_upload_storage_backend.strip().lower()
+        if upload_backend not in {"minio", "local"}:
+            raise RuntimeError(
+                "Invalid production configuration: BID_UPLOAD_STORAGE_BACKEND "
+                "must be minio or local"
+            )
+        if upload_backend == "local" and (
+            self.public_access_enabled
+            or not database_url.startswith("sqlite:")
+            or app_env not in {"dev", "development", "local", "test"}
+        ):
+            raise RuntimeError(
+                "Invalid production configuration: local bid upload storage is "
+                "restricted to private local/test SQLite runtimes"
+            )
         if not should_validate_secrets:
             return
 
@@ -404,6 +1340,16 @@ class Settings:
         require_secret("WEBHOOK_SECRET", self.webhook_secret)
         require_secret("RELOAD_SECRET", self.reload_secret)
         require_secret("ZHIPU_API_KEY", self.zhipu_api_key)
+        if self.feature_bid_assessment_phase4_model_executor:
+            require_secret(
+                "BID_ASSESSMENT_MODEL_API_KEY",
+                self.bid_assessment_model_api_key,
+            )
+            if not self.bid_assessment_model_chat_url.startswith("https://"):
+                errors.append(
+                    "BID_ASSESSMENT_MODEL_CHAT_URL must be an HTTPS URL when "
+                    "the Phase 4 model executor is enabled"
+                )
         if self.public_access_enabled:
             if not self.allowed_origins or "*" in self.allowed_origins:
                 errors.append(

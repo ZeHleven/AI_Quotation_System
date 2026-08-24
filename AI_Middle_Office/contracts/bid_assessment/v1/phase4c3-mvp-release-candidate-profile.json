@@ -1,0 +1,52 @@
+{
+  "schema": "bid-assessment-phase4c3-mvp-release-candidate-profile-v1",
+  "profile_id": "bid-assessment-phase4c3-mvp-release-candidate-v1",
+  "source_spec_version": "v0.1-r57",
+  "status": "locally_validated_first_real_pdf_rc_frozen",
+  "requires": [
+    "contracts/bid_assessment/v1/phase4c2-enterprise-baseline-acceptance-profile.json",
+    "schemas/bid_assessment/v1/mvp-release-candidate.schema.json",
+    "schemas/bid_assessment/v1/report.schema.json",
+    "schemas/bid_assessment/v1/run-validation.schema.json"
+  ],
+  "business_acceptance": {
+    "scope": "one_current_succeeded_run_and_ready_report",
+    "gate_codes": ["HG01", "HG02", "HG03", "HG04", "HG05", "HG06", "HG07"],
+    "gate_dispositions": ["confirmed", "correction_required", "not_reviewed"],
+    "quality_codes": ["REPORT_BUSINESS_READABLE", "CITATIONS_TRACEABLE", "UNKNOWNS_EXPLICIT", "DECISION_REASONABLE", "PARSE_LIMITATIONS_REVIEWED"],
+    "nonpass_gate_note_required": true,
+    "all_reviews_must_be_confirmed_to_freeze": true,
+    "acceptance_is_quality_not_all_gates_pass": true
+  },
+  "validation": {
+    "schema": "bid.mvp.release-candidate-validation.v1",
+    "path": "/api/v1/bid-assessment-runtime-lab/release-candidates/validate",
+    "persistence": "none",
+    "checks": ["current_run", "current_manifest", "current_scope", "current_enterprise_snapshot", "run_validation_passed", "report_hash_and_validation", "seven_gate_consistency", "decision_consistency", "atom_only_citations", "human_review_complete"],
+    "candidate_hash_stable": true
+  },
+  "freeze": {
+    "path": "/api/v1/bid-assessment-runtime-lab/release-candidates",
+    "candidate_hash_header": "X-MVP-RC-Candidate-Hash",
+    "server_recomputes_candidate_hash": true,
+    "idempotency_required": true,
+    "one_release_candidate_per_run": true,
+    "immutable": true,
+    "emits_outbox_event": false,
+    "writes_audit_log": true
+  },
+  "release_manifest": {
+    "schema": "bid.mvp.release-candidate.v1",
+    "binds": ["run_input_hash", "frozen_config_ids", "manifest_hash", "scope_hash", "enterprise_snapshot_hash", "report_hash", "report_validation_hash", "run_validation_hash", "decision_hash", "HG01-HG07 result hashes", "reviewer", "business reviews"],
+    "does_not_copy": ["document_body", "prompt_body", "model_context", "tool_result_body", "credentials"]
+  },
+  "compatibility": {
+    "new_database_migration_required": true,
+    "alembic_head": "20260817_0105",
+    "new_table": "bid_mvp_release_candidates",
+    "legacy_bid_intake_modified": false,
+    "feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_MVP_RELEASE_CANDIDATE",
+    "feature_flag_default": false,
+    "ecs_rollout_allowed": false
+  }
+}

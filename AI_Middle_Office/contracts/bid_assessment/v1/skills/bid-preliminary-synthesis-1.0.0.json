@@ -1,0 +1,12 @@
+{
+  "schema": "bid.skill.artifact.v1",
+  "skill_id": "bid-preliminary-synthesis",
+  "skill_version": "1.0.0",
+  "executor_kind": "langgraph",
+  "task_bindings": {
+    "synthesize_assessment": {
+      "action_contract": "bid.task.action.v1",
+      "output_schema": "synthesis_validation_result_v1"
+    }
+  }
+}

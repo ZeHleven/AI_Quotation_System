@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/pdf-native-layout.schema.json",
+  "title": "Bid Assessment PDF Native Layout v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "profile_version",
+    "pages",
+    "blocks",
+    "warnings",
+    "metrics",
+    "result_hash"
+  ],
+  "properties": {
+    "contract_version": {"const": "bid.pdf.native-layout.v1"},
+    "profile_version": {
+      "enum": [
+        "bid-pdf-native-layout-profile-v1",
+        "bid-pdf-native-layout-profile-v2-rq1a"
+      ]
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2000,
+      "items": {"$ref": "#/$defs/page"}
+    },
+    "blocks": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {"$ref": "#/$defs/block"}
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "metrics": {"$ref": "#/$defs/metrics"},
+    "result_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "bbox": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {"type": "number"}
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "page_no",
+        "width",
+        "height",
+        "rotation",
+        "status",
+        "content_source",
+        "ocr_status",
+        "native_char_count",
+        "extracted_char_count",
+        "word_count",
+        "block_count",
+        "table_count",
+        "image_count",
+        "text_coverage_ratio",
+        "reading_order_mode",
+        "warnings"
+      ],
+      "properties": {
+        "page_no": {"type": "integer", "minimum": 1},
+        "width": {"type": "number", "exclusiveMinimum": 0},
+        "height": {"type": "number", "exclusiveMinimum": 0},
+        "rotation": {"enum": [0, 90, 180, 270]},
+        "status": {"enum": ["succeeded", "partial"]},
+        "content_source": {"enum": ["native", "none"]},
+        "ocr_status": {"enum": ["not_applicable", "not_requested"]},
+        "native_char_count": {"type": "integer", "minimum": 0},
+        "extracted_char_count": {"type": "integer", "minimum": 0},
+        "word_count": {"type": "integer", "minimum": 0},
+        "block_count": {"type": "integer", "minimum": 0},
+        "table_count": {"type": "integer", "minimum": 0},
+        "image_count": {"type": "integer", "minimum": 0},
+        "text_coverage_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "reading_order_mode": {"enum": ["single_column", "two_column"]},
+        "warnings": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "block_key",
+        "text",
+        "block_type",
+        "page_no",
+        "ordinal",
+        "section_path",
+        "bbox",
+        "boundary_before",
+        "boundary_after"
+      ],
+      "properties": {
+        "block_key": {
+          "type": "string",
+          "pattern": "^pdf-block:[0-9a-f]{64}$"
+        },
+        "text": {"type": "string", "minLength": 1},
+        "block_type": {
+          "enum": ["heading", "paragraph", "clause", "list_item", "table_row"]
+        },
+        "page_no": {"type": "integer", "minimum": 1},
+        "ordinal": {"type": "integer", "minimum": 0},
+        "section_path": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "bbox": {"$ref": "#/$defs/bbox"},
+        "boundary_before": {"type": "boolean"},
+        "boundary_after": {"type": "boolean"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "page_count",
+        "block_count",
+        "native_char_count",
+        "extracted_char_count",
+        "missing_page_count",
+        "partial_page_count",
+        "table_count",
+        "image_count",
+        "two_column_page_count",
+        "common_section_path"
+      ],
+      "properties": {
+        "page_count": {"type": "integer", "minimum": 1, "maximum": 2000},
+        "block_count": {"type": "integer", "minimum": 0, "maximum": 200000},
+        "native_char_count": {"type": "integer", "minimum": 0},
+        "extracted_char_count": {"type": "integer", "minimum": 0},
+        "missing_page_count": {"type": "integer", "minimum": 0},
+        "partial_page_count": {"type": "integer", "minimum": 0},
+        "table_count": {"type": "integer", "minimum": 0},
+        "image_count": {"type": "integer", "minimum": 0},
+        "two_column_page_count": {"type": "integer", "minimum": 0},
+        "common_section_path": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "suppressed_margin_artifact_count": {"type": "integer", "minimum": 0},
+        "suppressed_margin_artifact_char_count": {"type": "integer", "minimum": 0},
+        "suppressed_margin_signature_count": {"type": "integer", "minimum": 0},
+        "suppressed_margin_page_count": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

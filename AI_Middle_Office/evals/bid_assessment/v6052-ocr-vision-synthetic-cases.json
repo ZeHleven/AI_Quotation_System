@@ -1,0 +1,109 @@
+{
+  "schema_version": "bid.pure_agent.v6052.ocr_vision.v1",
+  "dataset_kind": "synthetic_only",
+  "description": "Pure Agent V605-2 local OCR and deterministic visual-structure evaluation. All pages, text, identifiers and table values are fictional and generated at runtime.",
+  "execution_contract": {
+    "real_pdf_allowed": false,
+    "external_network_allowed": false,
+    "external_mcp_allowed": false,
+    "generative_vision_model_allowed": false,
+    "database_allowed": false,
+    "production_vector_store_allowed": false
+  },
+  "image_cases": [
+    {
+      "id": "O01_clear_scanned_text",
+      "kind": "text_page",
+      "canvas": {"width": 1200, "height": 420, "background": 255},
+      "font_size": 50,
+      "lines": [
+        "招标公告",
+        "投标截止时间：2026年9月30日10时00分",
+        "投标保证金：人民币50万元"
+      ],
+      "expected_fragments": ["招标公告", "2026年9月30日10时00分", "人民币50万元"],
+      "expected_review_required": false
+    },
+    {
+      "id": "O02_clean_table_grid",
+      "kind": "table_page",
+      "canvas": {"width": 1200, "height": 520, "background": 255},
+      "font_size": 38,
+      "table": {
+        "origin": [60, 70],
+        "width": 1080,
+        "height": 360,
+        "rows": [
+          ["项目", "招标要求", "企业资料"],
+          ["资质", "专业承包一级", "专业承包一级"],
+          ["业绩", "至少2项", "已有3项"]
+        ]
+      },
+      "expected_fragments": ["项目", "招标要求", "企业资料", "资质", "专业承包一级", "业绩", "至少2项", "已有3项"],
+      "expected_grid": {"rows": 3, "columns": 3, "cells": 9},
+      "expected_cell_fragments": {
+        "r0c0": "项目",
+        "r0c1": "招标要求",
+        "r0c2": "企业资料",
+        "r1c0": "资质",
+        "r1c1": "专业承包一级",
+        "r1c2": "专业承包一级",
+        "r2c0": "业绩",
+        "r2c1": "至少2项",
+        "r2c2": "已有3项"
+      },
+      "expected_review_required": false
+    },
+    {
+      "id": "O03_low_quality_scan",
+      "kind": "text_page",
+      "canvas": {"width": 1200, "height": 360, "background": 238},
+      "foreground": 218,
+      "font_size": 46,
+      "blur_radius": 3.2,
+      "lines": [
+        "投标截止时间：2026年10月8日9时30分",
+        "保证金：人民币80万元"
+      ],
+      "expected_fragments": ["2026年10月8日9时30分", "人民币80万元"],
+      "expected_review_required": true
+    },
+    {
+      "id": "O04_blank_page",
+      "kind": "blank_page",
+      "canvas": {"width": 1000, "height": 500, "background": 255},
+      "expected_fragments": [],
+      "expected_review_required": true
+    }
+  ],
+  "routing_cases": [
+    {
+      "id": "R01_native_text_priority",
+      "native_text": "投标截止时间为2026年9月30日。",
+      "ocr_available": true,
+      "expected_route": "native"
+    },
+    {
+      "id": "R02_scanned_page_uses_ocr",
+      "native_text": "   ",
+      "ocr_available": true,
+      "expected_route": "ocr"
+    },
+    {
+      "id": "R03_provider_unavailable_degrades",
+      "native_text": "",
+      "ocr_available": false,
+      "expected_route": "degraded"
+    }
+  ],
+  "thresholds": {
+    "clear_fragment_recall_min": 1.0,
+    "table_fragment_recall_min": 0.875,
+    "clear_mean_confidence_min": 0.9,
+    "box_integrity_min": 1.0,
+    "table_grid_accuracy_min": 1.0,
+    "table_cell_fragment_recall_min": 0.75,
+    "blank_false_positive_count_max": 0,
+    "ocr_case_seconds_max": 15.0
+  }
+}

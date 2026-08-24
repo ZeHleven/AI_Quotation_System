@@ -1,0 +1,229 @@
+{
+  "schema_version": "bid.pure_agent.v606.answer_citation.v1",
+  "dataset_kind": "synthetic_only",
+  "description": "Pure Agent V606 answer grounding and citation evaluation. All questions, evidence, source labels and identifiers are fictional.",
+  "execution_contract": {
+    "real_pdf_allowed": false,
+    "rag_allowed": false,
+    "tool_allowed": false,
+    "external_mcp_allowed": false,
+    "database_allowed": false,
+    "production_vector_store_allowed": false
+  },
+  "model_cases": [
+    {
+      "id": "A01_supported_deadline_and_guarantee",
+      "user_message": "请告诉我投标截止时间和投标保证金。",
+      "sources": [
+        {
+          "grounding_ref": "grounding:a01-deadline",
+          "source_ref": "source:a01-bid-document",
+          "source_scope_ref": "scope:a01-bid-document",
+          "source_version_ref": "version:a01-v1",
+          "source_basis": "document",
+          "grounding_kind": "evidence_atom",
+          "status": "supported",
+          "citable": true,
+          "content": "投标截止时间为2026年9月30日10时00分。",
+          "safe_title": "合成招标文件",
+          "safe_locator_label": "投标人须知第4.2.1条",
+          "safe_version_label": "合成版本1"
+        },
+        {
+          "grounding_ref": "grounding:a01-guarantee",
+          "source_ref": "source:a01-bid-document",
+          "source_scope_ref": "scope:a01-bid-document",
+          "source_version_ref": "version:a01-v1",
+          "source_basis": "document",
+          "grounding_kind": "evidence_atom",
+          "status": "supported",
+          "citable": true,
+          "content": "投标保证金为人民币50万元，须在投标截止时间前到账。",
+          "safe_title": "合成招标文件",
+          "safe_locator_label": "投标人须知第3.4.1条",
+          "safe_version_label": "合成版本1"
+        }
+      ],
+      "expected": {
+        "epistemic_status": "supported",
+        "required_grounding_refs": ["grounding:a01-deadline", "grounding:a01-guarantee"],
+        "required_limitation_codes": [],
+        "citation_count": 2
+      },
+      "reference_blocks": [
+        {
+          "block_type": "statement",
+          "block_id": "statement:a01-deadline",
+          "text": "投标截止时间为2026年9月30日10时00分。",
+          "claim_type": "fact",
+          "epistemic_status": "supported",
+          "grounding_refs": ["grounding:a01-deadline"]
+        },
+        {
+          "block_type": "statement",
+          "block_id": "statement:a01-guarantee",
+          "text": "投标保证金为人民币50万元，须在投标截止时间前到账。",
+          "claim_type": "fact",
+          "epistemic_status": "supported",
+          "grounding_refs": ["grounding:a01-guarantee"]
+        }
+      ]
+    },
+    {
+      "id": "A02_unknown_control_price",
+      "user_message": "这个项目的最高投标限价是多少？",
+      "sources": [
+        {
+          "grounding_ref": "grounding:a02-retrieval-no-result",
+          "source_ref": "receipt:a02-control-price-search",
+          "source_scope_ref": "scope:a02-bid-document",
+          "source_version_ref": "version:a02-search-v1",
+          "source_basis": "runtime_receipt",
+          "grounding_kind": "retrieval_receipt",
+          "status": "unknown",
+          "citable": false,
+          "content": "已在合成招标资料授权范围内检索最高投标限价、控制价和预算金额，未获得可核验结果。"
+        }
+      ],
+      "expected": {
+        "epistemic_status": "unknown",
+        "required_grounding_refs": ["grounding:a02-retrieval-no-result"],
+        "required_limitation_codes": ["retrieval_no_result"],
+        "citation_count": 0
+      },
+      "reference_blocks": [
+        {
+          "block_type": "statement",
+          "block_id": "statement:a02-control-price",
+          "text": "目前无法确认该项目的最高投标限价。",
+          "claim_type": "fact",
+          "epistemic_status": "unknown",
+          "grounding_refs": ["grounding:a02-retrieval-no-result"],
+          "limitation_refs": ["limitation:a02-no-result"]
+        },
+        {
+          "block_type": "limitation",
+          "block_id": "limitation:a02-no-result",
+          "code": "retrieval_no_result",
+          "text": "当前授权检索范围内没有可核验的最高投标限价。",
+          "grounding_refs": ["grounding:a02-retrieval-no-result"],
+          "applies_to_statement_refs": ["statement:a02-control-price"]
+        }
+      ]
+    },
+    {
+      "id": "A03_conflicted_deadline",
+      "user_message": "最终投标截止时间是哪一天？",
+      "sources": [
+        {
+          "grounding_ref": "grounding:a03-original-notice",
+          "source_ref": "source:a03-original-notice",
+          "source_scope_ref": "scope:a03-bid-document",
+          "source_version_ref": "version:a03-original-v1",
+          "source_basis": "document",
+          "grounding_kind": "evidence_atom",
+          "status": "conflicted",
+          "conflict_group_ref": "conflict-group:a03-original",
+          "citable": true,
+          "content": "原招标公告载明投标截止时间为2026年9月30日10时00分。",
+          "safe_title": "合成原招标公告",
+          "safe_locator_label": "时间安排条款",
+          "safe_version_label": "合成原始版本"
+        },
+        {
+          "grounding_ref": "grounding:a03-supplement-notice",
+          "source_ref": "source:a03-supplement-notice",
+          "source_scope_ref": "scope:a03-bid-document",
+          "source_version_ref": "version:a03-supplement-v1",
+          "source_basis": "document",
+          "grounding_kind": "evidence_atom",
+          "status": "conflicted",
+          "conflict_group_ref": "conflict-group:a03-supplement",
+          "citable": true,
+          "content": "补充通知载明投标截止时间调整为2026年10月8日9时30分。",
+          "safe_title": "合成补充通知",
+          "safe_locator_label": "第1项变更",
+          "safe_version_label": "合成补充版本"
+        }
+      ],
+      "expected": {
+        "epistemic_status": "conflicted",
+        "required_grounding_refs": ["grounding:a03-original-notice", "grounding:a03-supplement-notice"],
+        "required_limitation_codes": ["evidence_conflicted"],
+        "citation_count": 2
+      },
+      "reference_blocks": [
+        {
+          "block_type": "statement",
+          "block_id": "statement:a03-deadline-conflict",
+          "text": "现有资料对投标截止时间存在冲突：原公告为2026年9月30日10时00分，补充通知为2026年10月8日9时30分。",
+          "claim_type": "fact",
+          "epistemic_status": "conflicted",
+          "grounding_refs": ["grounding:a03-original-notice", "grounding:a03-supplement-notice"],
+          "limitation_refs": ["limitation:a03-conflict"]
+        },
+        {
+          "block_type": "limitation",
+          "block_id": "limitation:a03-conflict",
+          "code": "evidence_conflicted",
+          "text": "两份当前可见资料给出的时间不一致，不能在缺少来源优先级确认时选择其中一个。",
+          "grounding_refs": ["grounding:a03-original-notice", "grounding:a03-supplement-notice"],
+          "applies_to_statement_refs": ["statement:a03-deadline-conflict"]
+        }
+      ]
+    },
+    {
+      "id": "A04_partial_enterprise_qualification",
+      "user_message": "企业的装修专业承包一级资质现在确定有效吗？",
+      "sources": [
+        {
+          "grounding_ref": "grounding:a04-enterprise-qualification",
+          "source_ref": "source:a04-enterprise-record",
+          "source_scope_ref": "scope:a04-enterprise",
+          "source_version_ref": "version:a04-enterprise-v1",
+          "source_basis": "enterprise",
+          "grounding_kind": "evidence_atom",
+          "status": "partial",
+          "citable": true,
+          "content": "企业资料记录建筑装修装饰工程专业承包一级资质，但当前资料未提供可核验的证书有效期字段。",
+          "safe_title": "合成企业资质资料",
+          "safe_locator_label": "资质记录第1项",
+          "safe_version_label": "合成企业版本1"
+        }
+      ],
+      "expected": {
+        "epistemic_status": "partial",
+        "required_grounding_refs": ["grounding:a04-enterprise-qualification"],
+        "required_limitation_codes": ["evidence_insufficient"],
+        "citation_count": 1
+      },
+      "reference_blocks": [
+        {
+          "block_type": "statement",
+          "block_id": "statement:a04-qualification",
+          "text": "现有企业资料记录了建筑装修装饰工程专业承包一级资质，但无法仅据此确认其当前有效。",
+          "claim_type": "fact",
+          "epistemic_status": "partial",
+          "grounding_refs": ["grounding:a04-enterprise-qualification"],
+          "limitation_refs": ["limitation:a04-validity"]
+        },
+        {
+          "block_type": "limitation",
+          "block_id": "limitation:a04-validity",
+          "code": "evidence_insufficient",
+          "text": "当前资料缺少可核验的证书有效期字段。",
+          "grounding_refs": ["grounding:a04-enterprise-qualification"],
+          "applies_to_statement_refs": ["statement:a04-qualification"]
+        }
+      ]
+    }
+  ],
+  "thresholds": {
+    "reference_runtime_pass_rate_min": 1.0,
+    "negative_guard_pass_rate_min": 1.0,
+    "model_case_pass_rate_min": 1.0,
+    "citation_completeness_min": 1.0,
+    "unknown_safety_min": 1.0,
+    "conflict_dual_source_min": 1.0
+  }
+}

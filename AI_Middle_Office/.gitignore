@@ -5,7 +5,16 @@ __pycache__/
 *.pyo
 sql_app.db
 data/pricing_agent_archives/
+.local-*/
+.t/
+.local-mvp1-phase4d1-validation/
+.local-mvp1*-phase4d2/
+.local-pure-agent-daily*/
 
 # Private bid-intake evaluation annotations and review notes.
 evals/bid_intake/retrieval/v1/private_*
 outputs/bid_intake_retrieval_eval/private_*
+
+# Private new-domain bid-assessment Gold/Holdout, ledgers and reports.
+evals/bid_assessment/retrieval/v1/private_*
+outputs/bid_assessment_retrieval_eval/private_*

@@ -103,6 +103,7 @@
       ],
       "properties": {
         "assessment": {"$ref": "#/$defs/PlannerAssessment"},
+        "run_kind": {"type": "string", "enum": ["preliminary", "deep", "reanalysis"]},
         "bound_versions": {"$ref": "contracts.schema.json#/$defs/VersionBinding"},
         "workflow_stage": {"type": "string", "minLength": 1, "maxLength": 80},
         "document_inventory": {
@@ -184,6 +185,97 @@
         "expected_stage_after": {"type": "string", "minLength": 1, "maxLength": 80},
         "planner_confidence": {"type": "string", "enum": ["high", "medium", "low"]}
       }
+    },
+    "PlanValidationReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checks", "validated_hash"],
+      "properties": {
+        "status": {"const": "accepted"},
+        "checks": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 11,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "task_type_allowlist",
+              "acyclic_dependencies",
+              "scope_version_consistency",
+              "tool_profile_permissions",
+              "budget_limits",
+              "max_8_dynamic_tasks",
+              "max_dependency_depth_3",
+              "hard_gate_ordering",
+              "report_validation_ordering",
+              "skill_binding_hash",
+              "stage_sequence"
+            ]
+          }
+        },
+        "validated_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"}
+      }
+    },
+    "PlanCommitEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "generator_version",
+        "validator_version",
+        "task_registry_version",
+        "task_registry_hash",
+        "run_input_hash",
+        "planner_input_hash",
+        "proposal_hash",
+        "planner_input",
+        "proposal",
+        "validation"
+      ],
+      "properties": {
+        "schema": {"type": "string", "enum": ["bid.plan.commit.envelope.v1", "bid.plan.commit.envelope.v2"]},
+        "generator_version": {"type": "string", "enum": ["bid-deterministic-bootstrap-planner-v1", "bid-deterministic-stage-planner-v2"]},
+        "validator_version": {"type": "string", "enum": ["bid-plan-validator-v1", "bid-plan-validator-v2"]},
+        "task_registry_version": {"type": "string", "minLength": 1, "maxLength": 160},
+        "task_registry_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "task_catalog_ref": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,120}\\.json$"},
+        "skill_catalog_ref": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,120}\\.json$"},
+        "skill_catalog_version": {"type": "string", "minLength": 1, "maxLength": 160},
+        "skill_catalog_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "stage": {"type": "string", "pattern": "^P[0-4]$"},
+        "final_stage": {"type": "boolean"},
+        "run_input_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "planner_input_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "proposal_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "planner_input": {"$ref": "#/$defs/PlannerInput"},
+        "proposal": {"$ref": "#/$defs/PlanProposal"},
+        "validation": {"$ref": "#/$defs/PlanValidationReceipt"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"schema": {"const": "bid.plan.commit.envelope.v2"}}},
+            "then": {
+              "required": ["task_catalog_ref", "skill_catalog_ref", "skill_catalog_version", "skill_catalog_hash", "stage", "final_stage"],
+              "properties": {
+                "generator_version": {"const": "bid-deterministic-stage-planner-v2"},
+                "validator_version": {"const": "bid-plan-validator-v2"},
+                "planner_input": {
+                  "allOf": [
+                    {"$ref": "#/$defs/PlannerInput"},
+                    {"required": ["run_kind"]}
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "generator_version": {"const": "bid-deterministic-bootstrap-planner-v1"},
+                "validator_version": {"const": "bid-plan-validator-v1"}
+              }
+            }
+        }
+      ]
     }
   },
   "x-semantic-validations": {
@@ -202,6 +294,7 @@
   },
   "oneOf": [
     {"$ref": "#/$defs/PlannerInput"},
-    {"$ref": "#/$defs/PlanProposal"}
+    {"$ref": "#/$defs/PlanProposal"},
+    {"$ref": "#/$defs/PlanCommitEnvelope"}
   ]
 }

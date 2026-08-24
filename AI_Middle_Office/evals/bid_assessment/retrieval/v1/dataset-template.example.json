@@ -1,0 +1,50 @@
+{
+  "schema_version": "bid.evidence.retrieval-benchmark-dataset.v1",
+  "dataset_id": "replace-with-private-dataset-id",
+  "dataset_version": "1.0.0",
+  "split": "development",
+  "status": "gold_approved",
+  "sealed": false,
+  "maximum_formal_execution_count": 0,
+  "privacy": "private_restricted",
+  "projects": [
+    {
+      "project_id": "replace-with-anonymized-project-id",
+      "project_family_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "prior_rq_exposure": "development",
+      "source_documents": [
+        {
+          "document_id": "primary-tender",
+          "role": "primary_tender",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "page_count": 1
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "replace-with-case-id",
+      "project_id": "replace-with-anonymized-project-id",
+      "category": "scope",
+      "difficulty": "medium",
+      "question": "本标段的招标范围是什么？",
+      "answer_status": "answerable",
+      "targets": [
+        {
+          "target_id": "replace-with-target-id",
+          "evidence_role": "evidence_atom",
+          "required_text_fragments": ["replace-with-exact-phrase-anchor"],
+          "page_numbers": [1],
+          "match_policy": "all_fragments_same_atom"
+        }
+      ],
+      "annotation": {
+        "status": "approved",
+        "annotator_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "reviewer_hash": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    }
+  ],
+  "dataset_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+}

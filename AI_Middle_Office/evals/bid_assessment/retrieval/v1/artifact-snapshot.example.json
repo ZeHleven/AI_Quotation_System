@@ -1,0 +1,25 @@
+{
+  "code": [
+    "../../../../app/services/bid_retrieval_benchmark.py",
+    "../../../../app/services/bid_query_optimizer.py",
+    "../../../../app/services/bid_field_aware_lexical.py",
+    "../../../../app/services/bid_evidence_semantic_index.py",
+    "../../../../app/services/bid_hybrid_candidate_fusion.py",
+    "../../../../app/services/bid_lightweight_reranker.py",
+    "../../../../mcp_servers/bid_assessment_evidence/service.py",
+    "../../../../scripts/bid_pdf_c3_quality_baseline.py",
+    "../../../../scripts/bid_rq2_cross_project_benchmark.py"
+  ],
+  "contracts": [
+    "../../../../contracts/bid_assessment/v1/pdf-c3-role-aware-retrieval-profile.json",
+    "../../../../contracts/bid_assessment/v1/rq1c-query-optimizer-profile.json",
+    "../../../../contracts/bid_assessment/v1/rq1d-field-aware-lexical-profile.json",
+    "../../../../contracts/bid_assessment/v1/rq2a-semantic-retrieval-profile.json",
+    "../../../../contracts/bid_assessment/v1/rq2b-candidate-fusion-profile.json",
+    "../../../../contracts/bid_assessment/v1/rq2c-lightweight-rerank-profile.json",
+    "../../../../contracts/bid_assessment/v1/rq2-closeout-cross-project-profile.json"
+  ],
+  "dependencies": [
+    "../../../../requirements-bid-semantic.txt"
+  ]
+}

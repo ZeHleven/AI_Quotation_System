@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_version": "bid.evidence.lightweight-rerank.v1",
+  "profile_version": "bid-evidence-rerank-profile-v1-rq2c-bce",
+  "feature_flag": "FEATURE_BID_ASSESSMENT_RQ2C_LIGHTWEIGHT_RERANK",
+  "configuration": {
+    "profile_variable": "BID_EVIDENCE_RERANK_PROFILE_VERSION",
+    "default_profile": "bid-evidence-rerank-profile-v0-disabled",
+    "enabled_profile": "bid-evidence-rerank-profile-v1-rq2c-bce"
+  },
+  "source_profiles": {
+    "retrieval": "bid-evidence-retrieval-profile-v2-role-aware",
+    "query_optimizer": "bid-evidence-query-optimizer-profile-v1-rq1c",
+    "lexical": "bid-evidence-lexical-profile-v1-rq1d",
+    "semantic": "bid-evidence-semantic-profile-v1-rq2a-bce",
+    "candidate_fusion": "bid-evidence-candidate-fusion-profile-v1-rq2b"
+  },
+  "frozen_candidate_input": {
+    "source": "rq2b_fused_candidates_in_stable_order",
+    "max_candidates": 20,
+    "candidate_role": "retrieval_child",
+    "candidate_citable": false,
+    "new_recall_allowed": false,
+    "candidate_pool_mutation_allowed": false,
+    "query_source": "rq1c_q1_original_query",
+    "document_text_source": "c3_retrieval_text"
+  },
+  "reranker": {
+    "provider_id": "bce-cross-encoder-local",
+    "model_id": "maidalun1020/bce-reranker-base_v1",
+    "model_revision": "eb7650fca1d81e2856fbd0d522488844aa502735",
+    "offline_cache_only": true,
+    "max_sequence_length": 512,
+    "score_transform": "sigmoid",
+    "raw_score_range": [0.0, 1.0],
+    "maximum_pairs_per_search": 20,
+    "generation_model": false
+  },
+  "selection": {
+    "policy": "anchor_preserving_positive_margin_tail_replacement",
+    "baseline": "rq2b_parent_diversified_top_k",
+    "protected_anchors": [
+      "baseline_top1",
+      "best_top_k_minus_2_lexical_anchors"
+    ],
+    "minimum_score": 0.3,
+    "minimum_promotion_margin": 0.08,
+    "maximum_promotions": 2,
+    "maximum_children_per_parent": 2,
+    "parent_overflow_fallback": "inherit_rq2b_only_when_distinct_parents_cannot_fill_top_k",
+    "promotion_may_not_increase_parent_concentration": true,
+    "no_promotion_identity": true,
+    "unreplaced_positions_stable": true,
+    "semantic_only_forced_promotion": false,
+    "lexical_only_forced_promotion": false,
+    "full_result_resort": false,
+    "tie_break": [
+      "rerank_score_desc",
+      "fusion_rank_asc",
+      "retrieval_child_key_asc"
+    ]
+  },
+  "result_hash_inputs": [
+    "profile_version",
+    "fusion_result_hash",
+    "query_plan_hash",
+    "model_descriptor",
+    "stable_candidate_input_hashes",
+    "rerank_scores",
+    "baseline_and_final_stable_child_keys",
+    "promotion_audit"
+  ],
+  "failure_policy": {
+    "model_not_cached_or_provider_failure": "fail_closed_retry_existing_dispatch",
+    "descriptor_or_score_mismatch": "fail_closed_non_retryable",
+    "silent_rq2b_fallback": false,
+    "empty_candidate_pool": "rq2b_no_result_before_reranker"
+  },
+  "evidence_roles": {
+    "search_output": "retrieval_child",
+    "search_output_citable": false,
+    "read_output": "evidence_atom",
+    "read_output_citable": true,
+    "parent_is_candidate": false,
+    "atom_is_candidate": false
+  },
+  "frozen_adapter": {
+    "tool_name": "evidence.search",
+    "adapter_name": "bid-evidence-mcp-rq2c-search",
+    "adapter_version": "v7-bce-anchor-preserving-rerank",
+    "mode": "local_readonly",
+    "replay_policy": "safe_idempotent"
+  },
+  "invalidation": {
+    "rq2b_fusion_result_hash_change": "new_rerank_result_hash",
+    "query_plan_hash_change": "new_rerank_result_hash",
+    "retrieval_text_or_hash_change": "new_rerank_result_hash",
+    "model_or_revision_change": "new_profile_and_adapter_required",
+    "selection_policy_or_threshold_change": "new_profile_and_adapter_required"
+  },
+  "compatibility": {
+    "rq2b_v6_adapter_unchanged": true,
+    "rq2a_v5_adapter_unchanged": true,
+    "rq1d_v4_adapter_unchanged": true,
+    "historical_dispatch_keeps_frozen_adapter": true,
+    "new_database_migration_required": false,
+    "alembic_head": "20260815_0103"
+  },
+  "external_execution": {
+    "ocr_or_visual": false,
+    "generation_model": false,
+    "local_cross_encoder": true,
+    "embedding_model": true,
+    "vector_database": true,
+    "external_mcp": false,
+    "legacy_bid_intake_authority": false
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schema": "bid.skill.catalog.v1",
+  "catalog_id": "bid-assessment-mvp-skills",
+  "catalog_version": "1.0.0",
+  "artifacts": [
+    "bid-document-scope-1.0.0.json",
+    "bid-tender-fact-extraction-1.0.0.json",
+    "bid-fact-resolution-1.0.0.json",
+    "bid-preliminary-gates-1.0.0.json",
+    "bid-preliminary-synthesis-1.0.0.json",
+    "bid-preliminary-decision-1.0.0.json",
+    "bid-report-validation-1.0.0.json",
+    "bid-preliminary-report-1.0.0.json"
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "schema": "bid-assessment-phase4-mvp1-runtime-profile-v1",
+  "profile_id": "bid-assessment-phase4-mvp1-vertical-slice-v1",
+  "source_spec_version": "v0.1-r33",
+  "status": "isolated_runtime_verified",
+  "master_feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_MVP",
+  "slice_feature_flags": [
+    "FEATURE_BID_ASSESSMENT_PHASE4_EVIDENCE_MCP",
+    "FEATURE_BID_ASSESSMENT_PHASE4_FACT_AUTHORITY",
+    "FEATURE_BID_ASSESSMENT_PHASE4_PRELIMINARY_REPORT"
+  ],
+  "requires": [
+    "FEATURE_BID_ASSESSMENT_V1_RUNTIME",
+    "FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME",
+    "FEATURE_BID_ASSESSMENT_PHASE4_PLAN_CONTINUATION",
+    "FEATURE_BID_ASSESSMENT_PHASE4_LOCAL_AGENT",
+    "FEATURE_BID_ASSESSMENT_PHASE4_MODEL_EXECUTOR"
+  ],
+  "runtime_tools": [
+    "documents.outline",
+    "evidence.search",
+    "evidence.read",
+    "facts.query"
+  ],
+  "evidence_transport": "mcp_readonly_inprocess",
+  "retrieval": {
+    "query_planner": "legacy_deterministic_reuse",
+    "router": "legacy_deterministic_reuse",
+    "implemented_mode": "bm25_rrf",
+    "semantic_fallback_is_explicit": true
+  },
+  "authority": [
+    "bid_fact_assertions",
+    "bid_fact_evidence_links",
+    "bid_fact_coverages",
+    "bid_resolved_facts",
+    "bid_resolved_fact_heads",
+    "bid_hard_gate_results",
+    "bid_preliminary_decisions",
+    "bid_report_claims",
+    "bid_claim_citations",
+    "bid_report_validations",
+    "bid_preliminary_reports"
+  ],
+  "public_reads": [
+    "API-60",
+    "API-61"
+  ],
+  "run_validator_version": "bid-run-integrity-validator-v5",
+  "migration_head": "20260813_0101",
+  "execution_boundary": {
+    "production_ready": false,
+    "ecs_migration_allowed": false,
+    "legacy_bid_intake_authority": false,
+    "real_sample_or_model_run_authorized": false
+  }
+}

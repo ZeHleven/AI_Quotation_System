@@ -9,7 +9,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -27,7 +27,12 @@ from app.models.bid_assessment import (
 )
 from app.models.user import User
 from app.schemas.bid_assessment import (
+    BidAssessmentCloneForLotIn,
     BidAssessmentCreateIn,
+    BidLotSelectionIn,
+    BidRunCancelIn,
+    BidRunCreateIn,
+    BidRunRetryIn,
     BidUploadBatchAbandonIn,
     BidUploadBatchCreateIn,
     BidUploadBatchCommitIn,
@@ -51,6 +56,68 @@ from app.services.bid_document_pages import (
     bid_document_page_headers,
     build_bid_document_page,
 )
+from app.services.bid_document_versions import (
+    BidDocumentVersionNotFound,
+    bid_document_version_headers,
+    build_bid_document_version_detail,
+    iter_bid_download,
+    load_visible_bid_document_version,
+    safe_content_disposition,
+    safe_download_mime_type,
+)
+from app.services.bid_assessment_clones import (
+    CLONE_FOR_LOT_ROUTE_TEMPLATE,
+    BidAssessmentCloneCandidatesNotReady,
+    BidAssessmentCloneLotNotInManifest,
+    BidAssessmentCloneManifestMismatch,
+    BidAssessmentCloneNotFound,
+    BidAssessmentCloneSameLot,
+    BidAssessmentCloneStateConflict,
+    BidAssessmentCloneVersionMismatch,
+    clone_bid_assessment_for_lot,
+)
+from app.services.bid_lot_candidates import (
+    BidLotManifestNotFound,
+    bid_lot_candidate_headers,
+    build_bid_lot_candidate_page,
+)
+from app.services.bid_lot_selections import (
+    LOT_SELECTION_ROUTE_TEMPLATE,
+    BidLotCandidatesNotReady,
+    BidLotNotInManifest,
+    BidLotScopeAlreadyBound,
+    BidLotSelectionManifestMismatch,
+    BidLotSelectionNotFound,
+    BidLotSelectionStateConflict,
+    BidLotSelectionVersionMismatch,
+    select_bid_lot,
+)
+from app.services.bid_run_bootstrap import (
+    RUN_CREATE_ROUTE_TEMPLATE,
+    BidActiveRunExists,
+    BidRunAlreadyExistsForInput,
+    BidRunInputNotReady,
+    BidRunNotFound,
+    BidRunVersionMismatch,
+    create_manual_run,
+)
+from app.services.bid_run_snapshots import (
+    build_run_progress_snapshot,
+    run_etag,
+    run_snapshot_headers,
+)
+from app.services.bid_run_lifecycle import (
+    RUN_CANCEL_ROUTE_TEMPLATE,
+    RUN_RETRY_ROUTE_TEMPLATE,
+    BidRunInputStale as BidLifecycleRunInputStale,
+    BidRunLifecycleNotFound,
+    BidRunLifecycleVersionMismatch,
+    BidRunNotCancellable,
+    BidRunNotRetryable,
+    request_run_cancellation,
+    retry_run_from_latest_checkpoint,
+)
+from app.models.bid_assessment_runtime import BidAnalysisRun
 from app.services.bid_assessments import (
     BidAssessmentExternalRefConflict,
     create_bid_assessment,
@@ -263,6 +330,39 @@ def _upload_commit_headers(body: dict[str, Any], *, replayed: bool) -> dict[str,
         "X-Resource-Version": str(int(assessment["row_version"])),
         "X-Batch-ETag": str(batch["etag"]),
         "X-Batch-Resource-Version": str(int(batch["row_version"])),
+        "Cache-Control": "private, no-store",
+    }
+    if replayed:
+        headers["Idempotent-Replay"] = "true"
+    return headers
+
+
+def _lot_selection_headers(body: dict[str, Any], *, replayed: bool) -> dict[str, str]:
+    data = dict(body.get("data") or {})
+    assessment = dict(data.get("assessment") or {})
+    assessment_id = str(assessment["assessment_id"])
+    row_version = int(assessment["row_version"])
+    headers = {
+        "Location": f"/api/v1/bid-assessments/{assessment_id}",
+        "ETag": assessment_etag(assessment_id, row_version),
+        "X-Resource-Version": str(row_version),
+        "Cache-Control": "private, no-store",
+    }
+    if replayed:
+        headers["Idempotent-Replay"] = "true"
+    return headers
+
+
+def _run_command_headers(body: dict[str, Any], *, replayed: bool) -> dict[str, str]:
+    snapshot = dict(body.get("data") or {})
+    run_id = str(snapshot["run_id"])
+    row_version = int(snapshot["row_version"])
+    headers = {
+        "Location": (
+            f"/api/v1/bid-assessments/{snapshot['assessment_id']}/runs/{run_id}"
+        ),
+        "ETag": run_etag(run_id, row_version, snapshot),
+        "X-Resource-Version": str(row_version),
         "Cache-Control": "private, no-store",
     }
     if replayed:
@@ -521,6 +621,17 @@ def _upload_batch_not_found_response(request_id: str) -> JSONResponse:
         message="上传批次不存在或不可见",
         retryable=False,
         recovery={"action": "return_to_assessment"},
+    )
+
+
+def _document_version_not_found_response(request_id: str) -> JSONResponse:
+    return _error_response(
+        status_code=404,
+        request_id=request_id,
+        error_code="BID_RESOURCE_NOT_FOUND",
+        message="文件版本不存在或不可见",
+        retryable=False,
+        recovery={"action": "return_to_document_list"},
     )
 
 
@@ -810,6 +921,1786 @@ def list_bid_documents_endpoint(
         },
         headers=headers,
         media_type="application/json; charset=utf-8",
+    )
+
+
+@router.get(
+    "/bid-assessments/{assessment_id}/lots",
+    summary="查询 Assessment 标段候选",
+    operation_id="listBidLotCandidates",
+)
+def list_bid_lot_candidates_endpoint(
+    assessment_id: str,
+    request: Request,
+    manifest_id: str | None = None,
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the current or explicit Manifest lot projection without side effects."""
+
+    request_id = _request_id(request)
+    if not settings.feature_bid_assessment_v1_runtime:
+        return _not_found_response(request_id)
+    if not (
+        1 <= len(assessment_id) <= 80
+        and _REQUEST_ID_PATTERN.fullmatch(assessment_id)
+    ):
+        return _not_found_response(request_id)
+    if manifest_id is not None and not (
+        1 <= len(manifest_id) <= 80
+        and _REQUEST_ID_PATTERN.fullmatch(manifest_id)
+    ):
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="标段候选查询参数无效",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "manifest_id",
+                    "type": "string_pattern_mismatch",
+                    "message": "manifest_id 格式无效",
+                }
+            ],
+            recovery={"action": "correct_lot_candidate_query"},
+        )
+
+    try:
+        assessment = (
+            db.query(BidAssessment)
+            .filter(BidAssessment.id == assessment_id)
+            .one_or_none()
+        )
+        if assessment is None or (
+            int(assessment.created_by) != int(current_user.id)
+            and not has_admin_role(current_user)
+        ):
+            return _not_found_response(request_id)
+
+        page = build_bid_lot_candidate_page(
+            db,
+            assessment,
+            manifest_id=manifest_id,
+        )
+        headers = bid_lot_candidate_headers(assessment, page)
+        if _if_none_match_matches(if_none_match, headers["ETag"]):
+            return Response(status_code=304, headers=headers)
+    except BidLotManifestNotFound:
+        db.rollback()
+        return _not_found_response(request_id)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_lot_candidate_page_read_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "assessment_id": assessment_id,
+                "manifest_id": manifest_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="标段候选暂时无法读取",
+            retryable=True,
+            recovery={"action": "retry_lot_candidate_read"},
+        )
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "code": 200,
+            "message": "ok",
+            "data": page,
+            "error": None,
+            "request_id": request_id,
+        },
+        headers=headers,
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@router.post(
+    "/bid-assessments/{assessment_id}/lot-selection",
+    status_code=202,
+    summary="选择标段并固化 Assessment Scope",
+    operation_id="selectBidLot",
+)
+async def select_bid_lot_endpoint(
+    assessment_id: str,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Atomically bind one current, evidence-backed LotCandidate as Scope."""
+
+    request_id = _request_id(request)
+    if not settings.feature_bid_assessment_v1_runtime:
+        return _not_found_response(request_id)
+    if not (
+        1 <= len(assessment_id) <= 80
+        and _REQUEST_ID_PATTERN.fullmatch(assessment_id)
+    ):
+        return _not_found_response(request_id)
+
+    if idempotency_key is None:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="缺少 Idempotency-Key",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "missing",
+                    "message": "Field required",
+                }
+            ],
+            recovery={"action": "supply_idempotency_key"},
+        )
+    try:
+        validate_idempotency_key(idempotency_key)
+    except BidIdempotencyError:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="Idempotency-Key 格式无效",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "value_error",
+                    "message": "长度必须为 16–128 个可打印 ASCII 字符",
+                }
+            ],
+            recovery={"action": "replace_idempotency_key"},
+        )
+    if if_match is None:
+        return _error_response(
+            status_code=428,
+            request_id=request_id,
+            error_code="BID_PRECONDITION_REQUIRED",
+            message="必须提供 Assessment If-Match",
+            retryable=False,
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+    provided_etag = if_match.strip()
+    if not _STRONG_ETAG_PATTERN.fullmatch(provided_etag):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="If-Match 必须是 API-03 返回的单个强 ETag",
+            retryable=False,
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+
+    try:
+        raw_payload = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="请求体不是有效 JSON",
+            retryable=False,
+            recovery={"action": "fix_request_json"},
+        )
+    try:
+        payload = BidLotSelectionIn.model_validate(raw_payload)
+    except ValidationError as exc:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="标段选择请求字段校验失败",
+            retryable=False,
+            field_errors=_field_errors(exc),
+            recovery={"action": "fix_request_fields"},
+        )
+
+    try:
+        if not _assessment_is_visible(
+            db,
+            assessment_id=assessment_id,
+            current_user=current_user,
+        ):
+            return _not_found_response(request_id)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_lot_selection_visibility_check_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "assessment_id": assessment_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="Assessment 暂时无法读取",
+            retryable=True,
+            recovery={"action": "retry_same_request"},
+        )
+
+    normalized_payload = payload.model_dump(mode="json")
+    try:
+        execution = execute_idempotent_request(
+            db,
+            actor_id=int(current_user.id),
+            http_method="POST",
+            route_template=LOT_SELECTION_ROUTE_TEMPLATE,
+            idempotency_key=idempotency_key,
+            request_payload={
+                "assessment_id": assessment_id,
+                "if_match": provided_etag,
+                "body": normalized_payload,
+            },
+            request_id=request_id,
+            handler=lambda command_db: select_bid_lot(
+                command_db,
+                assessment_id=assessment_id,
+                expected_assessment_etag=provided_etag,
+                actor_id=int(current_user.id),
+                actor_ref=str(current_user.username),
+                actor_is_admin=has_admin_role(current_user),
+                request_id=request_id,
+                **normalized_payload,
+            ),
+        )
+        db.commit()
+    except BidIdempotencyInProgress:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_IN_PROGRESS",
+            message="相同标段选择请求正在处理中",
+            retryable=True,
+            details={"retry_after_seconds": 2},
+            recovery={"action": "retry_same_request"},
+            headers={"Retry-After": "2"},
+        )
+    except BidIdempotencyKeyReused:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_KEY_REUSED",
+            message="Idempotency-Key 已用于不同标段选择请求",
+            retryable=False,
+            recovery={"action": "use_new_idempotency_key"},
+        )
+    except BidLotSelectionVersionMismatch as exc:
+        db.rollback()
+        return _error_response(
+            status_code=412,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Assessment 已更新，请刷新后重试",
+            retryable=False,
+            details={
+                "provided_etag": exc.provided_etag,
+                "current_etag": exc.current_etag,
+                "current_resource_url": (
+                    f"/api/v1/bid-assessments/{exc.assessment_id}"
+                ),
+            },
+            recovery={"action": "get_latest_assessment_snapshot"},
+            headers={
+                "ETag": exc.current_etag,
+                "X-Resource-Version": str(exc.current_row_version),
+                "Cache-Control": "private, no-store",
+            },
+        )
+    except BidLotSelectionManifestMismatch as exc:
+        db.rollback()
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code=exc.code,
+            message="只能选择当前资料清单中的标段候选",
+            retryable=False,
+            details={
+                "provided_manifest_id": exc.provided_manifest_id,
+                "current_manifest_id": exc.current_manifest_id,
+            },
+            recovery={
+                "action": "get_current_lot_candidates",
+                "resource_url": f"/api/v1/bid-assessments/{assessment_id}/lots",
+            },
+        )
+    except BidLotCandidatesNotReady as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="标段候选尚未达到可选择状态",
+            retryable=True,
+            details={"generation_status": exc.status, "reason": exc.reason},
+            recovery={
+                "action": "wait_for_lot_candidates",
+                "resource_url": f"/api/v1/bid-assessments/{assessment_id}/lots",
+            },
+        )
+    except BidLotNotInManifest as exc:
+        db.rollback()
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code=exc.code,
+            message="标段候选不属于指定资料清单",
+            retryable=False,
+            details={"lot_id": exc.lot_id, "manifest_id": exc.manifest_id},
+            recovery={
+                "action": "get_current_lot_candidates",
+                "resource_url": f"/api/v1/bid-assessments/{assessment_id}/lots",
+            },
+        )
+    except BidLotScopeAlreadyBound as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Assessment 已绑定其他标段",
+            retryable=False,
+            details={
+                "scope_id": exc.scope_id,
+                "selected_lot_id": exc.selected_lot_id,
+                "manifest_id": exc.manifest_id,
+            },
+            recovery={
+                "action": "assessment.create_for_other_lot",
+                "resource_url": (
+                    f"/api/v1/bid-assessments/{assessment_id}/clone-for-lot"
+                ),
+            },
+        )
+    except BidLotSelectionStateConflict as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Assessment 当前状态不允许选择标段",
+            retryable=False,
+            details={
+                "lifecycle_status": exc.lifecycle_status,
+                "current_status": exc.business_status,
+                "allowed_statuses": ["awaiting_lot_selection"],
+            },
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+    except BidLotSelectionNotFound:
+        db.rollback()
+        return _not_found_response(request_id)
+    except IntegrityError:
+        db.rollback()
+        logger.exception(
+            "bid_lot_selection_integrity_conflict",
+            extra={"request_id": request_id, "assessment_id": assessment_id},
+        )
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_LOT_SCOPE_ALREADY_BOUND",
+            message="Assessment 标段 Scope 已由并发请求绑定",
+            retryable=False,
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_lot_selection_transaction_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "assessment_id": assessment_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="标段选择暂时无法保存",
+            retryable=True,
+            recovery={"action": "retry_same_request"},
+        )
+
+    response_body = dict(execution.body)
+    return JSONResponse(
+        status_code=int(execution.status_code),
+        content=response_body,
+        headers=_lot_selection_headers(
+            response_body,
+            replayed=bool(execution.replayed),
+        ),
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@router.post(
+    "/bid-assessments/{assessment_id}/clone-for-lot",
+    status_code=201,
+    summary="复用资料为其他标段创建独立研判",
+    operation_id="cloneBidAssessmentForLot",
+)
+async def clone_bid_assessment_for_lot_endpoint(
+    assessment_id: str,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create an independently authorized Assessment for another lot."""
+
+    request_id = _request_id(request)
+    if not settings.feature_bid_assessment_v1_runtime:
+        return _not_found_response(request_id)
+    if not (
+        1 <= len(assessment_id) <= 80
+        and _REQUEST_ID_PATTERN.fullmatch(assessment_id)
+    ):
+        return _not_found_response(request_id)
+
+    if idempotency_key is None:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="缺少 Idempotency-Key",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "missing",
+                    "message": "Field required",
+                }
+            ],
+            recovery={"action": "supply_idempotency_key"},
+        )
+    try:
+        validate_idempotency_key(idempotency_key)
+    except BidIdempotencyError:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="Idempotency-Key 格式无效",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "value_error",
+                    "message": "长度必须为 16–128 个可打印 ASCII 字符",
+                }
+            ],
+            recovery={"action": "replace_idempotency_key"},
+        )
+    if if_match is None:
+        return _error_response(
+            status_code=428,
+            request_id=request_id,
+            error_code="BID_PRECONDITION_REQUIRED",
+            message="必须提供源 Assessment If-Match",
+            retryable=False,
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+    provided_etag = if_match.strip()
+    if not _STRONG_ETAG_PATTERN.fullmatch(provided_etag):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="If-Match 必须是 API-03 返回的单个强 ETag",
+            retryable=False,
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+
+    try:
+        raw_payload = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="请求体不是有效 JSON",
+            retryable=False,
+            recovery={"action": "fix_request_json"},
+        )
+    try:
+        payload = BidAssessmentCloneForLotIn.model_validate(raw_payload)
+    except ValidationError as exc:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="另一标段研判创建请求字段校验失败",
+            retryable=False,
+            field_errors=_field_errors(exc),
+            recovery={"action": "fix_request_fields"},
+        )
+
+    try:
+        if not _assessment_is_visible(
+            db,
+            assessment_id=assessment_id,
+            current_user=current_user,
+        ):
+            return _not_found_response(request_id)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_assessment_clone_visibility_check_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "assessment_id": assessment_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="源 Assessment 暂时无法读取",
+            retryable=True,
+            recovery={"action": "retry_same_request"},
+        )
+
+    normalized_payload = payload.model_dump(mode="json")
+    try:
+        execution = execute_idempotent_request(
+            db,
+            actor_id=int(current_user.id),
+            http_method="POST",
+            route_template=CLONE_FOR_LOT_ROUTE_TEMPLATE,
+            idempotency_key=idempotency_key,
+            request_payload={
+                "assessment_id": assessment_id,
+                "if_match": provided_etag,
+                "body": normalized_payload,
+            },
+            request_id=request_id,
+            handler=lambda command_db: clone_bid_assessment_for_lot(
+                command_db,
+                assessment_id=assessment_id,
+                expected_assessment_etag=provided_etag,
+                actor_id=int(current_user.id),
+                actor_ref=str(current_user.username),
+                actor_is_admin=has_admin_role(current_user),
+                request_id=request_id,
+                **normalized_payload,
+            ),
+        )
+        db.commit()
+    except BidIdempotencyInProgress:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_IN_PROGRESS",
+            message="相同另一标段研判创建请求正在处理中",
+            retryable=True,
+            details={"retry_after_seconds": 2},
+            recovery={"action": "retry_same_request"},
+            headers={"Retry-After": "2"},
+        )
+    except BidIdempotencyKeyReused:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_KEY_REUSED",
+            message="Idempotency-Key 已用于不同的另一标段研判创建请求",
+            retryable=False,
+            recovery={"action": "use_new_idempotency_key"},
+        )
+    except BidAssessmentCloneVersionMismatch as exc:
+        db.rollback()
+        return _error_response(
+            status_code=412,
+            request_id=request_id,
+            error_code=exc.code,
+            message="源 Assessment 已更新，请刷新后重试",
+            retryable=False,
+            details={
+                "provided_etag": exc.provided_etag,
+                "current_etag": exc.current_etag,
+                "current_resource_url": (
+                    f"/api/v1/bid-assessments/{exc.assessment_id}"
+                ),
+            },
+            recovery={"action": "get_latest_assessment_snapshot"},
+            headers={
+                "ETag": exc.current_etag,
+                "X-Resource-Version": str(exc.current_row_version),
+                "Cache-Control": "private, no-store",
+            },
+        )
+    except BidAssessmentCloneManifestMismatch as exc:
+        db.rollback()
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code=exc.code,
+            message="只能从源 Assessment 的当前资料清单创建另一标段研判",
+            retryable=False,
+            details={
+                "provided_manifest_id": exc.provided_manifest_id,
+                "current_manifest_id": exc.current_manifest_id,
+            },
+            recovery={
+                "action": "get_current_lot_candidates",
+                "resource_url": f"/api/v1/bid-assessments/{assessment_id}/lots",
+            },
+        )
+    except BidAssessmentCloneCandidatesNotReady as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="源资料的标段候选尚未达到可复用状态",
+            retryable=True,
+            details={"generation_status": exc.status, "reason": exc.reason},
+            recovery={
+                "action": "wait_for_lot_candidates",
+                "resource_url": f"/api/v1/bid-assessments/{assessment_id}/lots",
+            },
+        )
+    except BidAssessmentCloneLotNotInManifest as exc:
+        db.rollback()
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code=exc.code,
+            message="标段候选不属于源资料清单",
+            retryable=False,
+            details={"lot_id": exc.lot_id, "manifest_id": exc.manifest_id},
+            recovery={
+                "action": "get_current_lot_candidates",
+                "resource_url": f"/api/v1/bid-assessments/{assessment_id}/lots",
+            },
+        )
+    except BidAssessmentCloneSameLot as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="不能为源 Assessment 已绑定的同一标段重复创建研判",
+            retryable=False,
+            details={
+                "source_lot_id": exc.source_lot_id,
+                "requested_lot_id": exc.requested_lot_id,
+                "reason": "same_lot_not_allowed",
+            },
+            recovery={
+                "action": "get_current_lot_candidates",
+                "resource_url": f"/api/v1/bid-assessments/{assessment_id}/lots",
+            },
+        )
+    except BidAssessmentCloneStateConflict as exc:
+        db.rollback()
+        recovery = {"action": "get_latest_assessment_snapshot"}
+        if exc.reason == "source_scope_required":
+            recovery = {
+                "action": "lot.select",
+                "resource_url": (
+                    f"/api/v1/bid-assessments/{assessment_id}/lot-selection"
+                ),
+            }
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="源 Assessment 当前状态不允许创建另一标段研判",
+            retryable=False,
+            details={
+                "lifecycle_status": exc.lifecycle_status,
+                "business_status": exc.business_status,
+                "reason": exc.reason,
+            },
+            recovery=recovery,
+        )
+    except BidAssessmentCloneNotFound:
+        db.rollback()
+        return _not_found_response(request_id)
+    except IntegrityError:
+        db.rollback()
+        logger.exception(
+            "bid_assessment_clone_integrity_conflict",
+            extra={"request_id": request_id, "assessment_id": assessment_id},
+        )
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_ASSESSMENT_STATE_CONFLICT",
+            message="另一标段研判已由并发请求创建或源资料已变化",
+            retryable=False,
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_assessment_clone_transaction_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "assessment_id": assessment_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="另一标段研判暂时无法创建",
+            retryable=True,
+            recovery={"action": "retry_same_request"},
+        )
+
+    response_body = dict(execution.body)
+    return JSONResponse(
+        status_code=int(execution.status_code),
+        content=response_body,
+        headers=_resource_headers(
+            response_body,
+            replayed=bool(execution.replayed),
+        ),
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@router.post(
+    "/bid-assessments/{assessment_id}/runs",
+    status_code=202,
+    summary="基于当前冻结输入创建重新研判 Run",
+    operation_id="createBidAnalysisRun",
+)
+async def create_bid_analysis_run_endpoint(
+    assessment_id: str,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """API-40 manual restart; the workflow still chooses the execution target."""
+
+    request_id = _request_id(request)
+    if not (
+        settings.feature_bid_assessment_v1_runtime
+        and settings.feature_bid_assessment_phase3_run_bootstrap
+    ):
+        return _not_found_response(request_id)
+    if not (
+        1 <= len(assessment_id) <= 80
+        and _REQUEST_ID_PATTERN.fullmatch(assessment_id)
+    ):
+        return _not_found_response(request_id)
+    if idempotency_key is None:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="缺少 Idempotency-Key",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "missing",
+                    "message": "Field required",
+                }
+            ],
+            recovery={"action": "supply_idempotency_key"},
+        )
+    try:
+        validate_idempotency_key(idempotency_key)
+    except BidIdempotencyError:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="Idempotency-Key 格式无效",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "value_error",
+                    "message": "长度必须为 16–128 个可打印 ASCII 字符",
+                }
+            ],
+            recovery={"action": "replace_idempotency_key"},
+        )
+    if if_match is None:
+        return _error_response(
+            status_code=428,
+            request_id=request_id,
+            error_code="BID_PRECONDITION_REQUIRED",
+            message="必须提供 Assessment If-Match",
+            retryable=False,
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+    provided_etag = if_match.strip()
+    if not _STRONG_ETAG_PATTERN.fullmatch(provided_etag):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="If-Match 必须是 API-03 返回的单个强 ETag",
+            retryable=False,
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+    try:
+        raw_payload = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="请求体不是有效 JSON",
+            retryable=False,
+            recovery={"action": "fix_request_json"},
+        )
+    try:
+        payload = BidRunCreateIn.model_validate(raw_payload)
+    except ValidationError as exc:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="Run 创建请求字段校验失败",
+            retryable=False,
+            field_errors=_field_errors(exc),
+            recovery={"action": "fix_request_fields"},
+        )
+    try:
+        if not _assessment_is_visible(
+            db,
+            assessment_id=assessment_id,
+            current_user=current_user,
+        ):
+            return _not_found_response(request_id)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_run_create_visibility_check_failed",
+            extra={"request_id": request_id, "assessment_id": assessment_id},
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="Assessment 暂时无法读取",
+            retryable=True,
+            recovery={"action": "retry_same_request"},
+        )
+
+    normalized_payload = payload.model_dump(mode="json")
+    try:
+        execution = execute_idempotent_request(
+            db,
+            actor_id=int(current_user.id),
+            http_method="POST",
+            route_template=RUN_CREATE_ROUTE_TEMPLATE,
+            idempotency_key=idempotency_key,
+            request_payload={
+                "assessment_id": assessment_id,
+                "if_match": provided_etag,
+                "body": normalized_payload,
+            },
+            request_id=request_id,
+            handler=lambda command_db: create_manual_run(
+                command_db,
+                assessment_id=assessment_id,
+                expected_assessment_etag=provided_etag,
+                actor_id=int(current_user.id),
+                actor_ref=str(current_user.username),
+                actor_is_admin=has_admin_role(current_user),
+                request_id=request_id,
+                **normalized_payload,
+            ),
+        )
+        db.commit()
+    except BidIdempotencyInProgress:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_IN_PROGRESS",
+            message="相同 Run 创建请求正在处理中",
+            retryable=True,
+            details={"retry_after_seconds": 2},
+            recovery={"action": "retry_same_request"},
+            headers={"Retry-After": "2"},
+        )
+    except BidIdempotencyKeyReused:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_KEY_REUSED",
+            message="Idempotency-Key 已用于不同的 Run 创建请求",
+            retryable=False,
+            recovery={"action": "use_new_idempotency_key"},
+        )
+    except BidRunVersionMismatch as exc:
+        db.rollback()
+        return _error_response(
+            status_code=412,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Assessment 已更新，请刷新后重试",
+            retryable=False,
+            details={
+                "provided_etag": exc.provided_etag,
+                "current_etag": exc.current_etag,
+                "current_resource_url": f"/api/v1/bid-assessments/{exc.assessment_id}",
+            },
+            recovery={"action": "get_latest_assessment_snapshot"},
+            headers={
+                "ETag": exc.current_etag,
+                "X-Resource-Version": str(exc.current_row_version),
+                "Cache-Control": "private, no-store",
+            },
+        )
+    except BidActiveRunExists as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Assessment 已有活跃 Run",
+            retryable=False,
+            details={"run_id": exc.run_id, "status": exc.status},
+            recovery={
+                "action": "run.view_progress",
+                "resource_url": f"/api/v1/bid-assessments/{assessment_id}/runs/{exc.run_id}",
+            },
+        )
+    except BidRunAlreadyExistsForInput as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="完全相同的冻结输入已经存在 Run",
+            retryable=False,
+            details={"run_id": exc.run_id, "status": exc.status},
+            recovery={
+                "action": "run.view_progress",
+                "resource_url": f"/api/v1/bid-assessments/{assessment_id}/runs/{exc.run_id}",
+            },
+        )
+    except BidRunInputNotReady as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Run 冻结输入尚未准备完成",
+            retryable=False,
+            details={"reason_codes": list(exc.reasons)},
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+    except BidRunNotFound:
+        db.rollback()
+        return _not_found_response(request_id)
+    except IntegrityError:
+        db.rollback()
+        logger.exception(
+            "bid_run_create_integrity_conflict",
+            extra={"request_id": request_id, "assessment_id": assessment_id},
+        )
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_ACTIVE_RUN_EXISTS",
+            message="Run 已由并发请求创建",
+            retryable=False,
+            recovery={"action": "get_latest_assessment_snapshot"},
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_run_create_transaction_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "assessment_id": assessment_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="Run 暂时无法创建",
+            retryable=True,
+            recovery={"action": "retry_same_request"},
+        )
+
+    response_body = dict(execution.body)
+    return JSONResponse(
+        status_code=int(execution.status_code),
+        content=response_body,
+        headers=_run_command_headers(
+            response_body,
+            replayed=bool(execution.replayed),
+        ),
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@router.get(
+    "/bid-assessments/{assessment_id}/runs/{run_id}",
+    summary="获取 Run 进度快照",
+    operation_id="getBidAnalysisRun",
+)
+def get_bid_analysis_run_endpoint(
+    assessment_id: str,
+    run_id: str,
+    request: Request,
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """API-41 projection; never exposes the internal Task DAG."""
+
+    request_id = _request_id(request)
+    if not (
+        settings.feature_bid_assessment_v1_runtime
+        and settings.feature_bid_assessment_phase3_run_bootstrap
+    ):
+        return _not_found_response(request_id)
+    if not all(
+        1 <= len(value) <= 80 and _REQUEST_ID_PATTERN.fullmatch(value)
+        for value in (assessment_id, run_id)
+    ):
+        return _not_found_response(request_id)
+    try:
+        run = (
+            db.query(BidAnalysisRun)
+            .join(BidAssessment, BidAssessment.id == BidAnalysisRun.assessment_id)
+            .filter(
+                BidAnalysisRun.id == run_id,
+                BidAnalysisRun.assessment_id == assessment_id,
+            )
+        )
+        if not has_admin_role(current_user):
+            run = run.filter(BidAssessment.created_by == int(current_user.id))
+        run_row = run.one_or_none()
+        if run_row is None:
+            return _not_found_response(request_id)
+        snapshot = build_run_progress_snapshot(db, run_row)
+        headers = run_snapshot_headers(run_row, snapshot)
+        if _if_none_match_matches(if_none_match, headers["ETag"]):
+            return Response(status_code=304, headers=headers)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_run_snapshot_read_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "assessment_id": assessment_id,
+                "run_id": run_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="Run 进度暂时无法读取",
+            retryable=True,
+            recovery={"action": "retry_snapshot_read"},
+        )
+    return JSONResponse(
+        status_code=200,
+        content={
+            "code": 200,
+            "message": "ok",
+            "data": snapshot,
+            "error": None,
+            "request_id": request_id,
+        },
+        headers=headers,
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@router.post(
+    "/bid-assessments/{assessment_id}/runs/{run_id}/cancel",
+    status_code=202,
+    summary="请求安全取消 Run",
+    operation_id="cancelBidAnalysisRun",
+)
+async def cancel_bid_analysis_run_endpoint(
+    assessment_id: str,
+    run_id: str,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """API-42 persists cancellation; lifecycle maintenance performs the fence."""
+
+    request_id = _request_id(request)
+    if not (
+        settings.feature_bid_assessment_v1_runtime
+        and settings.feature_bid_assessment_phase3_run_bootstrap
+        and settings.feature_bid_assessment_phase3_run_lifecycle
+    ):
+        return _not_found_response(request_id)
+    if not all(
+        1 <= len(value) <= 80 and _REQUEST_ID_PATTERN.fullmatch(value)
+        for value in (assessment_id, run_id)
+    ):
+        return _not_found_response(request_id)
+    if idempotency_key is None:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="缺少 Idempotency-Key",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "missing",
+                    "message": "Field required",
+                }
+            ],
+            recovery={"action": "supply_idempotency_key"},
+        )
+    try:
+        validate_idempotency_key(idempotency_key)
+    except BidIdempotencyError:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="Idempotency-Key 格式无效",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "value_error",
+                    "message": "长度必须为 16–128 个可打印 ASCII 字符",
+                }
+            ],
+            recovery={"action": "replace_idempotency_key"},
+        )
+    if if_match is None:
+        return _error_response(
+            status_code=428,
+            request_id=request_id,
+            error_code="BID_PRECONDITION_REQUIRED",
+            message="必须提供 Run If-Match",
+            retryable=False,
+            recovery={"action": "get_latest_run_snapshot"},
+        )
+    provided_etag = if_match.strip()
+    if not _STRONG_ETAG_PATTERN.fullmatch(provided_etag):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="If-Match 必须是 API-41 返回的单个强 ETag",
+            retryable=False,
+            recovery={"action": "get_latest_run_snapshot"},
+        )
+    try:
+        raw_payload = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="请求体不是有效 JSON",
+            retryable=False,
+            recovery={"action": "fix_request_json"},
+        )
+    try:
+        payload = BidRunCancelIn.model_validate(raw_payload)
+    except ValidationError as exc:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="Run 取消请求字段校验失败",
+            retryable=False,
+            field_errors=_field_errors(exc),
+            recovery={"action": "fix_request_fields"},
+        )
+    normalized_payload = payload.model_dump(mode="json")
+    try:
+        execution = execute_idempotent_request(
+            db,
+            actor_id=int(current_user.id),
+            http_method="POST",
+            route_template=RUN_CANCEL_ROUTE_TEMPLATE,
+            idempotency_key=idempotency_key,
+            request_payload={
+                "assessment_id": assessment_id,
+                "run_id": run_id,
+                "if_match": provided_etag,
+                "body": normalized_payload,
+            },
+            request_id=request_id,
+            handler=lambda command_db: request_run_cancellation(
+                command_db,
+                assessment_id=assessment_id,
+                run_id=run_id,
+                expected_run_etag=provided_etag,
+                actor_id=int(current_user.id),
+                actor_ref=str(current_user.username),
+                actor_is_admin=has_admin_role(current_user),
+                request_id=request_id,
+                **normalized_payload,
+            ),
+        )
+        db.commit()
+    except BidIdempotencyInProgress:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_IN_PROGRESS",
+            message="相同 Run 取消请求正在处理中",
+            retryable=True,
+            details={"retry_after_seconds": 2},
+            recovery={"action": "retry_same_request"},
+            headers={"Retry-After": "2"},
+        )
+    except BidIdempotencyKeyReused:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_KEY_REUSED",
+            message="Idempotency-Key 已用于不同的 Run 取消请求",
+            retryable=False,
+            recovery={"action": "use_new_idempotency_key"},
+        )
+    except BidRunLifecycleVersionMismatch as exc:
+        db.rollback()
+        return _error_response(
+            status_code=412,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Run 已更新，请刷新后重试",
+            retryable=False,
+            details={
+                "provided_etag": exc.provided_etag,
+                "current_etag": exc.current_etag,
+                "current_resource_url": (
+                    f"/api/v1/bid-assessments/{exc.assessment_id}/runs/{exc.run_id}"
+                ),
+            },
+            recovery={"action": "get_latest_run_snapshot"},
+            headers={
+                "ETag": exc.current_etag,
+                "X-Resource-Version": str(exc.current_row_version),
+                "Cache-Control": "private, no-store",
+            },
+        )
+    except BidRunNotCancellable as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Run 当前状态不允许取消",
+            retryable=False,
+            details={
+                "run_id": exc.run_id,
+                "status": exc.status,
+                "retryable": exc.retryable,
+            },
+            recovery={"action": "get_latest_run_snapshot"},
+        )
+    except BidRunLifecycleNotFound:
+        db.rollback()
+        return _not_found_response(request_id)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_run_cancel_transaction_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "assessment_id": assessment_id,
+                "run_id": run_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="Run 取消请求暂时无法处理",
+            retryable=True,
+            recovery={"action": "retry_same_request"},
+        )
+
+    response_body = dict(execution.body)
+    return JSONResponse(
+        status_code=int(execution.status_code),
+        content=response_body,
+        headers=_run_command_headers(
+            response_body,
+            replayed=bool(execution.replayed),
+        ),
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@router.post(
+    "/bid-assessments/{assessment_id}/runs/{run_id}/retry",
+    status_code=202,
+    summary="从最近 Checkpoint 重试 Run",
+    operation_id="retryBidAnalysisRun",
+)
+async def retry_bid_analysis_run_endpoint(
+    assessment_id: str,
+    run_id: str,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """API-43 creates fenced Attempts in the same failed, retryable Run."""
+
+    request_id = _request_id(request)
+    if not (
+        settings.feature_bid_assessment_v1_runtime
+        and settings.feature_bid_assessment_phase3_run_bootstrap
+        and settings.feature_bid_assessment_phase3_run_lifecycle
+    ):
+        return _not_found_response(request_id)
+    if not all(
+        1 <= len(value) <= 80 and _REQUEST_ID_PATTERN.fullmatch(value)
+        for value in (assessment_id, run_id)
+    ):
+        return _not_found_response(request_id)
+    if idempotency_key is None:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="缺少 Idempotency-Key",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "missing",
+                    "message": "Field required",
+                }
+            ],
+            recovery={"action": "supply_idempotency_key"},
+        )
+    try:
+        validate_idempotency_key(idempotency_key)
+    except BidIdempotencyError:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="Idempotency-Key 格式无效",
+            retryable=False,
+            field_errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "type": "value_error",
+                    "message": "长度必须为 16–128 个可打印 ASCII 字符",
+                }
+            ],
+            recovery={"action": "replace_idempotency_key"},
+        )
+    if if_match is None:
+        return _error_response(
+            status_code=428,
+            request_id=request_id,
+            error_code="BID_PRECONDITION_REQUIRED",
+            message="必须提供 Run If-Match",
+            retryable=False,
+            recovery={"action": "get_latest_run_snapshot"},
+        )
+    provided_etag = if_match.strip()
+    if not _STRONG_ETAG_PATTERN.fullmatch(provided_etag):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="If-Match 必须是 API-41 返回的单个强 ETag",
+            retryable=False,
+            recovery={"action": "get_latest_run_snapshot"},
+        )
+    try:
+        raw_payload = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        return _error_response(
+            status_code=400,
+            request_id=request_id,
+            error_code="BID_REQUEST_MALFORMED",
+            message="请求体不是有效 JSON",
+            retryable=False,
+            recovery={"action": "fix_request_json"},
+        )
+    try:
+        payload = BidRunRetryIn.model_validate(raw_payload)
+    except ValidationError as exc:
+        return _error_response(
+            status_code=422,
+            request_id=request_id,
+            error_code="BID_REQUEST_VALIDATION_FAILED",
+            message="Run 重试请求字段校验失败",
+            retryable=False,
+            field_errors=_field_errors(exc),
+            recovery={"action": "fix_request_fields"},
+        )
+    normalized_payload = payload.model_dump(mode="json")
+    try:
+        execution = execute_idempotent_request(
+            db,
+            actor_id=int(current_user.id),
+            http_method="POST",
+            route_template=RUN_RETRY_ROUTE_TEMPLATE,
+            idempotency_key=idempotency_key,
+            request_payload={
+                "assessment_id": assessment_id,
+                "run_id": run_id,
+                "if_match": provided_etag,
+                "body": normalized_payload,
+            },
+            request_id=request_id,
+            handler=lambda command_db: retry_run_from_latest_checkpoint(
+                command_db,
+                assessment_id=assessment_id,
+                run_id=run_id,
+                expected_run_etag=provided_etag,
+                actor_id=int(current_user.id),
+                actor_ref=str(current_user.username),
+                actor_is_admin=has_admin_role(current_user),
+                request_id=request_id,
+                **normalized_payload,
+            ),
+        )
+        db.commit()
+    except BidIdempotencyInProgress:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_IN_PROGRESS",
+            message="相同 Run 重试请求正在处理中",
+            retryable=True,
+            details={"retry_after_seconds": 2},
+            recovery={"action": "retry_same_request"},
+            headers={"Retry-After": "2"},
+        )
+    except BidIdempotencyKeyReused:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_IDEMPOTENCY_KEY_REUSED",
+            message="Idempotency-Key 已用于不同的 Run 重试请求",
+            retryable=False,
+            recovery={"action": "use_new_idempotency_key"},
+        )
+    except BidRunLifecycleVersionMismatch as exc:
+        db.rollback()
+        return _error_response(
+            status_code=412,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Run 已更新，请刷新后重试",
+            retryable=False,
+            details={
+                "provided_etag": exc.provided_etag,
+                "current_etag": exc.current_etag,
+                "current_resource_url": (
+                    f"/api/v1/bid-assessments/{exc.assessment_id}/runs/{exc.run_id}"
+                ),
+            },
+            recovery={"action": "get_latest_run_snapshot"},
+            headers={
+                "ETag": exc.current_etag,
+                "X-Resource-Version": str(exc.current_row_version),
+                "Cache-Control": "private, no-store",
+            },
+        )
+    except BidLifecycleRunInputStale as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Run 冻结输入已经过期，不能在原 Run 下重试",
+            retryable=False,
+            details={"run_id": exc.run_id, "reason_codes": list(exc.reasons)},
+            recovery={"action": "run.create_from_latest_manifest"},
+        )
+    except BidRunNotRetryable as exc:
+        db.rollback()
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code=exc.code,
+            message="Run 不满足检查点重试条件",
+            retryable=False,
+            details={
+                "run_id": exc.run_id,
+                "status": exc.status,
+                "retryable": exc.retryable,
+                "reason": exc.reason,
+            },
+            recovery={"action": "get_latest_run_snapshot"},
+        )
+    except BidRunLifecycleNotFound:
+        db.rollback()
+        return _not_found_response(request_id)
+    except IntegrityError:
+        db.rollback()
+        logger.exception(
+            "bid_run_retry_integrity_conflict",
+            extra={
+                "request_id": request_id,
+                "assessment_id": assessment_id,
+                "run_id": run_id,
+            },
+        )
+        return _error_response(
+            status_code=409,
+            request_id=request_id,
+            error_code="BID_RUN_NOT_RETRYABLE",
+            message="Run 已由并发请求恢复",
+            retryable=False,
+            recovery={"action": "get_latest_run_snapshot"},
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_run_retry_transaction_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "assessment_id": assessment_id,
+                "run_id": run_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="Run 重试请求暂时无法处理",
+            retryable=True,
+            recovery={"action": "retry_same_request"},
+        )
+
+    response_body = dict(execution.body)
+    return JSONResponse(
+        status_code=int(execution.status_code),
+        content=response_body,
+        headers=_run_command_headers(
+            response_body,
+            replayed=bool(execution.replayed),
+        ),
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@router.get(
+    "/bid-document-versions/{version_id}",
+    summary="获取研判文件版本详情",
+    operation_id="getBidDocumentVersion",
+)
+def get_bid_document_version_endpoint(
+    version_id: str,
+    request: Request,
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return an immutable, Manifest-authorized DocumentVersion projection."""
+
+    request_id = _request_id(request)
+    if not settings.feature_bid_assessment_v1_runtime:
+        return _document_version_not_found_response(request_id)
+    if not (
+        1 <= len(version_id) <= 80
+        and _REQUEST_ID_PATTERN.fullmatch(version_id)
+    ):
+        return _document_version_not_found_response(request_id)
+
+    try:
+        visible = load_visible_bid_document_version(
+            db,
+            version_id=version_id,
+            actor_id=int(current_user.id),
+            actor_is_admin=has_admin_role(current_user),
+        )
+        detail = build_bid_document_version_detail(db, visible)
+        headers = bid_document_version_headers(detail)
+        if _if_none_match_matches(if_none_match, headers["ETag"]):
+            return Response(status_code=304, headers=headers)
+    except BidDocumentVersionNotFound:
+        db.rollback()
+        return _document_version_not_found_response(request_id)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_document_version_read_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "version_id": version_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="文件版本详情暂时无法读取",
+            retryable=True,
+            recovery={"action": "retry_document_version_read"},
+        )
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "code": 200,
+            "message": "ok",
+            "data": detail,
+            "error": None,
+            "request_id": request_id,
+        },
+        headers=headers,
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@router.get(
+    "/bid-document-versions/{version_id}/download",
+    summary="受控下载研判文件原始版本",
+    operation_id="downloadBidDocumentVersion",
+)
+def download_bid_document_version_endpoint(
+    version_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Re-authorize and stream one exact object without exposing MinIO identity."""
+
+    request_id = _request_id(request)
+    if not settings.feature_bid_assessment_v1_runtime:
+        return _document_version_not_found_response(request_id)
+    if not (
+        1 <= len(version_id) <= 80
+        and _REQUEST_ID_PATTERN.fullmatch(version_id)
+    ):
+        return _document_version_not_found_response(request_id)
+
+    try:
+        visible = load_visible_bid_document_version(
+            db,
+            version_id=version_id,
+            actor_id=int(current_user.id),
+            actor_is_admin=has_admin_role(current_user),
+        )
+    except BidDocumentVersionNotFound:
+        db.rollback()
+        return _document_version_not_found_response(request_id)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "bid_document_download_authorization_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "version_id": version_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="文件下载授权暂时无法确认",
+            retryable=True,
+            recovery={"action": "retry_document_download"},
+        )
+
+    file_object = visible.file_object
+    if str(file_object.storage_status) != "available":
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="原文件暂时不可下载",
+            retryable=True,
+            recovery={"action": "retry_document_download"},
+        )
+
+    try:
+        storage = get_bid_upload_object_storage()
+        stream = storage.open_read(object_key=str(file_object.object_key))
+    except Exception:
+        # Some S3 clients include the object key in exception text. Keep this
+        # public download log deliberately key-free as required by the frozen
+        # storage-disclosure boundary.
+        logger.warning(
+            "bid_document_download_open_failed",
+            extra={
+                "request_id": request_id,
+                "actor_id": int(current_user.id),
+                "version_id": version_id,
+            },
+        )
+        return _error_response(
+            status_code=503,
+            request_id=request_id,
+            error_code="BID_STORAGE_UNAVAILABLE",
+            message="原文件暂时无法读取",
+            retryable=True,
+            recovery={"action": "retry_document_download"},
+        )
+
+    mime_type = safe_download_mime_type(str(file_object.mime_type))
+    headers = {
+        "Content-Disposition": safe_content_disposition(
+            str(visible.version.original_filename)
+        ),
+        "Content-Type": mime_type,
+        "Content-Length": str(int(file_object.size_bytes)),
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+        "Vary": "Authorization",
+        "Accept-Ranges": "none",
+        "Content-Security-Policy": "sandbox",
+    }
+    return StreamingResponse(
+        iter_bid_download(
+            stream,
+            chunk_size=int(settings.bid_upload_read_chunk_bytes),
+        ),
+        status_code=200,
+        headers=headers,
     )
 
 

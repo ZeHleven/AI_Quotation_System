@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "旗胜投标机会研判 Agent API",
-    "version": "1.0.0-draft.1",
-    "description": "Phase 0 机器合同。尚未注册运行时路由，不代表接口已经上线。"
+    "version": "1.0.0-draft.2",
+    "description": "报价资料研判 Agent 机器合同；已冻结 Phase 2 文档处理与 Phase 3A—3D Run Bootstrap、Planner、Task Runtime、API-40—API-43 边界，但不代表相关运行时已经上线。"
   },
   "servers": [{"url": "/api/v1"}],
   "security": [{"bearerAuth": []}],
@@ -169,7 +169,8 @@
         "x-api-id": "API-21",
         "operationId": "getBidDocumentVersion",
         "tags": ["documents"],
-        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
+        "parameters": [{"$ref": "#/components/parameters/IfNoneMatch"}],
+        "responses": {"200": {"$ref": "#/components/responses/DocumentVersionOk"}, "304": {"description": "私有 DocumentVersion 投影 ETag 未变化，无响应体"}, "default": {"$ref": "#/components/responses/Error"}}
       }
     },
     "/bid-document-versions/{version_id}/download": {
@@ -178,7 +179,8 @@
         "x-api-id": "API-22",
         "operationId": "downloadBidDocumentVersion",
         "tags": ["documents"],
-        "responses": {"200": {"description": "受控文件流", "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}}, "default": {"$ref": "#/components/responses/Error"}}
+        "description": "每次重新鉴权的完整文件流；首版不声明 Range/206",
+        "responses": {"200": {"$ref": "#/components/responses/DocumentDownloadOk"}, "default": {"$ref": "#/components/responses/Error"}}
       }
     },
     "/bid-assessments/{assessment_id}/lots": {
@@ -187,7 +189,12 @@
         "x-api-id": "API-30",
         "operationId": "listBidLotCandidates",
         "tags": ["lots"],
-        "responses": {"200": {"$ref": "#/components/responses/GenericOk"}, "default": {"$ref": "#/components/responses/Error"}}
+        "description": "读取指定或当前 Manifest 的标段候选投影；本 GET 不触发解析或候选生成",
+        "parameters": [
+          {"$ref": "#/components/parameters/ManifestIdQuery"},
+          {"$ref": "#/components/parameters/IfNoneMatch"}
+        ],
+        "responses": {"200": {"$ref": "#/components/responses/LotCandidatesOk"}, "304": {"description": "私有标段候选投影 ETag 未变化，无响应体"}, "default": {"$ref": "#/components/responses/Error"}}
       }
     },
     "/bid-assessments/{assessment_id}/lot-selection": {
@@ -198,7 +205,7 @@
         "tags": ["lots"],
         "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
         "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LotSelectionRequest"}}}},
-        "responses": {"202": {"$ref": "#/components/responses/GenericAccepted"}, "default": {"$ref": "#/components/responses/Error"}}
+        "responses": {"202": {"$ref": "#/components/responses/LotSelected"}, "default": {"$ref": "#/components/responses/Error"}}
       }
     },
     "/bid-assessments/{assessment_id}/clone-for-lot": {
@@ -209,7 +216,7 @@
         "tags": ["lots"],
         "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}, {"$ref": "#/components/parameters/IfMatch"}],
         "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CloneForLotRequest"}}}},
-        "responses": {"201": {"$ref": "#/components/responses/AssessmentCreated"}, "default": {"$ref": "#/components/responses/Error"}}
+        "responses": {"201": {"$ref": "#/components/responses/ClonedAssessmentCreated"}, "default": {"$ref": "#/components/responses/Error"}}
       }
     },
     "/bid-assessments/{assessment_id}/runs": {
@@ -229,6 +236,7 @@
         "x-api-id": "API-41",
         "operationId": "getBidAnalysisRun",
         "tags": ["runs"],
+        "parameters": [{"$ref": "#/components/parameters/IfNoneMatch"}],
         "responses": {"200": {"$ref": "#/components/responses/RunOk"}, "304": {"description": "ETag 未变化"}, "default": {"$ref": "#/components/responses/Error"}}
       }
     },
@@ -441,6 +449,9 @@
       "CommitUploadBatchResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/CommitUploadBatchResponse"},
       "UploadFileResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/UploadFileResponse"},
       "DocumentPageResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/DocumentPageResponse"},
+      "DocumentVersionResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/DocumentVersionResponse"},
+      "LotCandidatePageResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/LotCandidatePageResponse"},
+      "LotSelectionResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/LotSelectionResponse"},
       "RunResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/RunResponse"},
       "QuestionRoundResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/QuestionRoundResponse"},
       "ReportResponse": {"$ref": "../schemas/bid_assessment/v1/contracts.schema.json#/$defs/ReportResponse"},
@@ -450,8 +461,30 @@
       "GenericOk": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SuccessEnvelope"}}}},
       "GenericCreated": {"description": "资源已创建", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SuccessEnvelope"}}}},
       "GenericAccepted": {"description": "命令已持久化并异步处理", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SuccessEnvelope"}}}},
+      "LotSelected": {
+        "description": "标段 Scope、Assessment 状态和规划请求已原子持久化",
+        "headers": {
+          "Location": {"required": true, "schema": {"type": "string", "pattern": "^/api/v1/bid-assessments/"}},
+          "ETag": {"required": true, "schema": {"type": "string", "pattern": "^\"bid-assessment:[A-Za-z0-9_.:-]+:[1-9][0-9]*\"$"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "Idempotent-Replay": {"schema": {"type": "boolean"}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-store"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LotSelectionResponse"}}}
+      },
       "AssessmentOk": {"description": "Assessment 快照", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AssessmentResponse"}}}},
       "AssessmentCreated": {"description": "Assessment 已创建", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AssessmentResponse"}}}},
+      "ClonedAssessmentCreated": {
+        "description": "已为另一标段创建独立 Assessment、Manifest 和 Scope",
+        "headers": {
+          "Location": {"required": true, "schema": {"type": "string", "pattern": "^/api/v1/bid-assessments/"}},
+          "ETag": {"required": true, "schema": {"type": "string", "pattern": "^\"bid-assessment:[A-Za-z0-9_.:-]+:[1-9][0-9]*\"$"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "Idempotent-Replay": {"schema": {"type": "boolean"}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-store"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AssessmentResponse"}}}
+      },
       "UploadBatchOk": {"description": "上传批次快照", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadBatchResponse"}}}},
       "UploadBatchCreated": {"description": "上传批次已创建或更新", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadBatchResponse"}}}},
       "UploadBatchDeactivationCreated": {
@@ -520,8 +553,60 @@
         },
         "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DocumentPageResponse"}}}
       },
-      "RunOk": {"description": "Run 进度快照", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RunResponse"}}}},
-      "RunAccepted": {"description": "Run 命令已接受", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RunResponse"}}}},
+      "DocumentVersionOk": {
+        "description": "当前 actor 可见的不可变 DocumentVersion 权威投影",
+        "headers": {
+          "ETag": {"required": true, "schema": {"type": "string", "pattern": "^\"bid-document-version:"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-cache, max-age=0, must-revalidate"}},
+          "Vary": {"required": true, "schema": {"type": "string", "const": "Authorization"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DocumentVersionResponse"}}}
+      },
+      "DocumentDownloadOk": {
+        "description": "重新鉴权后的完整原文件流；不暴露对象存储地址",
+        "headers": {
+          "Content-Disposition": {"required": true, "schema": {"type": "string"}},
+          "Content-Length": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "X-Content-Type-Options": {"required": true, "schema": {"type": "string", "const": "nosniff"}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-store"}},
+          "Vary": {"required": true, "schema": {"type": "string", "const": "Authorization"}},
+          "Accept-Ranges": {"required": true, "schema": {"type": "string", "const": "none"}},
+          "Content-Security-Policy": {"required": true, "schema": {"type": "string", "const": "sandbox"}}
+        },
+        "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}
+      },
+      "LotCandidatesOk": {
+        "description": "Assessment Manifest 的标段候选只读投影；成功零候选仍返回 200",
+        "headers": {
+          "ETag": {"required": true, "schema": {"type": "string", "pattern": "^\"bid-lot-candidates:"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-cache, max-age=0, must-revalidate"}},
+          "Vary": {"required": true, "schema": {"type": "string", "const": "Authorization"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LotCandidatePageResponse"}}}
+      },
+      "RunOk": {
+        "description": "Run 进度快照；不返回内部 Task DAG",
+        "headers": {
+          "ETag": {"required": true, "schema": {"type": "string", "pattern": "^\\\"bid-run:"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-cache, max-age=0, must-revalidate"}},
+          "Vary": {"required": true, "schema": {"type": "string", "const": "Authorization"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RunResponse"}}}
+      },
+      "RunAccepted": {
+        "description": "Run 创建、取消请求或检查点重试命令已原子持久化",
+        "headers": {
+          "Location": {"required": true, "schema": {"type": "string", "pattern": "^/api/v1/bid-assessments/"}},
+          "ETag": {"required": true, "schema": {"type": "string", "pattern": "^\\\"bid-run:"}},
+          "X-Resource-Version": {"required": true, "schema": {"type": "integer", "minimum": 1}},
+          "Idempotent-Replay": {"schema": {"type": "boolean"}},
+          "Cache-Control": {"required": true, "schema": {"type": "string", "const": "private, no-store"}}
+        },
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RunResponse"}}}
+      },
       "QuestionRoundOk": {"description": "问题轮次快照", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/QuestionRoundResponse"}}}},
       "ReportOk": {"description": "已发布报告", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReportResponse"}}}},
       "Error": {"description": "稳定业务错误", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}}}

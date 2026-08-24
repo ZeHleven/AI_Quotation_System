@@ -67,10 +67,10 @@
         "created": ["planning", "cancelled", "stale", "failed"],
         "planning": ["queued", "cancelled", "stale", "failed"],
         "queued": ["running", "cancelled", "stale", "failed"],
-        "running": ["waiting_input", "waiting_operation", "validating", "succeeded", "failed", "stale", "cancelled"],
+        "running": ["planning", "waiting_input", "waiting_operation", "validating", "succeeded", "failed", "stale", "cancelled"],
         "waiting_input": ["queued", "stale", "cancelled"],
         "waiting_operation": ["queued", "failed", "stale", "cancelled"],
-        "validating": ["queued", "succeeded", "failed", "stale"],
+        "validating": ["queued", "succeeded", "failed", "stale", "cancelled"],
         "succeeded": [],
         "failed": ["queued", "stale", "cancelled"],
         "stale": [],
@@ -95,10 +95,10 @@
         "blocked": ["ready", "skipped", "stale", "cancelled"],
         "ready": ["leased", "skipped", "stale", "cancelled"],
         "leased": ["running", "ready", "cancelled"],
-        "running": ["waiting_operation", "waiting_input", "validating", "succeeded", "failed", "stale", "cancelled"],
+        "running": ["ready", "waiting_operation", "waiting_input", "validating", "succeeded", "failed", "stale", "cancelled"],
         "waiting_operation": ["ready", "failed", "stale", "cancelled"],
         "waiting_input": ["ready", "stale", "cancelled"],
-        "validating": ["ready", "succeeded", "failed", "stale"],
+        "validating": ["ready", "succeeded", "failed", "stale", "cancelled"],
         "succeeded": [],
         "failed": ["ready", "cancelled"],
         "skipped": [],
@@ -137,13 +137,57 @@
       "states": ["created", "submitted", "running", "succeeded", "failed", "cancelled", "timed_out"],
       "terminal_states": ["succeeded", "failed", "cancelled"],
       "transitions": {
-        "created": ["submitted"],
-        "submitted": ["running", "timed_out"],
+        "created": ["submitted", "cancelled"],
+        "submitted": ["running", "cancelled", "timed_out"],
         "running": ["succeeded", "failed", "cancelled", "timed_out"],
         "succeeded": [],
         "failed": [],
         "cancelled": [],
         "timed_out": ["submitted", "failed"]
+      }
+    },
+    "run_validation": {
+      "states": ["requested", "leased", "running", "passed", "failed", "stale", "cancelled"],
+      "terminal_states": ["passed", "failed", "stale", "cancelled"],
+      "transitions": {
+        "requested": ["leased", "cancelled"],
+        "leased": ["running", "requested", "cancelled"],
+        "running": ["requested", "passed", "failed", "stale", "cancelled"],
+        "passed": [],
+        "failed": [],
+        "stale": [],
+        "cancelled": []
+      }
+    },
+    "tool_dispatch": {
+      "states": ["queued", "leased", "sending", "awaiting_receipt", "retry_wait", "succeeded", "failed", "cancelled", "uncertain", "dead_letter"],
+      "terminal_states": ["succeeded", "failed", "cancelled", "uncertain", "dead_letter"],
+      "transitions": {
+        "queued": ["leased", "failed", "cancelled"],
+        "leased": ["sending", "retry_wait", "failed", "cancelled", "dead_letter"],
+        "sending": ["awaiting_receipt", "retry_wait", "succeeded", "failed", "cancelled", "uncertain", "dead_letter"],
+        "awaiting_receipt": ["succeeded", "failed", "cancelled", "uncertain", "dead_letter"],
+        "retry_wait": ["leased", "failed", "cancelled", "dead_letter"],
+        "succeeded": [],
+        "failed": [],
+        "cancelled": [],
+        "uncertain": [],
+        "dead_letter": []
+      }
+    },
+    "model_call": {
+      "states": ["accepted", "leased", "sending", "retry_wait", "succeeded", "failed", "cancelled", "uncertain", "dead_letter"],
+      "terminal_states": ["succeeded", "failed", "cancelled", "uncertain", "dead_letter"],
+      "transitions": {
+        "accepted": ["leased", "failed", "cancelled"],
+        "leased": ["sending", "retry_wait", "failed", "cancelled", "dead_letter"],
+        "sending": ["retry_wait", "succeeded", "failed", "cancelled", "uncertain", "dead_letter"],
+        "retry_wait": ["leased", "failed", "cancelled", "dead_letter"],
+        "succeeded": [],
+        "failed": [],
+        "cancelled": [],
+        "uncertain": [],
+        "dead_letter": []
       }
     }
   }

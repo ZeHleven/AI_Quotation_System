@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/evidence-retrieval.schema.json",
+  "title": "Qisheng Bid Assessment Role-aware Retrieval Index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "profile_version",
+    "role_contract_version",
+    "input_hash",
+    "entries",
+    "result_hash"
+  ],
+  "properties": {
+    "contract_version": {"const": "bid.evidence.retrieval-index.v1"},
+    "profile_version": {"const": "bid-evidence-retrieval-profile-v2-role-aware"},
+    "role_contract_version": {"const": "bid.evidence.chunk.v2"},
+    "input_hash": {"$ref": "#/$defs/Sha256"},
+    "entries": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/RetrievalEntry"}
+    },
+    "result_hash": {"$ref": "#/$defs/Sha256"}
+  },
+  "$defs": {
+    "Sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "EvidenceKey": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 100,
+      "pattern": "^(section|child|chunk|atom):[a-f0-9]{64}$"
+    },
+    "RetrievalEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retrieval_child_key",
+        "section_parent_key",
+        "ordinal",
+        "page_start",
+        "page_end",
+        "retrieval_hash",
+        "child_text_hash",
+        "source_atom_keys",
+        "source_atoms_hash",
+        "entry_hash"
+      ],
+      "properties": {
+        "retrieval_child_key": {"$ref": "#/$defs/EvidenceKey"},
+        "section_parent_key": {"$ref": "#/$defs/EvidenceKey"},
+        "ordinal": {"type": "integer", "minimum": 0},
+        "page_start": {"type": "integer", "minimum": 1},
+        "page_end": {"type": "integer", "minimum": 1},
+        "retrieval_hash": {"$ref": "#/$defs/Sha256"},
+        "child_text_hash": {"$ref": "#/$defs/Sha256"},
+        "source_atom_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/EvidenceKey"}
+        },
+        "source_atoms_hash": {"$ref": "#/$defs/Sha256"},
+        "entry_hash": {"$ref": "#/$defs/Sha256"}
+      }
+    }
+  }
+}

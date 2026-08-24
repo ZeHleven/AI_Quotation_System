@@ -1,0 +1,12 @@
+{
+  "schema": "bid.skill.artifact.v1",
+  "skill_id": "bid-preliminary-decision",
+  "skill_version": "1.0.0",
+  "executor_kind": "deterministic",
+  "task_bindings": {
+    "evaluate_final_decision": {
+      "action_contract": "bid.task.action.deterministic.v1",
+      "output_schema": "decision_result_v1"
+    }
+  }
+}

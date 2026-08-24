@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_version": "bid.evidence.candidate-fusion.v1",
+  "profile_version": "bid-evidence-candidate-fusion-profile-v1-rq2b",
+  "feature_flag": "FEATURE_BID_ASSESSMENT_RQ2B_CANDIDATE_FUSION",
+  "configuration": {
+    "profile_variable": "BID_EVIDENCE_CANDIDATE_FUSION_PROFILE_VERSION",
+    "default_profile": "bid-evidence-candidate-fusion-profile-v0-disabled",
+    "enabled_profile": "bid-evidence-candidate-fusion-profile-v1-rq2b"
+  },
+  "source_profiles": {
+    "retrieval": "bid-evidence-retrieval-profile-v2-role-aware",
+    "query_optimizer": "bid-evidence-query-optimizer-profile-v1-rq1c",
+    "lexical": "bid-evidence-lexical-profile-v1-rq1d",
+    "semantic": "bid-evidence-semantic-profile-v1-rq2a-bce"
+  },
+  "candidate_channels": {
+    "lexical": {
+      "source": "rq1d_bm25_baseline_bm25f_parent_weighted_rrf",
+      "max_candidates": 40,
+      "weight": 1.0
+    },
+    "semantic": {
+      "source": "rq2a_bce_query_weighted_rrf",
+      "max_candidates": 40,
+      "weight": 0.35
+    },
+    "overlap_bonus": {
+      "weight": 0.2,
+      "condition": "same_stable_retrieval_child_in_both_channels"
+    }
+  },
+  "fusion": {
+    "method": "rank_only_weighted_rrf",
+    "rrf_k": 60,
+    "raw_bm25_and_cosine_score_comparison": false,
+    "deduplication_key": "retrieval_child_key",
+    "tie_break": [
+      "fusion_score_desc",
+      "matched_channel_count_desc",
+      "retrieval_child_key_asc"
+    ],
+    "result_hash_inputs": [
+      "profile_version",
+      "source_index_set_hash",
+      "lexical_projection_set_hash",
+      "semantic_index_set_hash",
+      "query_plan_hash",
+      "stable_fused_candidates"
+    ],
+    "semantic_only_forced_promotion": false,
+    "max_children_per_parent": 2,
+    "max_returned_hits": 8,
+    "reranker": false
+  },
+  "failure_policy": {
+    "semantic_index_or_provider_failure": "fail_closed_retry_existing_dispatch",
+    "semantic_successful_empty_result": "lexical_only_result_with_auditable_zero_semantic_candidates",
+    "lexical_empty_result": "semantic_candidates_allowed",
+    "both_channels_empty": "no_result",
+    "silent_profile_fallback": false
+  },
+  "evidence_roles": {
+    "search_output": "retrieval_child",
+    "search_output_citable": false,
+    "read_output": "evidence_atom",
+    "read_output_citable": true,
+    "parent_is_candidate": false,
+    "atom_is_candidate": false
+  },
+  "frozen_adapter": {
+    "tool_name": "evidence.search",
+    "adapter_name": "bid-evidence-mcp-rq2b-search",
+    "adapter_version": "v6-bm25f-semantic-fusion",
+    "mode": "local_readonly",
+    "replay_policy": "safe_idempotent"
+  },
+  "invalidation": {
+    "manifest_or_document_filter_change": "new_index_and_semantic_set_hash",
+    "parse_or_retrieval_head_change": "fail_closed",
+    "semantic_head_or_model_change": "fail_closed",
+    "lexical_projection_hash_change": "new_fusion_result_hash",
+    "query_plan_hash_change": "new_fusion_result_hash",
+    "fusion_profile_change": "new_adapter_version_required"
+  },
+  "compatibility": {
+    "rq2a_v5_adapter_unchanged": true,
+    "rq1d_v4_adapter_unchanged": true,
+    "historical_dispatch_keeps_frozen_adapter": true,
+    "new_database_migration_required": false,
+    "alembic_head": "20260815_0103"
+  },
+  "external_execution": {
+    "ocr_or_visual": false,
+    "generation_model": false,
+    "embedding_model": true,
+    "vector_database": true,
+    "external_mcp": false,
+    "legacy_bid_intake_authority": false
+  }
+}

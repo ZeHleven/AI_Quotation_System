@@ -1,0 +1,67 @@
+{
+  "schema": "bid-assessment-phase4d1-business-baseline-revalidation-profile-v1",
+  "profile_id": "bid-assessment-phase4d1-business-baseline-revalidation-v1",
+  "source_spec_version": "v0.1-r59",
+  "status": "locally_validated_isolated_not_for_ecs",
+  "requires": [
+    "contracts/bid_assessment/v1/phase4c2-enterprise-baseline-acceptance-profile.json",
+    "contracts/bid_assessment/v1/phase4c3-mvp-release-candidate-profile.json",
+    "schemas/bid_assessment/v1/enterprise-business-baseline.schema.json",
+    "schemas/bid_assessment/v1/mvp-release-candidate.schema.json"
+  ],
+  "business_baseline": {
+    "authority_schema": "bid.enterprise.business-baseline.v1",
+    "validation_schema": "bid.enterprise.business-baseline-validation.v1",
+    "snapshot_policy": "latest_frozen_snapshot_only",
+    "slot_set": ["I01", "I02", "I03", "I04", "I05", "I06", "I07", "I08", "I09", "I10", "I11"],
+    "evidence_classes": ["official_document", "internal_system", "audited_record", "management_attestation", "not_available"],
+    "hashed_evidence_classes": ["official_document", "internal_system", "audited_record"],
+    "unknown_policy": "not_available_with_explicit_note",
+    "partial_and_attestation_policy": "verified_with_follow_up",
+    "validity_policy": "server_rechecks_at_review_and_run_bootstrap",
+    "review_time_window_minutes": 15,
+    "immutable": true
+  },
+  "validation": {
+    "path": "/api/v1/bid-assessment-runtime-lab/enterprise-business-baselines/validate",
+    "persistence": "none",
+    "candidate_hash_stable": true,
+    "rejects_absolute_paths_and_urls": true,
+    "does_not_return_source_contents": true
+  },
+  "freeze": {
+    "path": "/api/v1/bid-assessment-runtime-lab/enterprise-business-baselines",
+    "candidate_hash_header": "X-Enterprise-Business-Candidate-Hash",
+    "server_recomputes_candidate_hash": true,
+    "idempotency_required": true,
+    "one_business_baseline_per_snapshot": true,
+    "writes_audit_log": true
+  },
+  "run_bootstrap": {
+    "selects_only_business_verified_snapshot": true,
+    "input_fingerprint_binds": ["enterprise_business_baseline_version", "enterprise_business_baseline_hash"],
+    "expired_or_not_yet_valid_source_blocks": true
+  },
+  "decision_revalidation": {
+    "source": "prior_frozen_mvp_release_candidate_in_same_assessment",
+    "target": "current_succeeded_run_bound_to_business_baseline",
+    "compares": ["decision", "HG01", "HG02", "HG03", "HG04", "HG05", "HG06", "HG07"],
+    "candidate_hash_binds": ["source_release_hash", "enterprise_business_baseline_hash", "decision_and_gate_deltas"],
+    "reuses_phase4c3_release_authority": true,
+    "separate_decision_engine": false
+  },
+  "runtime_boundary": {
+    "local_execute_admin_only": true,
+    "view_only_writes_blocked_server_side": true,
+    "credentials_and_source_bodies_omitted": true
+  },
+  "compatibility": {
+    "new_database_migration_required": true,
+    "alembic_head": "20260817_0106",
+    "new_table": "bid_enterprise_business_baselines",
+    "legacy_bid_intake_modified": false,
+    "feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_BUSINESS_BASELINE",
+    "feature_flag_default": false,
+    "ecs_rollout_allowed": false
+  }
+}

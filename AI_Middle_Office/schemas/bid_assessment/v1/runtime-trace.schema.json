@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/runtime-trace.schema.json",
+  "title": "Bid Assessment Runtime Trace v1",
+  "$defs": {
+    "NullableString": {"type": ["string", "null"]},
+    "TraceNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "label", "status", "task_id", "attempt_id", "created_at", "updated_at", "details", "hashes"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "kind": {"type": "string", "minLength": 1, "maxLength": 64},
+        "label": {"type": "string", "minLength": 1, "maxLength": 180},
+        "status": {"type": "string", "minLength": 1, "maxLength": 64},
+        "task_id": {"$ref": "#/$defs/NullableString"},
+        "attempt_id": {"$ref": "#/$defs/NullableString"},
+        "created_at": {"$ref": "#/$defs/NullableString"},
+        "updated_at": {"$ref": "#/$defs/NullableString"},
+        "details": {
+          "type": "object",
+          "additionalProperties": {"type": ["string", "number", "integer", "boolean", "null"]}
+        },
+        "hashes": {
+          "type": "object",
+          "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 128}
+        }
+      }
+    },
+    "TraceEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target", "kind", "label"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1, "maxLength": 128},
+        "target": {"type": "string", "minLength": 1, "maxLength": 128},
+        "kind": {"type": "string", "minLength": 1, "maxLength": 64},
+        "label": {"type": "string", "maxLength": 80}
+      }
+    },
+    "TimelineItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "source", "resource_type", "resource_id", "status", "occurred_at", "sequence_no"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "type": {"type": "string", "minLength": 1, "maxLength": 128},
+        "source": {"enum": ["authority_row", "public_event"]},
+        "resource_type": {"type": "string", "minLength": 1, "maxLength": 64},
+        "resource_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "status": {"type": "string", "minLength": 1, "maxLength": 64},
+        "occurred_at": {"$ref": "#/$defs/NullableString"},
+        "sequence_no": {"type": ["integer", "null"], "minimum": 1}
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run", "summary", "redaction", "nodes", "edges", "timeline", "trace_hash", "generated_at"],
+  "properties": {
+    "schema": {"const": "bid.runtime.trace.v1"},
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "assessment_id", "run_kind", "run_sequence", "status", "current_stage", "row_version", "retryable", "started_at", "finished_at", "last_checkpoint_at"],
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "assessment_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "run_kind": {"enum": ["preliminary", "deep", "reanalysis"]},
+        "run_sequence": {"type": "integer", "minimum": 1},
+        "status": {"type": "string", "minLength": 1, "maxLength": 32},
+        "current_stage": {"$ref": "#/$defs/NullableString"},
+        "row_version": {"type": "integer", "minimum": 1},
+        "retryable": {"type": "boolean"},
+        "started_at": {"$ref": "#/$defs/NullableString"},
+        "finished_at": {"$ref": "#/$defs/NullableString"},
+        "last_checkpoint_at": {"$ref": "#/$defs/NullableString"},
+        "hard_gate_comparison_baseline_id": {"$ref": "#/$defs/NullableString"},
+        "hard_gate_comparison_baseline_hash": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_count", "edge_count", "task_count", "attempt_count", "checkpoint_count", "model_call_count", "tool_call_count", "validation_count", "counts_by_kind"],
+      "properties": {
+        "node_count": {"type": "integer", "minimum": 1},
+        "edge_count": {"type": "integer", "minimum": 0},
+        "task_count": {"type": "integer", "minimum": 0},
+        "attempt_count": {"type": "integer", "minimum": 0},
+        "checkpoint_count": {"type": "integer", "minimum": 0},
+        "model_call_count": {"type": "integer", "minimum": 0},
+        "tool_call_count": {"type": "integer", "minimum": 0},
+        "validation_count": {"type": "integer", "minimum": 0},
+        "counts_by_kind": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "omitted"],
+      "properties": {
+        "policy": {"const": "control_plane_metadata_only"},
+        "omitted": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "nodes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/TraceNode"}},
+    "edges": {"type": "array", "items": {"$ref": "#/$defs/TraceEdge"}},
+    "timeline": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/TimelineItem"}},
+    "trace_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "generated_at": {"type": "string", "minLength": 1, "maxLength": 40}
+  }
+}

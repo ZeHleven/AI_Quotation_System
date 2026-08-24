@@ -1,0 +1,58 @@
+{
+  "schema_version": "bid-pdf-native-layout-profile/v1",
+  "contract_version": "bid.pdf.native-layout.v1",
+  "profile_version": "bid-pdf-native-layout-profile-v1",
+  "parser_profile_version": "bid-document-parser-profile-v2-pdf-native-layout",
+  "chunk_contract_version": "bid.evidence.chunk.v2",
+  "chunk_profile_version": "bid-evidence-chunk-profile-v1",
+  "coordinate_system": {
+    "origin": "page_top_left",
+    "unit": "pdf_point",
+    "bbox_order": ["x0", "top", "x1", "bottom"],
+    "precision_decimals": 3
+  },
+  "limits": {
+    "max_pages": 2000,
+    "max_words_per_page": 50000,
+    "max_blocks": 200000,
+    "max_native_chars": 1200000
+  },
+  "layout_policy": {
+    "native_text_only": true,
+    "x_tolerance": 2.0,
+    "y_tolerance": 3.0,
+    "line_merge_tolerance": 3.0,
+    "paragraph_gap_ratio": 1.8,
+    "heading_size_ratio": 1.22,
+    "heading_signals": [
+      "font_size",
+      "font_weight",
+      "centering",
+      "generic_outline_numbering"
+    ],
+    "business_keyword_heading_rules": false,
+    "reading_order_modes": ["single_column", "two_column"],
+    "vector_table_strategy": "lines",
+    "table_output_block_type": "table_row",
+    "page_break_is_chunk_boundary": false
+  },
+  "quality_policy": {
+    "min_native_chars_per_page": 20,
+    "min_text_coverage_ratio": 0.65,
+    "empty_page_requires_ocr_review": true,
+    "image_with_insufficient_native_text_requires_ocr_review": true,
+    "native_text_is_not_visual_fidelity_proof": true
+  },
+  "authority_policy": {
+    "filename_is_evidence": false,
+    "mime_is_evidence": false,
+    "parser_hint_is_evidence": false,
+    "ocr_calls_allowed": false,
+    "vision_calls_allowed": false,
+    "model_calls_allowed": false,
+    "lot_inference_allowed": false,
+    "only_pdf_c1_builder_may_create_chunks": true,
+    "only_evidence_atoms_are_citable": true,
+    "phase4_evidence_mcp_requires_pdf_c3": true
+  }
+}

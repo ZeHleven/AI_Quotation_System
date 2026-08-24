@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_version": "bid.evidence.retrieval-index.v1",
+  "profile_version": "bid-evidence-retrieval-profile-v2-role-aware",
+  "source_role_contract_version": "bid.evidence.chunk.v2",
+  "parser_profile_version": "bid-document-parser-profile-v2-pdf-native-layout",
+  "parser_profile_versions": [
+    "bid-document-parser-profile-v2-pdf-native-layout",
+    "bid-document-parser-profile-v3-pdf-structure-rq1a",
+    "bid-document-parser-profile-v4-pdf-quality-gated-rq1b"
+  ],
+  "index_authority": {
+    "snapshot": "bid_evidence_retrieval_indexes",
+    "entries": "bid_evidence_retrieval_entries",
+    "head": "bid_evidence_retrieval_heads",
+    "head_scope": ["document_version_id", "retrieval_profile_version"],
+    "parse_head_match_required": true
+  },
+  "role_policy": {
+    "primary_search_role": "retrieval_child",
+    "auxiliary_search_role": "section_parent",
+    "read_output_role": "evidence_atom",
+    "citable_roles": ["evidence_atom"],
+    "legacy_role_fallback": false
+  },
+  "retrieval": {
+    "query_planner": "tender-query-planner-v1",
+    "primary_channel": "bm25",
+    "auxiliary_parent_channel": "bm25",
+    "fusion": "rrf",
+    "rrf_k": 60,
+    "parent_weight": 0.35,
+    "max_planned_queries": 3,
+    "max_scoped_candidates": 5000,
+    "max_hits": 8,
+    "semantic_backend_required": false
+  },
+  "compatible_query_layers": {
+    "default": "tender-query-planner-v1",
+    "rq1c": "bid-evidence-query-optimizer-profile-v1-rq1c",
+    "rq1c_reuses_index_without_rebuild": true,
+    "query_plan_is_part_of_search_result_hash": true
+  },
+  "compatible_lexical_layers": {
+    "default": "bid-evidence-lexical-profile-v0-single-field",
+    "rq1d": "bid-evidence-lexical-profile-v1-rq1d",
+    "rq1d_reuses_index_without_rebuild": true,
+    "projection_is_query_time_readonly_derivative": true
+  },
+  "compatible_semantic_layers": {
+    "default": "bid-evidence-semantic-profile-v0-disabled",
+    "rq2a": "bid-evidence-semantic-profile-v1-rq2a-bce",
+    "rq2a_source_role": "retrieval_child",
+    "rq2a_reuses_index_as_immutable_embedding_source": true,
+    "rq2a_parent_or_atom_embedding": false
+  },
+  "read": {
+    "accepted_anchor_roles": ["retrieval_child", "evidence_atom"],
+    "returned_role": "evidence_atom",
+    "max_anchor_ids": 4,
+    "max_items": 12,
+    "max_characters": 12000,
+    "neighbor_scope": "same_section_parent",
+    "neighbor_radius_max": 2,
+    "bounded_pages_max": 4
+  },
+  "invalidation": {
+    "parse_head_change": "immediate_fail_closed_then_mark_stale",
+    "retrieval_profile_change": "new_profile_head_required",
+    "manifest_change": "new_manifest_scoped_index_set_hash",
+    "manifest_role_change": "no_document_reindex;new_index_set_hash",
+    "parse_quality_blocked": "do_not_create_index;no_stale_fallback",
+    "parse_quality_hash_change": "new_parse_run_and_input_hash_required",
+    "source_hash_drift": "fail_closed",
+    "stale_fallback_allowed": false
+  },
+  "external_execution": {
+    "embedding_model": false,
+    "vector_database": false,
+    "ocr_or_visual": false,
+    "model": false,
+    "public_network": false,
+    "legacy_bid_intake_authority": false
+  }
+}

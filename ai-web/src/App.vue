@@ -187,7 +187,7 @@
               <span>企业资料库</span>
             </button>
           </div>
-          <div class="nav-group" v-if="canViewDwgTrial || canViewAgentCenter || canViewStandaloneBidIntakeAgent || canViewPricingAgent">
+          <div class="nav-group" v-if="canViewDwgTrial || canViewAgentCenter || canViewStandaloneBidIntakeAgent || canViewPricingAgent || canViewBidAssessmentPureAgent || canViewBidAssessmentRuntimeLab">
             <p class="nav-group-label">智能工具</p>
             <button
               v-if="canViewPricingAgent"
@@ -197,6 +197,24 @@
             >
               <el-icon><DataAnalysis /></el-icon>
               <span>智能组价实验室</span>
+            </button>
+            <button
+              v-if="canViewBidAssessmentPureAgent"
+              :class="['nav-item', { active: routeName === 'bidAssessmentPureAgent' }]"
+              type="button"
+              @click="navigate('/admin/bid-assessment-pure-agent')"
+            >
+              <el-icon><DataAnalysis /></el-icon>
+              <span>投标机会研判 Agent</span>
+            </button>
+            <button
+              v-if="canViewBidAssessmentRuntimeLab"
+              :class="['nav-item', { active: routeName === 'bidAssessmentRuntimeLab' }]"
+              type="button"
+              @click="navigate('/admin/bid-assessment-runtime-lab')"
+            >
+              <el-icon><Histogram /></el-icon>
+              <span>研判 Agent 运行实验台</span>
             </button>
             <button
               v-if="canViewStandaloneBidIntakeAgent"
@@ -228,6 +246,15 @@
           </div>
           <div class="nav-group" v-if="canAccessPermissions || canOpenLegacyAdmin || canManageBidIntakePolicy">
             <p class="nav-group-label">系统管理</p>
+            <button
+              v-if="canViewBidAssessmentPureAgentDiagnostics"
+              :class="['nav-item', { active: routeName === 'bidAssessmentPureAgentDiagnostics' }]"
+              type="button"
+              @click="navigate('/admin/bid-assessment-pure-agent-diagnostics')"
+            >
+              <el-icon><Histogram /></el-icon>
+              <span>研判 Agent 诊断</span>
+            </button>
             <button
               v-if="canManageBidIntakePolicy"
               :class="['nav-item', { active: routeName === 'bidIntakePolicy' }]"
@@ -1200,6 +1227,12 @@
         </template>
 
         <PricingAgentLab v-else-if="routeName === 'pricingAgent'" />
+
+        <BidAssessmentPureAgent v-else-if="routeName === 'bidAssessmentPureAgent'" />
+
+        <BidAssessmentPureAgentDiagnostics v-else-if="routeName === 'bidAssessmentPureAgentDiagnostics'" />
+
+        <BidAssessmentRuntimeLab v-else-if="routeName === 'bidAssessmentRuntimeLab'" />
 
         <template v-else-if="routeName === 'bidIntakeAgent'">
           <div class="content-heading">
@@ -9113,6 +9146,9 @@ const BudgetProjects = defineAsyncComponent(() => import('./BudgetProjects.vue')
 const AccountQuotaLibrary = defineAsyncComponent(() => import('./AccountQuotaLibrary.vue'))
 const EnterpriseQuotaWorkbench = defineAsyncComponent(() => import('./EnterpriseQuotaWorkbench.vue'))
 const PricingAgentLab = defineAsyncComponent(() => import('./PricingAgentLab.vue'))
+const BidAssessmentPureAgent = defineAsyncComponent(() => import('./BidAssessmentPureAgent.vue'))
+const BidAssessmentPureAgentDiagnostics = defineAsyncComponent(() => import('./BidAssessmentPureAgentDiagnostics.vue'))
+const BidAssessmentRuntimeLab = defineAsyncComponent(() => import('./BidAssessmentRuntimeLab.vue'))
 const UnifiedQuotes = defineAsyncComponent(() => import('./UnifiedQuotes.vue'))
 
 const REQUIREMENT_HISTORY_DB_NAME = 'ai_requirement_standardization_history'
@@ -10411,6 +10447,13 @@ const canViewStandaloneBidIntakeAgent = computed(() => (
   canViewBidding.value
   && (canAccessPermissions.value || hasRole('quote_user', 'quote_operator', 'manager'))
 ))
+const canViewBidAssessmentPureAgent = computed(() => hasAvailableModule('bid_assessment_pure_agent'))
+const canViewBidAssessmentPureAgentDiagnostics = computed(() => (
+  canAccessPermissions.value && canViewBidAssessmentPureAgent.value
+))
+const canViewBidAssessmentRuntimeLab = computed(() => (
+  canAccessPermissions.value || canViewStandaloneBidIntakeAgent.value
+))
 const canManageBidIntakePolicy = computed(() => canAccessPermissions.value || hasRole('manager'))
 const canViewAgentCenter = computed(() => hasAvailableModule('agent_center'))
 const canManageAgentDailyReview = computed(() => canAccessPermissions.value || hasRole('quote_operator'))
@@ -11341,6 +11384,9 @@ function routeFromPath(path) {
   if (pathname === '/admin/bidding') return 'bidding'
   if (pathname === '/admin/bid-intake-agent' && view === 'policy') return 'bidIntakePolicy'
   if (pathname === '/admin/bid-intake-agent') return 'bidIntakeAgent'
+  if (pathname === '/admin/bid-assessment-pure-agent') return 'bidAssessmentPureAgent'
+  if (pathname === '/admin/bid-assessment-pure-agent-diagnostics') return 'bidAssessmentPureAgentDiagnostics'
+  if (pathname === '/admin/bid-assessment-runtime-lab') return 'bidAssessmentRuntimeLab'
   if (pathname === '/admin/bid-intake-policy') return 'bidIntakePolicy'
   if (pathname === '/admin/enterprise-profile') return 'enterpriseProfile'
   if (pathname === '/admin/cost-db') return 'costDb'
@@ -19858,6 +19904,20 @@ async function bootstrap() {
         return
       }
       await loadBidIntakeAgentProjects()
+      return
+    }
+    if (routeName.value === 'bidAssessmentPureAgent') {
+      if (!canViewBidAssessmentPureAgent.value) state.error = 'forbidden'
+      return
+    }
+    if (routeName.value === 'bidAssessmentPureAgentDiagnostics') {
+      if (!canViewBidAssessmentPureAgentDiagnostics.value) state.error = 'forbidden'
+      return
+    }
+    if (routeName.value === 'bidAssessmentRuntimeLab') {
+      if (!canViewBidAssessmentRuntimeLab.value) {
+        state.error = 'forbidden'
+      }
       return
     }
     if (routeName.value === 'bidIntakePolicy') {

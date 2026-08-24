@@ -1,0 +1,20 @@
+{
+  "schema": "bid.skill.artifact.v1",
+  "skill_id": "bid-document-scope",
+  "skill_version": "1.0.0",
+  "executor_kind": "deterministic",
+  "task_bindings": {
+    "bind_assessment_snapshot": {
+      "action_contract": "bid.task.action.deterministic.v1",
+      "output_schema": "document_scope_result_v1"
+    },
+    "inventory_documents": {
+      "action_contract": "bid.task.action.deterministic.v1",
+      "output_schema": "document_scope_result_v1"
+    },
+    "build_coverage_baseline": {
+      "action_contract": "bid.task.action.deterministic.v1",
+      "output_schema": "document_scope_result_v1"
+    }
+  }
+}

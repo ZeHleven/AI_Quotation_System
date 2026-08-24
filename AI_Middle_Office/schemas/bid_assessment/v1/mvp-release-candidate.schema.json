@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/mvp-release-candidate.schema.json",
+  "title": "Bid Assessment MVP Release Candidate v1",
+  "$defs": {
+    "GateCode": {"enum": ["HG01", "HG02", "HG03", "HG04", "HG05", "HG06", "HG07"]},
+    "Disposition": {"enum": ["confirmed", "correction_required", "not_reviewed"]},
+    "QualityCode": {"enum": ["REPORT_BUSINESS_READABLE", "CITATIONS_TRACEABLE", "UNKNOWNS_EXPLICIT", "DECISION_REASONABLE", "PARSE_LIMITATIONS_REVIEWED"]},
+    "GateReviewCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate_code", "disposition", "note"],
+      "properties": {
+        "gate_code": {"$ref": "#/$defs/GateCode"},
+        "disposition": {"$ref": "#/$defs/Disposition"},
+        "note": {"type": ["string", "null"], "maxLength": 1000}
+      }
+    },
+    "QualityReviewCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "disposition", "note"],
+      "properties": {
+        "code": {"$ref": "#/$defs/QualityCode"},
+        "disposition": {"$ref": "#/$defs/Disposition"},
+        "note": {"type": ["string", "null"], "maxLength": 1000}
+      }
+    },
+    "ReleaseCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "review_note", "gate_reviews", "quality_reviews"],
+      "properties": {
+        "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$"},
+        "source_release_candidate_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$"},
+        "review_note": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "gate_reviews": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"$ref": "#/$defs/GateReviewCommand"}},
+        "quality_reviews": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/QualityReviewCommand"}}
+      }
+    },
+    "SystemCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "label", "status", "detail"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "status": {"enum": ["passed", "warning", "blocked"]},
+        "detail": {}
+      }
+    },
+    "ReviewedGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate_code", "disposition", "note", "gate_status", "gate_result_hash", "review_ready", "reason_codes"],
+      "properties": {
+        "gate_code": {"$ref": "#/$defs/GateCode"},
+        "disposition": {"$ref": "#/$defs/Disposition"},
+        "note": {"type": ["string", "null"]},
+        "gate_status": {"enum": ["pass", "fail", "unknown", "not_applicable", "missing"]},
+        "gate_result_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "review_ready": {"type": "boolean"},
+        "reason_codes": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "ReviewedQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "disposition", "note", "review_ready", "reason_codes"],
+      "properties": {
+        "code": {"$ref": "#/$defs/QualityCode"},
+        "disposition": {"$ref": "#/$defs/Disposition"},
+        "note": {"type": ["string", "null"]},
+        "review_ready": {"type": "boolean"},
+        "reason_codes": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "ReviewProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["review_note", "gate_reviews", "quality_reviews"],
+      "properties": {
+        "review_note": {"type": "string", "minLength": 1},
+        "gate_reviews": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"$ref": "#/$defs/ReviewedGate"}},
+        "quality_reviews": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/ReviewedQuality"}}
+      }
+    },
+    "DecisionRevalidation": {
+      "type": ["object", "null"],
+      "properties": {
+        "source_release_candidate_id": {"type": ["string", "null"]},
+        "source_release_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "source_run_id": {"type": ["string", "null"]},
+        "target_run_id": {"type": "string"},
+        "source_decision": {"type": ["string", "null"]},
+        "target_decision": {"type": ["string", "null"]},
+        "decision_changed": {"type": "boolean"},
+        "gate_deltas": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["gate_code", "source_status", "target_status", "changed"],
+            "properties": {
+              "gate_code": {"$ref": "#/$defs/GateCode"},
+              "source_status": {"enum": ["pass", "fail", "unknown", "not_applicable", "missing"]},
+              "target_status": {"enum": ["pass", "fail", "unknown", "not_applicable", "missing"]},
+              "changed": {"type": "boolean"}
+            }
+          }
+        },
+        "business_baseline_id": {"type": ["string", "null"]},
+        "business_baseline_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "verification_outcome": {"type": ["string", "null"], "enum": ["verified", "verified_with_follow_up", null]}
+      },
+      "required": ["source_release_candidate_id", "source_release_hash", "source_run_id", "target_run_id", "source_decision", "target_decision", "decision_changed", "gate_deltas", "business_baseline_id", "business_baseline_hash", "verification_outcome"],
+      "additionalProperties": false
+    },
+    "Validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "authority_version", "assessment_id", "run_id", "report_id", "run_validation_id", "enterprise_snapshot_id", "decision", "gate_outcomes", "acceptance_outcome", "system_checks", "blocking_codes", "review_blocking_codes", "review", "revalidation", "source_hashes", "candidate_hash", "can_freeze", "already_frozen", "existing_release_candidate"],
+      "properties": {
+        "schema": {"const": "bid.mvp.release-candidate-validation.v1"},
+        "authority_version": {"const": "bid-mvp-release-candidate-authority-v1"},
+        "assessment_id": {"type": "string"},
+        "run_id": {"type": "string"},
+        "report_id": {"type": ["string", "null"]},
+        "run_validation_id": {"type": ["string", "null"]},
+        "enterprise_snapshot_id": {"type": "string"},
+        "decision": {"type": ["string", "null"]},
+        "gate_outcomes": {"type": "object", "minProperties": 7, "maxProperties": 7, "additionalProperties": {"enum": ["pass", "fail", "unknown", "not_applicable", "missing"]}},
+        "acceptance_outcome": {"enum": ["accepted", "accepted_with_follow_up"]},
+        "system_checks": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/SystemCheck"}},
+        "blocking_codes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "review_blocking_codes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "review": {"$ref": "#/$defs/ReviewProjection"},
+        "revalidation": {"$ref": "#/$defs/DecisionRevalidation"},
+        "source_hashes": {"type": "object"},
+        "candidate_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "can_freeze": {"type": "boolean"},
+        "already_frozen": {"type": "boolean"},
+        "existing_release_candidate": {"type": ["object", "null"]}
+      }
+    },
+    "ReleaseProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "release_candidate_id", "version", "status", "acceptance_outcome", "assessment_id", "run_id", "report_id", "run_validation_id", "enterprise_snapshot_id", "reviewer_id", "review_note", "review", "source_hashes", "manifest", "candidate_hash", "release_hash", "reviewed_at"],
+      "properties": {
+        "schema": {"const": "bid.mvp.release-candidate.v1"},
+        "release_candidate_id": {"type": "string"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "status": {"const": "frozen"},
+        "acceptance_outcome": {"enum": ["accepted", "accepted_with_follow_up"]},
+        "assessment_id": {"type": "string"},
+        "run_id": {"type": "string"},
+        "report_id": {"type": "string"},
+        "run_validation_id": {"type": "string"},
+        "enterprise_snapshot_id": {"type": "string"},
+        "reviewer_id": {"type": "integer", "minimum": 1},
+        "review_note": {"type": "string", "minLength": 1},
+        "review": {"$ref": "#/$defs/ReviewProjection"},
+        "source_hashes": {"type": "object"},
+        "manifest": {"type": "object"},
+        "candidate_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "release_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reviewed_at": {"type": "string", "format": "date-time"},
+        "created": {"type": "boolean"}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/ReleaseCommand"},
+    {"$ref": "#/$defs/Validation"},
+    {"$ref": "#/$defs/ReleaseProjection"}
+  ]
+}

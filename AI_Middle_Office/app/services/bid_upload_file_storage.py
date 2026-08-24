@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
+from pathlib import Path
 from typing import BinaryIO, Protocol
+import uuid
 
 from app.core.config import settings
 from app.services.file_storage import ensure_bucket, get_storage_client
@@ -38,6 +41,8 @@ class BidUploadObjectStorage(Protocol):
     ) -> StoredBidUploadObject: ...
 
     def delete(self, *, object_key: str) -> None: ...
+
+    def open_read(self, *, object_key: str) -> BinaryIO: ...
 
     def list_candidates(
         self,
@@ -125,6 +130,13 @@ class MinioBidUploadObjectStorage:
         except Exception as exc:
             raise BidUploadStorageError("BID_UPLOAD_OBJECT_DELETE_FAILED") from exc
 
+    def open_read(self, *, object_key: str) -> BinaryIO:
+        client = get_storage_client()
+        try:
+            return client.get_object(settings.minio_bucket, object_key)
+        except Exception as exc:
+            raise BidUploadStorageError("BID_UPLOAD_OBJECT_GET_FAILED") from exc
+
     def list_candidates(
         self,
         *,
@@ -155,5 +167,123 @@ class MinioBidUploadObjectStorage:
         return rows
 
 
+class LocalBidUploadObjectStorage:
+    """Private SQLite-lab storage; never enabled by the production profile."""
+
+    def __init__(self, root: str | Path):
+        self._root = Path(root).expanduser().resolve()
+        self._root.mkdir(parents=True, exist_ok=True)
+
+    def _path(self, object_key: str) -> Path:
+        normalized = str(object_key or "").replace("\\", "/").strip("/")
+        segments = normalized.split("/") if normalized else []
+        if not segments or any(segment in {"", ".", ".."} for segment in segments):
+            raise BidUploadStorageError("BID_UPLOAD_OBJECT_KEY_INVALID")
+        candidate = self._root.joinpath(*segments).resolve()
+        try:
+            candidate.relative_to(self._root)
+        except ValueError as exc:
+            raise BidUploadStorageError("BID_UPLOAD_OBJECT_KEY_INVALID") from exc
+        return candidate
+
+    def put(
+        self,
+        *,
+        stream: BinaryIO,
+        object_key: str,
+        size_bytes: int,
+        mime_type: str,
+    ) -> StoredBidUploadObject:
+        if int(size_bytes) < 1:
+            raise BidUploadStorageError("BID_UPLOAD_OBJECT_EMPTY")
+        target = self._path(object_key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Keep the atomic sibling name independent from the often long UUID object name.
+        # This matters on Windows local labs where the repository root plus the governed
+        # object prefix can otherwise push the temporary path beyond MAX_PATH even though
+        # the final object path itself is valid.
+        temporary = target.parent / f".{uuid.uuid4().hex[:12]}.tmp"
+        digest = hashlib.sha256()
+        written = 0
+        try:
+            with temporary.open("xb") as output:
+                while True:
+                    remaining = int(size_bytes) - written
+                    if remaining <= 0:
+                        if stream.read(1):
+                            raise BidUploadStorageError("BID_UPLOAD_OBJECT_SIZE_MISMATCH")
+                        break
+                    chunk = stream.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    output.write(chunk)
+                    digest.update(chunk)
+                    written += len(chunk)
+                    if written > int(size_bytes):
+                        raise BidUploadStorageError("BID_UPLOAD_OBJECT_SIZE_MISMATCH")
+            if written != int(size_bytes):
+                raise BidUploadStorageError("BID_UPLOAD_OBJECT_SIZE_MISMATCH")
+            temporary.replace(target)
+        except BidUploadStorageError:
+            temporary.unlink(missing_ok=True)
+            raise
+        except Exception as exc:
+            temporary.unlink(missing_ok=True)
+            raise BidUploadStorageError("BID_UPLOAD_OBJECT_PUT_FAILED") from exc
+        return StoredBidUploadObject(
+            object_key=str(object_key),
+            size_bytes=written,
+            mime_type=str(mime_type),
+            storage_etag=digest.hexdigest(),
+        )
+
+    def delete(self, *, object_key: str) -> None:
+        try:
+            self._path(object_key).unlink(missing_ok=True)
+        except BidUploadStorageError:
+            raise
+        except Exception as exc:
+            raise BidUploadStorageError("BID_UPLOAD_OBJECT_DELETE_FAILED") from exc
+
+    def open_read(self, *, object_key: str) -> BinaryIO:
+        try:
+            return self._path(object_key).open("rb")
+        except BidUploadStorageError:
+            raise
+        except Exception as exc:
+            raise BidUploadStorageError("BID_UPLOAD_OBJECT_GET_FAILED") from exc
+
+    def list_candidates(
+        self,
+        *,
+        prefix: str,
+        limit: int,
+    ) -> list[BidUploadObjectCandidate]:
+        prefix_path = self._path(prefix)
+        if not prefix_path.exists():
+            return []
+        rows: list[BidUploadObjectCandidate] = []
+        try:
+            for candidate in sorted(path for path in prefix_path.rglob("*") if path.is_file()):
+                if candidate.name.endswith(".uploading"):
+                    continue
+                rows.append(
+                    BidUploadObjectCandidate(
+                        object_key=candidate.relative_to(self._root).as_posix(),
+                        last_modified=datetime.fromtimestamp(
+                            candidate.stat().st_mtime,
+                            tz=timezone.utc,
+                        ),
+                    )
+                )
+                if len(rows) >= max(1, int(limit)):
+                    break
+        except Exception as exc:
+            raise BidUploadStorageError("BID_UPLOAD_OBJECT_LIST_FAILED") from exc
+        return rows
+
+
 def get_bid_upload_object_storage() -> BidUploadObjectStorage:
+    if settings.bid_upload_storage_backend.strip().lower() == "local":
+        return LocalBidUploadObjectStorage(settings.bid_upload_local_root)
     return MinioBidUploadObjectStorage()

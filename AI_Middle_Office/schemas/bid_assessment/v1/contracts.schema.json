@@ -155,7 +155,9 @@
       "additionalProperties": false,
       "required": [
         "manifest_id",
+        "manifest_version",
         "scope_id",
+        "scope_version",
         "enterprise_snapshot_version",
         "rule_set_version",
         "fact_catalog_version",
@@ -167,8 +169,16 @@
       ],
       "properties": {
         "manifest_id": {"$ref": "#/$defs/Id"},
+        "manifest_version": {"type": "integer", "minimum": 1},
         "scope_id": {"$ref": "#/$defs/Id"},
+        "scope_version": {"type": "integer", "minimum": 1},
         "enterprise_snapshot_version": {"$ref": "#/$defs/Id"},
+        "hard_gate_comparison_baseline_id": {"$ref": "#/$defs/Id"},
+        "hard_gate_comparison_baseline_version": {"$ref": "#/$defs/Id"},
+        "hard_gate_comparison_baseline_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
         "rule_set_version": {"$ref": "#/$defs/Id"},
         "fact_catalog_version": {"$ref": "#/$defs/Id"},
         "prompt_bundle_version": {"$ref": "#/$defs/Id"},
@@ -209,6 +219,27 @@
         "lot_code": {"type": ["string", "null"], "maxLength": 100},
         "lot_name": {"type": "string", "minLength": 1, "maxLength": 300},
         "scope_version": {"type": "integer", "minimum": 1}
+      }
+    },
+    "LotSelectionOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation_id", "status", "status_url"],
+      "properties": {
+        "operation_id": {"$ref": "#/$defs/Id"},
+        "status": {"type": "string", "const": "accepted"},
+        "status_url": {"type": "string", "pattern": "^/api/v1/bid-assessments/"}
+      }
+    },
+    "LotSelectionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "accepted_operation", "run", "assessment"],
+      "properties": {
+        "scope": {"$ref": "#/$defs/ScopeSnapshot"},
+        "accepted_operation": {"$ref": "#/$defs/LotSelectionOperation"},
+        "run": {"type": "null"},
+        "assessment": {"$ref": "#/$defs/AssessmentSnapshot"}
       }
     },
     "ManifestSummary": {
@@ -426,7 +457,7 @@
         "score": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
         "page_count": {"type": ["integer", "null"], "minimum": 0},
         "sheet_count": {"type": ["integer", "null"], "minimum": 0},
-        "ocr_status": {"type": "string", "enum": ["not_applicable", "not_run", "succeeded", "partial", "failed"]},
+        "ocr_status": {"type": "string", "enum": ["not_applicable", "not_requested", "queued", "running", "succeeded", "partial", "failed"]},
         "low_quality_locations": {"type": "array", "items": {"type": "string", "maxLength": 200}}
       }
     },
@@ -511,6 +542,183 @@
         "include_versions": {"type": "boolean"}
       }
     },
+    "DocumentVersionLogicalDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document_id", "logical_name", "document_type"],
+      "properties": {
+        "document_id": {"$ref": "#/$defs/Id"},
+        "logical_name": {"type": "string", "minLength": 1, "maxLength": 500},
+        "document_type": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"}
+      }
+    },
+    "DocumentUploadSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "operation", "relative_path"],
+      "properties": {
+        "source_type": {"type": "string", "enum": ["upload_batch", "unknown"]},
+        "operation": {"type": ["string", "null"], "enum": ["add", "replace", null]},
+        "relative_path": {"type": ["string", "null"], "maxLength": 1000}
+      }
+    },
+    "DocumentParseSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "latest_run_id", "requested_at", "started_at", "finished_at", "quality", "warnings"],
+      "properties": {
+        "status": {"type": "string", "enum": ["not_requested", "queued", "running", "succeeded", "partial", "failed"]},
+        "latest_run_id": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]},
+        "requested_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]},
+        "started_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]},
+        "finished_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]},
+        "quality": {"oneOf": [{"$ref": "#/$defs/DocumentParseQuality"}, {"type": "null"}]},
+        "warnings": {"type": "array", "items": {"$ref": "#/$defs/DocumentWarning"}}
+      }
+    },
+    "DocumentManifestReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assessment_id", "assessment_url", "manifest_id", "manifest_version", "is_current_manifest", "role", "order_no"],
+      "properties": {
+        "assessment_id": {"$ref": "#/$defs/Id"},
+        "assessment_url": {"type": "string", "pattern": "^/api/v1/bid-assessments/"},
+        "manifest_id": {"$ref": "#/$defs/Id"},
+        "manifest_version": {"type": "integer", "minimum": 1},
+        "is_current_manifest": {"type": "boolean"},
+        "role": {"type": "string", "minLength": 1, "maxLength": 64},
+        "order_no": {"type": "integer", "minimum": 0}
+      }
+    },
+    "DocumentVersionAllowedActions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["download", "download_url"],
+      "properties": {
+        "download": {"type": "boolean"},
+        "download_url": {"type": ["string", "null"], "pattern": "^/api/v1/bid-document-versions/.+/download$"}
+      }
+    },
+    "DocumentVersionDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version_id", "document", "version_no", "filename", "size_bytes", "mime_type", "sha256", "created_at", "upload_source", "parse_summary", "manifest_references", "allowed_actions"],
+      "properties": {
+        "version_id": {"$ref": "#/$defs/Id"},
+        "document": {"$ref": "#/$defs/DocumentVersionLogicalDocument"},
+        "version_no": {"type": "integer", "minimum": 1},
+        "filename": {"type": "string", "minLength": 1, "maxLength": 500},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "mime_type": {"type": "string", "minLength": 1, "maxLength": 200},
+        "sha256": {"$ref": "#/$defs/Sha256"},
+        "created_at": {"$ref": "#/$defs/UtcDateTime"},
+        "upload_source": {"$ref": "#/$defs/DocumentUploadSource"},
+        "parse_summary": {"$ref": "#/$defs/DocumentParseSummary"},
+        "manifest_references": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/DocumentManifestReference"}},
+        "allowed_actions": {"$ref": "#/$defs/DocumentVersionAllowedActions"}
+      }
+    },
+    "DocumentVersionResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "data", "error", "request_id"],
+      "properties": {
+        "code": {"type": "integer", "const": 200},
+        "message": {"type": "string", "maxLength": 500},
+        "data": {"$ref": "#/$defs/DocumentVersionDetail"},
+        "error": {"type": "null"},
+        "request_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "LotGenerationStatus": {
+      "type": "string",
+      "enum": ["not_started", "queued", "running", "succeeded", "failed", "stale"]
+    },
+    "LotCandidateStatus": {
+      "type": "string",
+      "enum": ["candidate", "selected", "rejected"]
+    },
+    "LotCandidateEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "display_label", "detail_url"],
+      "properties": {
+        "evidence_id": {"$ref": "#/$defs/Id"},
+        "display_label": {"type": "string", "minLength": 1, "maxLength": 300},
+        "detail_url": {"type": "string", "pattern": "^/api/v1/bid-evidence/"}
+      }
+    },
+    "LotCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lot_id", "detection_run_id", "lot_code", "lot_name", "scope_summary", "status", "confidence", "confidence_score", "evidence_refs", "warnings"],
+      "properties": {
+        "lot_id": {"$ref": "#/$defs/Id"},
+        "detection_run_id": {"$ref": "#/$defs/Id"},
+        "lot_code": {"type": ["string", "null"], "maxLength": 128},
+        "lot_name": {"type": "string", "minLength": 1, "maxLength": 500},
+        "scope_summary": {"type": ["string", "null"], "maxLength": 2000},
+        "status": {"$ref": "#/$defs/LotCandidateStatus"},
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "confidence_score": {"oneOf": [{"$ref": "#/$defs/RatioDecimalString"}, {"type": "null"}]},
+        "evidence_refs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/LotCandidateEvidence"}},
+        "warnings": {"type": "array", "items": {"$ref": "#/$defs/DocumentWarning"}}
+      }
+    },
+    "LotManifestSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_id", "version", "manifest_hash", "is_current_manifest"],
+      "properties": {
+        "manifest_id": {"$ref": "#/$defs/Id"},
+        "version": {"type": "integer", "minimum": 1},
+        "manifest_hash": {"$ref": "#/$defs/Sha256"},
+        "is_current_manifest": {"type": "boolean"}
+      }
+    },
+    "LotGenerationSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "detection_run_id", "parse_set_hash", "candidate_count", "retryable", "error_code", "requested_at", "started_at", "finished_at"],
+      "properties": {
+        "status": {"$ref": "#/$defs/LotGenerationStatus"},
+        "detection_run_id": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]},
+        "parse_set_hash": {"oneOf": [{"$ref": "#/$defs/Sha256"}, {"type": "null"}]},
+        "candidate_count": {"type": "integer", "minimum": 0},
+        "retryable": {"type": "boolean"},
+        "error_code": {"type": ["string", "null"], "pattern": "^BID_[A-Z0-9_]+$"},
+        "requested_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]},
+        "started_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]},
+        "finished_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]}
+      }
+    },
+    "LotCandidatePage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assessment_id", "manifest", "generation", "candidates", "selection_required", "selected_lot_id", "blocking_reason", "allowed_actions"],
+      "properties": {
+        "assessment_id": {"$ref": "#/$defs/Id"},
+        "manifest": {"oneOf": [{"$ref": "#/$defs/LotManifestSummary"}, {"type": "null"}]},
+        "generation": {"$ref": "#/$defs/LotGenerationSummary"},
+        "candidates": {"type": "array", "items": {"$ref": "#/$defs/LotCandidate"}},
+        "selection_required": {"type": "boolean"},
+        "selected_lot_id": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]},
+        "blocking_reason": {"oneOf": [{"$ref": "#/$defs/BlockingReason"}, {"type": "null"}]},
+        "allowed_actions": {"type": "array", "items": {"$ref": "#/$defs/AllowedAction"}}
+      }
+    },
+    "LotCandidatePageResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "data", "error", "request_id"],
+      "properties": {
+        "code": {"type": "integer", "const": 200},
+        "message": {"type": "string", "maxLength": 500},
+        "data": {"$ref": "#/$defs/LotCandidatePage"},
+        "error": {"type": "null"},
+        "request_id": {"$ref": "#/$defs/Id"}
+      }
+    },
     "UploadAcceptedFile": {
       "type": "object",
       "additionalProperties": false,
@@ -560,10 +768,31 @@
         "finished_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]}
       }
     },
+    "RunRecentEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "event_type", "resource_version", "occurred_at"],
+      "properties": {
+        "event_id": {"$ref": "#/$defs/Id"},
+        "event_type": {"type": "string", "minLength": 1, "maxLength": 100},
+        "resource_version": {"type": "integer", "minimum": 1},
+        "occurred_at": {"$ref": "#/$defs/UtcDateTime"}
+      }
+    },
+    "RunWaitingObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "resource_id", "reason"],
+      "properties": {
+        "type": {"type": "string", "enum": ["owner_input", "async_operation"]},
+        "resource_id": {"$ref": "#/$defs/Id"},
+        "reason": {"type": "string", "maxLength": 500}
+      }
+    },
     "RunProgressSnapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["run_id", "assessment_id", "run_kind", "status", "row_version", "input_fingerprint", "input_hash", "input_versions", "stages", "current_stage", "waiting_reason", "retryable", "last_checkpoint_at", "started_at", "finished_at"],
+      "required": ["run_id", "assessment_id", "run_kind", "status", "row_version", "input_fingerprint", "input_hash", "input_versions", "stages", "current_stage", "waiting_reason", "waiting", "latest_event", "allowed_actions", "retryable", "cancel_requested_at", "last_checkpoint_at", "started_at", "finished_at"],
       "properties": {
         "run_id": {"$ref": "#/$defs/Id"},
         "assessment_id": {"$ref": "#/$defs/Id"},
@@ -576,7 +805,11 @@
         "stages": {"type": "array", "items": {"$ref": "#/$defs/RunStage"}},
         "current_stage": {"type": ["string", "null"], "maxLength": 80},
         "waiting_reason": {"type": ["string", "null"], "maxLength": 500},
+        "waiting": {"oneOf": [{"$ref": "#/$defs/RunWaitingObject"}, {"type": "null"}]},
+        "latest_event": {"oneOf": [{"$ref": "#/$defs/RunRecentEvent"}, {"type": "null"}]},
+        "allowed_actions": {"type": "array", "items": {"$ref": "#/$defs/AllowedAction"}},
         "retryable": {"type": "boolean"},
+        "cancel_requested_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]},
         "last_checkpoint_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]},
         "started_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]},
         "finished_at": {"oneOf": [{"$ref": "#/$defs/UtcDateTime"}, {"type": "null"}]}
@@ -668,6 +901,32 @@
         "BID_RUN_ALREADY_EXISTS_FOR_INPUT",
         "BID_RUN_INPUT_STALE",
         "BID_RUN_NOT_RETRYABLE",
+        "BID_RUN_NOT_CANCELLABLE",
+        "BID_RUN_VALIDATION_NOT_LEASEABLE",
+        "BID_RUN_VALIDATION_FENCE_LOST",
+        "BID_RUN_VALIDATION_INPUT_DRIFT",
+        "BID_RUN_VALIDATION_INTEGRITY_FAILED",
+        "BID_TASK_NOT_LEASEABLE",
+        "BID_TASK_CONTRACT_INVALID",
+        "BID_TASK_FENCE_LOST",
+        "BID_TASK_LEASE_EXPIRED",
+        "BID_CHECKPOINT_CONFLICT",
+        "BID_CONTEXT_ASSEMBLY_INVALID",
+        "BID_TOOL_UNAUTHORIZED",
+        "BID_TOOL_ARGUMENTS_INVALID",
+        "BID_TOOL_BUDGET_EXHAUSTED",
+        "BID_TOOL_INVOCATION_CONFLICT",
+        "BID_TOOL_RESULT_INVALID",
+        "BID_TOOL_ADAPTER_UNAVAILABLE",
+        "BID_TOOL_DISPATCH_CONFLICT",
+        "BID_TOOL_DISPATCH_FENCE_LOST",
+        "BID_TOOL_DISPATCH_OUTCOME_UNCERTAIN",
+        "BID_MODEL_CONFIGURATION_INVALID",
+        "BID_MODEL_CALL_CONFLICT",
+        "BID_MODEL_BUDGET_EXHAUSTED",
+        "BID_MODEL_FENCE_LOST",
+        "BID_MODEL_ACTION_INVALID",
+        "BID_LOCAL_AGENT_STATE_INVALID",
         "BID_UPLOAD_BATCH_ALREADY_OPEN",
         "BID_UPLOAD_BATCH_NOT_READY",
         "BID_UPLOAD_BATCH_ALREADY_COMMITTED",
@@ -684,6 +943,28 @@
         "BID_BATCH_TOO_LARGE",
         "BID_FILE_TYPE_UNSUPPORTED",
         "BID_FILE_CONTENT_INVALID",
+        "BID_DOCUMENT_OCR_REQUIRED",
+        "BID_DOCUMENT_PARSER_PROFILE_DISABLED",
+        "BID_PDF_NATIVE_LAYOUT_LIMIT_EXCEEDED",
+        "BID_EVIDENCE_RETRIEVAL_INDEX_NOT_READY",
+        "BID_EVIDENCE_RETRIEVAL_INDEX_INVALID",
+        "BID_EVIDENCE_RETRIEVAL_PROFILE_DISABLED",
+        "BID_EVIDENCE_REFERENCE_ROLE_INVALID",
+        "BID_EVIDENCE_SEMANTIC_INDEX_NOT_READY",
+        "BID_EVIDENCE_SEMANTIC_INDEX_INVALID",
+        "BID_EVIDENCE_SEMANTIC_PROFILE_DISABLED",
+        "BID_EVIDENCE_SEMANTIC_FENCE_LOST",
+        "BID_SEMANTIC_PROVIDER_UNAVAILABLE",
+        "BID_SEMANTIC_PROVIDER_INVALID",
+        "BID_EVIDENCE_FUSION_PROFILE_DISABLED",
+        "BID_EVIDENCE_CANDIDATE_FUSION_INVALID",
+        "BID_EVIDENCE_RERANK_PROFILE_DISABLED",
+        "BID_EVIDENCE_RERANK_INVALID",
+        "BID_RERANK_PROVIDER_UNAVAILABLE",
+        "BID_RERANK_MODEL_UNAVAILABLE",
+        "BID_RERANK_EXECUTION_FAILED",
+        "BID_RERANK_PROVIDER_INVALID",
+        "BID_RERANK_MODEL_PROFILE_MISMATCH",
         "BID_REPLACEMENT_TARGET_INVALID",
         "BID_LOT_CANDIDATES_NOT_READY",
         "BID_LOT_NOT_IN_MANIFEST",
@@ -694,6 +975,24 @@
         "BID_REPORT_NOT_PUBLISHED",
         "BID_REPORT_ARTIFACT_UNAVAILABLE",
         "BID_REPORT_SCOPE_MISMATCH",
+        "BID_ENTERPRISE_SNAPSHOT_INVALID",
+        "BID_ENTERPRISE_BASELINE_INVALID",
+        "BID_ENTERPRISE_CANDIDATE_HASH_MISMATCH",
+        "BID_ENTERPRISE_BUSINESS_BASELINE_INVALID",
+        "BID_ENTERPRISE_BUSINESS_CANDIDATE_HASH_MISMATCH",
+        "BID_ENTERPRISE_BUSINESS_NOT_READY",
+        "BID_ENTERPRISE_BUSINESS_ALREADY_FROZEN",
+        "BID_ENTERPRISE_BUSINESS_REVIEW_TIME_STALE",
+        "BID_ENTERPRISE_EVIDENCE_IMPORT_INVALID",
+        "BID_ENTERPRISE_EVIDENCE_CANDIDATE_HASH_MISMATCH",
+        "BID_ENTERPRISE_EVIDENCE_PACKAGE_NOT_READY",
+        "BID_HARD_GATE_COMPARISON_SOURCE_NOT_READY",
+        "BID_HARD_GATE_COMPARISON_BASELINE_INVALID",
+        "BID_HARD_GATE_COMPARISON_CANDIDATE_HASH_MISMATCH",
+        "BID_MVP_RC_INVALID",
+        "BID_MVP_RC_NOT_READY",
+        "BID_MVP_RC_CANDIDATE_HASH_MISMATCH",
+        "BID_MVP_RC_ALREADY_FROZEN",
         "BID_STORAGE_UNAVAILABLE",
         "BID_QUEUE_UNAVAILABLE",
         "BID_RATE_LIMITED"
@@ -770,6 +1069,54 @@
         "request_id": {"$ref": "#/$defs/Id"}
       }
     },
+    "Mvp1ReportSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report_id", "assessment_id", "run_id", "report_type", "version", "status",
+        "title", "executive_summary", "decision", "investment_level", "gate_summary",
+        "report_hash", "generated_at", "decision_id", "validation_id", "report"
+      ],
+      "properties": {
+        "report_id": {"$ref": "#/$defs/Id"},
+        "assessment_id": {"$ref": "#/$defs/Id"},
+        "run_id": {"$ref": "#/$defs/Id"},
+        "report_type": {"const": "preliminary"},
+        "version": {"type": "integer", "minimum": 1},
+        "status": {"type": "string", "enum": ["ready", "stale"]},
+        "title": {"type": "string", "minLength": 1, "maxLength": 300},
+        "executive_summary": {"type": "string", "minLength": 1},
+        "decision": {"type": ["string", "null"], "enum": ["bid", "no_bid", "conditional", "insufficient", null]},
+        "investment_level": {"type": ["string", "null"], "enum": ["low", "medium", "high", "hold", null]},
+        "gate_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pass", "fail", "unknown"],
+          "properties": {
+            "pass": {"type": "integer", "minimum": 0, "maximum": 7},
+            "fail": {"type": "integer", "minimum": 0, "maximum": 7},
+            "unknown": {"type": "integer", "minimum": 0, "maximum": 7}
+          }
+        },
+        "report_hash": {"$ref": "#/$defs/Sha256"},
+        "generated_at": {"$ref": "#/$defs/UtcDateTime"},
+        "decision_id": {"$ref": "#/$defs/Id"},
+        "validation_id": {"$ref": "#/$defs/Id"},
+        "report": {"type": "object"}
+      }
+    },
+    "LotSelectionResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "data", "error", "request_id"],
+      "properties": {
+        "code": {"type": "integer", "const": 202},
+        "message": {"type": "string", "const": "标段已选择，研判规划已受理"},
+        "data": {"$ref": "#/$defs/LotSelectionResult"},
+        "error": {"type": "null"},
+        "request_id": {"$ref": "#/$defs/Id"}
+      }
+    },
     "UploadFileResponse": {
       "type": "object",
       "additionalProperties": false,
@@ -813,7 +1160,12 @@
       "properties": {
         "code": {"type": "integer", "const": 200},
         "message": {"type": "string", "maxLength": 500},
-        "data": {"$ref": "#/$defs/ReportSnapshot"},
+        "data": {
+          "oneOf": [
+            {"$ref": "#/$defs/ReportSnapshot"},
+            {"$ref": "#/$defs/Mvp1ReportSnapshot"}
+          ]
+        },
         "error": {"type": "null"},
         "request_id": {"$ref": "#/$defs/Id"}
       }

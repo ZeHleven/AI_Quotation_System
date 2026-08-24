@@ -1,0 +1,88 @@
+{
+  "schema_version": "bid.pure_agent.v608.runtime_governance.v1",
+  "dataset_kind": "synthetic_runtime_governance",
+  "description": "Deterministic six-guard calibration for the isolated Pure Agent runtime. No business document, model, network, MCP, or external database is used.",
+  "runtime_profile": {
+    "max_active_duration_ms": 60000,
+    "max_model_calls": 4,
+    "max_tool_calls": 6,
+    "max_total_input_tokens": 20000,
+    "max_total_output_tokens": 5000,
+    "max_cost_microunits": 1000000,
+    "max_replans": 2,
+    "max_answer_repairs": 2,
+    "max_no_progress_actions": 2,
+    "max_retry_attempts": 2,
+    "max_parallel_read_calls": 1,
+    "model_timeout_ms": 30000,
+    "tool_timeout_ms": 10000
+  },
+  "thresholds": {
+    "scenario_pass_rate_min": 1.0,
+    "budget_oversubscription_count_max": 0,
+    "duplicate_effect_commit_count_max": 0,
+    "late_result_acceptance_count_max": 0,
+    "unsafe_recovery_replay_count_max": 0,
+    "direct_durable_misclassification_count_max": 0,
+    "loop_stop_observation_max": 3,
+    "persistence_scenario_pass_rate_min": 1.0
+  },
+  "isolation_contract": {
+    "external_database_allowed": false,
+    "sqlite_memory_allowed": true,
+    "model_allowed": false,
+    "business_documents_allowed": false,
+    "embedding_reranker_allowed": false,
+    "ocr_vision_allowed": false,
+    "external_mcp_allowed": false,
+    "ecs_allowed": false
+  },
+  "cases": [
+    {"id": "BUD-01", "domain": "budget", "expected": "allowed"},
+    {"id": "BUD-02", "domain": "budget", "expected": "exhausted"},
+    {"id": "BUD-03", "domain": "budget", "expected": "verified_settlement"},
+    {"id": "BUD-04", "domain": "budget", "expected": "conservative_settlement"},
+    {"id": "BUD-05", "domain": "budget", "expected": "overage_rejected"},
+    {"id": "BUD-06", "domain": "budget", "expected": "profile_expansion_rejected"},
+
+    {"id": "LOOP-01", "domain": "loop", "expected": "pass"},
+    {"id": "LOOP-02", "domain": "loop", "expected": "warning"},
+    {"id": "LOOP-03", "domain": "loop", "expected": "stop"},
+    {"id": "LOOP-04", "domain": "loop", "expected": "repeat_warning"},
+    {"id": "LOOP-05", "domain": "loop", "expected": "cycle_warning"},
+    {"id": "LOOP-06", "domain": "loop", "expected": "progress_reset"},
+
+    {"id": "EFF-01", "domain": "effect", "expected": "reserve_new"},
+    {"id": "EFF-02", "domain": "effect", "expected": "reuse_result"},
+    {"id": "EFF-03", "domain": "effect", "expected": "await_existing"},
+    {"id": "EFF-04", "domain": "effect", "expected": "reconcile"},
+    {"id": "EFF-05", "domain": "effect", "expected": "scope_rejected"},
+    {"id": "EFF-06", "domain": "effect", "expected": "non_replayable_rejected"},
+
+    {"id": "CAN-01", "domain": "cancellation", "expected": "active_result_accepted"},
+    {"id": "CAN-02", "domain": "cancellation", "expected": "fenced_result_rejected"},
+    {"id": "CAN-03", "domain": "cancellation", "expected": "stale_result_rejected"},
+    {"id": "CAN-04", "domain": "cancellation", "expected": "new_action_rejected"},
+    {"id": "CAN-05", "domain": "cancellation", "expected": "persisted_late_result_ignored"},
+    {"id": "CAN-06", "domain": "cancellation", "expected": "pending_checkpoint_invalidated"},
+    {"id": "CAN-07", "domain": "cancellation", "expected": "unused_budget_released"},
+    {"id": "CAN-08", "domain": "cancellation", "expected": "running_budget_conservatively_settled"},
+
+    {"id": "EXE-01", "domain": "direct_durable", "expected": "direct"},
+    {"id": "EXE-02", "domain": "direct_durable", "expected": "durable_by_duration"},
+    {"id": "EXE-03", "domain": "direct_durable", "expected": "durable_by_requirements"},
+    {"id": "EXE-04", "domain": "direct_durable", "expected": "parallel_limit_rejected"},
+
+    {"id": "REC-01", "domain": "recovery", "expected": "terminal_no_action"},
+    {"id": "REC-02", "domain": "recovery", "expected": "wait_for_lease"},
+    {"id": "REC-03", "domain": "recovery", "expected": "wait_for_user"},
+    {"id": "REC-04", "domain": "recovery", "expected": "continue_accepted_observation"},
+    {"id": "REC-05", "domain": "recovery", "expected": "consume_persisted_result"},
+    {"id": "REC-06", "domain": "recovery", "expected": "reconcile_uncertain"},
+    {"id": "REC-07", "domain": "recovery", "expected": "retry_safe"},
+    {"id": "REC-08", "domain": "recovery", "expected": "retry_limit_blocked"},
+    {"id": "REC-09", "domain": "recovery", "expected": "registry_change_blocked"},
+    {"id": "REC-10", "domain": "recovery", "expected": "authorization_change_blocked"},
+    {"id": "REC-11", "domain": "recovery", "expected": "no_effect_continue"}
+  ]
+}

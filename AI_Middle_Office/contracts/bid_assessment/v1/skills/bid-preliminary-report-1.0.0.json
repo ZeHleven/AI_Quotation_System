@@ -1,0 +1,12 @@
+{
+  "schema": "bid.skill.artifact.v1",
+  "skill_id": "bid-preliminary-report",
+  "skill_version": "1.0.0",
+  "executor_kind": "deterministic",
+  "task_bindings": {
+    "generate_preliminary_report": {
+      "action_contract": "bid.task.action.deterministic.v1",
+      "output_schema": "preliminary_report_draft_v1"
+    }
+  }
+}

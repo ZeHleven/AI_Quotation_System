@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/hard-gate-comparison-baseline.schema.json",
+  "title": "Bid Assessment Hard Gate Comparison Baseline v1",
+  "$defs": {
+    "VerificationStatus": {"enum": ["supported", "partial", "unknown"]},
+    "SourceSide": {"enum": ["tender", "enterprise"]},
+    "FactCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fact_slot", "source_side", "verification_status", "value_type",
+        "canonical_value", "evidence_item_ids", "evidence_atom_ids", "note"
+      ],
+      "properties": {
+        "fact_slot": {"type": "string", "minLength": 1, "maxLength": 160},
+        "source_side": {"$ref": "#/$defs/SourceSide"},
+        "verification_status": {"$ref": "#/$defs/VerificationStatus"},
+        "value_type": {"type": ["string", "null"], "maxLength": 48},
+        "canonical_value": {},
+        "evidence_item_ids": {
+          "type": "array", "maxItems": 20, "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 80}
+        },
+        "evidence_atom_ids": {
+          "type": "array", "maxItems": 20, "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 80}
+        },
+        "note": {"type": "string", "minLength": 1, "maxLength": 1000}
+      }
+    },
+    "Command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assessment_id", "source_run_id", "business_baseline_id",
+        "reviewed_as_of", "review_note", "facts"
+      ],
+      "properties": {
+        "assessment_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "source_run_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "business_baseline_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "reviewed_as_of": {"type": "string", "format": "date-time", "pattern": "Z$"},
+        "review_note": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "facts": {"type": "array", "minItems": 16, "maxItems": 16, "items": {"$ref": "#/$defs/FactCommand"}}
+      }
+    },
+    "Projection": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "schema", "assessment_id", "source_run_id", "business_baseline_id",
+        "verification_outcome", "candidate_hash", "facts"
+      ],
+      "properties": {
+        "schema": {"enum": ["bid.hard-gate.comparison-baseline.v1", "bid.hard-gate.comparison-baseline-validation.v1"]},
+        "assessment_id": {"type": "string"},
+        "source_run_id": {"type": "string"},
+        "business_baseline_id": {"type": "string"},
+        "verification_outcome": {"enum": ["verified", "verified_with_follow_up"]},
+        "candidate_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "baseline_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "facts": {"type": "array", "minItems": 16, "maxItems": 16}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/Command"},
+    {"$ref": "#/$defs/Projection"}
+  ]
+}

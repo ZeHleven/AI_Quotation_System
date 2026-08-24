@@ -1,0 +1,60 @@
+{
+  "schema_version": "bid-rq1b-parse-quality-profile/v1",
+  "profile_version": "bid-parse-quality-profile-v1",
+  "contract_version": "bid.parse.quality.v1",
+  "parser_profile_version": "bid-document-parser-profile-v4-pdf-quality-gated-rq1b",
+  "inherited_layout_profile_version": "bid-pdf-native-layout-profile-v2-rq1a",
+  "inherited_chunk_profile_version": "bid-evidence-chunk-profile-v2-rq1a",
+  "dimension_weights": {
+    "native_readiness": 30,
+    "structural_coherence": 35,
+    "citable_integrity": 25,
+    "warning_hygiene": 10
+  },
+  "grade_thresholds": {
+    "high_min": 85,
+    "medium_min": 60,
+    "low_min": 0,
+    "partial_status_score_cap": 84,
+    "blocked_score_cap": 39
+  },
+  "blocking_thresholds": {
+    "missing_page_ratio_gte": 0.2,
+    "partial_page_ratio_gte": 0.2,
+    "citable_heading_ratio_lt": 0.9,
+    "retrieval_child_required": true,
+    "citable_atom_required": true
+  },
+  "review_thresholds": {
+    "partial_page_present": true,
+    "ocr_pending_page_present": true,
+    "undersized_non_isolated_child_ratio_gt": 0.35,
+    "actionable_warning_density_per_page_gt": 0.5,
+    "score_below": 85
+  },
+  "consumer_gates": {
+    "retrieval_index": "not_blocked",
+    "lot_detection": {
+      "quality_not_blocked": true,
+      "missing_page_ratio_lte": 0.1,
+      "citable_heading_ratio_gte": 0.95
+    },
+    "automated_assessment": {
+      "quality_not_blocked": true,
+      "score_gte": 60
+    }
+  },
+  "authority_policy": {
+    "quality_report_warning_code": "PDF_PARSE_QUALITY_GATE_EVALUATED",
+    "quality_report_hash_required": true,
+    "parse_result_hash_includes_quality_report": true,
+    "legacy_profile_output_unchanged": true,
+    "blocked_index_fallback_allowed": false,
+    "blocked_lot_detection_fallback_allowed": false,
+    "blocked_assessment_fallback_allowed": false,
+    "document_text_in_quality_report": false,
+    "ocr_calls_allowed": false,
+    "vision_calls_allowed": false,
+    "model_calls_allowed": false
+  }
+}

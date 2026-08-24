@@ -1,0 +1,11 @@
+# Optional RQ2-A/RQ2-C Worker dependencies. Do not install in the formal
+# release image until the bid-assessment Agent receives an explicit rollout
+# approval. sentence-transformers brings the frozen Transformers/Torch runtime
+# used by both the embedding and local cross-encoder adapters. This file is a
+# separate Worker environment lock: numpy 1.x intentionally cannot be merged
+# into the formal API image, whose production lock currently uses numpy 2.x.
+numpy==1.26.4
+pymilvus==2.3.6
+sentence-transformers==3.1.0
+transformers==4.44.2
+torch==2.6.0

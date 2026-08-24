@@ -1,0 +1,57 @@
+{
+  "schema_version": "bid-evidence-chunk-profile/v1",
+  "contract_version": "bid.evidence.chunk.v2",
+  "profile_version": "bid-evidence-chunk-profile-v1",
+  "token_estimator_version": "bid-token-estimator-cjk-conservative-v1",
+  "limits": {
+    "soft_min_tokens": 220,
+    "target_tokens": 380,
+    "soft_max_tokens": 500,
+    "hard_max_tokens": 600,
+    "long_overlap_tokens": 80
+  },
+  "fragment_roles": {
+    "section_parent": {
+      "parent_role": null,
+      "search_role": "secondary",
+      "is_citable": false
+    },
+    "retrieval_child": {
+      "parent_role": "section_parent",
+      "search_role": "primary",
+      "is_citable": false
+    },
+    "evidence_atom": {
+      "parent_role": "retrieval_child",
+      "search_role": "read_only",
+      "is_citable": true
+    }
+  },
+  "boundary_policy": {
+    "normal_structure_overlap_tokens": 0,
+    "long_block_split_order": [
+      "sentence_or_line_boundary_at_or_before_soft_max",
+      "sentence_or_line_boundary_before_hard_max",
+      "hard_max_token_boundary"
+    ],
+    "isolated_block_types": [
+      "clause",
+      "table",
+      "table_row",
+      "form_field",
+      "image",
+      "caption",
+      "attachment_boundary"
+    ],
+    "page_break_is_hard_boundary": false,
+    "section_change_is_hard_boundary": true
+  },
+  "authority_policy": {
+    "retrieval_text_is_evidence": false,
+    "context_prefix_is_evidence": false,
+    "only_context_read_atoms_are_citable": true,
+    "generated_chunk_summary_enabled": false,
+    "model_calls_allowed": false,
+    "ocr_calls_allowed": false
+  }
+}

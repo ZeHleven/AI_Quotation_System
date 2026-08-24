@@ -35,6 +35,8 @@
       "required": [
         "context_manifest_id",
         "task_id",
+        "task_attempt_id",
+        "fencing_token",
         "role",
         "bound_versions",
         "included_fact_ids",
@@ -45,16 +47,31 @@
         "token_estimate",
         "compression_level",
         "assembler_version",
+        "task_contract_hash",
+        "context_profile",
+        "budget_profile",
+        "included_tool_result_ids",
+        "included_model_result_ids",
+        "working_state_hash",
+        "component_token_estimates",
         "hash"
       ],
       "properties": {
         "context_manifest_id": {"$ref": "contracts.schema.json#/$defs/Id"},
         "task_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "task_attempt_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "fencing_token": {"type": "integer", "minimum": 1},
         "role": {"$ref": "#/$defs/ModelRole"},
         "bound_versions": {"$ref": "contracts.schema.json#/$defs/VersionBinding"},
         "included_fact_ids": {
           "type": "array",
           "maxItems": 500,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        },
+        "included_gate_ids": {
+          "type": "array",
+          "maxItems": 20,
           "uniqueItems": true,
           "items": {"$ref": "contracts.schema.json#/$defs/Id"}
         },
@@ -83,6 +100,37 @@
         "token_estimate": {"type": "integer", "minimum": 0, "maximum": 32000},
         "compression_level": {"type": "integer", "minimum": 0, "maximum": 3},
         "assembler_version": {"type": "string", "minLength": 1, "maxLength": 80},
+        "task_contract_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "context_profile": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"},
+        "budget_profile": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"},
+        "included_tool_result_ids": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        },
+        "included_model_result_ids": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "contracts.schema.json#/$defs/Id"}
+        },
+        "working_state_hash": {
+          "oneOf": [
+            {"$ref": "contracts.schema.json#/$defs/Sha256"},
+            {"type": "null"}
+          ]
+        },
+        "component_token_estimates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base", "evidence", "total"],
+          "properties": {
+            "base": {"type": "integer", "minimum": 0, "maximum": 32000},
+            "evidence": {"type": "integer", "minimum": 0, "maximum": 32000},
+            "total": {"type": "integer", "minimum": 0, "maximum": 32000}
+          }
+        },
         "hash": {"$ref": "contracts.schema.json#/$defs/Sha256"}
       }
     }

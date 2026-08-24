@@ -1,0 +1,61 @@
+{
+  "schema": "bid-assessment-phase4c1-enterprise-hard-gates-profile-v1",
+  "profile_id": "bid-assessment-phase4c1-enterprise-hard-gates-v1",
+  "source_spec_version": "v0.1-r52",
+  "status": "locally_validated",
+  "requires": [
+    "contracts/bid_assessment/v1/phase4-mvp1-runtime-profile.json",
+    "contracts/bid_assessment/v1/task-catalog-1.1.0-phase4c1.json",
+    "contracts/bid_assessment/v1/fact-catalog-mvp1-phase4c1.json",
+    "contracts/bid_assessment/v1/skills/catalog-1.1.0.json",
+    "schemas/bid_assessment/v1/enterprise-capability.schema.json",
+    "schemas/bid_assessment/v1/execute-preflight-v2.schema.json"
+  ],
+  "enterprise_snapshot": {
+    "schema": "bid.enterprise.capability-snapshot.v1",
+    "catalog_version": "bid-enterprise-capability-catalog-v1",
+    "slots": ["I01", "I02", "I03", "I04", "I05", "I06", "I07", "I08", "I09", "I10", "I11"],
+    "immutability": "new_version_only",
+    "body_storage": "content_addressed_local_object_store",
+    "run_binding": "snapshot_id_version_hash",
+    "unknown_policy": "explicit_null_without_assertion"
+  },
+  "plan_continuation": {
+    "stage": "P1",
+    "task_key": "mvp.p1.06.build_enterprise_snapshot",
+    "task_type": "build_enterprise_snapshot",
+    "resolve_task_key": "mvp.p1.07.resolve_fact_conflicts",
+    "executor_kind": "deterministic",
+    "external_tools_allowed": false
+  },
+  "hard_gates": {
+    "codes": ["HG01", "HG02", "HG03", "HG04", "HG05", "HG06", "HG07"],
+    "input_authority": "resolved_facts_only",
+    "comparison": "structured_deterministic_v1",
+    "unstructured_policy": "unknown",
+    "legacy_boolean_compatibility": true,
+    "raw_enterprise_payload_in_trace": false
+  },
+  "runtime_lab": {
+    "get_path": "/api/v1/bid-assessment-runtime-lab/enterprise-snapshot",
+    "create_path": "/api/v1/bid-assessment-runtime-lab/enterprise-snapshots",
+    "create_access": "local_execute_admin_only",
+    "idempotency_required": true,
+    "view_only_write_blocked": true,
+    "preflight_schema": "bid.runtime.execute-preflight.v2"
+  },
+  "compatibility": {
+    "new_database_migration_required": true,
+    "alembic_head": "20260817_0104",
+    "legacy_bid_intake_modified": false,
+    "feature_flag": "FEATURE_BID_ASSESSMENT_PHASE4_ENTERPRISE_CAPABILITY",
+    "feature_flag_default": false,
+    "ecs_rollout_allowed": false
+  },
+  "validation_summary": {
+    "authorized_matrix": "phase4c1_contract_schema_migration_snapshot_fact_gate_preflight_api_sse_local_dynamic_browser",
+    "result": "passed",
+    "scope": "fully_isolated_local_only",
+    "external_environment_accessed": false
+  }
+}

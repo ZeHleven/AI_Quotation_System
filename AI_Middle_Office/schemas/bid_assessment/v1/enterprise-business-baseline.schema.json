@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/enterprise-business-baseline.schema.json",
+  "title": "Bid Assessment Enterprise Business Baseline v1",
+  "$defs": {
+    "SlotCode": {"enum": ["I01", "I02", "I03", "I04", "I05", "I06", "I07", "I08", "I09", "I10", "I11"]},
+    "SlotReviewCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot_code", "disposition", "evidence_class", "evidence_ref", "evidence_hash", "note"],
+      "properties": {
+        "slot_code": {"$ref": "#/$defs/SlotCode"},
+        "disposition": {"enum": ["confirmed", "correction_required", "not_reviewed"]},
+        "evidence_class": {"enum": ["official_document", "internal_system", "audited_record", "management_attestation", "not_available"]},
+        "evidence_ref": {"type": ["string", "null"], "maxLength": 300},
+        "evidence_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "evidence_item_id": {"type": ["string", "null"], "maxLength": 80},
+        "note": {"type": ["string", "null"], "maxLength": 1000}
+      }
+    },
+    "Command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot_id", "reviewed_as_of", "review_note", "slot_reviews"],
+      "properties": {
+        "snapshot_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "evidence_package_id": {"type": ["string", "null"], "maxLength": 80},
+        "reviewed_as_of": {"type": "string", "format": "date-time", "pattern": "Z$"},
+        "review_note": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "slot_reviews": {"type": "array", "minItems": 11, "maxItems": 11, "items": {"$ref": "#/$defs/SlotReviewCommand"}}
+      }
+    },
+    "Projection": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schema", "snapshot_id", "verification_outcome", "candidate_hash"],
+      "properties": {
+        "schema": {"enum": ["bid.enterprise.business-baseline.v1", "bid.enterprise.business-baseline-validation.v1"]},
+        "snapshot_id": {"type": "string"},
+        "evidence_package_id": {"type": ["string", "null"]},
+        "verification_outcome": {"enum": ["verified", "verified_with_follow_up"]},
+        "candidate_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/Command"},
+    {"$ref": "#/$defs/Projection"}
+  ]
+}

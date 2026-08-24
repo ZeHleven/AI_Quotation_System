@@ -16,6 +16,13 @@ from app.models.bid_assessment import (
     BidFileObject,
     BidManifestDocument,
 )
+from app.models.bid_assessment_documents import (
+    BidDocumentParseHead,
+    BidDocumentParseRun,
+)
+from app.services.bid_document_parse_projections import (
+    build_document_parse_summaries,
+)
 
 
 PARSE_STATUSES = frozenset(
@@ -96,12 +103,7 @@ def build_bid_document_page(
     page: int,
     page_size: int,
 ) -> dict[str, Any]:
-    """Build an Assessment-scoped page without exposing object-store internals.
-
-    Phase 1 intentionally has no parse-run table. Until that data domain exists,
-    every committed DocumentVersion projects ``not_requested`` and no quality
-    summary. Parser hints, source metadata, and storage state are not substitutes.
-    """
+    """Build an Assessment-scoped page without exposing object-store internals."""
 
     manifest = _selected_manifest(db, assessment, manifest_id)
     current_manifest_id = (
@@ -139,21 +141,6 @@ def build_bid_document_page(
         "is_current": str(manifest.id) == current_manifest_id,
     }
 
-    # No parse-run records exist in Phase 1. A filter for any future state is a
-    # valid query with an empty result, not an inference from unrelated columns.
-    if parse_status is not None and parse_status != "not_requested":
-        return {
-            "data": [],
-            "total": 0,
-            "page": page,
-            "page_size": page_size,
-            "manifest": manifest_summary,
-            "current_manifest_id": current_manifest_id,
-            "manifest_selection": selection,
-            "filters": filters,
-            "include_versions": include_versions,
-        }
-
     selected_query = (
         db.query(
             BidManifestDocument,
@@ -167,12 +154,26 @@ def build_bid_document_page(
         )
         .join(BidDocument, BidDocument.id == BidDocumentVersion.document_id)
         .join(BidFileObject, BidFileObject.id == BidDocumentVersion.file_object_id)
+        .outerjoin(
+            BidDocumentParseHead,
+            BidDocumentParseHead.document_version_id == BidDocumentVersion.id,
+        )
+        .outerjoin(
+            BidDocumentParseRun,
+            BidDocumentParseRun.id == BidDocumentParseHead.current_run_id,
+        )
         .filter(BidManifestDocument.manifest_id == manifest.id)
     )
     if document_type is not None:
         selected_query = selected_query.filter(
             BidDocument.document_type == document_type
         )
+    if parse_status == "not_requested":
+        selected_query = selected_query.filter(
+            BidDocumentParseHead.document_version_id.is_(None)
+        )
+    elif parse_status is not None:
+        selected_query = selected_query.filter(BidDocumentParseRun.status == parse_status)
 
     total = int(selected_query.count())
     selected_rows = (
@@ -186,6 +187,8 @@ def build_bid_document_page(
         .all()
     )
     document_ids = [str(row[2].id) for row in selected_rows]
+    selected_version_ids = [str(row[1].id) for row in selected_rows]
+    parse_summaries = build_document_parse_summaries(db, selected_version_ids)
 
     visible_versions_by_document: dict[
         str, list[tuple[BidDocumentVersion, BidFileObject]]
@@ -246,6 +249,7 @@ def build_bid_document_page(
     for member, selected_version, document, selected_file in selected_rows:
         document_id = str(document.id)
         selected_version_id = str(selected_version.id)
+        parse_summary = parse_summaries[selected_version_id]
         visible_versions = visible_versions_by_document[document_id]
         summaries = [
             _version_summary(version, file_object)
@@ -273,8 +277,8 @@ def build_bid_document_page(
                     selected_file,
                 ),
                 "current_version": current_summary,
-                "parse_status": "not_requested",
-                "parse_quality": None,
+                "parse_status": parse_summary["status"],
+                "parse_quality": parse_summary["quality"],
                 "is_in_current_manifest": selected_version_id == current_version_id,
                 "replacement_chain": {
                     "previous_version_id": (
@@ -290,7 +294,7 @@ def build_bid_document_page(
                     "latest_version_id": summaries[-1]["version_id"],
                     "visible_version_count": len(summaries),
                 },
-                "warnings": [],
+                "warnings": parse_summary["warnings"],
                 "versions": summaries if include_versions else None,
             }
         )

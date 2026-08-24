@@ -240,14 +240,14 @@ def mark_outbox_failed(
 
 
 def publish_outbox_to_celery(envelope: OutboxEnvelope) -> str:
-    """Publish a committed event to the first concrete transactional consumer."""
+    """Publish a committed event to the fan-out consumer router."""
 
     from app.tasks.celery_app import celery_app
 
     if celery_app is None:
         raise BidOutboxPublisherUnavailable("BID_QUEUE_UNAVAILABLE")
     async_result = celery_app.send_task(
-        "bid.project_public_event",
+        "bid.consume_outbox_event",
         args=[envelope.event_id],
         headers={
             "bid-event-id": envelope.event_id,

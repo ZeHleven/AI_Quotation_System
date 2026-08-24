@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/evidence-chunk.schema.json",
+  "title": "Bid Assessment Evidence Chunk v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "profile_version",
+    "token_estimator_version",
+    "fragments",
+    "metrics",
+    "warnings",
+    "result_hash"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "bid.evidence.chunk.v2"
+    },
+    "profile_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "token_estimator_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "fragments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fragment"
+      }
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "result_hash": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "fragment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_key",
+        "fragment_role",
+        "parent_key",
+        "locator_type",
+        "locator",
+        "normalized_text",
+        "ordinal",
+        "estimated_tokens",
+        "is_citable",
+        "source_block_keys",
+        "retrieval_text",
+        "text_hash",
+        "locator_hash",
+        "retrieval_hash"
+      ],
+      "properties": {
+        "evidence_key": {
+          "type": "string",
+          "pattern": "^(section|chunk|atom):[0-9a-f]{64}$"
+        },
+        "fragment_role": {
+          "enum": [
+            "section_parent",
+            "retrieval_child",
+            "evidence_atom"
+          ]
+        },
+        "parent_key": {
+          "type": ["string", "null"]
+        },
+        "locator_type": {
+          "enum": ["page_bbox", "section"]
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "normalized_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "is_citable": {
+          "type": "boolean"
+        },
+        "source_block_keys": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "retrieval_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "locator_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "retrieval_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "locator": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "fragment_role",
+        "block_type",
+        "section_path",
+        "page_no",
+        "page_end",
+        "source_block_ids",
+        "token_count",
+        "is_citable"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "bid.evidence.chunk.v2"
+        },
+        "fragment_role": {
+          "enum": [
+            "section_parent",
+            "retrieval_child",
+            "evidence_atom"
+          ]
+        },
+        "block_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "section_path": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "section_occurrence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "page_no": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "page_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bbox": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "number"
+          }
+        },
+        "source_block_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source_spans": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "char_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "char_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "split_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "split_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "overlap_left_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 80
+        },
+        "token_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source_atom_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "context_prefix": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_normalized_text_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "is_citable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_block_count",
+        "heading_block_count",
+        "section_parent_count",
+        "retrieval_child_count",
+        "evidence_atom_count",
+        "source_estimated_tokens",
+        "overlap_estimated_tokens",
+        "overlap_ratio",
+        "max_child_tokens",
+        "children_below_soft_min",
+        "long_split_atom_count"
+      ],
+      "properties": {
+        "input_block_count": {"type": "integer", "minimum": 1},
+        "heading_block_count": {"type": "integer", "minimum": 0},
+        "section_parent_count": {"type": "integer", "minimum": 1},
+        "retrieval_child_count": {"type": "integer", "minimum": 0},
+        "evidence_atom_count": {"type": "integer", "minimum": 0},
+        "source_estimated_tokens": {"type": "integer", "minimum": 0},
+        "overlap_estimated_tokens": {"type": "integer", "minimum": 0},
+        "overlap_ratio": {"type": "number", "minimum": 0},
+        "max_child_tokens": {"type": "integer", "minimum": 0, "maximum": 600},
+        "children_below_soft_min": {"type": "integer", "minimum": 0},
+        "long_split_atom_count": {"type": "integer", "minimum": 0},
+        "citable_heading_atom_count": {"type": "integer", "minimum": 0},
+        "aggregated_table_row_child_count": {"type": "integer", "minimum": 0},
+        "parent_section_max_depth": {"type": "integer", "minimum": 1, "maximum": 6}
+      }
+    }
+  }
+}

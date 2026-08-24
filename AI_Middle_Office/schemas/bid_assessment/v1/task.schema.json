@@ -88,6 +88,19 @@
         "calculate.sensitivity_scenarios"
       ]
     },
+    "SkillBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skill_id", "skill_version", "skill_hash", "executor_kind", "action_contract", "output_schema"],
+      "properties": {
+        "skill_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,79}$"},
+        "skill_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$"},
+        "skill_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "executor_kind": {"type": "string", "enum": ["deterministic", "langgraph"]},
+        "action_contract": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{2,127}$"},
+        "output_schema": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{2,127}$"}
+      }
+    },
     "TaskDefinition": {
       "type": "object",
       "additionalProperties": false,
@@ -121,7 +134,14 @@
         "tool_profile": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"},
         "context_profile": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"},
         "budget_profile": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"},
-        "completion_contract": {"type": "string", "minLength": 1, "maxLength": 120}
+        "completion_contract": {"type": "string", "minLength": 1, "maxLength": 120},
+        "allowed_tools": {
+          "type": "array",
+          "maxItems": 25,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/ToolName"}
+        },
+        "skill_binding": {"$ref": "#/$defs/SkillBinding"}
       }
     },
     "TaskScope": {
@@ -170,6 +190,7 @@
         "task_id": {"$ref": "contracts.schema.json#/$defs/Id"},
         "task_key": {"type": "string", "minLength": 1, "maxLength": 160},
         "task_type": {"$ref": "#/$defs/TaskType"},
+        "skill_binding": {"$ref": "#/$defs/SkillBinding"},
         "objective": {"type": "string", "minLength": 1, "maxLength": 500},
         "scope": {"$ref": "#/$defs/TaskScope"},
         "depends_on": {
@@ -206,10 +227,76 @@
         },
         "output_version": {"type": "string", "minLength": 1, "maxLength": 80}
       }
+    },
+    "TaskLease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "attempt_id", "attempt_no", "worker_id", "fencing_token", "lease_until", "task_contract", "task_contract_hash", "resume_checkpoint"],
+      "properties": {
+        "task_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "attempt_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "attempt_no": {"type": "integer", "minimum": 1},
+        "worker_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "fencing_token": {"type": "integer", "minimum": 1},
+        "lease_until": {"$ref": "contracts.schema.json#/$defs/UtcDateTime"},
+        "task_contract": {"$ref": "#/$defs/TaskContract"},
+        "task_contract_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "resume_checkpoint": {
+          "oneOf": [
+            {"$ref": "#/$defs/ResumeCheckpoint"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "ResumeCheckpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint_id", "source_attempt_id", "action_seq", "state_hash", "candidate_output_ref", "next_state"],
+      "properties": {
+        "checkpoint_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "source_attempt_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "action_seq": {"type": "integer", "minimum": 0},
+        "state_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "candidate_output_ref": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+        "next_state": {"type": ["string", "null"], "minLength": 1, "maxLength": 64}
+      }
+    },
+    "CheckpointWrite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt_id", "fencing_token", "action_seq", "context_manifest_id", "state", "tool_refs", "budget_usage", "candidate_output_ref", "next_state"],
+      "properties": {
+        "attempt_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "fencing_token": {"type": "integer", "minimum": 1},
+        "action_seq": {"type": "integer", "minimum": 0},
+        "context_manifest_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "state": {"type": "object"},
+        "tool_refs": {"type": ["array", "null"], "maxItems": 100, "items": {"type": "object"}},
+        "budget_usage": {"type": ["object", "null"]},
+        "candidate_output_ref": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+        "next_state": {"type": ["string", "null"], "minLength": 1, "maxLength": 64}
+      }
+    },
+    "TaskCompletionReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint_id", "state_hash", "output_hash", "completion_contract", "validator_version", "output_ref"],
+      "properties": {
+        "checkpoint_id": {"$ref": "contracts.schema.json#/$defs/Id"},
+        "state_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "output_hash": {"$ref": "contracts.schema.json#/$defs/Sha256"},
+        "completion_contract": {"type": "string", "minLength": 1, "maxLength": 120},
+        "validator_version": {"type": "string", "const": "bid-task-output-validator-v1"},
+        "output_ref": {"type": ["string", "null"], "minLength": 1, "maxLength": 512}
+      }
     }
   },
   "oneOf": [
     {"$ref": "#/$defs/TaskDefinition"},
-    {"$ref": "#/$defs/TaskContract"}
+    {"$ref": "#/$defs/TaskContract"},
+    {"$ref": "#/$defs/TaskLease"},
+    {"$ref": "#/$defs/CheckpointWrite"},
+    {"$ref": "#/$defs/TaskCompletionReceipt"}
   ]
 }

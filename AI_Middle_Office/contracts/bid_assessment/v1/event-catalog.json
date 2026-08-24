@@ -14,7 +14,7 @@
     {"event_type": "question.round.answered", "resource_type": "question_round", "required_payload_fields": ["round_id", "run_id"]},
     {"event_type": "report.published", "resource_type": "report", "required_payload_fields": ["report_id", "report_type", "version", "decision_class"]},
     {"event_type": "report.delta.published", "resource_type": "delta", "required_payload_fields": ["delta_id", "severity", "decision_changed"]},
-    {"event_type": "operation.failed", "resource_types": ["upload_batch", "document_version", "run", "report", "delta"], "required_payload_fields": ["operation_type", "resource_id", "error_code", "retryable"]},
+    {"event_type": "operation.failed", "resource_types": ["assessment", "upload_batch", "document_version", "run", "report", "delta"], "required_payload_fields": ["operation_type", "resource_id", "error_code", "retryable"]},
     {"event_type": "stream.reset", "resource_type": "assessment", "required_payload_fields": ["reason", "snapshot_url"]},
     {"event_type": "stream.closed", "resource_type": "assessment", "required_payload_fields": ["reason", "terminal"]}
   ],
@@ -30,12 +30,16 @@
     "bid.document.parse_requested.v1",
     "bid.document.parsed.v1",
     "bid.document.parse_failed.v1",
+    "bid.manifest.parse_set_ready.v1",
+    "bid.lot_detection.requested.v1",
     "bid.lots.detected.v1",
+    "bid.lot_detection.failed.v1",
     "bid.lot.selected.v1",
     "bid.assessment.input_stale.v1",
     "bid.run.created.v1",
     "bid.plan.requested.v1",
     "bid.plan.committed.v1",
+    "bid.plan.continuation_requested.v1",
     "bid.task.ready.v1",
     "bid.task.leased.v1",
     "bid.task.waiting_operation.v1",
@@ -46,8 +50,10 @@
     "bid.run.validation_requested.v1",
     "bid.run.cancel_requested.v1",
     "bid.run.cancelled.v1",
+    "bid.run.retry_requested.v1",
     "bid.run.succeeded.v1",
     "bid.run.failed.v1",
+    "bid.run.stale.v1",
     "bid.facts.changed.v1",
     "bid.calculation.completed.v1",
     "bid.gates.evaluated.v1",
@@ -61,5 +67,107 @@
     "bid.report.published.v1",
     "bid.report.failed.v1",
     "bid.report.superseded.v1"
-  ]
+  ],
+  "outbox_event_contracts": {
+    "bid.document.parse_requested.v1": {
+      "aggregate_type": "document_parse_run",
+      "required_payload_fields": ["parse_run_id", "document_version_id", "input_hash", "parser_profile_version"]
+    },
+    "bid.document.parsed.v1": {
+      "aggregate_type": "document_parse_run",
+      "required_payload_fields": ["parse_run_id", "document_version_id", "status", "quality", "warnings", "unit_counts", "result_hash"]
+    },
+    "bid.document.parse_failed.v1": {
+      "aggregate_type": "document_parse_run",
+      "required_payload_fields": ["parse_run_id", "document_version_id", "status", "quality", "warnings", "error_code", "retryable", "attempt_count"]
+    },
+    "bid.manifest.parse_set_ready.v1": {
+      "aggregate_type": "manifest",
+      "required_payload_fields": ["manifest_id", "parse_set_hash", "document_count", "partial_count"]
+    },
+    "bid.lot_detection.requested.v1": {
+      "aggregate_type": "lot_detection_run",
+      "required_payload_fields": ["detection_run_id", "manifest_id", "parse_set_hash", "input_hash"]
+    },
+    "bid.lots.detected.v1": {
+      "aggregate_type": "lot_detection_run",
+      "required_payload_fields": ["detection_run_id", "manifest_id", "parse_set_hash", "candidate_count", "selection_required", "lots_url"]
+    },
+    "bid.lot_detection.failed.v1": {
+      "aggregate_type": "lot_detection_run",
+      "required_payload_fields": ["detection_run_id", "manifest_id", "error_code", "retryable", "attempt_count"]
+    },
+    "bid.lot.selected.v1": {
+      "aggregate_type": "scope",
+      "required_payload_fields": ["scope_id", "lot_id", "manifest_id", "detection_run_id", "from", "to", "resource_version"]
+    },
+    "bid.plan.requested.v1": {
+      "aggregate_type": "scope",
+      "required_payload_fields": ["operation_id", "assessment_id", "scope_id", "manifest_id", "lot_id", "requested_run_kind", "resource_version"]
+    },
+    "bid.run.created.v1": {
+      "aggregate_type": "run",
+      "required_payload_fields": ["run_id", "assessment_id", "scope_id", "manifest_id", "run_kind", "run_sequence", "from", "to", "retryable", "resource_version", "assessment_resource_version", "input_fingerprint", "input_hash", "evaluation_time", "progress_url"]
+    },
+    "bid.plan.committed.v1": {
+      "aggregate_type": "plan_revision",
+      "required_payload_fields": ["plan_revision_id", "run_id", "revision_no", "validated_hash", "task_count", "ready_task_count", "task_registry_version", "validator_version", "resource_version"]
+    },
+    "bid.plan.continuation_requested.v1": {
+      "aggregate_type": "run",
+        "required_payload_fields": ["run_id", "completed_plan_revision_id", "completed_stage", "next_stage", "from", "to", "stage_code", "status", "message", "completed_units", "total_units", "resource_version"]
+    },
+    "bid.task.ready.v1": {
+      "aggregate_type": "task",
+      "required_payload_fields": ["task_id", "task_key", "task_type", "run_id", "plan_revision_id", "stage_code", "status", "message", "completed_units", "total_units", "resource_version"]
+    },
+    "bid.task.leased.v1": {
+      "aggregate_type": "task",
+      "required_payload_fields": ["task_id", "task_key", "task_type", "run_id", "plan_revision_id", "attempt_id", "attempt_no", "lease_owner", "lease_until", "fencing_token", "task_contract_hash", "resume_checkpoint_id", "resource_version"]
+    },
+    "bid.task.waiting_operation.v1": {
+      "aggregate_type": "task",
+      "required_payload_fields": ["task_id", "task_key", "task_type", "run_id", "plan_revision_id", "attempt_id", "operation_id", "checkpoint_id", "stage_code", "status", "message", "completed_units", "total_units", "resource_version"]
+    },
+    "bid.task.succeeded.v1": {
+      "aggregate_type": "task",
+      "required_payload_fields": ["task_id", "task_key", "task_type", "run_id", "plan_revision_id", "attempt_id", "checkpoint_id", "result_hash", "stage_code", "status", "message", "completed_units", "total_units", "resource_version"]
+    },
+    "bid.task.failed.v1": {
+      "aggregate_type": "task",
+      "required_payload_fields": ["task_id", "task_key", "task_type", "run_id", "plan_revision_id", "attempt_id", "error_code", "retryable", "retry_scheduled", "stage_code", "status", "message", "completed_units", "total_units", "resource_version"]
+    },
+    "bid.task.stale.v1": {
+      "aggregate_type": "task",
+      "required_payload_fields": ["task_id", "task_key", "task_type", "run_id", "plan_revision_id", "attempt_id", "error_code", "stage_code", "status", "message", "completed_units", "total_units", "resource_version"]
+    },
+    "bid.run.validation_requested.v1": {
+      "aggregate_type": "run",
+      "required_payload_fields": ["run_id", "from", "to", "retryable", "completed_units", "total_units", "resource_version"]
+    },
+    "bid.run.cancel_requested.v1": {
+      "aggregate_type": "run",
+      "required_payload_fields": ["run_id", "from", "to", "retryable", "reason", "cancel_requested_at", "previous_stage", "stage_code", "status", "message", "completed_units", "total_units", "resource_version"]
+    },
+    "bid.run.cancelled.v1": {
+      "aggregate_type": "run",
+      "required_payload_fields": ["run_id", "from", "to", "retryable", "resource_version", "assessment_resource_version", "tasks_cancelled", "attempts_cancelled", "operations_cancelled"]
+    },
+    "bid.run.retry_requested.v1": {
+      "aggregate_type": "run",
+      "required_payload_fields": ["run_id", "from", "to", "retryable", "retry_mode", "attempts", "completed_units", "total_units", "resource_version"]
+    },
+    "bid.run.succeeded.v1": {
+      "aggregate_type": "run",
+      "required_payload_fields": ["run_id", "from", "to", "retryable", "validation_id", "validator_version", "validation_result_hash", "failure_code", "completed_units", "total_units", "resource_version", "assessment_resource_version"]
+    },
+    "bid.run.failed.v1": {
+      "aggregate_type": "run",
+      "required_payload_fields": ["run_id", "from", "to", "retryable", "resource_version"]
+    },
+    "bid.run.stale.v1": {
+      "aggregate_type": "run",
+      "required_payload_fields": ["run_id", "from", "to", "retryable", "validation_id", "validator_version", "validation_result_hash", "failure_code", "completed_units", "total_units", "resource_version", "assessment_resource_version"]
+    }
+  }
 }

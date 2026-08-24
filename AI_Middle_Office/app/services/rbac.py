@@ -325,6 +325,18 @@ def get_available_modules(user: User) -> list[dict]:
                 "stage": "trial",
             }
         )
+    if {"system_admin", "admin", "staff", "manager", "quote_user", "quote_operator"} & roles:
+        modules.append(
+            {
+                "key": "bid_assessment_pure_agent",
+                "name": "投标机会研判 Agent",
+                "path": "/admin/bid-assessment-pure-agent",
+                "status": "available"
+                if settings.feature_bid_assessment_pure_agent
+                else "pending",
+                "stage": "local_development",
+            }
+        )
     if {"system_admin", "admin", "enterprise_profile_viewer", "enterprise_profile_editor", "enterprise_profile_approver"} & roles:
         modules.append(
             {

@@ -23,7 +23,9 @@ from app.api.v1 import (
     agents,
     auth,
     bid_assessments,
+    bid_assessment_reports,
     bid_assessment_events,
+    bid_assessment_runtime_lab,
     bid_intake_runtime,
     bidding,
     budget_pricing,
@@ -85,8 +87,15 @@ from app.models import tender_evidence_index as tender_evidence_index_model  # n
 from app.models import tender_parse_pipeline as tender_parse_pipeline_model  # noqa: F401
 from app.models import bid_assessment as bid_assessment_model  # noqa: F401
 from app.models import bid_assessment_config as bid_assessment_config_model  # noqa: F401
+from app.models import bid_assessment_documents as bid_assessment_documents_model  # noqa: F401
+from app.models import bid_assessment_retrieval as bid_assessment_retrieval_model  # noqa: F401
+from app.models import bid_assessment_semantic as bid_assessment_semantic_model  # noqa: F401
+from app.models import bid_assessment_release as bid_assessment_release_model  # noqa: F401
 from app.models import bid_assessment_runtime as bid_assessment_runtime_model  # noqa: F401
 from app.models import bid_assessment_eventing as bid_assessment_eventing_model  # noqa: F401
+from app.models import bid_assessment_lots as bid_assessment_lots_model  # noqa: F401
+from app.models import bid_assessment_tooling as bid_assessment_tooling_model  # noqa: F401
+from app.models import bid_tool_execution as bid_tool_execution_model  # noqa: F401
 from app.core.logging import configure_logging, reset_trace_id, set_trace_id
 from app.core.security import verify_password
 from app.services.queue_health import check_task_queue
@@ -232,6 +241,34 @@ app.include_router(
     prefix="/api/v1",
     tags=["Bid Assessment v1 Events"],
 )
+app.include_router(
+    bid_assessment_reports.router,
+    prefix="/api/v1",
+    tags=["Bid Assessment v1 Reports"],
+)
+app.include_router(
+    bid_assessment_runtime_lab.router,
+    prefix="/api/v1",
+    tags=["Bid Assessment Runtime Lab"],
+)
+if settings.feature_bid_assessment_pure_agent:
+    # Keep the isolated persistence models and routes out of the application
+    # registry unless the dedicated local-development switch is explicit.
+    from app.api.v1 import (
+        bid_assessment_pure_agent,
+        bid_assessment_pure_agent_diagnostics,
+    )
+
+    app.include_router(
+        bid_assessment_pure_agent.router,
+        prefix="/api/v1",
+        tags=["Bid Assessment Pure Agent"],
+    )
+    app.include_router(
+        bid_assessment_pure_agent_diagnostics.router,
+        prefix="/api/v1",
+        tags=["Bid Assessment Pure Agent Diagnostics"],
+    )
 app.include_router(bidding.router, prefix="/api/v1", tags=["Bidding"])
 app.include_router(
     bid_intake_runtime.router,
@@ -521,6 +558,33 @@ def serve_vite_bidding():
 @app.get("/admin/bid-intake-agent", include_in_schema=False)
 def serve_vite_bid_intake_agent():
     if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/bid-assessment-runtime-lab", include_in_schema=False)
+def serve_vite_bid_assessment_runtime_lab():
+    if not settings.feature_vite_frontend:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/bid-assessment-pure-agent", include_in_schema=False)
+def serve_vite_bid_assessment_pure_agent():
+    if (
+        not settings.feature_vite_frontend
+        or not settings.feature_bid_assessment_pure_agent
+    ):
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_vite_index()
+
+
+@app.get("/admin/bid-assessment-pure-agent-diagnostics", include_in_schema=False)
+def serve_vite_bid_assessment_pure_agent_diagnostics():
+    if (
+        not settings.feature_vite_frontend
+        or not settings.feature_bid_assessment_pure_agent
+    ):
         raise HTTPException(status_code=404, detail="Not Found")
     return _serve_vite_index()
 

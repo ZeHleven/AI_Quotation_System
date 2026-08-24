@@ -1,0 +1,88 @@
+{
+  "schema": "bid-assessment-phase3-runtime-profile-v1",
+  "profile_id": "bid-assessment-phase3-complete-runtime-v1",
+  "source_spec_version": "v0.1-r25",
+  "status": "verified_local_isolated",
+  "master_feature_flag": "FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME",
+  "required_feature_flags": [
+    "FEATURE_BID_ASSESSMENT_V1_RUNTIME",
+    "FEATURE_BID_ASSESSMENT_PHASE3_RUN_BOOTSTRAP",
+    "FEATURE_BID_ASSESSMENT_PHASE3_PLANNER",
+    "FEATURE_BID_ASSESSMENT_PHASE3_TASK_RUNTIME",
+    "FEATURE_BID_ASSESSMENT_PHASE3_RUN_LIFECYCLE",
+    "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_CONTEXT",
+    "FEATURE_BID_ASSESSMENT_PHASE3_TOOL_EXECUTOR",
+    "FEATURE_BID_ASSESSMENT_PHASE3_RUN_VALIDATION"
+  ],
+  "ordered_stages": [
+    {
+      "phase": "3A",
+      "name": "run_bootstrap",
+      "entry": ["API-40", "bid.plan.requested.v1"],
+      "exit_event": "bid.run.created.v1",
+      "authority": ["bid_analysis_runs"]
+    },
+    {
+      "phase": "3B",
+      "name": "plan_commit",
+      "entry": ["bid.run.created.v1"],
+      "exit_event": "bid.plan.committed.v1",
+      "authority": ["bid_plan_revisions", "bid_tasks", "bid_task_dependencies"]
+    },
+    {
+      "phase": "3C",
+      "name": "task_runtime",
+      "entry": ["bid.task.ready.v1"],
+      "exit_event": "bid.run.validation_requested.v1",
+      "authority": ["bid_task_attempts", "bid_checkpoints"]
+    },
+    {
+      "phase": "3D",
+      "name": "run_lifecycle",
+      "entry": ["API-42", "API-43"],
+      "exit_event": "bid.run.cancelled.v1|bid.run.retry_requested.v1",
+      "authority": ["bid_analysis_runs", "bid_task_attempts", "bid_async_operations"]
+    },
+    {
+      "phase": "3E",
+      "name": "tool_context",
+      "entry": ["governed_task_attempt"],
+      "exit_event": "bid.task.ready.v1",
+      "authority": ["bid_context_manifests", "bid_tool_invocations", "bid_tool_results"]
+    },
+    {
+      "phase": "3F",
+      "name": "tool_execution",
+      "entry": ["governed_tool_invocation"],
+      "exit_event": "bid.task.ready.v1",
+      "authority": ["bid_tool_dispatches", "bid_tool_dispatch_attempts"]
+    },
+    {
+      "phase": "3G",
+      "name": "run_validation",
+      "entry": ["bid.run.validation_requested.v1"],
+      "exit_event": "bid.run.succeeded.v1|bid.run.failed.v1|bid.run.stale.v1",
+      "authority": ["bid_run_validations", "bid_run_validation_attempts"]
+    }
+  ],
+  "terminal_invariants": {
+    "one_active_run_per_assessment": true,
+    "one_committed_plan_per_run": true,
+    "one_current_attempt_per_task": true,
+    "monotonic_fencing": true,
+    "immutable_checkpoints_and_results": true,
+    "one_validation_per_run": true,
+    "one_terminal_convergence_event_per_run": true,
+    "terminal_run_rejects_late_writes": true
+  },
+  "run_validator_version": "bid-run-integrity-validator-v2",
+  "migration_head": "20260812_0097",
+  "external_execution": {
+    "real_model": false,
+    "ocr_or_visual": false,
+    "public_network": false,
+    "real_external_tool": false,
+    "real_object_storage": false,
+    "enabled_adapters": ["documents.outline@local_readonly"]
+  }
+}

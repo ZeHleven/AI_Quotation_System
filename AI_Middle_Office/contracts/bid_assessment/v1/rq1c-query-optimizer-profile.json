@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_version": "bid.evidence.query-plan.v2",
+  "profile_version": "bid-evidence-query-optimizer-profile-v1-rq1c",
+  "source_retrieval_profile_version": "bid-evidence-retrieval-profile-v2-role-aware",
+  "source_query_planner_profile_version": "tender-query-planner-v1",
+  "feature_flag": "FEATURE_BID_ASSESSMENT_RQ1C_QUERY_OPTIMIZER",
+  "configuration": {
+    "profile_variable": "BID_EVIDENCE_QUERY_OPTIMIZER_PROFILE_VERSION",
+    "default_profile": "tender-query-planner-v1",
+    "enabled_profile": "bid-evidence-query-optimizer-profile-v1-rq1c"
+  },
+  "budget": {
+    "max_queries": 6,
+    "max_subjects": 4,
+    "max_query_characters": 500,
+    "original_query_required": true,
+    "original_query_position": 1,
+    "dedupe": "nfkc_lower_alnum_cjk_fingerprint"
+  },
+  "ordered_expansion": [
+    "original_query",
+    "parallel_subject_decomposition",
+    "tender_field_alias_and_answer_shape",
+    "legacy_atomic_clause_reuse",
+    "legacy_fact_slot_reuse",
+    "legacy_semantic_fact_companion"
+  ],
+  "query_weights": {
+    "original": 1.0,
+    "parallel_subject": 1.0,
+    "field_alias": 0.9,
+    "legacy_atomic": 0.85,
+    "legacy_fact_slot": 0.85,
+    "semantic_companion": 0.75
+  },
+  "retrieval_execution": {
+    "primary_role": "retrieval_child",
+    "auxiliary_role": "section_parent",
+    "read_role": "evidence_atom",
+    "child_channel": "bm25",
+    "parent_channel": "bm25",
+    "fusion": "weighted_rrf",
+    "rrf_k": 60,
+    "parent_weight": 0.35,
+    "semantic_backend_required": false,
+    "query_plan_in_result_hash": true
+  },
+  "frozen_adapter": {
+    "tool_name": "evidence.search",
+    "adapter_name": "bid-evidence-mcp-rq1c-search",
+    "adapter_version": "v3-rq1c-query-optimizer",
+    "mode": "local_readonly",
+    "replay_policy": "safe_idempotent"
+  },
+  "compatibility": {
+    "legacy_v1_query_plan_unchanged_when_disabled": true,
+    "pdf_c3_index_reused_without_reindex": true,
+    "evidence_mcp_v2_role_contract_unchanged": true,
+    "old_dispatch_keeps_frozen_adapter": true,
+    "new_database_migration_required": false
+  },
+  "external_execution": {
+    "ocr_or_visual": false,
+    "model": false,
+    "embedding": false,
+    "vector_database": false,
+    "public_network": false,
+    "external_mcp": false,
+    "legacy_bid_intake_authority": false
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "bid.skill.artifact.v1",
+  "skill_id": "bid-report-validation",
+  "skill_version": "1.0.0",
+  "executor_kind": "deterministic",
+  "task_bindings": {
+    "validate_claim_evidence": {
+      "action_contract": "bid.task.action.deterministic.v1",
+      "output_schema": "claim_evidence_validation_v1"
+    },
+    "validate_report_consistency": {
+      "action_contract": "bid.task.action.deterministic.v1",
+      "output_schema": "report_consistency_validation_v1"
+    }
+  }
+}

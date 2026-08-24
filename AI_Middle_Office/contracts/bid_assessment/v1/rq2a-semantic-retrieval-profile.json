@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_version": "bid.evidence.semantic-index.v1",
+  "profile_version": "bid-evidence-semantic-profile-v1-rq2a-bce",
+  "source_retrieval_profile_version": "bid-evidence-retrieval-profile-v2-role-aware",
+  "source_query_profile_version": "bid-evidence-query-optimizer-profile-v1-rq1c",
+  "source_lexical_profile_version": "bid-evidence-lexical-profile-v1-rq1d",
+  "feature_flag": "FEATURE_BID_ASSESSMENT_RQ2A_SEMANTIC_RECALL",
+  "configuration": {
+    "profile_variable": "BID_EVIDENCE_SEMANTIC_SEARCH_PROFILE_VERSION",
+    "default_profile": "bid-evidence-semantic-profile-v0-disabled",
+    "enabled_profile": "bid-evidence-semantic-profile-v1-rq2a-bce",
+    "provider_variable": "BID_EVIDENCE_SEMANTIC_PROVIDER_ID",
+    "default_provider": "disabled",
+    "enabled_provider": "bce-milvus"
+  },
+  "authority": {
+    "snapshot": "bid_evidence_semantic_indexes",
+    "entries": "bid_evidence_semantic_entries",
+    "head": "bid_evidence_semantic_heads",
+    "head_scope": ["document_version_id", "semantic_profile_version"],
+    "source_head_match_required": true,
+    "provider_vectors_are_not_database_authority": true,
+    "provider_hits_require_database_hash_validation": true
+  },
+  "embedding": {
+    "input_role": "retrieval_child",
+    "input_field": "bid_evidence_retrieval_entries.retrieval_text",
+    "parent_embedded": false,
+    "atom_embedded": false,
+    "generated_summary": false,
+    "provider_contract_version": "bid.semantic-vector-provider.v1",
+    "provider_id": "bce-milvus",
+    "model_id": "maidalun1020/bce-embedding-base_v1",
+    "model_revision": "9c0d82af44af61abe171ffae23fde5740c0ec1a8",
+    "dimension": 768,
+    "normalize_embeddings": true,
+    "distance_metric": "COSINE",
+    "upsert_batch_size": 64,
+    "provider_record_id_scope": "semantic_input_hash_and_vector_namespace",
+    "batch_write_idempotency": "content_addressed_namespace_and_record_id"
+  },
+  "vector_backend": {
+    "engine": "milvus",
+    "collection": "bid_assessment_evidence_semantic_v1",
+    "legacy_collection_reuse": false,
+    "index_type": "HNSW",
+    "index_params": {"M": 32, "efConstruction": 200},
+    "search_params": {"ef": 128},
+    "namespace_scope": "one_immutable_semantic_index",
+    "network_access_at_import": false,
+    "model_load_at_import": false
+  },
+  "recall": {
+    "output_role": "retrieval_child",
+    "is_citable": false,
+    "query_source": "bid.evidence.query-plan.v2",
+    "query_expansion_fusion": "weighted_rrf_within_semantic_channel",
+    "query_rrf_k": 60,
+    "per_query_candidate_depth": 40,
+    "max_returned_hits": 8,
+    "parent_auxiliary_recall": false,
+    "atom_output": false,
+    "lexical_candidate_fusion": false,
+    "reranker": false,
+    "provider_failure_policy": "fail_closed_keep_historical_rq1d_adapter_available"
+  },
+  "failure_recovery": {
+    "lease_seconds_default": 900,
+    "max_attempts_default": 5,
+    "fencing_required": true,
+    "heartbeat_required": true,
+    "heartbeat_boundary": "before_and_after_each_64_child_provider_batch",
+    "provider_request_id_stable": true,
+    "sending_then_unknown_result_recovery": "idempotent_upsert_same_namespace_and_record_ids",
+    "partial_database_entries_allowed": false,
+    "expired_building_lease": "reclaim_with_higher_fencing_token"
+  },
+  "invalidation": {
+    "retrieval_head_change": "immediate_fail_closed_then_mark_stale",
+    "retrieval_result_hash_change": "new_semantic_index_required",
+    "semantic_profile_change": "new_profile_head_required",
+    "model_or_revision_change": "new_semantic_index_required",
+    "embedding_dimension_or_normalization_change": "new_profile_required",
+    "manifest_change": "new_manifest_scoped_semantic_index_set_hash",
+    "manifest_role_change": "no_document_reindex;new_semantic_index_set_hash",
+    "provider_hash_drift": "fail_closed",
+    "stale_fallback_allowed": false
+  },
+  "frozen_adapter": {
+    "tool_name": "evidence.search",
+    "adapter_name": "bid-evidence-mcp-rq2a-search",
+    "adapter_version": "v5-child-semantic-recall",
+    "mode": "local_readonly",
+    "replay_policy": "safe_idempotent",
+    "search_mode": "semantic_only_before_rq2b_fusion"
+  },
+  "compatibility": {
+    "rq1d_search_unchanged_when_disabled": true,
+    "historical_adapter_versions_unchanged": true,
+    "atom_only_read_unchanged": true,
+    "old_dispatch_keeps_frozen_adapter": true,
+    "new_database_migration_required": true,
+    "alembic_revision": "20260815_0103",
+    "alembic_head": "20260815_0103"
+  },
+  "external_execution": {
+    "ocr_or_visual": false,
+    "generation_model": false,
+    "embedding_model": true,
+    "vector_database": true,
+    "public_network": false,
+    "external_mcp": false,
+    "legacy_bid_intake_authority": false
+  }
+}

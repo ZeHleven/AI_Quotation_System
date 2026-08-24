@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qisheng.local/schemas/bid-assessment/v1/tool-execution.schema.json",
+  "title": "Qisheng Bid Assessment Tool Adapter/Executor Contracts v1",
+  "$defs": {
+    "Sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "ToolAdapterMode": {"enum": ["local_readonly", "external_async"]},
+    "ToolReplayPolicy": {"enum": ["safe_idempotent", "reconcile_required", "no_replay"]},
+    "ToolDispatchStatus": {
+      "enum": ["queued", "leased", "sending", "awaiting_receipt", "retry_wait", "succeeded", "failed", "cancelled", "uncertain", "dead_letter"]
+    },
+    "ToolDispatchEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "invocation_id", "operation_id", "assessment_id", "run_id", "task_id", "task_attempt_id", "context_manifest_id", "manifest_id", "tool_registry_version_id", "tool_name", "arguments", "request_hash", "provider_request_id"],
+      "properties": {
+        "schema_version": {"const": "bid-tool-dispatch-envelope-v1"},
+        "invocation_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "operation_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "assessment_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "task_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "task_attempt_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "context_manifest_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "manifest_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "tool_registry_version_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "tool_name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "arguments": {"type": "object"},
+        "request_hash": {"$ref": "#/$defs/Sha256"},
+        "provider_request_id": {"type": "string", "minLength": 1, "maxLength": 191}
+      }
+    },
+    "ToolAdapterResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "summary", "data", "evidence_refs", "warnings", "metrics", "truncated", "external_object_ref", "provider_receipt_id", "actual_cost_microunits"],
+      "properties": {
+        "status": {"enum": ["ok", "no_result", "partial", "failed", "unauthorized", "invalid_arguments", "missing_inputs", "stale", "budget_exhausted"]},
+        "summary": {"type": "string", "maxLength": 600},
+        "data": {},
+        "evidence_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 80}},
+        "warnings": {"type": "array", "items": {"type": "string", "maxLength": 500}},
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["elapsed_ms", "returned_items"],
+          "properties": {
+            "elapsed_ms": {"type": "integer", "minimum": 0},
+            "returned_items": {"type": "integer", "minimum": 0}
+          }
+        },
+        "truncated": {"type": "boolean"},
+        "external_object_ref": {"type": ["string", "null"], "maxLength": 512},
+        "provider_receipt_id": {"type": ["string", "null"], "maxLength": 191},
+        "actual_cost_microunits": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
-# 旗胜投标机会研判 Agent 重构总体设计与实现规格 v0.1-r12
+# 旗胜投标机会研判 Agent 重构总体设计与实现规格 v0.1-r62
 
-> 文档状态：目标架构基线（已完成开发前一致性修订，待机器合同派生与实现）
+> 文档状态：Phase 4D-3 已完成真实事实核验与硬门可比化的本地隔离收口，并以资料包v3、香港中心307页真实PDF、本地BCE和DeepSeek完成真实业务闭环及MVP RC复验；当前结论为`insufficient/hold`和七项unknown，验收结果`accepted_with_follow_up`。仍不是生产发布，0108不得应用到ECS
 > 编制日期：2026-08-09
 > 适用对象：旗胜公司内部、企业负责人单用户场景
 > 适用范围：一次研判仅针对一个招标项目中的一个标段
@@ -3804,6 +3804,7 @@ Manifest v2 -> Run v3 -> 初筛报告 v2 -> 深入报告 v2
 ```json
 {
   "lot_id": "lot_...",
+  "detection_run_id": "ldr_...",
   "lot_code": "01",
   "lot_name": "装饰装修标段",
   "scope_summary": "办公楼室内装饰工程",
@@ -3859,8 +3860,8 @@ Manifest v2 -> Run v3 -> 初筛报告 v2 -> 深入报告 v2
 | API-20 | `GET /bid-assessments/{id}/documents` | 200 | 资源可见 | 否 | 否 | Document page |
 | API-21 | `GET /bid-document-versions/{version_id}` | 200/304 | 至少一个可见 Assessment Manifest 引用 | 否 | 否 | DocumentVersion |
 | API-22 | `GET /bid-document-versions/{version_id}/download` | 200 | 至少一个可见 Assessment Manifest 引用 | 否 | 否 | 文件流 |
-| API-30 | `GET /bid-assessments/{id}/lots` | 200 | 候选已生成或空 | 否 | 否 | LotCandidate[] |
-| API-31 | `POST /bid-assessments/{id}/lot-selection` | 202 | `awaiting_lot_selection` | 是 | 是 | Scope + accepted Run |
+| API-30 | `GET /bid-assessments/{id}/lots` | 200/304 | Assessment/Manifest 可见；候选可未生成或为空 | 否 | 否 | LotCandidatePage |
+| API-31 | `POST /bid-assessments/{id}/lot-selection` | 202 | `awaiting_lot_selection` | 是 | 是 | Scope + accepted_operation + `run=null` |
 | API-32 | `POST /bid-assessments/{id}/clone-for-lot` | 201 | 源 Manifest/候选可用 | 是 | 是 | 新 AssessmentSnapshot |
 | API-40 | `POST /bid-assessments/{id}/runs` | 202 | 无活跃 Run、输入完备 | 是 | 是 | RunProgressSnapshot |
 | API-41 | `GET /bid-assessments/{id}/runs/{run_id}` | 200/304 | Run 属于 Assessment | 否 | 否 | RunProgressSnapshot |
@@ -4238,13 +4239,15 @@ Query：`manifest_id` 默认当前、`document_type`、`parse_status`、`include
 
 `GET /api/v1/bid-document-versions/{version_id}`
 
-返回不可变元数据、可见 Assessment Manifest 引用、逻辑 Document、版本号、哈希、MIME、上传来源、解析运行摘要、页数/Sheet、OCR 质量和允许操作。支持 ETag/304；只返回当前 actor 有权查看的 Manifest 关系，不返回 MinIO object key。
+返回不可变元数据、可见 Assessment Manifest 引用、逻辑 Document、版本号、完整 SHA-256、MIME、脱敏上传来源、解析运行摘要、页数/Sheet、OCR 质量和允许操作。支持私有强制重验证 ETag/304；只返回当前 actor 有权查看的 Manifest 关系，不返回 FileObject ID、MinIO object key、storage ETag/状态、parser hint、source metadata 原文或创建人。当前尚无解析运行表时必须返回 `not_requested` 和全空质量摘要，不得从文件名、MIME、parser hint 或对象状态猜测。版本可见性只能沿可见 Assessment 的 Manifest 成员关系取得，共享 FileObject 或相同哈希本身不授予权限。
 
 #### API-22 下载原文件
 
 `GET /api/v1/bid-document-versions/{version_id}/download`
 
-每次重新鉴权后由 API/Nginx 受控流式返回，HTTP 200，设置安全的 `Content-Disposition`、`Content-Type`、`X-Content-Type-Options: nosniff`。禁止把内部 MinIO 地址作为永久 URL 返回。支持 Range 时必须保持权限校验。
+每次重新鉴权并复用 API-21 的 Manifest 可见性谓词后，由 API/Nginx 受控流式返回，HTTP 200，设置安全的 `Content-Disposition`、`Content-Type`、`Content-Length`、`X-Content-Type-Options: nosniff`、私有禁存储缓存和沙箱头。禁止把内部 MinIO 地址、bucket、object key 或预签名地址返回给浏览器。首版不声明 Range/206，`Range` 请求仍重新鉴权并返回完整 200；未来启用 Range 前必须先冻结单区间、416、`If-Range` 和 Nginx 转发合同，且任何分段请求都不得绕过权限校验。
+
+API-21/22 完整协议见 `docs/bid-assessment-api21-api22-document-read-protocol-20260811.md`。
 
 #### API-63 查看证据
 
@@ -4281,7 +4284,19 @@ Query：`expansion=none|neighbors|parent_section|bounded_pages`，`radius=0..2`�
 
 `GET /api/v1/bid-assessments/{assessment_id}/lots?manifest_id={current}`
 
-成功 HTTP 200，返回 `LotCandidate[]`、`selection_required`、`selected_lot_id` 和候选来源 Manifest。候选尚未生成时返回空数组并附 `generation_status=not_started|running|failed`，不以 404 表示“尚未识别”。
+本接口是纯读取投影：省略 `manifest_id` 时读取 Assessment 当前 Manifest；显式 Manifest 必须属于同一 Assessment。允许读取历史 Manifest 的历史候选，但响应必须标记 `is_current_manifest=false` 且关闭所有选择动作。功能关闭、Assessment/Manifest 不存在或当前 actor 不可见时统一返回 404。GET 不得创建检测任务、发送 Outbox、写审计或幂等记录。
+
+成功 HTTP 200，返回候选来源 Manifest、`generation`、`LotCandidate[]`、`selection_required`、`selected_lot_id`、`blocking_reason` 和 `allowed_actions`。检测状态固定为：
+
+`not_started | queued | running | succeeded | failed | stale`
+
+`succeeded` 包含成功但零候选；此时返回空数组和 `blocking_reason.code=no_supported_lot`，不以 404 表示“尚未识别”。`stale` 表示 DetectionHead 的 `parse_set_hash` 与当前权威 ParseSet 不一致，历史候选可以展示但不得选择。
+
+候选状态由读取时投影：当前 Scope 引用的候选为 `selected`；Scope 已绑定后的其他同代候选为 `rejected`；其余为 `candidate`。`selection_required` 只有在当前 Manifest 检测成功、尚无 Scope、候选无法按确定性规则唯一自动绑定且允许 `lot.select` 时为 true。
+
+API-30 返回私有强 ETag，`Cache-Control: private, no-cache, max-age=0, must-revalidate` 和 `Vary: Authorization`；`If-None-Match` 命中返回 304 空响应体。ETag 必须覆盖当前 actor 可见的完整投影。响应不得暴露对象存储引用、内部解析器/模型输出、异常栈、租约或不可见 EvidenceFragment。
+
+完整状态、响应字段和失效规则见 `bid-assessment-document-processing-phase2-protocol-20260811.md`。
 
 #### API-31 首次绑定标段
 
@@ -4297,7 +4312,13 @@ Headers：`Idempotency-Key`、Assessment `If-Match`。请求：
 }
 ```
 
-仅 `awaiting_lot_selection` 且尚无绑定 Scope 时允许。事务创建不可变 Scope、推进状态并写入规划事件。成功 HTTP 202，返回 `scope`、`accepted_operation` 和可能已经创建的 `run`。选择同一标段的幂等重放返回原 Scope；已绑定其他标段返回 409 `BID_LOT_SCOPE_ALREADY_BOUND`，恢复动作指向 API-32。
+仅当前、已成功且 `parse_set_hash` 未失效的 DetectionRun 候选可选；候选必须属于请求 Manifest、该 Manifest 必须仍是 Assessment 当前 Manifest，并至少保留一条同 Manifest 的正文 EvidenceFragment 关联。仅 `awaiting_lot_selection` 且尚无绑定 Scope 时允许首次选择。
+
+事务必须锁定 Assessment，创建不可变 Scope 及完整候选来源快照，把 Assessment 推进到 `preliminary_analyzing` 并递增 `row_version`，依次写入 `bid.lot.selected.v1`、`bid.plan.requested.v1` 和用户审计。`bid.plan.requested.v1` 是 Phase 3 Planner 的持久入口；在企业/规则/Prompt/工具/模型/公式版本尚未统一冻结前，API-31 不得伪造 `BidAnalysisRun`，因此本阶段响应中的 `run` 固定为 null。
+
+成功 HTTP 202，返回 `scope`、`accepted_operation`、`run=null` 和最新 `assessment`。相同 `Idempotency-Key + If-Match + body` 重放原响应；使用最新 ETag 再次选择同一 Manifest 的同一标段返回原 Scope 且不重复写事件。已绑定其他标段返回 409 `BID_LOT_SCOPE_ALREADY_BOUND`，恢复动作指向 API-32。旧 Assessment ETag 返回 412；候选尚未成功生成或已 stale 返回 409 `BID_LOT_CANDIDATES_NOT_READY`；候选不属于请求 Manifest 返回 422 `BID_LOT_NOT_IN_MANIFEST`。
+
+API-31 复用既有 `bid_assessment_scopes`、幂等、Outbox 和审计数据域，不新增 Alembic revision；代码 head 保持 `20260811_0093`。完整事务、快照、错误和事件字段见 `bid-assessment-document-processing-phase2-protocol-20260811.md`。
 
 #### API-32 为另一标段创建新研判
 
@@ -4314,6 +4335,117 @@ Headers：`Idempotency-Key`、源 Assessment `If-Match`。请求：
 ```
 
 服务端创建新的 Assessment、自己的 Manifest 成员关系和 Scope 快照，引用同一批不可变 DocumentVersion/FileObject，不复制 MinIO 对象；企业快照、运行、问题和报告全部独立。新 Assessment 对文档的授权来自它自己的 Manifest 成员关系，不能继承源 Assessment ACL 或依赖源 Assessment 存活。成功 HTTP 201，返回新 `AssessmentSnapshot` 和 `Location`。禁止用本接口克隆到相同标段或使用非当前/不可见 Manifest。
+
+API-32 只允许从 `lifecycle_status=active`、已绑定源 Scope 的可见 Assessment 创建；请求 Manifest 必须仍是源 Assessment 的当前 Manifest，目标 Candidate 必须来自该 Manifest 当前未 stale 的成功 DetectionRun 并具有正文证据。相同 Candidate ID 或相同 `normalized_lot_key` 视为同一标段并返回 409。新 Assessment 继承源 `client_name/internal_note`，使用请求 `title`，不继承 `external_ref`，初始即为 `preliminary_analyzing`、`row_version=1`、`active_run=null`。
+
+新 Manifest 必须以新 Assessment ID 重新计算 hash，版本从 1 开始，只复制 Manifest 成员关系并复用 DocumentVersion/FileObject 引用。新 Scope 的不可变快照记录源 Assessment/Manifest/DetectionRun、Candidate 和 Evidence 谱系，但 `source_lot_candidate_id` 保持 null，避免新聚合生命周期依赖源候选；文档读取授权只沿新 Assessment -> 新 Manifest -> ManifestDocument 判断。一个事务内写 `bid.assessment.created.v1 -> bid.plan.requested.v1` 因果链和用户审计，不写语义不准确的 `bid.lot.selected.v1`，也不在 Phase 3 版本集合就绪前伪造 Run。API-32 复用既有 Assessment/Manifest/Scope/Outbox/审计/幂等表，不新增 Alembic revision，代码 head 保持 `20260811_0093`；完整协议见 `bid-assessment-document-processing-phase2-protocol-20260811.md`。
+
+### 16.27A Phase 3A Run Bootstrap 冻结边界
+
+Phase 3A 以 `bid.plan.requested.v1` 为自动入口，只在同一事务可锁定当前 Scope、当前 Manifest、
+最新合法 frozen 企业快照、唯一 active Rule/Fact Catalog/Prompt/Tool/Model/Formula 版本时创建
+`BidAnalysisRun`。`evaluation_time` 必须从该创建事务的数据库 UTC 时钟读取；按 3.5 的字段集合计算
+`input_fingerprint`，再加入 evaluation time 计算 `input_hash`。任一版本缺失、失效或不再是当前输入
+时，不创建占位 Run，也不写该消费者的 processed marker；独立维护扫描在治理输入就绪后重试原
+`bid.plan.requested.v1`。
+
+六类 active 配置的评审和激活时间不得晚于 evaluation time。消费者必须在活跃 Run 短路前校验
+事件的 run kind、正整数 resource version，以及 Payload lot ID/Manifest 与不可变 Scope 快照的一致性，
+防止错绑规划请求被误标为已满足。
+
+活跃 Run 判定还必须包含 `failed AND retryable=true`；该状态只能经 API-43 在原 Run 下恢复，
+不能通过 API-40 创建并行的新 Run。
+
+等待治理输入期间若 Assessment 已归档或业务旅程已 `cancelled/superseded`，原规划请求写 ignored
+processed marker 后停止重试；`cancelled` 只能由用户通过 API-40 显式重开，`superseded` 禁止重开。
+
+Run Bootstrap 只读取已经冻结的企业快照，不直接查询资质、人员、案例、产能、定额、费率或历史
+投标等可变业务表。一个成功事务依次创建 `status=created/current_stage=planning` 的 Run、更新
+Assessment `active_run_id` 与 row version、写 `bid.run.created.v1`、审计和 processed marker。
+`bid.run.created.v1` 继续投影为脱敏 `run.status.changed`；事件不得包含配置正文、企业记录、文档正文、
+Prompt、工具参数、模型输出或对象存储引用。
+
+本增量新增独立默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_RUN_BOOTSTRAP=false`。API-40 固定创建
+`run_kind=reanalysis`，客户端不能指定工作流目标；API-41 的强 ETag 覆盖完整可见投影，包括最近
+公共 Run 事件，并且禁止返回内部 Task DAG。完整合同见
+`bid-assessment-runtime-brain-phase3a-protocol-20260811.md`。
+
+现有 `0084/0085/0086` 已包含企业/配置快照、Run 外键、Assessment active pointer、Outbox、幂等和
+审计结构，本增量不新增 Alembic revision，代码唯一 head 保持 `20260811_0093`。
+
+### 16.27B Phase 3B Planner、确定性 DAG 校验与 Plan Commit
+
+Phase 3B 以 `bid.run.created.v1` 为唯一持久入口。Planner 只读取 Run 冻结的 Assessment、Scope、Manifest、企业快照与 Rule/Fact Catalog/Prompt/Tool/Model/Formula 版本，文档清单只使用 Manifest 成员和当前 ParseHead 权威状态；不得从文件名、MIME 或 `parser_hint` 重新推断标段，也不得重新执行 Phase 2 的解析或标段检测。
+
+标准任务注册表覆盖既有 49 个任务类型，并为每一类型冻结 category、tool/context/budget profile、completion contract、allowed tools 和 priority。Planner 只能提议任务类型、合法依赖、事实槽、问题候选和下一阶段，不能调用工具、写事实、创建 Attempt、提交 Plan 或改变 Run 状态。Phase 3B 初始实现固定使用无模型调用的 `bid-deterministic-bootstrap-planner-v1`；未来模型 proposal 仍必须经过同一 `bid-plan-validator-v1`。
+
+初始 PlanProposal 固定新增 8 个任务，形成 `bind_assessment_snapshot -> inventory_documents -> build_coverage_baseline -> 五个首批事实抽取任务` 的 DAG；最大动态深度为 3，Commit 后只有根任务 ready，其他 7 个任务 blocked。每个 proposal 必须通过任务白名单、无环、Scope/版本一致、工具 profile、预算、最多 8 个动态任务、最大动态深度 3、硬门槛顺序和报告校验顺序九项确定性检查。硬门槛必须位于事实冲突消解之后，维度必须位于全部硬门槛之后，报告必须位于最终决策、Claim/Evidence 校验和报告一致性校验之后。
+
+`BidPlanRevision.proposal_json` 保存 `bid.plan.commit.envelope.v1`，完整绑定 generator/validator/registry 版本、registry hash、Run input hash、PlannerInput hash、proposal hash、原始 PlannerInput、PlanProposal 和 validation receipt。消费者在同一事务内完成 PlanRevision `proposed -> validating -> committed`、Run `created -> planning -> queued`、Task/Dependency、`bid.plan.committed.v1`、首个 `bid.task.ready.v1`、审计和 processed marker；任一步失败全部回滚。Run 行锁、每 Run 唯一 committed slot、Task 逻辑输入唯一约束、Outbox dedupe 和 processed marker 共同保证并发幂等，独立维护扫描恢复无 marker 的 `bid.run.created.v1`。
+
+Phase 3B 使用独立默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_PLANNER=false`。既有 `0085/0086` 已提供 PlanRevision/Task/Dependency/Run/Outbox/processed marker/审计结构，本增量不新增 Alembic revision，代码唯一 head 保持 `20260811_0093`。完整协议见 `bid-assessment-runtime-brain-phase3b-planner-protocol-20260811.md`。
+
+### 16.27C/D Phase 3C Task Runtime 与 Phase 3D Run 生命周期收口
+
+Phase 3C 从 committed Plan 和 Run 冻结版本重构 TaskContract，以 Attempt Lease、Heartbeat、递增 fencing、不可变 Checkpoint 和完成回执控制 Task 写入权；Task 完成事务只释放全部父依赖已满足的下游任务，全 DAG 完成后把 Run 转为 validating 并写 `bid.run.validation_requested.v1`，不直接发布报告。完整协议见 `bid-assessment-runtime-brain-phase3c-task-runtime-protocol-20260811.md`。
+
+Phase 3D 实现 API-42/API-43。API-42 只在一个事务内持久化 `cancel_requested_at`、`cancelling` 阶段、`bid.run.cancel_requested.v1`、用户审计和幂等响应；独立维护任务随后原子取消非终态 Task、活跃 Attempt/AsyncOperation，并把 Run 与 Assessment business status 转为 cancelled。取消请求落库后新 Lease 和旧 Worker 的 Heartbeat/Checkpoint/完成写入全部 fail closed。
+
+API-43 只允许当前 `failed,retryable=true` 且 Manifest/Scope/active Run 未 stale 的原 Run。事务先围栏旧活跃 Attempt/Operation，再为失败或中断且父依赖满足的 Task 创建 attempt_no/fencing 单调递增的 `created` Attempt，把 Task 置 ready、Run `failed -> queued`，写 `bid.run.retry_requested.v1`、用户审计和幂等响应。下一次 Lease 必须复用该 Attempt，并返回最近历史 Checkpoint 的恢复引用；没有 Checkpoint 时从 TaskContract 起点开始。完整协议见 `bid-assessment-runtime-brain-phase3d-run-lifecycle-protocol-20260811.md`。
+
+Phase 3D 使用独立默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_RUN_LIFECYCLE=false`，复用 `0085/0086` 的 Run/Task/Attempt/Checkpoint/AsyncOperation/Outbox/幂等/审计结构，不新增表或字段；`20260811_0094` 只线性扩展 `bid.run.retry_requested.v1` 的数据库 Outbox CHECK，代码 head 为 `20260811_0094`。本阶段不执行模型、OCR、视觉、工具、事实或报告链路。
+
+### 16.27E Phase 3E Tool Gateway、Context Assembler 与 Result Store
+
+Phase 3E 为有效 Attempt/Fence 建立确定性 Context Manifest，并由 Tool Gateway 严格校验模型可见参数、Task tool profile/allowlist、冻结 ToolRegistry、调用预算和幂等键。Assessment/Run/Task/Scope/Manifest/版本均由服务端注入并以 HMAC scope token 绑定；模型不能提交或覆盖权限范围。Context 只允许当前 Manifest/ParseHead 的 Evidence、直接依赖输出和同 Run/同 Task 的历史 ToolResult，P0/P1 证据不能因预算被静默裁剪。
+
+同步结果原子写入不可变 ToolResult 和 Invocation 终态。异步调用必须先保存绑定 Context 的 Checkpoint，再令 Attempt/Task/Run 进入 waiting_operation 并释放 Lease；操作完成后旧 Attempt 被围栏为 continuation transferred，Task/Run 回到 ready/queued，由下一次 Lease 创建递增 Attempt/Fence 并从 Checkpoint 恢复。取消、显式重试或终态 Run 同时取消所有未完成 Invocation，晚到回执不得复活旧 Fence。
+
+本阶段新增默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_TOOL_CONTEXT=false`，只注册 30 秒超时围栏/恢复维护入口，不开放新外部 API，不注册模型或工具执行器，不调用 OCR/视觉/解析/检索/计算/对象存储。线性 revision `20260812_0095` 新增 `bid_context_manifests`、`bid_tool_invocations`、`bid_tool_results` 及 Checkpoint Context 外键；升级前必须在线证明历史预留 `context_manifest_id` 全为空，降级前必须证明新血缘全为空。代码唯一 head 为 `20260812_0095`。完整协议见 `bid-assessment-runtime-brain-phase3e-tool-context-protocol-20260812.md`。
+
+### 16.27F Phase 3F 受控 Tool Adapter/Executor 调度
+
+Phase 3F 将已授权 Invocation 转成唯一、持久、可恢复的 Dispatch。Gateway 必须先在同一事务内保存 Checkpoint、AsyncOperation、Invocation pending 状态和 Dispatch envelope；Executor 只能领取数据库权威 Dispatch，以递增 DispatchAttempt/Fence 执行，并在事务提交后才允许 Adapter I/O。跨重试使用稳定 `provider_request_id`；旧 Fence 回执、取消或超时后的晚到结果均 fail closed。
+
+首个且唯一注册 Adapter 为本地只读 `documents.outline`：只读取 Run Manifest 成员及对应 DocumentVersion 当前 ParseHead/结构化 ParseUnit，不读取原始文件、不重新解析，也不依据文件名、MIME 或 `parser_hint` 推断业务事实。未注册工具不回退到旧 MCP、Dify、n8n 或公网；真实模型、OCR/视觉、检索、计算、对象存储及外部收费工具继续不接入。安全幂等 Adapter 可按稳定请求号恢复；不可安全重放的发送后租约丢失必须进入 `uncertain`，禁止猜测成功或重复收费。
+
+本阶段新增默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_TOOL_EXECUTOR=false`。线性 revision `20260812_0096` 新增 `bid_tool_dispatches`、`bid_tool_dispatch_attempts` 及 AsyncOperation 复合血缘约束，代码唯一 head 为 `20260812_0096`；不开放新外部 API，不新增 Outbox 事件。完整协议见 `bid-assessment-runtime-brain-phase3f-tool-executor-protocol-20260812.md`。授权范围内合同、迁移、Dispatch/Adapter、事务与恢复及相邻回归共 `149 passed`；未触发真实模型、OCR/视觉、外部工具或对象存储。
+
+### 16.27G Phase 3G Run Validation/Convergence
+
+Phase 3G 消费全 DAG 成功后的唯一 `bid.run.validation_requested.v1`，建立每 Run 唯一 Validation 和递增 ValidationAttempt Lease/Fence，按固定顺序检查 frozen input 当前性、唯一 committed Plan、Task/Dependency、Attempt/Checkpoint、未结 AsyncOperation/Invocation/Dispatch 与结果血缘，并固化不可变 validation result/hash。内容质量仍由 DAG 内 Claim/Evidence 与报告一致性 TaskContract 负责，本阶段不调用模型或外部工具。
+
+Validation 通过时原子收敛 Run `validating -> succeeded` 和当前 Assessment `preliminary_ready|deep_ready`；规则失败收敛为 failed；输入或 active pointer 变化收敛旧 Run 为 stale，但不得覆盖新 active Run 的 Assessment 状态。新增默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_RUN_VALIDATION=false`，线性 revision `20260812_0097` 新增两张验证权威表并扩展 `bid.run.stale.v1` 的数据库 Outbox CHECK，代码唯一 head 更新为 `20260812_0097`。完整协议见 `bid-assessment-runtime-brain-phase3g-validation-convergence-protocol-20260812.md`；本地隔离专项验证 `158 passed / 0 failed`。
+
+### 16.27H Phase 3 总收口
+
+Phase 3 总收口以 `contracts/bid_assessment/v1/phase3-runtime-profile.json` 冻结 A—G 完整运行链和跨阶段终态不变量。新增默认关闭的声明性主开关 `FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME=false`；只有同时启用 V1 Runtime、Run Bootstrap、Planner、Task Runtime、Run Lifecycle、Tool Context、Tool Executor 和 Run Validation，并满足 Tool scope signing key 门禁时，配置才能加载。主开关关闭时继续允许各阶段开关用于隔离开发与专项验证。
+
+Run Validator 升级为 `bid-run-integrity-validator-v2`，把完整 Task Attempt/Checkpoint、Context Manifest、Tool Invocation、AsyncOperation、Dispatch/DispatchAttempt 和 ToolResult 的稳定身份、归属、Hash、Fence 与连续代际纳入 materialization input hash 和终态确定性检查。全链冻结为 `API-40 -> Run Bootstrap -> Plan Commit -> Task/Context/本地只读 Tool Adapter -> 新 Attempt/Fence -> final Checkpoint -> Run Validation -> API-41/SSE`；成功、失败、stale 和取消只允许一个原子终态收敛事件，终态后拒绝晚到写入。
+
+本收口不新增表、字段、约束枚举或 Outbox 事件，因此不新增 Alembic revision，代码唯一 head 保持 `20260812_0097`。首个 Adapter 仍只有本地数据库只读 `documents.outline`；真实模型、OCR/视觉、公网、真实外部工具和真实对象存储执行器保持关闭。用户授权范围内的综合合同、确定性 A—G 端到端、事务/幂等/Lease/Fence/取消/超时/恢复/终态唯一性和 `0083`—`0097` 迁移拓扑已完成本地隔离验证，结果 `175 passed / 0 failed`。完整协议见 `bid-assessment-runtime-brain-phase3-closeout-protocol-20260812.md`。
+
+### 16.27I Phase 4 可落地执行架构
+
+Phase 4 不新建第二套 Agent Runtime：Phase 3 的 Run/Plan/Task/Attempt/Lease/Fence/Checkpoint/Context/Tool/Validation 继续是唯一外层控制平面；LangGraph 只作为单 Task 内的有界状态转换器，每次最多推进一个可持久化动作，不使用旧 `bid_intake_*` Checkpoint，也不得通过 `ToolNode` 绕过 Tool Gateway。MCP 固定为 Tool Executor 后的只读 Adapter，必须使用服务端注入且绑定 Assessment/Run/Task/Attempt/Fence/Manifest/Scope/allowed tools 的 Scope Token；旧 MCP 只复用 FastMCP、Client、Query Planner、Router 与纯检索算法，Repository 必须改读当前新数据域 Manifest/ParseHead/EvidenceFragment。
+
+当前首批 Plan 只有 8 个任务且全部完成后会直接请求 Run Validation，因此首个实现切片必须先补同一 Run 的 Plan Continuation：按阶段递增并原子提交 PlanRevision，历史 Revision 可 supersede 但其 Task/Attempt/Checkpoint/结果保持有效；只有最终报告段完成后才能请求 Run Validation。TaskDefinition/TaskContract 同时冻结 `skill_id/version/hash/executor_kind/action_contract/output_schema`，绑定写入 Plan envelope 和 Task input hash，恢复时不得跟随当前 active Skill 漂移。
+
+首版 Query Pipeline 复用确定性归一化、最多 3 个原子 Query、exact/semantic/hybrid 路由、BM25 + BCEmbedding/Milvus + RRF 与稳定同分排序；最小检索单元继续是 Phase 2 权威 EvidenceFragment，表格/章节上下文通过父子引用组成证据组，不重新切 Chunk。cross-encoder、LLM reranker、候选覆盖 promotion、GraphRAG、长期 Memory 和受控第二轮检索保持关闭，只有在新数据域独立评测通过后才能启用。用户澄清与检索 Query 优化是两个协议：只有现有资料无法回答且可能改变决策的企业内部事实才进入 API-50—53。
+
+最快可落地路线是 Phase 4A 执行基础、Phase 4B Evidence MCP/检索基线、Phase 4C 十类事实权威，然后把 HG01—HG07、确定性 Decision、Claim/Evidence 校验和初筛报告组成 MVP-1 纵向链；七维深度分析、问题轮次和深度报告随后增量实现。首版需要从 `20260812_0097` 后新增线性迁移，候选拆分为 Plan Continuation 事件、模型调用权威、事实权威、初筛 Gate/Decision/Report 权威四组；实现时不得预建空迁移或应用到 ECS。完整冻结见 `bid-assessment-phase4-landable-agent-architecture-20260812.md`。
+
+### 16.27J Phase 4A-1 Plan Continuation + SkillBinding 实现边界
+
+Phase 4A-1 已以 v2 Plan envelope 落地 preliminary/reanalysis Run 的 P0—P4 固定阶段模板；每段最多 8 个新 Task、局部深度最多 3，跨 Revision 只允许依赖既有成功 Task。P0—P3 完成后写 `bid.plan.continuation_requested.v1` 并由独立消费者在一个事务中把旧 current Revision 转为 superseded、提交下一 Revision/Task/Dependency/Outbox/审计/processed marker；P4 完成后才写 Run Validation 请求。
+
+首批 8 个 Skill artifact 采用仓库内只追加 JSON 目录，Plan 冻结 catalog ref/version/hash，TaskDefinition 和 input hash 冻结 `skill_id/version/hash/executor_kind/action_contract/output_schema/allowed_tools`。历史 TaskContract 允许从 committed 或 superseded Revision 按 retained artifact 重构，不与可变 active Skill 比较；artifact 缺失、Hash 漂移、TaskType/allowed tools/完成合同不一致均 fail closed。Run Validator v3 把全部 Revision、联合 Task/Dependency 和 SkillBinding 重构纳入终态校验。新增默认关闭的 Phase 4 总/子开关和线性 `20260812_0098`，仅扩展 continuation Outbox CHECK；合同、Planner/DAG、Continuation 事务/恢复、历史 TaskContract、API-41/SSE 和迁移拓扑专项已完成 `173 passed / 0 failed`，未调用模型、MCP、OCR/视觉或外部工具。完整协议见 `bid-assessment-phase4a1-plan-continuation-skill-binding-protocol-20260812.md`。
+
+### 16.27K Phase 4A-2 受控 Model Gateway + 单 Task 有界 LangGraph Executor 实现边界
+
+Phase 4A-2 在 Phase 3 唯一控制面与 Phase 4A-1 SkillBinding 内建立模型执行权威：`bid_model_calls` 先持久化逻辑调用和冻结请求 Envelope，`bid_model_call_attempts` 管理 Provider Lease/Heartbeat/Fence、稳定 request id 与重放策略，`bid_model_results` 只保存经严格 Schema 和 allowed-tools 校验的动作、usage/cost 与不可变 Hash。ModelProfile role route、Provider/model binding、PromptBundle、ContextManifest、TaskContract、SkillBinding、Checkpoint 和 Fence 均进入请求与 Validator v4 血缘；调用 Token、迭代、Provider Attempt、总超时及成本 microunits 预算均 fail closed。发送前失败可以按冻结策略恢复，发送后未知结果只能在 `safe_idempotent` 下重试，未领取或租约/总时限过期由维护扫描终结或恢复，迟到回执不得越过 Task/Run Fence。
+
+LangGraph 只运行一个 Task 的一次纯状态转换：`hydrate -> propose one action -> validate -> yield`，无自身 Checkpointer、数据库连接、Provider 或 ToolNode。无模型结果时只能请求一个模型调用；有结果时只允许 `request_tool/submit_fact_candidates/submit_claim_candidates/request_task_input/finish` 中一个封闭动作。Tool 必须重新经过 Phase 3E Gateway；候选和 `finish_ready` 只写现有 `bid_checkpoints`，在事实、Gate、Decision 和 Report 权威尚未实现前不直接完成 Task。新增默认关闭的 `FEATURE_BID_ASSESSMENT_PHASE4_LOCAL_AGENT/MODEL_EXECUTOR`，必须成对启用并依赖 Phase 3 complete runtime 与 Plan Continuation；线性迁移 `20260813_0099` 新增三张权威表与 Checkpoint 复合血缘，当前代码唯一 head 为 `20260813_0099`。合同/0099/有界执行、Phase 4A-1 与 Phase 3C—3G/API-41、SSE/Outbox/事务/幂等本地隔离专项合计 `189 passed / 0 failed`；仅使用显式注入的内存测试 Provider 验证事务边界，仓库仍不注册真实 Provider，未调用真实模型、MCP、OCR/视觉、外部 Tool、真实样例或真实存储，不得应用到 ECS。完整协议见 `bid-assessment-phase4a2-model-langgraph-executor-protocol-20260813.md`。
 
 ### 16.28 运行与进度接口
 
@@ -4848,7 +4980,7 @@ committing -> ready（可恢复失败） | committed | failed（不可恢复）
 - 金额使用 `DECIMAL(20,4)`，比例使用 `DECIMAL(10,6)`，禁止 float。
 - JSON 只用于结构变化较快的补充字段；可查询、可约束、有关联的数据必须规范化。
 - 所有表包含 `created_at`；可变实体包含 `updated_at` 和乐观锁 `row_version`。
-- 新增表/字段必须走 Alembic。仓库当前已有候选 revision `20260808_0082`（`down_revision=20260801_0081`），但环境是否已应用必须在开工时用 Alembic 实际查询确认；本功能不得按本文写死的 `0081` 另开分支。只有在确认 `0082` 的取舍、合并状态和目标环境实际 head 后，才能从当时唯一 head 创建新 revision；任何环境升级前必须先备份。
+- 新增表、字段或受约束枚举必须走 Alembic。Phase 2 已从原唯一 head `20260811_0091` 线性新增 `20260811_0092`、`20260811_0093`，Phase 3D—3G 为 `0094`—`0097`，Phase 4A-1/A-2 为 `0098/0099`；MVP-1 以 `20260813_0100` 新增 FactAssertion/EvidenceLink/Coverage/ResolvedFact Head，以 `20260813_0101` 新增 HG01—HG07/Decision/Claim/Citation/ReportValidation/PreliminaryReport；PDF-C3 以 `20260814_0102` 新增 role-aware RetrievalIndex/Entry/Head，RQ2-A 以 `20260815_0103` 新增 Child-only SemanticIndex/Entry/Head。当前仓库代码迁移唯一 head 为 `20260815_0103`，禁止从早期 `0081/0082` 另开分支。目标 ECS 最近一次只读确认仍为 `20260808_0082`；在用户确认整个 Agent 开发完成并允许上线前，不得连接、备份、迁移或升级 ECS，也不得把 Agent migration 放入正式发布候选。
 
 ### 17.2 核心表总览
 
@@ -4866,13 +4998,23 @@ committing -> ready（可恢复失败） | committed | failed（不可恢复）
 | `bid_upload_batch_deactivations` | PK `id`; FK batch/document; reason；UQ `(batch_id, document_id)` |
 | `bid_document_manifests` | PK `id`; FK assessment; `version`, `manifest_hash`; UQ `(assessment_id, version)`、`(assessment_id, manifest_hash)`; 不可变 |
 | `bid_manifest_documents` | PK `(manifest_id, document_version_id)`; `role`, `order_no`; 不可变 |
-| `bid_lot_candidates` | PK `id`; FK manifest; `lot_code`, `lot_name`, `normalized_lot_key`, `source_status`, `confidence`, `candidate_hash`; UQ `(manifest_id, normalized_lot_key)`；候选不直接拥有 Assessment 状态 |
-| `bid_lot_candidate_evidence` | PK `(lot_candidate_id, evidence_id)`; `support_role`, `display_order`; 候选证据必须属于该 Manifest 中的 DocumentVersion |
-| `bid_parse_runs` | PK `id`; FK document_version; `parser_version`, `status`, `result_ref`, `quality`; UQ `(document_version_id, parser_version, input_hash)` |
-| `bid_evidence_fragments` | PK `id`; FK document_version; `locator_json`, `text_hash`, `normalized_text`, `parent_id`, `object_ref`; UQ `(document_version_id, locator_hash, text_hash)`; 内容不可变，不保存单一 lot FK |
+| `bid_document_parse_runs` | PK `id`; FK document_version; `parser_profile_version`, `input_hash`, `status=queued/running/succeeded/partial/failed`, `retryable`, result ref/hash、质量、时间、row version；UQ `(document_version_id, parser_profile_version, input_hash)`；不得复用旧 `bid_parse_runs` |
+| `bid_document_parse_heads` | PK/FK document_version；FK current parse run、row version；当前 Run 必须属于同一 DocumentVersion；无 Head 才投影 `not_requested` |
+| `bid_document_parse_attempts` | PK `id`; FK parse run；attempt no、lease/heartbeat/fencing、稳定错误；UQ `(run_id, attempt_no)` |
+| `bid_document_parse_events` | PK `id`; FK run/attempt；追加式 sequence、状态变化、脱敏 payload/hash；UQ `(run_id, sequence_no)` |
+| `bid_document_parse_units` | PK `id`; FK parse run；`unit_type=document/page/sheet/image`、页/Sheet/图片定位、`content_source=native/ocr/mixed/none`、OCR 状态/版本/置信度、result ref/hash；UQ `(run_id, unit_type, unit_key)` |
+| `bid_evidence_fragments` | PK `id`; FK parse run/document version/parse unit；`locator_type`, `locator_json/hash`, `text_hash`, `normalized_text`, `parent_id`, `object_ref`; UQ `(document_version_id, parse_run_id, locator_hash, text_hash)`；内容不可变，不保存单一 lot FK |
+| `bid_lot_detection_runs` | PK `id`; FK manifest；`parse_set_hash`, detector/rule/normalizer version、`input_hash`, `status=queued/running/succeeded/failed/stale`, retryable、result hash、candidate count；UQ `(manifest_id, input_hash)` |
+| `bid_lot_detection_heads` | PK/FK manifest；FK current detection run、row version；输入不匹配当前 ParseSet 时对外投影 stale |
+| `bid_lot_detection_attempts` | PK `id`; FK detection run；attempt no、lease/heartbeat/fencing、稳定错误；UQ `(run_id, attempt_no)` |
+| `bid_lot_detection_events` | PK `id`; FK run/attempt；追加式 sequence、状态变化、脱敏 payload/hash；UQ `(run_id, sequence_no)` |
+| `bid_lot_candidates` | PK `id`; FK manifest/detection run; `lot_code`, `lot_name`, `normalized_lot_key`, `source_status`, confidence score/level、`candidate_hash`; UQ `(detection_run_id, normalized_lot_key)`、`(detection_run_id, candidate_hash)`；候选不可变且不直接拥有 Assessment 状态 |
+| `bid_lot_candidate_evidence` | PK `(lot_candidate_id, evidence_id)`; `support_role`, `display_order`, `display_label`; 候选至少一条直接内容证据且证据必须属于该 Manifest 中的 DocumentVersion |
 | `bid_evidence_scope_links` | PK `(evidence_id, scope_id)`; `relation`, `confidence`, `source`; 同一 Evidence 可授权给多个独立 Scope |
 
 DocumentVersion 的可见性只能由“当前 actor 可见的 Assessment -> Manifest -> `bid_manifest_documents`”路径判断，不能由 `bid_documents` 或对象 key 推断。API-32 复用的是不可变 FileObject/DocumentVersion，并为新 Assessment 创建自己的 Manifest 成员关系和 Scope 快照，因此不会形成跨 Assessment ACL 泄漏。
+
+DocumentVersion 保持不可变，不增加可变解析状态；当前解析结果只能由 `bid_document_parse_heads` 指向。解析结果可按 DocumentVersion 在多个 Manifest 间复用，标段检测结果则绑定精确 Manifest 和精确 `parse_set_hash`，不得跨 Manifest 静默继承。详细字段、Check/FK 约束、OCR 状态与 Alembic 拆分见 Phase 2 协议文档。
 
 #### 企业快照与配置版本
 
@@ -5105,7 +5247,10 @@ timed_out -> submitted（策略允许重试） | failed
 - `bid.document.parse_requested.v1`
 - `bid.document.parsed.v1`
 - `bid.document.parse_failed.v1`
+- `bid.manifest.parse_set_ready.v1`
+- `bid.lot_detection.requested.v1`
 - `bid.lots.detected.v1`
+- `bid.lot_detection.failed.v1`
 - `bid.lot.selected.v1`
 - `bid.assessment.input_stale.v1`
 
@@ -5225,7 +5370,9 @@ system_safety_rules
 
 #### Phase 2：文档、标段与事实证据
 
-- 用适配器复用现有上传、解析、证据存储和混合检索；
+- 先按 `bid-assessment-document-processing-phase2-protocol-20260811.md` 冻结 ParseRun/ParseUnit/OCR、Document Worker、Manifest ParseSet、LotDetectionRun、LotCandidate 证据和 API-30；
+- 用适配器复用现有上传、纯解析算法、证据存储和混合检索，但只把新表作为权威来源；
+- 禁止从文件名、扩展名、MIME 或 `parser_hint` 直接生成标段、证据或置信度；
 - 加入单标段识别/绑定、Fact Slot、事实断言、冲突消解、版本变化和证据读取扩展；
 - 建立企业快照接口，不直接让 Agent 查询可变业务表。
 
@@ -5237,9 +5384,13 @@ system_safety_rules
 
 #### Phase 4：局部 Agent 与七维分析
 
-- 依次落地事实提取、资格、投入、合同、能力、中标、战略、经济性任务；
-- 四种逻辑模型角色使用隔离 Prompt 和输出合同；
-- 在历史样本上测试“资料不足时不编写结论”。
+- 先落地同一 Run 的 Plan Continuation、SkillBinding、受控 Model Gateway 与单动作 LangGraph Executor；
+- 把旧 MCP/Query Planner/Router/BM25+向量+RRF 复用到新 Manifest/ParseHead/EvidenceFragment 权威面，旧 Repository 与旧 Checkpoint 不复用；
+- 检索质量按 RQ1-A—D、RQ2-A—C 递进：RQ2-A 只建立 Child-only BCE/Milvus 语义索引和 Semantic-only Adapter，RQ2-B 才做 BM25F+Semantic 候选融合，RQ2-C 才做 Top-K 轻量重排；Parent 只辅助、Read 只返回 Atom 的证据角色全程不变；
+- 依次落地十类招标事实提取、事实冲突消解、资格、投入、合同、能力、中标、战略、经济性任务；
+- 四种逻辑模型角色使用隔离 Prompt 和输出合同；模型只提交候选，不直接写事实、规则结果、分数或决策；
+- 先形成 HG01—HG07、确定性投入建议和有引用初筛报告的 MVP-1，再扩展七维深入研判；
+- 在历史样本和全新 Holdout 上测试“资料不足时不编写结论”，未通过门禁的重排、图扩展、二轮检索和长期 Memory 保持关闭。
 
 #### Phase 5：计算与决策引擎
 
@@ -5408,6 +5559,56 @@ system_safety_rules
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| v0.1-r62 | 2026-08-18 | Phase 4D-3 完成真实业务闭环与MVP RC复验：完全隔离副本使用资料包v3、香港中心307页真实PDF、RQ2-B/固定本地BCE和DeepSeek；16槽Comparison Baseline冻结为`1 supported / 6 partial / 9 unknown`。真实Run首次暴露Executor仍固定读取旧`enterprise_snapshot_id`输出引用的问题，三次Attempt安全回滚；修复为兼容`comparison_baseline_id`并补完整Executor路径回归后，通过API-43从最近Checkpoint恢复，同一Run最终`27/27 Task`、`34 Model`、`23 Tool`、`95 Checkpoint`、Run Validation `52/52`通过，6 Claim/6 Atom引用，模型成本`19546` micro-USD。决策从历史合成`no_bid`纠正并稳定为真实证据下`insufficient/hold`，HG01—HG07均unknown；新RC `mvp-rc-20260818091440-c21d8d4b3bf9`以`accepted_with_follow_up`冻结。9017已切回view-only，写请求403且数据库Hash不变；未调用OCR/视觉/外部MCP，9015/ECS未改，0108不得应用到ECS |
+| v0.1-r61 | 2026-08-18 | Phase 4D-3 完成本地隔离收口：冻结16个招标/企业可比事实、Atom/Evidence Item强证据规则、零持久化Validate、Candidate Hash/幂等Freeze及不可变Comparison Baseline；0108新增Baseline/Evidence/Fact物化血缘并让Run绑定Baseline ID/Hash。Run Bootstrap、Preflight、P1物化、Resolver优先级、HG01—HG07和Run Validator闭环，模型候选不能覆盖人工核验的supported/partial/unknown。合同/Schema/配置/迁移/核心与相邻回归`245 passed / 0 failed`，Vite `2235 modules`；9016 execute→view-only动态与浏览器门禁通过且已停止，数据库Hash不变。未使用真实资料、OCR/视觉、BCE、生成模型或外部MCP；开关默认false、不改旧`bid_intake_*`、9015/ECS未改，0108不得应用到ECS |
+| v0.1-r60 | 2026-08-17 | Phase 4D-2 完成本地隔离收口：内容寻址Evidence Item、不可变Evidence Package、显式I01—I11映射、Business Baseline/Run/RC Package Hash血缘、0107及Runtime Lab双模式完成授权矩阵`250 passed / 0 failed`。2026-08-18在独立9014先导入营业执照、两份企业资质和安全生产许可证共4个文件Item并映射I01/I02/I03；随后导入14份用户指定历史合同并映射I04，再把人员与资格证书汇总图以`internal_system` Item映射I05。最新Package `enterprise-evidence-20260818023417-986239c8dbd2` / Hash `c00f746b...1a7b`已冻结，I06—I11保持unknown；同库恢复view-only后可读、Worker/模型关闭、写请求403，9003/9013未改。合同正文和人员证书原件均未解析，近五年、履约验收、逐人证书有效状态及劳动关系仍需业务复核；未运行OCR/视觉/BCE/模型/研判或外部MCP，默认关闭且不得应用到ECS |
+| v0.1-r59 | 2026-08-17 | Phase 4D-1 完成本地隔离收口：合同/Schema、0106升降级与0083—0106迁移拓扑、Validate零持久化、来源/Hash/有效期/unknown/partial/核验时间、事务/ACL/view-only/幂等/Candidate Hash、Run Bootstrap基线选择/漂移、历史RC→新Run→Decision/HG01—HG07及Phase4C/Preflight/API-41/SSE相邻回归共`239 passed / 0 failed`。一次性9010动态冻结企业快照与业务基线并验证幂等，两个旧Candidate Hash均被409拒绝；新Run审计绑定的Baseline Version/Hash与权威行一致。合成确定性全链Run/Report/Validation成功，27 Task、78 Attempt、31 Model、20 Tool、89 Checkpoint；因11槽均显式unknown，七项硬门不误判、Decision保持`insufficient`。浏览器Preflight零阻断、SSE/Trace/Report可读、控制台0 error；缺历史RC或Atom权威的合成旧Run被正确fail-closed。9010已停止、9003未改；未用真实企业数据/PDF/BCE/OCR/视觉/生成模型/外部MCP/ECS，head为0106且不得应用到ECS |
+| v0.1-r58 | 2026-08-17 | Phase 4D-1 完成静态实现：新增 I01—I11 真实来源逐槽核验、15分钟服务端核验时间窗、来源类别/逻辑引用/SHA-256/unknown与follow-up规则，以及不可变 `bid_enterprise_business_baselines` 和线性0106。新开关开启时 Run Bootstrap 只选择已核验且在evaluation time仍有效的企业快照，并将Baseline Version/Hash写入输入指纹；Phase4C-3 RC复用同一权威表，绑定同Assessment历史RC并输出Decision及HG01—HG07差异。Runtime Lab新增Validate/Freeze与复验视图，view-only/ACL/幂等/Candidate Hash边界保留。尚未获授权运行Agent专项、迁移动态、浏览器或真实企业数据复验；默认关闭，不得应用到ECS |
+| v0.1-r57 | 2026-08-17 | Phase 4C-3 完成首次真实 PDF 业务验收和 RC 冻结：307页“香港中心”以RQ2-B+本地BCE+DeepSeek V4 Flash跑通，Run/Report/Validation成功，27 Task、88 Attempt、36 Model、25 Tool、99 Checkpoint、3 Claim/12 Atom引用，模型成本`26401` micro-USD。RC 14项检查全通过、Atom-only违规0，以`accepted_with_follow_up`冻结为`mvp-rc-20260817084759-f77d02eded07`，幂等重放/view-only 403/浏览器禁写通过，直接专项`31 passed / 0 failed`。真实失败案例中Search Child混入候选被权威层拒绝，已以Gateway citable-candidate整条过滤修复而未放宽Atom门。企业快照仍为演示数据，Parse 84分/`review_required`、第272页未OCR/视觉，因此`no_bid`不是真实投标决策；未调用外部MCP/生产Milvus/ECS，head保持0105，不得应用到ECS |
+| v0.1-r56 | 2026-08-17 | Phase 4C-3 完成本地隔离协议与工程验收：合同/Schema、0105升降级、零持久化Validate、全血缘漂移、七项硬门/五项质量人工复核、Candidate Hash、事务/ACL/view-only/幂等、Phase4C-1/4C-2/Preflight/API-41/SSE及确定性全链共`232 passed / 0 failed`。合成TXT动态全链27/27 Task、Run/Report/Validation成功，31 Model、20 Tool、89 Checkpoint、1 Claim/3引用；修正Run Validation自描述Hash和本地Provider优先引用文档Fact。RC校验13项通过，legacy TXT引用因非Atom被`CITATIONS_ATOM_ONLY`正确阻断且未冻结伪RC。view-only POST 403、Worker/模型关闭、前端冻结按钮禁用；9007/9008已停止、9003未改动。未使用真实PDF/OCR/视觉/Embedding/Reranker/生成模型/外部MCP；真实资料首个RC仍待单独授权，不得应用到ECS |
+| v0.1-r55 | 2026-08-17 | Phase 4C-3 完成静态实现：新增 `bid.mvp.release-candidate-validation.v1` 零持久化业务验收与不可变 `bid.mvp.release-candidate.v1`，将当前 succeeded Run、Manifest/Scope、最新冻结企业快照、Report/Report Validation/Run Validation、Decision、HG01—HG07结果Hash以及人工复核共同绑定到稳定Candidate Hash。七项硬门的业务验收评价“结论与证据是否正确”，不强制全部pass；fail/unknown必须记录跟进说明并冻结为`accepted_with_follow_up`。新增admin-only Validate/Freeze API、Idempotency/Candidate Hash事务围栏、Runtime Lab验收面板、默认关闭开关及本地专用0105不可变权威表；不新增DAG/Worker/模型/Tool/Outbox，不改旧`bid_intake_*`，不得应用到ECS。本增量尚未获授权运行Agent专项、迁移动态或浏览器验证 |
+| v0.1-r54 | 2026-08-17 | Phase 4C-2 完成本地隔离收口：合同/Schema、Baseline Validate零持久化、Diff/稳定Hash、Candidate Hash漂移、来源/partial/unknown/有效期、事务/ACL/view-only/幂等、HG01—HG07 Acceptance、Phase4C-1/Preflight/API-41/SSE和0083—0104迁移拓扑自动矩阵共`191 passed / 0 failed`。一次性9005 execute动态验证预览不落库、错误Hash 409、正确Hash冻结与幂等重放、11/11槽ready、HG02—HG07 ready且HG01 deferred_tender；浏览器验证候选变化立即使冻结失效。同库view-only的Worker/模型/写权限关闭，两个写接口403、历史快照可读、前端写按钮禁用且控制台0 error；9005已停止、9003未改动。无新迁移，head保持0104，默认关闭，不得应用到ECS；未使用真实PDF/OCR/视觉/Embedding/Reranker/生成模型/外部MCP或外部环境 |
+| v0.1-r53 | 2026-08-17 | Phase 4C-2 完成静态实现：新增零持久化 `bid.enterprise.baseline-validation.v1`，按I01—​I11输出来源/有效期/coverage/diff和HG01—​HG07企业侧readiness；Runtime Lab不再把未核实资金、保函、人天自动写0，表单变化会使Candidate Hash失效，冻结时服务端重新计算并以`X-Enterprise-Candidate-Hash`围栏漂移。新HardGate/Report增加业务名称、未解析Fact和下一步动作，unknown仍禁止推为pass。复用0104既有表，无新迁移，head保持0104，开关默认false、不改旧`bid_intake_*`、不得应用到ECS；本增量尚未获授权运行Agent专项、真实企业样例或模型，当前只完成静态实现 |
+| v0.1-r52 | 2026-08-17 | Phase 4C-1 完成本地隔离专项收口：合同/Schema、0104迁移、核心及相邻自动矩阵`31 passed / 0 failed`；两版企业快照的合成TXT全链均为27/27 Task并成功生成Report/Run Validation。11项supported生成11 Fact/Link；I02 partial + I05过期时只生成10 Fact/Link，分别保持partial/unknown，七项门为2 pass + 5 unknown。专项修复Windows长对象路径上传503和HG03部分事实可能误判pass；动态view-only写请求403、数据库Hash不变，浏览器写按钮禁用且无错误。9004最终以隔离view-only运行。唯一开发head为0104、开关默认false；未运行真实PDF/OCR/视觉/Embedding/Reranker/生成模型/外部MCP，不连接外部环境，不得应用到ECS |
+| v0.1-r51 | 2026-08-17 | Phase 4C-1 完成代码与合同增量：复用0084 Snapshot/Record并以内容寻址对象保存I01—​I11正文，新增0104 Enterprise SnapshotRecord→FactAssertion不可变血缘；Run Bootstrap只接受11槽完整且Hash一致的冻结快照。Phase4C启用时P1新增无模型/无Tool的`build_enterprise_snapshot`，再统一Resolve；HG01—​HG07只读ResolvedFact，以精确集合、枚举、CNY金额、人天和交易对手等受控结构比较，非结构化/partial/过期输入保持unknown，旧布尔Fact仅兼容历史Run。Runtime Lab新增admin-only快照读/冻接口和配置面，Preflight v2新增企业快照阻断且不会阻断配置动作。唯一开发head为0104、开关默认false、不改旧`bid_intake_*`、不得应用到ECS；本增量尚未获授权运行Agent专项，当前仅完成静态实现 |
+| v0.1-r50 | 2026-08-17 | Phase 4B-5 完成 Execute Preflight 与运行操作面：新增非泄密 `bid.runtime.execute-preflight.v1`，按隔离边界、冻结 Model Profile、本地对象目录、模型凭据、检索 Profile、BCE Snapshot、RQ2 依赖、Worker、写权限和view-only密钥围栏返回 ready/blocked/deferred/inactive，不返回密钥、绝对路径或正文；前端新增 readiness 面板，每次上传、选标段、取消或重试前重读 Capability/Preflight 并比较进程级 Authority Fingerprint，模式变化时丢弃未提交操作，浏览器不能提升权限。运行操作复用 API-41 强 ETag、API-42 取消和 API-43 `from_latest_checkpoint` 重试，保持幂等与 Fencing；view-only 启动器以固定禁用哨兵同时阻断父进程 Key 继承和项目 `.env` 回退。最终自动矩阵`22 passed / 0 failed`，Python/PowerShell/JSON与Vite `2235 modules`通过；动态 fresh execute 仅创建1 Assessment且0 Run/Model/Tool，同库view-only四种写方法403且哈希不变；9003历史RQ2-B库升级后Preflight 0 blocker、密钥围栏ready、5个Run可读，历史SHA-256仍为`1EFC35CB...53942`，浏览器无错误且写按钮禁用。无新迁移，head保持0103，未运行PDF/OCR/视觉/Embedding/Reranker/生成模型/外部MCP，不连接外部环境，不得应用到ECS |
+| v0.1-r49 | 2026-08-17 | Phase 4B-4 完成本地 Runtime Lab `view-only/execute` 双模式收口：默认 view-only，FastAPI 中间件在路由前硬阻断全部非 GET/HEAD/OPTIONS 请求并返回 `BID_MVP1_VIEW_ONLY`，只读启动仅校验已有用户与冻结 Model Profile，不建表、不启 Worker、不要求或读取模型密钥；execute 才允许初始化、Worker 和写请求，DeepSeek 缺失/占位 Key 在创建目录和替换服务前失败。Capability 新增 access/write/worker/model/retrieval 权威状态，前端按四项 readiness 共同门禁上传和启动 Run；启停脚本新增隔离 Lab 名、健康自校验及 PID 缺失时显式 Port + 服务身份安全回退。自动合同/配置/SSE相邻矩阵 `8 passed / 0 failed`，Vite `2235 modules`；动态专项中 execute Assessment POST 201且0 Run/0 ModelCall，view-only 四种写方法均403，临时库和Phase 4B-3历史库停启前后SHA-256一致。未读取PDF或调用OCR/视觉/模型/外部MCP，无新迁移，head保持0103，当前9003以view-only运行 |
+| v0.1-r48 | 2026-08-16 | Phase 4B-3 在隔离 localhost/SQLite/本地对象目录控制平面中，以三份 Development 真实 PDF、固定本地 BCE exact-COSINE、RQ2-B 融合、Evidence MCP 和获授权联网的 DeepSeek V4 Flash 完成真实资料 MVP 全链：共383页，3/3 Run succeeded、3/3 Report ready、78/78 Task succeeded、33 FactAssertion、21 Claim、83 Atom Citation、288 Checkpoint，Run Validator 3/3通过；105次模型调用总账`765433/21158` Token、`62962` micro-USD（约`$0.062962`）。Evidence Search/Read压缩到24KiB边界，引用只接受Gateway投影的Atom ID，空候选安全finish，并验证Checkpoint恢复；直接相关专项`29 passed / 0 failed`。三份Parse均因禁用OCR/视觉而为review_required；企业快照仍为合成数据，实时链因本机缺冻结Reranker snapshot使用RQ2-B而非RQ2-C，正式Holdout未运行。当前仅可用于本地演示/简历，不是生产发布；无新迁移，head保持0103，默认关闭，不得应用到ECS |
+| v0.1-r47 | 2026-08-16 | Phase 4B-2 在完全隔离 localhost/SQLite/本地对象目录/进程内队列中，以官方 DeepSeek V4 Flash 和本地 Evidence MCP 完成合成 TXT 的 P0—P4 全链：26/26 Task succeeded、31/31 ModelCall 有不可变 Result、10 Search + 10 Atom-only Read、12 FactAssertion/12 EvidenceLink、18 ResolvedFact、88 Checkpoint、Run Validator v5 51/51 检查通过，Run succeeded、Report ready。联调收口 RFC3339 Z、Task 级 Fact slot/value type、Gateway 权威 ToolCall ID、检索提示元字段剥离、CNY 数值无损四位规范化、失败响应安全诊断与 Token/费用累计账本；最终总账输入/输出 `170165/5730` Token、`11430` micro-USD，其中一次被拒 Fact Action 的 `6399/392` Token、`479` micro-USD 被正确保留并安全重试。DeepSeek 本地 Profile 升级为不可变1.0.1，最多3次/180秒；直接相关专项 `110 passed / 0 failed`。未使用真实PDF、OCR、视觉、外部MCP、生产Milvus或ECS；无新迁移，head保持0103，默认开关关闭，不得应用到ECS |
+| v0.1-r46 | 2026-08-16 | Phase 4B-1 接入官方 DeepSeek V4 Flash：冻结官方 HTTPS Host、`deepseek-v4-flash`、`thinking=disabled`、JSON 输出和成本版本，复用 Phase 4A-2 Model Gateway/预算/Lease/Fencing/Checkpoint/取消/超时/未知结果恢复；默认关闭且本地真实模式使用独立数据库。Provider/配置/合同、Phase 4A-2、MVP-1、API-41/SSE 授权矩阵 `141 passed / 0 failed`。首烟返回的 `finish` 混入未选分支字段且缺少 `completion_summary`，被 Schema 正确拒绝；随后注入完整 JSON Schema、分支互斥与精确 finish 示例。强化后的唯一官方复烟返回合法 `finish`，Schema 通过，输入/输出 `2240/42` Token、成本 `326` micro-USD，且不含业务资料。Provider 可进入隔离本地 MVP-1 联调，但不代表真实文件端到端或生产上线完成。无新迁移，head保持0103；未调用OCR/视觉/外部MCP或ECS |
+| v0.1-r45 | 2026-08-16 | 进入 RQ2 总收口与跨项目 Gold/Holdout：冻结 RQ2-B 为 Baseline、RQ2-C 为 Candidate，不再围绕单份“香港中心”继续调参；新增项目族级 Development/Holdout 隔离、最少 3+2 项目/60+40 题/每项目20题、双人独立复核、Atom phrase/page Gold、数据/代码/合同/依赖 Hash、Development 先过门、Holdout 最多一次正式 baseline→candidate 执行、失败不重跑不从 Holdout 加规则，以及宏项目质量、最差项目、逐题零退化、Atom-only、确定性和 P95 时延联合准出。合同/Schema与相邻专项 `126 passed / 0 failed`。用户批准其余33题后，香港中心/深圳丰隆/泰丰花园三项目形成60题/156目标/19类别 Development Gold，Dataset Hash `50857d3f...c963`，Snapshot Hash `8ad34718...0a`；固定本地BCE正式 A/B Candidate Macro Hit@5/Recall@5/MRR@5/NDCG@5=`0.966667/0.886667/0.763055/0.731853`，Hit@8/Recall@8/Atom Read=`0.983333/0.9225/0.838055`，逐题退化0、Top-8恢复1、Atom-only违规0、全不变量通过。但 Macro Citable Target Availability `0.955855 < 0.98`、Paired Search Delta P95 `3705.179ms > 2500ms`，Development准出失败，禁止建立Pre-Holdout Freeze或运行Holdout。泰丰有旧Holdout暴露史，只能作为Development。未调用OCR/视觉/生成模型/外部MCP/生产Milvus或外部环境；无新迁移，head保持0103 |
+| v0.1-r44 | 2026-08-15 | RQ2-C 冻结候选轻量重排完成协议、Schema/Profile、默认关闭配置、代码与本地隔离专项：只对 RQ2-B 稳定 Fusion Top-20 Retrieval Child 使用固定 revision `maidalun1020/bce-reranker-base_v1` Cross-Encoder，以 RQ1-C q1 原查询配对打分；保留 RQ2-B Parent 多样性 Top-K、Top-1和最佳 `top_k-2` 词法锚点，只允许 `score>=0.30` 且相对未保护尾部 `margin>=0.08` 的最多2次 replacement，零 promotion 时有序结果必须逐项不变。Evidence MCP v7 Search仍不可引用、Read仍Atom-only，历史v4/v5/v6 Adapter冻结；合同/配置/检索与运行/迁移无重复矩阵 `367 passed / 0 failed`。“香港中心”25题四臂A/B中 RQ2-B→RQ2-C Top-5 Hit/Recall保持 `0.96/0.90`，Top-8由 `0.96/0.90` 提升至 `1.00/0.94`，`HKC-C3-020` 正确Child从Fusion rank11提升到最终rank7；4次promotion、21题恒等、逐题零退化、Atom-only违规0、重放一致，冻结Worker依赖下CPU P95 `1526→3584ms`。Rerank 为请求级派生结果，无新迁移，head保持0103；所有开关默认关闭，未调用OCR/视觉/生成模型/外部MCP或生产Milvus，不连接外部环境，不得应用到ECS |
+| v0.1-r43 | 2026-08-15 | RQ2-B BM25F + Semantic 候选融合完成协议、Schema/Profile、代码、本地隔离专项与“香港中心”三组消融：同一 RQ1-C Query Plan 下分别取得 RQ1-D/RQ2-A Top-40 Child，以稳定 Key 去重，冻结词法1.00、语义0.35、双通道重合奖励0.20、k=60的 rank-only weighted RRF；Fusion Hash 纳入 Query Plan/C3 IndexSet/Lexical ProjectionSet/Semantic IndexSet。真实资料修正 `child:` fixture 与 PDF-C1 `chunk:` Key 兼容缺口。无重复矩阵 `245 passed / 0 failed`；同一25题共享权威下 RQ1-D/RQ2-A/RQ2-B 的 Hit@5 为 `0.92/0.68/0.96`、Recall@5 `0.86/0.60/0.90`、Atom Read `0.82/0.60/0.86`、MRR `0.584/0.478/0.651333`，Fusion补回2个语义新增题但1题Top-5/Top-8回退，下一步由RQ2-C修复排序挤出。Search仍不可引用、Read仍Atom-only，历史v4/v5 Adapter不变；不新增迁移，head保持0103。A/B使用本地固定BCE exact-COSINE，未执行生产Milvus、OCR/视觉、生成模型或外部MCP，未连接外部环境 |
+| v0.1-r42 | 2026-08-15 | RQ2-A Child-only 语义索引与召回完成协议、Schema/Profile、代码与本地隔离专项验证：冻结 BCE snapshot/768维/Normalize/COSINE、独立且强校验 Schema 的 Milvus collection、懒加载 Provider、不可变 SemanticIndex/Entry/Head、Provider Hit Hash/去重校验、64 Child 分批 Heartbeat、Lease/Fencing、纳入 semantic input/namespace 的稳定 record id 与发送后未知结果幂等恢复；新增 Semantic-only `evidence.search@v5`，Parent 不建向量、Read 仍 Atom-only，历史 v2/v3/v4 Adapter 不变。合同/迁移/状态机/相邻链共 `190 passed / 0 failed`；“香港中心”共享权威25题真实固定 BCE exact-COSINE A/B 中 Hit@5 `0.92→0.68`、Recall@5 `0.86→0.60`、Atom Read `0.82→0.60`，语义补回2个词法零命中题但11题回退，确认下一步必须做 RQ2-B 融合而非语义替换。新增默认关闭开关和线性 `20260815_0103`；本机未安全启动独立 Milvus daemon，A/B 明确使用非生产 `isolated-bce-exact-cosine`，生产 Milvus Adapter 首次真实联调仍为部署前门禁；未调用 OCR/视觉/生成模型/外部 MCP，未连接外部环境 |
+| v0.1-r41 | 2026-08-15 | RQ1-D 字段感知词法召回完成协议、代码、机器合同、本地隔离专项验证与真实 Silver A/B：从 C3 Child/Atom locator 派生 Heading/Table Key/Table Value/Table Row/Body 五通道，以稳定 evidence key 而非随机 UUID 生成 Hash/tie-break；RQ1-C field_codes/answer_shapes 驱动 BM25F，并以 Child BM25 1.0 为基线、弱字段0.005/表格强结构0.10作有界 RRF tie-breaker，加入65%/85% 高频 Token 降权、q1 0.45 anchor、Parent 0.20和同 Parent最多2个 Child。合同/C3/配置/Phase 3E/3F/API-41/SSE/迁移拓扑共 `205 passed / 0 failed`；“香港中心”共享 ParseHead/IndexHead A/B 中 Hit@5 `0.68→0.92`、Recall@5 `0.62→0.86`、Atom Read `0.62→0.82`、零命中 `8→2`，6题提升且逐题无回退，P95 `1195→1708ms` 留作后续性能优化。无新迁移，head保持0102；未调用 OCR/视觉/模型/Embedding/向量或外部 MCP，未连接外部环境 |
+| v0.1-r40 | 2026-08-15 | RQ1-C 确定性 Query Optimizer 完成协议、代码、机器合同与本地隔离专项验证：新增 `bid.evidence.query-plan.v2` / `bid-evidence-query-optimizer-profile-v1-rq1c`，原查询固定 q1，按并列主体、标准投标字段别名与答案形状扩展并真正执行旧 Planner atomic/fact-slot；最多6条、NFKC 指纹去重、分类型权重，经 Child BM25 + Parent 0.35 辅助 weighted RRF。新增默认关闭开关和冻结 `evidence.search@v3-rq1c` Adapter；历史 v1 Query Plan/v2 Search Dispatch/C3 Index 不变，无新迁移，head 保持0102。无重复测试矩阵 `202 passed / 0 failed`；“香港中心”25题共享 ParseHead/IndexHead A/B 中 Hit@5 `0.44→0.72`、Recall@5/Atom Read Recall@5 `0.38→0.66`、Hit@8 `0.48→0.84`，证据角色与确定性无回退，但 Top-5 仍未到建议门槛且 P95 Search `397→1065ms`，下一步进入 RQ1-D；不调用 OCR/视觉/模型/向量或外部 MCP，不连接外部环境 |
+| v0.1-r39 | 2026-08-15 | RQ1-B Parse Quality Gate 完成协议、代码、机器合同与本地隔离验证：新增独立默认关闭的 v4 Parser Profile 和 `bid.parse.quality.v1`，以 Native readiness/Structural coherence/Citable integrity/Warning hygiene 四维确定性评分生成 pass/review_required/blocked；partial 最高84分，硬阻断最高39分。报告作为首条安全 Warning 进入 Parse result hash，Worker 校验唯一性/血缘/状态/Hash；blocked 分别阻断 C3 Index、Lot Detection 和 Phase 3 Run Bootstrap。旧 v1/v2/v3 Profile 与 Hash 语义不变；复用现有表、不新增迁移，head 保持0102。授权专项无重复矩阵 `179 passed / 0 failed`；同一“香港中心”25题 A/B 将 `partial + high/100` 修正为 `partial + medium/84 / review_required`，Parent/Child/Atom 与全部检索指标不变，Hit@5/Recall@5/Atom Read Recall@5 仍为 `0.44/0.38/0.38`。未调用 OCR/视觉/模型或外部服务 |
+| v0.1-r38 | 2026-08-15 | RQ1-A 结构表示增量完成本地隔离专项验证：新增独立默认关闭的 v3 Parser、v2 Layout/Chunk Profile，以跨页重复+页边几何+通用数字折叠降噪页眉页脚；按顶层章节聚合微型小节、聚合连续表格行，并把 heading 原文作为带页码/bbox/Hash 的可引用 Atom。旧 PDF-C2 v2/C1 v1 行为不变；C3 明确接受两个冻结 role-aware Parser Profile，ParseHead/Index 失效规则不变。合同与相邻回归无重复矩阵 `48 passed / 0 failed`；同一 25 题 Silver A/B 中可引用目标 `88.10%→100%`、Hit@5 `0.32→0.44`、Recall@5 `0.24→0.38`、Atom Read Recall@5 `0.16→0.38`，逐题无上述指标回退但仍未达检索门槛。复用现有表，Alembic head 保持 0102；不调用 OCR/视觉/模型或外部服务，不连接外部环境 |
+| v0.1-r37 | 2026-08-15 | 经用户授权建立 PDF-C2/C3 真实单文档 Silver 检索质量基线：在完全隔离 SQLite 中对 307 页真实 PDF 跑通原生布局、Parent/Child/Atom、Phase 2 权威、C3 Index 与 Evidence MCP v2，形成 25 题/42 目标。协议安全保持 Atom-only Read 0 违规且确定性重放一致，但 `Hit@5=0.32`、`Target Recall@5=0.24`、`Atom Read Target Recall@5=0.16`，5/42 目标无可引用 Atom，88.01% Child 低于 220 token，质量投影未反映 1432 条结构警告。下一步进入 Retrieval Quality-1：结构/可引用性、质量分、Query Optimizer、字段感知词法召回、语义召回/重排；Silver 需业务复核为 Gold。未调用 OCR/视觉/模型/向量服务或外部 MCP，未连接外部环境 |
+| v0.1-r36 | 2026-08-15 | PDF-C3 role-aware Evidence MCP / Retrieval Profile、索引与失效规则完成本地隔离专项验证：Search 只返回不可引用 Child，Parent 仅以 0.35 权重辅助 BM25+RRF，Read 只返回同 Parent 可引用 Atom；新增不可变 RetrievalIndex/Entry、按文档/Profile 唯一 Head、ParseHead/Profile/Manifest/Hash fail-closed、历史 v1 Adapter 围栏和线性 0102。默认关闭且不改变既有 9001 行为；PDF-C3/合同/配置/迁移与相邻回归共 `211 passed / 0 failed`；仅使用合成结构数据和隔离 SQLite/Alembic，未读取真实 PDF，未调用 OCR/视觉/模型/向量服务或外部 MCP |
+| v0.1-r35 | 2026-08-14 | PDF-C2 原生布局解析接入并完成本地隔离专项验证：冻结 `bid.pdf.native-layout.v1`、原生 Layout/Profile/坐标/质量合同和 v2 Parser Profile；以 pdfplumber 原生字符/Word/矢量表格层形成 page/bbox/reading order/section path Block，再唯一调用 PDF-C1 并映射现有 Phase 2 Parent/Child/Atom。新增默认关闭子开关和四项配置门禁，旧 v1 Profile 保持兼容；空白/扫描/低覆盖页只标记待 OCR，不调用 OCR/视觉/模型。复用现有表且不新增迁移，head 保持 0101；合成布局/配置/映射/Lot Atom 门禁、机器合同和 Phase 2 Parse/Lot Worker 相邻回归合并 `91 passed / 0 failed`，未运行真实 PDF、OCR/视觉、模型或 MCP |
+| v0.1-r34 | 2026-08-14 | PDF-C1 结构化 Chunk 合同与纯 Builder 完成：冻结 `bid.evidence.chunk.v2`、保守 Token estimator、220/380/500/600 Token Profile、仅超长块 80 Token overlap、Section Parent→Retrieval Child→Evidence Atom、确定性 context prefix/retrieval text 和稳定 Key/Hash；只有 Atom 可引用。合同/Token/边界/overlap/Parent-Child-Atom/Span 覆盖/稳定 Hash 专项 12 passed，Phase 2 Parse Worker 结果合同相邻回归 4 passed；未接 Parse Adapter/MCP/9001，不读取真实 PDF，不调用 OCR/视觉/模型，不新增迁移，head 保持 0101 |
+| v0.1-r32 | 2026-08-13 | 可运行 MVP-1 代码垂直闭环与静态检查完成：工作台接通 Assessment/上传/Manifest/解析标段/Run/报告，新增只读 Evidence MCP、Query Planner + BM25/RRF、context-read 证据门、Fact/Coverage/ResolvedFact、HG01—HG07、确定性 Decision、Claim/Citation/ReportValidation/PreliminaryReport、API-60/61 和 Run 终态报告血缘校验；线性迁移为 0100/0101，head 更新到 0101。Python compileall 与 Vite 2235 modules 构建通过；专项合同/迁移/API/恢复、真实样例、OCR/视觉、MCP 和模型调用待授权，9001 仍是隔离预览，不得应用到 ECS |
+| v0.1-r33 | 2026-08-14 | 建立 localhost-only MVP-1 隔离运行环境：独立 SQLite、独立对象目录、进程内 Outbox/Worker、无密码本地管理员及注入式确定性 Provider；修正 Evidence MCP Adapter 持久化模式和 Provider/Task 无稳定错误码恢复，新增合成本地演示资料与 HTTP 全链验证脚本。合同/迁移/Planner/LangGraph/配置 160 项及新数据域 API/Worker/事务/恢复 150 项，共 310 passed / 0 failed；合成 TXT 经真实 API 完成上传、Manifest、解析、标段、P0—P4、报告与 Run succeeded。未运行真实资料、OCR/视觉或真实模型/外部工具，未连接 ECS/CentOS/真实 MinIO/Redis，代码 head 保持 0101，不得应用到 ECS |
+| v0.1-r31 | 2026-08-13 | 工程可视化 MVP-0 代码与静态检查完成：新增独立 Runtime Lab、`bid.runtime.trace.v1` Schema、owner/admin 只读 Run 列表与 Trace API，以及 Run/Plan/Skill/Task/Attempt/Context/Model/Tool/Checkpoint/Validation 图谱、时间线、检查面板和授权 SSE 后刷新；无 Run 时只显示明确标记的协议预览。只暴露控制平面元数据，不返回 Prompt/Context/模型动作/Tool 参数与结果正文或思维链；新增默认关闭只读开关，不新增迁移，head 保持 0099。Python 语法、JSON、diff check 和 Vite `2235 modules` 构建通过；MVP-0 API/ACL/ETag/SSE/浏览器运行专项待用户授权，不调用模型、MCP、OCR/视觉或 Tool，不连接外部环境，不得应用到 ECS |
+| v0.1-r30 | 2026-08-13 | Phase 4A-2 本地隔离专项验证完成：修复 ToolName/ErrorCode 机器合同闭环与 ModelCall 首次调度 Checkpoint 查询顺序；覆盖受控 Model Gateway、单 Task 有界 LangGraph、事务回滚、幂等、成本/Token 预算、Lease/Heartbeat/Fencing、Checkpoint、取消、超时、发送后未知结果、安全重试及显式测试 Provider I/O 事务边界，并回归 Phase 4A-1、Phase 3C—3G、API-41、SSE/Outbox，合计 `189 passed / 0 failed`。未注册或调用真实 Provider、MCP、OCR/视觉、外部 Tool、真实样例或真实存储，不连接外部环境，不得应用到 ECS |
+| v0.1-r29 | 2026-08-13 | Phase 4A-2 受控 Model Gateway + 单 Task 有界 LangGraph Executor 代码与静态检查完成：新增三张模型执行权威表、冻结请求 Envelope、Provider Attempt Lease/Heartbeat/Fence/幂等/重放/成本与 Token 预算、总超时和未领取恢复；LangGraph 只执行一次单动作并沿用 Phase 3 Checkpoint，Tool 仍经 Gateway，候选不直接写事实/决策/报告；Run Validator 升级为 v4，新增默认关闭子开关和线性 `20260813_0099`。专项运行验证待授权，未注册或调用真实/fake Provider、MCP、OCR/视觉、外部 Tool 或真实存储，不连接外部环境，不得应用到 ECS |
+| v0.1-r28 | 2026-08-13 | Phase 4A-1 本地隔离专项验证完成：合同/SkillBinding/P0—P4 Planner/DAG、Continuation 原子事务/幂等/回滚恢复、历史 TaskContract、Run Validator v3、API-41/SSE 相邻链及 0083—0098 迁移拓扑合计 `173 passed / 0 failed`；修正 Skill artifact 合同测试为逐 `task_bindings` 校验并冻结 0098 降级拒绝文案。不调用模型/MCP/OCR/外部工具或真实存储，不连接外部环境，功能开关继续默认关闭且不得应用到 ECS |
+| v0.1-r27 | 2026-08-12 | Phase 4A-1 Plan Continuation + SkillBinding 代码增量完成：P0—P4 确定性续段、Revision 原子 supersede/commit、跨 Revision DAG、最终 Validation 门禁、8 个版本化 Skill artifact、Plan/Task SkillBinding 与 allowed-tools Hash 冻结、历史 TaskContract 重构及 Run Validator v3；新增默认关闭 Phase 4 开关与线性 `20260812_0098`。仅完成 JSON/语法/diff 静态检查，专项运行验证待授权；不调用模型/MCP/OCR/外部工具，不修改旧 `bid_intake_*`，不得应用到 ECS |
+| v0.1-r26 | 2026-08-12 | Phase 4 可落地执行架构冻结：确定 Phase 3 为唯一外层控制平面、LangGraph 为单 Task 有界状态转换器、MCP 为 Tool Gateway 后只读 Adapter、`bid_checkpoints` 为唯一恢复权威；识别当前 8 任务完成后直接 Validation 的 Plan Continuation 阻断，冻结分段 Plan、SkillBinding、ModelCall、Query/Retrieval、Context/Memory、Checkpoint 和迁移边界；最快路线为 4A 执行基础 -> 4B Evidence MCP/检索 -> 4C 事实权威 -> HG01—HG07/Decision/Claim/初筛报告 MVP-1。Phase 4 代码、迁移和运行验证尚未开始，head 保持 `20260812_0097` |
+| v0.1-r25 | 2026-08-12 | Phase 3 总收口协议、代码与本地隔离综合验证完成：新增完整运行 Profile 和默认关闭总开关，强制 V1 Runtime 与 Phase 3A—3G 开关依赖闭包；Run Validator 升级为 v2，将 Task/Context/Invocation/AsyncOperation/DispatchAttempt/Result 完整 Hash/Fence 血缘纳入确定性 input 和终态检查；API-40 到 API-41/SSE 的本地只读 Adapter 确定性端到端及综合矩阵 `175 passed / 0 failed`；不新增迁移，唯一 head 保持 `20260812_0097`，不启用模型、OCR/视觉、公网、真实外部工具或真实对象存储 |
+| v0.1-r24 | 2026-08-12 | Phase 3G Run Validation/Convergence 协议、代码与本地隔离专项验证完成：每 Run 唯一 Validation、ValidationAttempt Lease/Fence、确定性完整性规则、不可变 result hash、过期/取消恢复和 Run/Assessment/Outbox/Audit 原子 succeeded/failed/stale 收敛；新增默认关闭开关和线性 revision `20260812_0097`，代码唯一 head 更新为 0097；Phase 3G 核心与 Phase 3C—3F/API-41/SSE 相邻回归共 `158 passed / 0 failed`，不调用模型、OCR/视觉、外部工具或真实对象存储，不连接外部环境 |
+| v0.1-r23 | 2026-08-12 | Phase 3F 受控 Tool Adapter/Executor 调度协议冻结、代码增量及本地隔离专项验证完成：原子 Dispatch 意图、稳定 provider request id、DispatchAttempt/Lease/Fence、安全重放与发送后未知结果、取消/超时联动，以及本地只读 `documents.outline` Adapter；新增默认关闭开关和线性 revision `20260812_0096`，代码唯一 head 更新为 0096；授权范围内共 `149 passed`，不调用真实模型、OCR/视觉、外部工具或真实对象存储，不连接外部环境 |
+| v0.1-r22 | 2026-08-12 | Phase 3E Tool/Context Control Plane 协议冻结、完成代码增量与本地隔离专项验证：确定性 Context Manifest、服务端 Scope/版本注入、严格 Tool Schema/profile/预算/幂等/HMAC scope token、不可变 Result Store、同步与 AsyncOperation/Checkpoint/新 Attempt-Fence 恢复、取消/重试围栏；新增默认关闭开关和线性 revision `20260812_0095`，代码唯一 head 更新为 0095；授权范围内合同与迁移拓扑 117、API/Phase 3C/3D 相邻链 16、Outbox/SSE/维护恢复 13，共 `146 passed`；未执行模型、OCR、视觉、工具、真实样例或真实对象存储，未连接外部环境 |
+| v0.1-r21 | 2026-08-11 | Phase 3D 验证收口修订：专项发现 `bid.run.retry_requested.v1` 尚未进入数据库 Outbox CHECK，新增线性 revision `20260811_0094` 且带已持久化事件降级保护，代码唯一 head 更新为 0094；授权范围内机器合同与迁移拓扑 115、API-42/API-43 及 Phase 3C/API-41 相邻链 10、事务/幂等/Outbox/SSE/周期维护运行服务 12，共 `137 passed`；未运行真实样例、OCR/视觉解析或模型调用，未连接外部环境 |
+| v0.1-r20 | 2026-08-11 | Phase 3D API-42/API-43 与 Run 生命周期协议冻结并完成代码增量：取消请求异步维护收敛、旧 Worker 硬 fence、Run/Task/Attempt/AsyncOperation 原子取消、failed/retryable 与输入 stale 门、递增 Attempt/Fencing、Lease 复用和最近 Checkpoint 恢复、私有强 ETag/ACL/幂等/Outbox/审计/SSE 边界；新增独立默认关闭开关，复用 `0085/0086` 且不新增 revision，代码 head 保持 `20260811_0093`；专项验证待用户授权 |
+| v0.1-r19 | 2026-08-11 | Phase 3C Task Runtime Control Plane 冻结、完成代码增量并通过本地隔离专项验证：定义从 committed Plan 与冻结输入重构的 TaskContract、180 秒 Lease/30 秒 Heartbeat、Attempt/fencing CAS、不可变连续 Checkpoint、完成回执、依赖释放、DAG 完成后的 validation request、失败重试、租约恢复和终态 Run fence；新增独立默认关闭开关，确认复用 `0085/0086` 且不新增 revision，代码 head 保持 `20260811_0093`；本增量不执行模型、OCR、视觉、工具或真实对象存储，授权范围内共 `123 passed` |
+| v0.1-r18 | 2026-08-11 | Phase 3B Planner 冻结并完成本地隔离专项验证：定义 49 项标准任务运行时注册表、无模型初始 PlanProposal、九项确定性 DAG 校验、可复现 Plan envelope、`run.created -> plan.committed/task.ready` 原子事务、processed marker 与维护扫描恢复协议和独立默认关闭开关；确认复用 `0085/0086`，不新增 revision，代码 head 保持 `20260811_0093`；合同、Planner/DAG、Plan Commit/API-41、迁移拓扑、回滚恢复、Outbox/SSE 共 `133 passed` |
+| v0.1-r17 | 2026-08-11 | Phase 3A 运行入口冻结：定义 frozen 企业快照与六类 active 配置选择、数据库 evaluation time、input fingerprint/hash、`plan.requested -> run.created` 原子 Bootstrap、输入未就绪不写 processed marker的恢复协议、API-40/API-41 私有 ETag/ACL 边界和独立默认关闭开关；确认复用既有 Run/事件数据骨架、不新增 revision，代码 head 保持 `20260811_0093` |
+| v0.1-r16 | 2026-08-11 | Phase 2 多标段收口：冻结 API-32 只复用不可变 DocumentVersion/FileObject 引用、新 Assessment 自有 Manifest ACL 与独立 Scope 快照、同标段拒绝、源聚合只读、`assessment.created -> plan.requested` 因果链和源归档后授权独立性；确认不复制对象、不伪造 Run、不新增 revision，代码 head 保持 `20260811_0093` |
+| v0.1-r15 | 2026-08-11 | Phase 2 Scope 绑定收口：冻结 API-31 只允许当前且未 stale 的成功检测候选、正文证据门、Assessment ETag 与状态门、不可变 Scope 快照、同标段领域幂等/异标段冲突、`lot.selected -> plan.requested` 原子因果链；Phase 3 版本集合就绪前不伪造 Run，并确认复用既有表、代码 head 保持 `20260811_0093` |
+| v0.1-r14 | 2026-08-11 | Phase 2 实现前一致性修订：冻结独立 Document ParseRun/Head/Attempt/Event、页/Sheet/OCR 权威 ParseUnit、EvidenceFragment、Manifest ParseSet、LotDetectionRun 代际和失效；禁止用文件名/MIME/parser_hint 推断标段；补齐 Worker fencing/恢复事件，并把 API-30 冻结为带成功零候选、stale、私有强 ETag/304 和历史 Manifest 只读边界的类型化投影 |
+| v0.1-r13 | 2026-08-11 | API-21/22 实现前一致性修订：冻结 DocumentVersion 必须沿当前 actor 可见的 Assessment Manifest 授权、可见引用过滤、完整哈希与上传来源脱敏、Phase 1 解析质量空投影、版本强 ETag/304，以及 API 受控完整文件流、安全下载头、对象存储防泄漏和首版不声明 Range/206 的边界 |
 | v0.1-r12 | 2026-08-11 | API-20 实现前一致性修订：冻结默认/显式 Manifest 选择、历史 selected version 与当前 version 双投影、Assessment 范围版本链、解析状态占位、过滤前稳定分页、私有强制重验证 ETag/304，以及 FileObject、对象存储和源元数据防泄漏边界 |
 | v0.1-r11 | 2026-08-11 | API-16 实现前一致性修订：reason 改为必填并冻结先 trim 后限长；冻结批次强 ETag/幂等哈希、允许放弃与终态错误集合、开放槽/版本/Outbox/审计事务，以及按放弃时刻起算宽限期、引用解除先提交、共享 FileObject 最后引用保护、精确物理删除和失败转孤儿重试协议 |
 | v0.1-r10 | 2026-08-11 | API-15 实现前一致性修订：补齐文件/停用双计数与确认字段；冻结 add/replace/deactivate 合并、FileObject 复用与新 DocumentVersion、不可变 Manifest 哈希/版本、空 Manifest 恢复语义、Assessment 指针和状态切换、旧 Run stale、提交来源持久化，以及版本登记、Manifest、stale、解析和后续规划门闩的原子因果顺序 |

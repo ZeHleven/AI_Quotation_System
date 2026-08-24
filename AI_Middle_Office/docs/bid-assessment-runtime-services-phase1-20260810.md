@@ -1,7 +1,7 @@
 # 报价资料研判 Agent Phase 1 运行服务
 
-日期：2026-08-10；更新：2026-08-11
-状态：代码实现与本地隔离验证；未连接、未迁移、未启用 ECS
+日期：2026-08-10；更新：2026-08-12
+状态：Phase 1/2/3A—3E 已完成代码与本地隔离专项验证；未连接、未迁移、未启用 ECS
 
 ## 实现范围
 
@@ -181,8 +181,60 @@ API-16 reason、终态门禁与共享对象延迟清理详见
 API-20 Manifest 选择、版本投影、分页缓存和存储防泄漏详见
 `docs/bid-assessment-api20-document-list-protocol-20260811.md`。
 
-## 下一开工门
+## 2026-08-11 Phase 3A 交接
 
-下一项为 API-21 `GET /api/v1/bid-document-versions/{version_id}`。开工前须冻结版本可见性必须沿
-Assessment Manifest 关系验证、解析运行摘要与页/Sheet/OCR 质量来源、上传来源脱敏形状、版本级
-ETag，以及 API-21 到 API-22 的允许操作与下载授权边界。
+Phase 2 已完成 API-30—API-32 与 `20260811_0092/0093` 权威数据域收口。Phase 3A 进一步冻结并
+实现了 `bid.plan.requested.v1 -> BidAnalysisRun -> bid.run.created.v1` 的 Run Bootstrap、冻结企业
+快照/六类 active 配置选择、数据库 evaluation time、input fingerprint/hash、输入未就绪不写
+processed marker 的恢复协议，以及 API-40/API-41。Phase 3A 不执行 Planner、模型、Tool 或 OCR，
+复用 `0084`—`0086` 既有表且不新增 revision，代码唯一 head 保持 `20260811_0093`。
+
+本增量获用户明确许可后完成合同、API-40/API-41、事务/ACL/幂等/ETag、Outbox 恢复和相邻回归
+专项，共 `82 passed`：合同 64、Phase 3A 核心 3、API-03/API-31/API-32 相邻 8、事务/Outbox/SSE
+运行服务 7。测试仅使用临时 SQLite、本地假消息/存储边界，未运行真实样例、OCR/视觉解析或模型
+调用。下一开工门为 Phase 3B Planner：必须先冻结标准 Task 注册表、PlanProposal、
+确定性 DAG 校验、PlanRevision/Task/Dependency 原子提交及 `bid.plan.committed.v1` / 首批
+`bid.task.ready.v1` 边界。详见
+`docs/bid-assessment-runtime-brain-phase3a-protocol-20260811.md`。
+
+## 2026-08-11 Phase 3B 交接
+
+Phase 3B 已实现 49 项标准任务运行时注册表、无模型初始 PlanProposal、九项确定性 DAG 校验、可复现 Plan envelope、`bid.run.created.v1 -> PlanRevision/Task/Dependency -> bid.plan.committed.v1/bid.task.ready.v1` 原子消费和无 processed marker 维护扫描。初始 DAG 为 8 个任务、7 条依赖、最大动态深度 3，只有 `bind_assessment_snapshot` 首先 ready；不重新解析文件或推断标段，不创建 Attempt，不调用 OCR/视觉/模型。独立开关 `FEATURE_BID_ASSESSMENT_PHASE3_PLANNER=false` 默认关闭。
+
+本增量复用 `0085/0086`，不新增 Alembic revision，代码唯一 head 保持 `20260811_0093`；未连接或改动 ECS/CentOS/真实 MinIO/Redis。获得用户明确许可后完成合同 65、Planner/DAG 5、Plan Commit 与 API-40/API-41 相邻 4、迁移拓扑 47、事务回滚/维护恢复 2、Outbox/processed marker/SSE 运行服务 10，共 `133 passed`。完整协议见 `docs/bid-assessment-runtime-brain-phase3b-planner-protocol-20260811.md`。
+
+Phase 3C 已进一步冻结并实现 Task Runtime Control Plane：从 committed Plan 与 frozen Run 输入重构 TaskContract，使用 `BidTaskAttempt` 的 180 秒 Lease、Heartbeat 和递增 fencing token 控制唯一写入权，以 `BidCheckpoint` 持久化不可变连续恢复点，并在完成事务内释放满足全部父依赖的下游 Task；全 DAG 完成后只转入 validating 并写 validation request，不直接完成 Run 或发布报告。失败、过期租约和 terminal Run 使用新 Attempt/旧 token 硬 fence 收敛。独立开关 `FEATURE_BID_ASSESSMENT_PHASE3_TASK_RUNTIME=false` 默认关闭，周期维护只恢复租约而不主动执行 ready Task。
+
+Phase 3C 继续复用 `0085/0086`，不新增 Alembic revision，代码唯一 head 保持 `20260811_0093`；本阶段不执行模型、OCR、视觉、Tool 或真实存储。Python 编译、JSON 解析和 JSON Schema 静态检查已通过；经用户明确授权，Phase 3C 合同、状态机、API-41/SSE 相邻回归与迁移拓扑共 `123 passed`。完整协议见 `docs/bid-assessment-runtime-brain-phase3c-task-runtime-protocol-20260811.md`。
+
+## 2026-08-11 Phase 3D 交接
+
+Phase 3D 已冻结并实现 API-42/API-43 与 Run 生命周期收口。API-42 在强 Run ETag、ACL 和幂等事务下持久化 `cancel_requested_at`，由 30 秒维护任务原子取消非终态 Task、活跃 Attempt/AsyncOperation，并收敛 Run/Assessment；API-43 只恢复当前 failed/retryable 且 Scope/Manifest/active Run 未 stale 的原 Run，围栏旧执行后创建 attempt_no/fencing 单调递增的 `created` Attempt，下一次 Lease 复用该 Attempt 并携带最近不可变 Checkpoint。API-41 与 Outbox/SSE 同步补齐 actor-visible 取消时间、动态操作和取消/重试事件投影。
+
+本增量使用独立默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_RUN_LIFECYCLE=false`，复用 `0085/0086` 已有结构，并新增 `20260811_0094` 仅扩展 `bid.run.retry_requested.v1` 的数据库 Outbox CHECK，代码唯一 head 为 `20260811_0094`；不执行模型、OCR、视觉、Tool 或真实存储，未连接或改动 ECS/CentOS/真实 MinIO/Redis。静态门已通过；经用户明确授权，机器合同与迁移拓扑 115、API-42/API-43 及 Phase 3C/API-41 相邻链 10、事务/幂等/Outbox/SSE/周期维护运行服务 12，共 `137 passed`。完整协议见 `docs/bid-assessment-runtime-brain-phase3d-run-lifecycle-protocol-20260811.md`。
+
+## 2026-08-12 Phase 3E 交接
+
+Phase 3E 已冻结并实现 Tool/Context Control Plane：确定性 Context Manifest 绑定当前 Attempt/Fence、Run frozen versions、TaskContract 和受控 Evidence/依赖/历史 ToolResult；Tool Gateway 执行严格参数 Schema、profile/allowlist、ToolRegistry、预算、幂等和 HMAC scope token；同步与异步结果写入不可变 Result Store，异步等待通过 Checkpoint、新 Attempt/Fence 恢复，旧 Attempt 与晚到回执硬围栏。Phase 3D 取消/重试同步取消未完成 Invocation。
+
+本增量使用独立默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_TOOL_CONTEXT=false`，新增线性 revision `20260812_0095`、三张权威表及 Checkpoint Context 外键，代码唯一 head 为 `20260812_0095`；授权范围内合同与迁移拓扑 117、API/Phase 3C/3D 相邻链 16、Outbox/SSE/维护恢复 13，共 `146 passed`。不开放新外部 API 或执行器，未执行模型、OCR、视觉、Tool、真实样例或真实存储，未连接或改动 ECS/CentOS/真实 MinIO/Redis。完整协议见 `docs/bid-assessment-runtime-brain-phase3e-tool-context-protocol-20260812.md`。
+
+## 2026-08-12 Phase 3F 交接
+
+Phase 3F 已冻结并实现受控 Tool Adapter/Executor 调度：Gateway 在 Adapter I/O 前原子保存异步 continuation 和唯一 Dispatch；Executor 以数据库 Lease、单调 DispatchAttempt/Fence、稳定 provider request id 和持久 sending 边界执行；安全幂等调用可恢复重放，不可安全重放的发送后租约丢失进入 `uncertain`。取消、显式重试和操作超时同步围栏 Dispatch。首个 Adapter 仅为本地只读 `documents.outline`，只读取当前 ParseHead/结构化 ParseUnit，不读取原文件或触发解析。
+
+新增独立默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_TOOL_EXECUTOR=false` 和线性 revision `20260812_0096`；代码唯一 head 为 `20260812_0096`。Phase 3F 合同、迁移、配置/周期任务、Dispatch/Adapter、事务/幂等/Lease/Fencing、Checkpoint/超时/取消恢复和 Phase 3C—3E/API-41/SSE 相邻回归已完成本地隔离专项验证，共 `149 passed`。不开放新外部 API，不调用模型、OCR/视觉、公网、真实外部工具或真实对象存储，未连接或改动外部环境。完整协议见 `docs/bid-assessment-runtime-brain-phase3f-tool-executor-protocol-20260812.md`。
+
+## 2026-08-12 Phase 3G 交接
+
+Phase 3G 已冻结并实现 Run Validation/Convergence：唯一 Validation、ValidationAttempt Lease/Fence、确定性 frozen input/Plan/Task/Dependency/Attempt/Checkpoint/AsyncOperation/Tool 血缘校验、不可变结果哈希，以及 Run/Assessment/Outbox/Audit 原子 `succeeded|failed|stale` 收敛。旧 active pointer 的 stale Run 不得覆盖新 Run 对应的 Assessment 状态。
+
+本地隔离专项验证已完成：Phase 3G 合同、0097 迁移、Validation/Convergence 核心链与 Phase 3C—3F/API-41/SSE 相邻回归共 `158 passed / 0 failed`；未运行真实样例、OCR/视觉解析、模型、真实外部工具或真实对象存储。
+
+新增默认关闭开关 `FEATURE_BID_ASSESSMENT_PHASE3_RUN_VALIDATION=false` 和线性 revision `20260812_0097`；代码唯一 head 为 `20260812_0097`。专项与相邻回归已获授权并完成，结果计入上述 `158 passed / 0 failed`；不调用模型、OCR/视觉、公网、真实工具或对象存储，未连接外部环境。完整协议见 `docs/bid-assessment-runtime-brain-phase3g-validation-convergence-protocol-20260812.md`。
+
+## 2026-08-12 Phase 3 总收口交接
+
+v0.1-r25 已冻结 `phase3-runtime-profile.json`、完整 A—G 链和跨阶段终态不变量；新增默认关闭总开关 `FEATURE_BID_ASSESSMENT_PHASE3_COMPLETE_RUNTIME=false`，只有 V1 Runtime、Phase 3A—3G 七个阶段开关和 Tool scope signing key 全部就绪才能加载完整运行配置。Run Validator 升级为 `bid-run-integrity-validator-v2`，materialization input 与终态检查进一步绑定全部 Task Attempt/Checkpoint、Context Manifest、Invocation、AsyncOperation、Dispatch/DispatchAttempt 和 ToolResult 的稳定身份、Hash、Fence 与代际连续性。
+
+总链专项测试已完成：API-40 创建并提交 Plan 后，首个 Task 经过 Context、唯一允许的本地只读 `documents.outline` Adapter、AsyncOperation、DispatchAttempt、新 Task Attempt/Fence 和最终 Checkpoint，再完成其余 DAG、Run Validation、API-41 与可终止 SSE 投影。合同/Planner/配置门禁 `79`、Phase 3A—3G/API-40/API-41/完整端到端 `31`、事务/Outbox/SSE/维护恢复 `14`、`0083`—`0097` 迁移拓扑 `51`，最终为 `175 passed / 0 failed`。本增量不新增 Alembic revision，唯一 head 保持 `20260812_0097`；不调用真实模型、OCR/视觉、公网、外部工具或真实对象存储，未连接外部环境。完整协议见 `docs/bid-assessment-runtime-brain-phase3-closeout-protocol-20260812.md`。

@@ -200,6 +200,21 @@ def test_initial_registry_is_fail_closed_and_model_contract_is_minimal() -> None
         assert "context_snapshot_ref" not in serialized
 
 
+def test_documents_outline_requires_a_concrete_navigation_goal() -> None:
+    with pytest.raises(ValidationError):
+        DocumentsOutlineInput.model_validate(
+            {"document_ref": "document:bid-1"}
+        )
+
+    arguments = DocumentsOutlineInput.model_validate(
+        {
+            "document_ref": "document:bid-1",
+            "navigation_goal": "定位投标资格要求所在章节",
+        }
+    )
+    assert arguments.navigation_goal == "定位投标资格要求所在章节"
+
+
 def test_registry_snapshot_freezes_full_contract_and_dynamic_visible_set() -> None:
     registry = build_fake_registry()
     snapshot = freeze_registry_snapshot(
@@ -403,11 +418,17 @@ def test_execution_guard_enforces_document_evidence_and_frozen_snapshot_scope() 
         evidence_guard.evaluate(
             call=_call(
                 tool_name=DOCUMENTS_OUTLINE,
-                arguments={"document_ref": "document:bid-1"},
+                arguments={
+                    "document_ref": "document:bid-1",
+                    "navigation_goal": "定位资格要求所在章节",
+                },
                 snapshot=snapshot,
             ),
             definition=registry.get(DOCUMENTS_OUTLINE),
-            arguments=DocumentsOutlineInput(document_ref="document:bid-1"),
+            arguments=DocumentsOutlineInput(
+                document_ref="document:bid-1",
+                navigation_goal="定位资格要求所在章节",
+            ),
             snapshot=snapshot,
             context=context,
             policy=policy,
@@ -419,12 +440,18 @@ def test_execution_guard_enforces_document_evidence_and_frozen_snapshot_scope() 
         evidence_guard.evaluate(
             call=_call(
                 tool_name=DOCUMENTS_OUTLINE,
-                arguments={"document_ref": "document:outside"},
+                arguments={
+                    "document_ref": "document:outside",
+                    "navigation_goal": "定位资格要求所在章节",
+                },
                 snapshot=snapshot,
                 sequence=2,
             ),
             definition=registry.get(DOCUMENTS_OUTLINE),
-            arguments=DocumentsOutlineInput(document_ref="document:outside"),
+            arguments=DocumentsOutlineInput(
+                document_ref="document:outside",
+                navigation_goal="定位资格要求所在章节",
+            ),
             snapshot=snapshot,
             context=context,
             policy=policy,

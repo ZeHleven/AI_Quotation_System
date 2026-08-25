@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Callable, Protocol
 
 from pydantic import Field, ValidationError, model_validator
@@ -46,7 +47,10 @@ from .persisted_local_adapters import LocalBoundaryInputPolicy
 from .persisted_evidence_adapters import (
     PersistedEvidenceArtifactRejected,
     PersistedEvidenceAtomAuthority,
+    PersistedPriorAnswerEvidenceLineage,
     extract_persisted_evidence_atoms,
+    index_persisted_evidence_atoms,
+    load_prior_answer_evidence_lineage,
 )
 from .planner_runtime import PlannerRuntime
 from .planning import ExecutionMode, PlanRevision
@@ -93,8 +97,24 @@ class PersistedCapabilityBoundaryRejected(PersistedCapabilityAdapterError):
     """The active Action lost a Task, scope, policy, or authorization fence."""
 
 
+class PersistedAnswerAuthorityErrorCode(str, Enum):
+    CONTEXT_STALE = "answer_authority_context_stale"
+    GROUNDING_OUTSIDE_CONTEXT = "answer_grounding_outside_fresh_context"
+    EVIDENCE_AUTHORITY_UNVERIFIED = "answer_evidence_authority_unverified"
+    EVIDENCE_CONTEXT_DRIFT = "answer_evidence_context_drift"
+
+
+class PersistedAnswerAuthorityFailure(StrictContract):
+    code: PersistedAnswerAuthorityErrorCode
+    safe_message: str = Field(min_length=1, max_length=500)
+
+
 class PersistedAnswerAuthorityRejected(PersistedCapabilityAdapterError):
-    """The fresh Context cannot authorize the model-authored Grounding refs."""
+    """Typed safe failure for fresh Answer Grounding authority."""
+
+    def __init__(self, failure: PersistedAnswerAuthorityFailure):
+        self.failure = failure
+        super().__init__(failure.safe_message)
 
 
 class PersistedToolBoundaryPolicy(StrictContract):
@@ -179,7 +199,12 @@ class ReceiptOnlyAnswerAuthorityProjector:
             or snapshot.status not in _MODEL_READY_CONTEXT_STATUSES
         ):
             raise PersistedAnswerAuthorityRejected(
-                "Answer authority requires a fresh model-ready Context"
+                PersistedAnswerAuthorityFailure(
+                    code=PersistedAnswerAuthorityErrorCode.CONTEXT_STALE,
+                    safe_message=(
+                        "Answer authority requires a fresh model-ready Context"
+                    ),
+                )
             )
 
         entries = {entry.entry_ref: entry for entry in context.projection_entries}
@@ -188,7 +213,14 @@ class ReceiptOnlyAnswerAuthorityProjector:
             entry = entries.get(grounding_ref)
             if entry is None:
                 raise PersistedAnswerAuthorityRejected(
-                    "Answer draft references Grounding outside the fresh Context"
+                    PersistedAnswerAuthorityFailure(
+                        code=(
+                            PersistedAnswerAuthorityErrorCode.GROUNDING_OUTSIDE_CONTEXT
+                        ),
+                        safe_message=(
+                            "Answer draft references Grounding outside the fresh Context"
+                        ),
+                    )
                 )
             records.append(
                 self._receipt_record(
@@ -200,7 +232,11 @@ class ReceiptOnlyAnswerAuthorityProjector:
                 )
             )
 
-        allowed_scopes = (task.task_id,)
+        allowed_scopes = tuple(
+            dict.fromkeys(
+                (task.task_id, *(record.source_scope_ref for record in records))
+            )
+        )
         grounding = GroundingSnapshot.build(
             task_ref=task.task_id,
             state_version=task.state_version,
@@ -229,6 +265,11 @@ class ReceiptOnlyAnswerAuthorityProjector:
         task_ref: str,
         authorization_snapshot_ref: str,
     ) -> GroundingRecord:
+        runtime_resource_identity = (
+            entry.kind is ContextEntryKind.GROUNDING
+            and entry.authority_label
+            == "authorized-resource-identity-receipt"
+        )
         source_basis, grounding_kind = {
             ContextEntryKind.POLICY: (
                 SourceBasis.SYSTEM_RULE,
@@ -252,7 +293,11 @@ class ReceiptOnlyAnswerAuthorityProjector:
             ),
             ContextEntryKind.GROUNDING: (
                 SourceBasis.RUNTIME_RECEIPT,
-                GroundingKind.SOURCE_AVAILABILITY_RECEIPT,
+                (
+                    GroundingKind.RESOURCE_IDENTITY_RECEIPT
+                    if runtime_resource_identity
+                    else GroundingKind.SOURCE_AVAILABILITY_RECEIPT
+                ),
             ),
         }.get(
             entry.kind,
@@ -270,7 +315,7 @@ class ReceiptOnlyAnswerAuthorityProjector:
             source_ref=entry.source_ref,
             source_basis=source_basis,
             grounding_kind=grounding_kind,
-            source_scope_ref=task_ref,
+            source_scope_ref=(entry.source_ref if runtime_resource_identity else task_ref),
             authorization_snapshot_ref=authorization_snapshot_ref,
             source_version_ref=entry.source_version_ref,
             source_head_version_ref=entry.source_version_ref,
@@ -279,7 +324,11 @@ class ReceiptOnlyAnswerAuthorityProjector:
             locator_hash=locator_hash,
             source_head_locator_hash=locator_hash,
             context_projection_hash=entry.projection_hash,
-            status=GroundingStatus.UNKNOWN,
+            status=(
+                GroundingStatus.SUPPORTED
+                if runtime_resource_identity
+                else GroundingStatus.UNKNOWN
+            ),
             citable=False,
             citation_projection_ready=False,
             quote_bindings=(),
@@ -306,11 +355,16 @@ class PersistedEvidenceAnswerAuthorityProjector:
             or snapshot.status not in _MODEL_READY_CONTEXT_STATUSES
         ):
             raise PersistedAnswerAuthorityRejected(
-                "Answer authority requires a fresh model-ready Context"
+                PersistedAnswerAuthorityFailure(
+                    code=PersistedAnswerAuthorityErrorCode.CONTEXT_STALE,
+                    safe_message=(
+                        "Answer authority requires a fresh model-ready Context"
+                    ),
+                )
             )
 
         entries = {entry.entry_ref: entry for entry in context.projection_entries}
-        authorities = self._load_authorities(task)
+        authorities = self._load_authorities(task, context)
         records: list[GroundingRecord] = []
         citation_records: list[CitationAuthorityRecord] = []
         allowed_scopes: list[str] = [task.task_id]
@@ -318,19 +372,26 @@ class PersistedEvidenceAnswerAuthorityProjector:
             entry = entries.get(grounding_ref)
             if entry is None:
                 raise PersistedAnswerAuthorityRejected(
-                    "Answer draft references Grounding outside the fresh Context"
-                )
-            authority = authorities.get(grounding_ref)
-            if authority is None:
-                records.append(
-                    ReceiptOnlyAnswerAuthorityProjector._receipt_record(
-                        entry=entry,
-                        task_ref=task.task_id,
-                        authorization_snapshot_ref=(
-                            snapshot.authorization_snapshot_ref
+                    PersistedAnswerAuthorityFailure(
+                        code=(
+                            PersistedAnswerAuthorityErrorCode.GROUNDING_OUTSIDE_CONTEXT
+                        ),
+                        safe_message=(
+                            "Answer draft references Grounding outside the fresh Context"
                         ),
                     )
                 )
+            authority = authorities.get(grounding_ref)
+            if authority is None:
+                receipt = ReceiptOnlyAnswerAuthorityProjector._receipt_record(
+                    entry=entry,
+                    task_ref=task.task_id,
+                    authorization_snapshot_ref=(
+                        snapshot.authorization_snapshot_ref
+                    ),
+                )
+                records.append(receipt)
+                allowed_scopes.append(receipt.source_scope_ref)
                 continue
             self._validate_context_entry(
                 entry=entry,
@@ -401,25 +462,75 @@ class PersistedEvidenceAnswerAuthorityProjector:
     def _load_authorities(
         self,
         task: AgentTaskState,
+        context: ContextAssemblyResult | None = None,
     ) -> dict[str, PersistedEvidenceAtomAuthority]:
-        authorities: dict[str, PersistedEvidenceAtomAuthority] = {}
+        authorities: list[PersistedEvidenceAtomAuthority] = []
         try:
             for observation_ref in task.observation_refs:
                 artifact = self._repository.load_context_observation_artifact(
                     task_id=task.task_id,
                     observation_ref=observation_ref,
                 )
-                for authority in extract_persisted_evidence_atoms(artifact):
-                    if authority.evidence_ref in authorities:
-                        raise PersistedEvidenceArtifactRejected(
-                            "Evidence Atom authority is ambiguous across observations"
-                        )
-                    authorities[authority.evidence_ref] = authority
-        except (PureAgentPersistenceError, PersistedEvidenceArtifactRejected) as exc:
+                authorities.extend(extract_persisted_evidence_atoms(artifact))
+            allowed_scope_refs = tuple(
+                dict.fromkeys(
+                    entry.source_ref
+                    for entry in (
+                        () if context is None else context.projection_entries
+                    )
+                    if entry.kind is ContextEntryKind.GROUNDING
+                    and entry.authority_label
+                    in {
+                        "authorized-resource-receipt",
+                        "authorized-resource-identity-receipt",
+                    }
+                )
+            )
+            for entry in (() if context is None else context.projection_entries):
+                if (
+                    entry.kind is not ContextEntryKind.EVIDENCE_PARENT
+                    or entry.authority_label
+                    != "persisted-prior-answer-evidence-lineage"
+                ):
+                    continue
+                lineage = PersistedPriorAnswerEvidenceLineage.model_validate_json(
+                    entry.content
+                )
+                if (
+                    entry.source_ref != lineage.response_ref
+                    or entry.source_version_ref != lineage.response_artifact_ref
+                    or entry.source_content_hash != canonical_hash(lineage)
+                ):
+                    raise PersistedEvidenceArtifactRejected(
+                        "prior Answer Context lineage drifted"
+                    )
+                reloaded, inherited = load_prior_answer_evidence_lineage(
+                    repository=self._repository,
+                    current_task=task,
+                    message_ref=lineage.message_ref,
+                    allowed_scope_refs=allowed_scope_refs,
+                )
+                if reloaded != lineage:
+                    raise PersistedEvidenceArtifactRejected(
+                        "prior Answer evidence lineage changed after Context assembly"
+                    )
+                authorities.extend(inherited)
+            return index_persisted_evidence_atoms(authorities)
+        except (
+            PureAgentPersistenceError,
+            PersistedEvidenceArtifactRejected,
+            ValidationError,
+        ) as exc:
             raise PersistedAnswerAuthorityRejected(
-                "persisted Evidence Atom authority could not be verified"
+                PersistedAnswerAuthorityFailure(
+                    code=(
+                        PersistedAnswerAuthorityErrorCode.EVIDENCE_AUTHORITY_UNVERIFIED
+                    ),
+                    safe_message=(
+                        "persisted Evidence Atom authority could not be verified"
+                    ),
+                )
             ) from exc
-        return authorities
 
     @staticmethod
     def _validate_context_entry(
@@ -436,7 +547,12 @@ class PersistedEvidenceAnswerAuthorityProjector:
             or entry.content != authority.context_content()
         ):
             raise PersistedAnswerAuthorityRejected(
-                "fresh Context Evidence Atom drifted from persisted authority"
+                PersistedAnswerAuthorityFailure(
+                    code=PersistedAnswerAuthorityErrorCode.EVIDENCE_CONTEXT_DRIFT,
+                    safe_message=(
+                        "fresh Context Evidence Atom drifted from persisted authority"
+                    ),
+                )
             )
 
     @staticmethod

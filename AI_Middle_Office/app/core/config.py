@@ -141,6 +141,13 @@ class Settings:
         "FEATURE_BID_ASSESSMENT_PURE_AGENT_RUNTIME",
         False,
     )
+    # V2 Provider boundary is isolated behind a third, independent switch.
+    # The local Pure Agent continues to use the V1 provider unless explicitly
+    # enabled for an isolated startup.
+    feature_bid_assessment_pure_agent_provider_boundary_v2: bool = _env_bool(
+        "FEATURE_BID_ASSESSMENT_PURE_AGENT_PROVIDER_BOUNDARY_V2",
+        False,
+    )
     bid_assessment_pure_agent_continuation_secret: str = _env(
         "BID_ASSESSMENT_PURE_AGENT_CONTINUATION_SECRET",
         "",

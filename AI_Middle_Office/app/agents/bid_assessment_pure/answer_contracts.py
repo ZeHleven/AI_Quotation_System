@@ -59,6 +59,7 @@ class GroundingKind(str, Enum):
     PERMISSION_RECEIPT = "permission_receipt"
     TOOL_RECEIPT = "tool_receipt"
     CONTEXT_RECEIPT = "context_receipt"
+    RESOURCE_IDENTITY_RECEIPT = "resource_identity_receipt"
 
 
 class GroundingStatus(str, Enum):
@@ -129,6 +130,26 @@ class StatementBlock(StrictContract):
         return self
 
 
+class RuntimeFactBlock(StrictContract):
+    """Runtime-scoped resource identity fact, never a business-content claim.
+
+    This is a distinct block instead of a flag on ``StatementBlock`` so older
+    persisted AnswerDraft values keep exactly the same canonical JSON and hash.
+    """
+
+    block_type: Literal["runtime_fact"] = "runtime_fact"
+    block_id: Reference
+    text: str = Field(min_length=1, max_length=20_000)
+    presentation_hint: PresentationHint = PresentationHint.PARAGRAPH
+    grounding_refs: tuple[Reference, ...] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_unique_refs(self) -> "RuntimeFactBlock":
+        if len(self.grounding_refs) != len(set(self.grounding_refs)):
+            raise ValueError("grounding_refs must be unique")
+        return self
+
+
 class LimitationBlock(StrictContract):
     block_type: Literal["limitation"] = "limitation"
     block_id: Reference
@@ -157,7 +178,13 @@ class InteractionBlock(StrictContract):
 
 
 AnswerBlock = Annotated[
-    Union[NarrativeBlock, StatementBlock, LimitationBlock, InteractionBlock],
+    Union[
+        NarrativeBlock,
+        StatementBlock,
+        RuntimeFactBlock,
+        LimitationBlock,
+        InteractionBlock,
+    ],
     Field(discriminator="block_type"),
 ]
 
@@ -209,7 +236,7 @@ class AnswerDraft(StrictContract):
     def referenced_grounding_refs(self) -> tuple[str, ...]:
         refs: list[str] = []
         for block in self.blocks:
-            if isinstance(block, (StatementBlock, LimitationBlock)):
+            if isinstance(block, (StatementBlock, RuntimeFactBlock, LimitationBlock)):
                 refs.extend(block.grounding_refs)
         return tuple(dict.fromkeys(refs))
 

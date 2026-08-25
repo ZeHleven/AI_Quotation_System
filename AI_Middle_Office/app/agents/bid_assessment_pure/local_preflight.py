@@ -32,6 +32,7 @@ class LocalPreflightSettingsView(Protocol):
     feature_vite_frontend: bool
     feature_bid_assessment_pure_agent: bool
     feature_bid_assessment_pure_agent_runtime: bool
+    feature_bid_assessment_pure_agent_provider_boundary_v2: bool
     bid_assessment_pure_agent_continuation_secret: str
 
 
@@ -211,6 +212,27 @@ class LocalPreflightProbe:
             bool(settings.feature_bid_assessment_pure_agent_runtime),
             "Pure Agent Runtime 开关已显式开启。",
             "Pure Agent Runtime 开关未显式开启。",
+        )
+        v2_enabled = bool(
+            getattr(
+                settings,
+                "feature_bid_assessment_pure_agent_provider_boundary_v2",
+                False,
+            )
+        )
+        add(
+            "PROVIDER_BOUNDARY_SELECTION_VALID",
+            not v2_enabled
+            or (
+                bool(settings.feature_bid_assessment_pure_agent)
+                and bool(settings.feature_bid_assessment_pure_agent_runtime)
+            ),
+            (
+                "Provider Boundary V2 已显式选择。"
+                if v2_enabled
+                else "Provider Boundary V2 保持关闭，使用 V1。"
+            ),
+            "Provider Boundary V2 只能在已启用的隔离 Runtime 中选择。",
         )
         add(
             "CONTINUATION_SECRET_READY",
@@ -401,6 +423,8 @@ class PureAgentRuntimeStatusView(StrictContract):
     )
     surface_enabled: bool
     execution_switch_enabled: bool
+    provider_boundary_v2_enabled: bool = False
+    provider_boundary_mode: Literal["v1", "v2"] = "v1"
     preflight_ready: bool
     runtime_available: bool
     startup_status: Literal[

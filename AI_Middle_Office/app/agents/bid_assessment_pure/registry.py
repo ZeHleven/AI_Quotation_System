@@ -96,7 +96,9 @@ def build_initial_registry() -> CanonicalToolRegistry:
                 description=(
                     "读取当前招标资料中指定文档的章节层级、页码范围和结构导航信息。"
                     "适用于长文档首次导航、定位可能相关的章节、判断目录结构或缩小后续检索范围；"
-                    "需要具体条款原文时继续使用 bid_document_search。"
+                    "仅当当前用户请求或已接受上下文存在具体导航信息需求时使用，并在 "
+                    "navigation_goal 中明确该需求；需要具体条款原文时继续使用 "
+                    "bid_document_search。"
                 ),
                 input_model=DocumentsOutlineInput,
                 output_model=DocumentsOutlineOutput,

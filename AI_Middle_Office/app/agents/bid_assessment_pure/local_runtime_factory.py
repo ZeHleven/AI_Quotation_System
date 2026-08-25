@@ -22,6 +22,7 @@ from .persisted_capability_adapters import (
     PersistedToolBoundaryPolicy,
 )
 from .persisted_context_adapters import (
+    AuthorizedResourceIdentity,
     PersistedContextAdapterFactories,
     PersistedContextProjectionPolicy,
 )
@@ -34,7 +35,13 @@ from .persisted_local_adapters import (
 )
 from .planner_runtime import PlannerRuntime
 from .provider_bridges import ProviderPlannerProvider
+from .provider_ingress_adapter_v2 import DeterministicProviderJsonIngressAdapter
+from .provider_ingress_v2 import ProviderBoundaryV2Config
+from .provider_orchestration_v2 import ProviderDecisionAnswerOrchestratorV2
 from .provider_runtime import ProviderAdapter, StructuredModelCallBridge
+from .provider_runtime_bridge_v2 import (
+    ProviderBoundaryV2MainAgentActionProvider,
+)
 from .rag_adapters import (
     build_local_rag_handler_registry,
     build_local_rag_registry,
@@ -60,7 +67,7 @@ from .tool_guards import DefaultExecutionGuard
 from .tool_runtime import freeze_registry_snapshot
 
 
-LOCAL_SYSTEM_POLICY = """你是旗胜投标机会研判主 Agent。围绕用户当前问题，每次只自主选择一个下一步 Action，不能执行固定阶段表。简单问题直接处理；只有问题确实跨多个来源、存在依赖或需要多步验证时才使用 Planner。需要资料时只调用当前可见的只读工具。Search 结果只用于定位，任何事实、比较或风险结论必须先用 evidence_read 升级为 Evidence Atom。不能伪造 evidence_ref、来源、页码、企业能力或引用。信息不足且用户能够补充时请求一个明确 Slot；证据不足但无法由用户补充时，应在回答中明确未知和限制。回答中的 grounding_refs 只能逐字选择当前 Context 中可见的 entry_ref，事实陈述优先绑定 evidence_atom。所有 block.text 只写业务内容，不得自行写 [1]、第N页/page N、URL、文件路径或 source/evidence/grounding ref；Runtime 会根据 grounding_refs 自动生成最终引用编号与定位信息。不要输出思维链。"""
+LOCAL_SYSTEM_POLICY = """你是旗胜投标机会研判主 Agent。围绕用户当前问题，每次只自主选择一个下一步 Action，不能执行固定阶段表。简单问题直接处理；只有问题确实跨多个来源、存在依赖或需要多步验证时才使用 Planner。需要资料时只调用当前可见的只读工具。如果本次 Runtime 输入包含 tool_call_constraints，单次 Function Calling 数量不得超过其中的 max_calls_per_response；如果所需调用更多，优先选择不重叠、价值最高的一批，后续再动态决定。Search 结果只用于定位，任何事实、比较或风险结论必须先用 evidence_read 升级为 Evidence Atom。每次工具调用后必须先判断是否新增候选或 Evidence Atom；已有证据足以回答、检索不再增加信息或 Runtime 已给出 retrieval_convergence.saturated 时，不得继续换关键词重复检索，必须在 answer 与 request_information 中收口。不能伪造 evidence_ref、来源、页码、企业能力或引用。信息不足且用户能够补充时请求一个明确 Slot；证据不足但无法由用户补充时，应在回答中明确未知和限制。回答中的 grounding_refs 只能逐字选择当前 Context 中可见的 entry_ref，事实陈述优先绑定 evidence_atom。所有 block.text 只写业务内容，不得自行写 [1]、第N页/page N、URL、文件路径或 source/evidence/grounding ref；Runtime 会根据 grounding_refs 自动生成最终引用编号与定位信息。不要输出思维链。"""
 
 LOCAL_OUTPUT_CONTRACT = """主 Agent 只能返回 Provider Function Calling，或一个满足 MainAgentModelDecision Schema 的 JSON 对象。若返回 Answer，AnswerDraft.context_snapshot_ref 和 state_version 必须逐字使用本次 main_agent_decision_request 的 context_snapshot_ref 与 origin_state_version；每个事实 Statement 必须引用当前可见 Evidence Atom；无证据内容只能作为一般建议、交互提示或带 limitation 的未知说明；回答正文不得自行包含引用编号、页码定位、URL、文件路径或内部 ref，引用仅通过 grounding_refs 交给 Runtime 投影。Planner 只返回有限滚动计划，不执行工具。"""
 
@@ -83,6 +90,32 @@ def default_local_runtime_limits() -> RuntimeLimitSet:
     )
 
 
+def select_local_main_agent_provider(
+    *,
+    provider_adapter: ProviderAdapter,
+    v1_provider: MainAgentActionProvider,
+    provider_boundary_v2_enabled: bool = False,
+    slot_validators: SlotValidatorRegistry | None = None,
+) -> MainAgentActionProvider:
+    """Select one Provider boundary without invoking it or granting authority."""
+
+    if not provider_boundary_v2_enabled:
+        return v1_provider
+    return ProviderBoundaryV2MainAgentActionProvider(
+        orchestrator=ProviderDecisionAnswerOrchestratorV2(
+            adapter=provider_adapter,
+            ingress=DeterministicProviderJsonIngressAdapter(
+                ProviderBoundaryV2Config(enabled=True)
+            ),
+            slot_capability_snapshot=(
+                (slot_validators or SlotValidatorRegistry())
+                .freeze_capability_snapshot()
+            ),
+        ),
+        v1_compatibility_provider=v1_provider,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class LocalPureAgentCompositionConfig:
     provider_adapter: ProviderAdapter
@@ -90,10 +123,12 @@ class LocalPureAgentCompositionConfig:
     rag_sources: CanonicalOfflineRagSources
     model_profile: ModelContextProfile
     context_profile: ContextProfile
+    provider_boundary_v2_enabled: bool = False
     authorized_document_refs: tuple[str, ...] = ()
     enterprise_scope_ref: str | None = None
     information_need_refs: tuple[str, ...] = ()
     required_resource_refs: tuple[str, ...] = ()
+    resource_identities: tuple[AuthorizedResourceIdentity, ...] = ()
     slot_validators: SlotValidatorRegistry = field(default_factory=SlotValidatorRegistry)
     runtime_limits: RuntimeLimitSet = field(default_factory=default_local_runtime_limits)
     policy_snapshot_ref: str = "policy:bid-pure-agent-local-v1"
@@ -117,6 +152,13 @@ class LocalPureAgentCompositionConfig:
         ):
             if len(values) != len(set(values)):
                 raise ValueError("local composition references must be unique")
+        identity_refs = tuple(
+            item.resource_ref for item in self.resource_identities
+        )
+        if len(identity_refs) != len(set(identity_refs)):
+            raise ValueError("local resource identity refs must be unique")
+        if not set(identity_refs).issubset(self.required_resource_refs):
+            raise ValueError("resource identities must belong to required resources")
 
 
 class BudgetInitializingAdmissionContextProvider:
@@ -250,6 +292,7 @@ def build_local_pure_agent_adapters(
             system_policy=LOCAL_SYSTEM_POLICY,
             output_contract=LOCAL_OUTPUT_CONTRACT,
             registry_snapshot=registry_snapshot,
+            resource_identities=config.resource_identities,
             max_interaction_messages=20,
         )
     )
@@ -260,6 +303,13 @@ def build_local_pure_agent_adapters(
     local_factories = PersistedLocalRuntimeAdapterFactories(
         boundary_policy=boundary_policy,
         admission_policy=admission_policy,
+    )
+
+    main_agent_provider = select_local_main_agent_provider(
+        provider_adapter=config.provider_adapter,
+        v1_provider=config.main_agent_provider,
+        provider_boundary_v2_enabled=config.provider_boundary_v2_enabled,
+        slot_validators=config.slot_validators,
     )
 
     def admission_context(repository: PureAgentRepository):
@@ -310,7 +360,7 @@ def build_local_pure_agent_adapters(
         context_assembler_for_repository=context_factories.context_assembler,
         main_agent_inputs=local_factories.main_agent_inputs,
         admission_context=admission_context,
-        action_loop=lambda: DynamicActionLoopRuntime(provider=config.main_agent_provider),
+        action_loop=lambda: DynamicActionLoopRuntime(provider=main_agent_provider),
         capability_executors=capability_factories.capability_executors(
             planner=planner,
             tool_gateway=tool_gateway,

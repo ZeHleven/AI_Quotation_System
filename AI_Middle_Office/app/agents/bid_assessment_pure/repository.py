@@ -251,6 +251,15 @@ class ContextMessageRow:
 
 
 @dataclass(frozen=True)
+class ContextCommittedResponseRow:
+    """Verified committed response lineage for one prior assistant message."""
+
+    message_ref: str
+    response_task_ref: str
+    envelope: ResponsePersistenceEnvelope
+
+
+@dataclass(frozen=True)
 class PersistedObservationArtifactRow:
     """Hash-verified Observation and result body accepted by one Task."""
 
@@ -555,6 +564,74 @@ class PureAgentRepository:
                 )
             projected.append(self._context_message_row(row, content=content))
         return tuple(projected)
+
+    def load_context_committed_response(
+        self,
+        *,
+        task_id: str,
+        conversation_id: str,
+        message_id: str,
+    ) -> ContextCommittedResponseRow:
+        """Load prior committed Answer lineage behind one Context message.
+
+        The current Task trigger is the temporal fence. Stale, superseded,
+        cross-conversation, future, or content-drifted responses are rejected.
+        """
+
+        task = self._task(task_id, lock=False)
+        if task.conversation_id != conversation_id:
+            raise PureAgentNotFound("task was not found")
+        trigger = (
+            self.db.query(BidPureAgentMessage)
+            .filter(BidPureAgentMessage.id == task.trigger_message_id)
+            .one_or_none()
+        )
+        message = (
+            self.db.query(BidPureAgentMessage)
+            .filter(BidPureAgentMessage.id == message_id)
+            .one_or_none()
+        )
+        if (
+            trigger is None
+            or message is None
+            or trigger.conversation_id != conversation_id
+            or message.conversation_id != conversation_id
+            or int(message.sequence_no) >= int(trigger.sequence_no)
+            or message.role != "assistant"
+            or message.message_type != "answer.committed"
+        ):
+            raise PureAgentNotFound("prior committed Answer message was not found")
+        response = (
+            self.db.query(BidPureAgentResponse)
+            .filter(
+                BidPureAgentResponse.rendered_message_id == message_id,
+                BidPureAgentResponse.conversation_id == conversation_id,
+                BidPureAgentResponse.status == ResponseLifecycleStatus.COMMITTED.value,
+            )
+            .one_or_none()
+        )
+        if response is None:
+            raise PureAgentNotFound("prior committed Answer response was not found")
+        envelope = self._response_envelope(response)
+        content = normalize_json(message.content_json)
+        if (
+            envelope.current_status is not ResponseLifecycleStatus.COMMITTED
+            or envelope.artifact.task_ref != response.task_id
+            or envelope.artifact.conversation_ref != conversation_id
+            or envelope.artifact.message.model_dump(mode="json") != content
+            or not self._digest_matches(
+                message.content_hash,
+                canonical_hash(content),
+            )
+        ):
+            raise PureAgentFenceRejected(
+                "prior committed Answer lineage failed its persistence fence"
+            )
+        return ContextCommittedResponseRow(
+            message_ref=message_id,
+            response_task_ref=response.task_id,
+            envelope=envelope,
+        )
 
     def load_active_task_state(
         self,

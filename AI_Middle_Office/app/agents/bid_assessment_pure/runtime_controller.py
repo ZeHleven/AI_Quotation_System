@@ -1240,13 +1240,15 @@ class PureAgentRuntimeController:
         wakeup: RuntimeWakeup,
         *,
         error_code: str,
+        diagnostic_codes: tuple[str, ...] = (),
     ) -> RuntimePulseOutcome:
         """Settle one unhandled local Action failure and publish a terminal state.
 
         The dispatcher calls this only after the failed pulse transaction has
         rolled back.  No exception body, Provider payload, Prompt, or secret is
-        persisted; the public event projector continues to expose only its
-        generic Task failure message.
+        persisted. Only bounded, redacted diagnostic codes may be retained;
+        the public event projector continues to expose only its generic Task
+        failure message.
         """
 
         state = self.repository.load_runtime_task_state(
@@ -1274,10 +1276,32 @@ class PureAgentRuntimeController:
             else "_"
             for character in str(error_code).strip().lower()
         )[:100] or "runtime_dispatch_failed"
+        normalized_diagnostics = tuple(
+            dict.fromkeys(
+                "".join(
+                    character
+                    if (
+                        "a" <= character.lower() <= "z"
+                        or "0" <= character <= "9"
+                        or character in {"_", "-", "."}
+                    )
+                    else "_"
+                    for character in str(value).strip().lower()
+                )[:240]
+                for value in diagnostic_codes[:32]
+                if str(value).strip()
+            )
+        )
         failure_body = {
-            "schema_name": "bid.pure-agent.runtime-action-failure.v1",
+            "schema_name": (
+                "bid.pure-agent.runtime-action-failure.v2"
+                if normalized_diagnostics
+                else "bid.pure-agent.runtime-action-failure.v1"
+            ),
             "error_code": normalized_code,
         }
+        if normalized_diagnostics:
+            failure_body["diagnostic_codes"] = list(normalized_diagnostics)
         failure_hash = canonical_hash(failure_body)
         result_ref = (
             "runtime-action-failure:" + failure_hash.removeprefix("sha256:")
@@ -1309,7 +1333,7 @@ class PureAgentRuntimeController:
                 "summary": "Runtime Action failed safely",
                 "material_progress": False,
                 "progress_signal_refs": [],
-                "limitation_codes": [normalized_code],
+                "limitation_codes": [normalized_code, *normalized_diagnostics],
             }
             observation_hash = canonical_hash(observation_body)
             observation = ActionObservation(
@@ -1697,8 +1721,24 @@ class LocalRuntimePulseDispatcher:
                 session.rollback()
                 safe_failure = getattr(exc, "failure", None)
                 safe_code = getattr(getattr(safe_failure, "code", None), "value", None)
+                safe_validation_issues = tuple(
+                    getattr(safe_failure, "validation_issues", ()) or ()
+                )
+                safe_diagnostic_codes = tuple(
+                    str(getattr(issue, "diagnostic_code"))
+                    for issue in safe_validation_issues[:32]
+                    if getattr(issue, "diagnostic_code", None)
+                )
+                safe_issue_detail = ",".join(
+                    f"{getattr(issue, 'path', '$')}:"
+                    f"{getattr(issue, 'error_type', 'validation_error')}"
+                    for issue in safe_validation_issues[:8]
+                )
                 safe_detail = (
-                    str(exc)[:200]
+                    (
+                        str(exc)
+                        + (f" issues={safe_issue_detail}" if safe_issue_detail else "")
+                    )[:500]
                     if isinstance(exc, ActionLoopContractRejected)
                     or safe_failure is not None
                     or (
@@ -1730,6 +1770,7 @@ class LocalRuntimePulseDispatcher:
                                 else "runtime_dispatch_failed"
                             )
                         ),
+                        diagnostic_codes=safe_diagnostic_codes,
                     )
                     failure_session.commit()
                     return failure_outcome
@@ -1770,11 +1811,31 @@ class LocalRuntimePulseDispatcher:
             await asyncio.sleep(0)
         if last is None:
             raise RuntimeError("local Runtime dispatcher produced no pulse")
-        return RuntimePulseOutcome(
-            task_ref=last.task_ref,
-            state_version=last.state_version,
-            task_status=last.task_status,
-            disposition=RuntimePulseDisposition.YIELDED,
-            directive=RuntimePulseDirective.STOP,
-            action_ref=last.action_ref,
+        logger.warning(
+            (
+                "pure_agent_runtime_pulse_limit_exhausted task=%s "
+                "state_version=%s max_pulses=%s"
+            ),
+            wakeup.task_ref,
+            last.state_version,
+            self._max_pulses,
         )
+        failure_session = self._session_factory()
+        try:
+            failure_controller = self._controller_factory(failure_session)
+            failure_outcome = failure_controller.fail_active_action(
+                current_wakeup,
+                error_code="runtime_pulse_limit_exceeded",
+                diagnostic_codes=("runtime_dispatch.max_pulses_exhausted",),
+            )
+            failure_session.commit()
+            return failure_outcome
+        except Exception:
+            failure_session.rollback()
+            logger.exception(
+                "pure_agent_runtime_pulse_limit_settlement_failed task=%s",
+                wakeup.task_ref,
+            )
+            raise
+        finally:
+            failure_session.close()

@@ -173,6 +173,14 @@ class ToolExecutionResult(ToolOutputContract, Generic[DataT]):
 
 class DocumentsOutlineInput(ToolInputContract):
     document_ref: Reference = Field(description="要读取结构导航的招标文档引用")
+    navigation_goal: str = Field(
+        min_length=1,
+        max_length=500,
+        description=(
+            "当前用户请求或已接受未决上下文中的具体导航信息需求；"
+            "不得填写预防性、泛化或与当前任务无关的理由"
+        ),
+    )
 
 
 class OutlineEntry(ToolOutputContract):

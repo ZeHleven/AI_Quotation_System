@@ -601,7 +601,18 @@ def test_complete_observation_and_tool_pairs_round_trip_into_context(
         if entry.kind is ContextEntryKind.OBSERVATION
     )
     observation_payload = json.loads(observation_entry.content)
-    assert observation_payload["artifact"] == batch.artifact
+    assert "artifact" not in observation_payload
+    projection = observation_payload["artifact_projection"]
+    assert projection["projection_kind"] == "tool_batch_result"
+    assert projection["call_count"] == 2
+    assert tuple(item["tool_name"] for item in projection["calls"]) == VISIBLE_TOOLS
+    assert all(item["result"]["ok"] for item in projection["calls"])
+    assert observation_payload["artifact_receipt"]["artifact_hash"] == (
+        batch.observation.artifact_hash
+    )
+    assert observation_entry.authority_label == (
+        "persisted-observation-compact-projection"
+    )
 
 
 def test_legacy_call_without_input_json_never_reconstructs_partial_protocol(
@@ -737,3 +748,146 @@ def test_large_artifact_stays_recoverable_but_context_uses_bounded_receipt(
     assert payload["artifact_receipt"]["artifact_hash"] == (
         batch.observation.artifact_hash
     )
+    projection = payload["artifact_projection"]
+    assert projection["projection_kind"] == "tool_batch_result"
+    assert projection["calls"][0]["result"]["data_projection"]["truncated"] is True
+    assert len(
+        projection["calls"][0]["result"]["data_projection"]["candidates"]
+    ) == 16
+    assert "甲" * 2_000 not in observation.content
+    assert len(observation.content) < len(canonical_json(batch.artifact)) // 3
+
+
+def test_rejected_answer_projects_actionable_guard_feedback(repository) -> None:
+    repo, _ = repository
+    registry = _registry()
+    source = PersistedContextCandidateSource(
+        repo,
+        policy=_projection_policy(registry),
+    )
+    projection = source._compact_observation_artifact(
+        {
+            "schema_name": "bid.pure-agent.capability.answer-result.v1",
+            "status": "rejected",
+            "execution_draft": {
+                "blocks": [
+                    {
+                        "block_type": "statement",
+                        "block_id": "statement:comparison-1",
+                        "text": "企业能力完全满足招标要求。" + "误" * 1_000,
+                        "claim_type": "comparison",
+                        "epistemic_status": "supported",
+                        "grounding_refs": ["evidence:bid-only"],
+                        "limitation_refs": [],
+                    }
+                ]
+            },
+            "validation": {
+                "accepted": False,
+                "issues": [
+                    {
+                        "code": "support_matrix_unsatisfied",
+                        "message": "comparison requires both source bases",
+                        "block_ref": "statement:comparison-1",
+                    },
+                    {
+                        "code": "limitation_receipt_invalid",
+                        "message": "unsupported statement requires limitation",
+                        "block_ref": "statement:comparison-1",
+                    },
+                ],
+                "statement_support": [
+                    {
+                        "statement_ref": "statement:comparison-1",
+                        "claim_type": "comparison",
+                        "epistemic_status": "supported",
+                        "source_bases": ["bid_document"],
+                        "grounding_refs": ["evidence:bid-only"],
+                        "limitation_refs": [],
+                        "citation_ready": False,
+                        "publishable": False,
+                    }
+                ],
+                "validated_grounding_refs": ["evidence:bid-only"],
+                "limitation_codes": [],
+            },
+            "grounding_snapshot": {"large_body": "证" * 20_000},
+            "context": {"large_body": "文" * 20_000},
+            "citation_authority_snapshot": {"large_body": "引" * 20_000},
+        }
+    )
+
+    assert projection["projection_kind"] == "answer_guard_feedback"
+    assert projection["accepted"] is False
+    assert projection["required_actions"] == [
+        "acquire_citable_evidence_for_each_required_source_basis_then_retry",
+        "upgrade_search_candidates_with_evidence_read_or_use_compatible_"
+        "limitation_receipt",
+    ]
+    assert projection["issues"][0]["block_ref"] == "statement:comparison-1"
+    assert projection["statement_support"][0]["source_bases"] == [
+        "bid_document"
+    ]
+    assert len(projection["draft_blocks"][0]["text"]) == 600
+    assert "grounding_snapshot" not in projection
+    assert "context" not in projection
+    assert "citation_authority_snapshot" not in projection
+    assert "不得原样重试" in projection["instruction"]
+    assert "Resource Identity Receipt" in projection["instruction"]
+
+
+def test_evidence_read_projection_keeps_source_domain_without_text(repository) -> None:
+    repo, _ = repository
+    source = PersistedContextCandidateSource(
+        repo,
+        policy=_projection_policy(_registry()),
+    )
+    projection = source._compact_observation_artifact(
+        {
+            "schema_name": "bid.pure-agent.capability.tool-batch-result.v1",
+            "calls": [
+                {
+                    "call_ref": "tool-call:evidence-read",
+                    "tool_name": "evidence_read",
+                    "accepted_for_context": True,
+                    "replayed": False,
+                    "result": {
+                        "ok": True,
+                        "data": {
+                            "evidence": [
+                                {
+                                    "evidence_ref": "evidence:enterprise-1",
+                                    "text": "企业能力证据正文" * 1_000,
+                                    "locator": "enterprise:test#chunk=1",
+                                    "citable": True,
+                                }
+                            ]
+                        },
+                        "error": None,
+                    },
+                    "provenance": [
+                        {
+                            "output_ref": "evidence:enterprise-1",
+                            "source_domain": "enterprise_knowledge",
+                            "source_scope_ref": "enterprise-scope:test",
+                            "source_version_ref": "enterprise-version:test",
+                            "locator": "enterprise:test#chunk=1",
+                            "citable": True,
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    call = projection["calls"][0]
+    assert call["result"]["data_projection"]["evidence"][0] == {
+        "evidence_ref": "evidence:enterprise-1",
+        "locator": "enterprise:test#chunk=1",
+        "citable": True,
+        "content_projected_as": "evidence_atom",
+    }
+    assert call["provenance_receipts"][0]["source_domain"] == (
+        "enterprise_knowledge"
+    )
+    assert "企业能力证据正文" not in canonical_json(projection)

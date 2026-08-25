@@ -9,6 +9,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.agents.bid_assessment_pure.action_runtime import (
+    ActionObservation,
+    ActionObservationKind,
+    ActionObservationStatus,
     ActionReservationIntent,
     AgentActionKind,
     PlanActionRequest,
@@ -17,6 +20,10 @@ from app.agents.bid_assessment_pure.answer_contracts import (
     AnswerDraft,
     AnswerLimitationCode,
     LimitationBlock,
+)
+from app.agents.bid_assessment_pure.capability_executors import (
+    CapabilityExecutionRejected,
+    ToolCallBatchCapabilityExecutor,
 )
 from app.agents.bid_assessment_pure.persisted_capability_adapters import (
     PersistedAnswerAuthorityRejected,
@@ -57,6 +64,7 @@ from app.agents.bid_assessment_pure.runtime import (
 )
 from app.agents.bid_assessment_pure.runtime_controller import (
     PersistedRuntimeAction,
+    RuntimeActionExecution,
     RuntimeActionPersistenceEnvelope,
     RuntimeActionRecoveryBinding,
 )
@@ -611,3 +619,122 @@ def test_missing_recovery_binding_rejects_capability_boundary() -> None:
 
     with pytest.raises(PersistedCapabilityBoundaryRejected, match="recoverable"):
         asyncio.run(provider.prepare(task=task, action=action))
+
+
+def _persisted_tool_error_execution(
+    *,
+    error_code: str,
+) -> tuple[AgentTaskState, PersistedRuntimeAction, RuntimeActionExecution]:
+    registry = _registry()
+    decision = _context(
+        state_version=1,
+        consumer=ContextConsumer.MAIN_AGENT,
+        registry=registry,
+        suffix=f"tool-error-{error_code}",
+    ).snapshot
+    action = _action(
+        kind=AgentActionKind.TOOL_CALL_BATCH,
+        registry=registry,
+        decision_context=decision,
+    )
+    call_ref = "tool-call:c04-persisted-error"
+    payload = {
+        "schema_name": "bid.pure-agent.capability.tool-batch-result.v1",
+        "calls": [
+            {
+                "call_ref": call_ref,
+                "tool_name": BID_DOCUMENT_SEARCH,
+                "result": {
+                    "ok": False,
+                    "data": None,
+                    "error": {
+                        "code": error_code,
+                        "message": "No matching local result.",
+                        "retryable": False,
+                    },
+                },
+                "tool_message": None,
+                "ledger_call_id": "ledger:c04-persisted-error",
+                "accepted_for_context": True,
+                "guard_decisions": [],
+                "replayed": False,
+                "provenance": [],
+            }
+        ],
+    }
+    result_hash = canonical_hash(payload)
+    result_ref = f"tool-batch-result:{result_hash.removeprefix('sha256:')}"
+    observation_body = {
+        "task_ref": "task:c04",
+        "source_action_ref": action.action_ref,
+        "action_sequence": action.sequence,
+        "state_version": 4,
+        "kind": ActionObservationKind.TOOL_RESULT.value,
+        "status": ActionObservationStatus.DEGRADED.value,
+        "artifact_ref": result_ref,
+        "artifact_hash": result_hash,
+        "summary": "Tool batch preserved one accepted error result.",
+        "material_progress": True,
+        "progress_signal_refs": [call_ref],
+        "limitation_codes": [error_code],
+    }
+    observation_hash = canonical_hash(observation_body)
+    observation = ActionObservation(
+        **observation_body,
+        observation_ref=(
+            f"observation:{observation_hash.removeprefix('sha256:')}"
+        ),
+        observation_hash=observation_hash,
+    )
+    task = _task(action_ref=None).model_copy(
+        update={
+            "state_version": 5,
+            "observation_refs": (observation.observation_ref,),
+        }
+    )
+    execution = RuntimeActionExecution(
+        observation=observation,
+        effect_status="succeeded",
+        result_ref=result_ref,
+        result_payload=payload,
+    )
+    return task, action, execution
+
+
+def test_tool_error_result_round_trips_through_strict_json_contract() -> None:
+    task, action, execution = _persisted_tool_error_execution(
+        error_code="not_found"
+    )
+    executor = ToolCallBatchCapabilityExecutor(
+        boundary_provider=object(),  # type: ignore[arg-type]
+        gateway=object(),  # type: ignore[arg-type]
+    )
+
+    post_action = asyncio.run(
+        executor.after_observation(
+            task=task,
+            action=action,
+            execution=execution,
+        )
+    )
+
+    assert post_action.directive.value == "continue"
+
+
+def test_tool_error_result_still_rejects_unknown_json_error_code() -> None:
+    task, action, execution = _persisted_tool_error_execution(
+        error_code="not_a_tool_error_code"
+    )
+    executor = ToolCallBatchCapabilityExecutor(
+        boundary_provider=object(),  # type: ignore[arg-type]
+        gateway=object(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(CapabilityExecutionRejected, match="persisted contract"):
+        asyncio.run(
+            executor.after_observation(
+                task=task,
+                action=action,
+                execution=execution,
+            )
+        )

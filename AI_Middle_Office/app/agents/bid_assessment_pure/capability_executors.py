@@ -39,6 +39,9 @@ from .common import Reference, StrictContract, ToolName
 from .planner_runtime import PlannerRuntime
 from .planning import ComplexityDecision, ExecutionMode, PlanRevision
 from .repository import PureAgentRepository
+from .retrieval_convergence_v2 import (
+    semantic_progress_signal_refs_from_tool_batch,
+)
 from .response_contracts import (
     ResponseSupersedeReason,
     ResponseVersionHead,
@@ -552,6 +555,9 @@ class ToolCallBatchCapabilityExecutor:
         result = ToolCallBatchExecutionResult(calls=tuple(results))
         payload = result.model_dump(mode="json")
         result_ref, result_hash = _result_identity("tool-batch-result", payload)
+        semantic_progress_refs = semantic_progress_signal_refs_from_tool_batch(
+            payload
+        )
         accepted_refs = tuple(
             item.call_ref for item in result.calls if item.accepted_for_context
         )
@@ -574,6 +580,8 @@ class ToolCallBatchCapabilityExecutor:
                 limitations.extend(
                     decision.code for decision in item.guard_decisions if not decision.allowed
                 )
+        if accepted_refs and not semantic_progress_refs:
+            limitations.append("retrieval_no_novel_information")
         limitation_codes = tuple(dict.fromkeys(limitations))[:64]
         observation = self._action_loop.build_action_observation(
             task=task,
@@ -584,10 +592,11 @@ class ToolCallBatchCapabilityExecutor:
             artifact_hash=result_hash,
             summary=(
                 f"Tool batch completed with {len(successful)}/{len(result.calls)} "
-                "successful context-accepted results"
+                "successful context-accepted results and "
+                f"{len(semantic_progress_refs)} semantic progress signals"
             ),
-            material_progress=bool(accepted_refs),
-            progress_signal_refs=accepted_refs,
+            material_progress=bool(semantic_progress_refs),
+            progress_signal_refs=semantic_progress_refs,
             limitation_codes=limitation_codes,
         )
         return RuntimeActionExecution(
@@ -611,8 +620,8 @@ class ToolCallBatchCapabilityExecutor:
             expected_kind=AgentActionKind.TOOL_CALL_BATCH,
         )
         try:
-            result = ToolCallBatchExecutionResult.model_validate(
-                execution.result_payload
+            result = ToolCallBatchExecutionResult.model_validate_json(
+                canonical_json(execution.result_payload)
             )
         except ValidationError as exc:
             issue_summary = [

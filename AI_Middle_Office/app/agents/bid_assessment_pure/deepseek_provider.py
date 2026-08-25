@@ -12,7 +12,7 @@ from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 import httpx
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
 from .action_runtime import (
     ActionLoopContractRejected,
@@ -20,7 +20,9 @@ from .action_runtime import (
     MainAgentModelDecision,
     MainAgentProviderOutcome,
     ProviderMainAgentActionProvider,
+    ToolCallBatchAction,
 )
+from .common import StrictContract, ToolName
 from .provider_runtime import (
     OpenAICompatibleChatCodec,
     ProviderAdapter,
@@ -36,6 +38,7 @@ from .provider_runtime import (
     ProviderStructuredOutputSpec,
     ProviderStrictMode,
     ProviderTokenCounter,
+    ProviderToolCallProposal,
     ProviderToolChoice,
     ProviderTransportFailure,
     ProviderWireRequest,
@@ -58,10 +61,30 @@ from .tool_runtime import RegistrySnapshot, canonical_hash, canonical_json
 
 _OFFICIAL_HOST = "api.deepseek.com"
 _OFFICIAL_PATHS = frozenset({"/chat/completions", "/v1/chat/completions"})
+_INVALID_TOOL_ARGUMENTS_SAFE_MESSAGE = (
+    "provider codec rejected response: value is not valid JSON"
+)
 
 
 class OfficialDeepSeekConfigurationError(ValueError):
     """The local Provider configuration is missing or outside its allowlist."""
+
+
+class ProviderToolDecisionCallProjection(StrictContract):
+    """Compact untrusted Tool selection repaired without Function Calling."""
+
+    tool_name: ToolName
+    arguments: dict[str, Any]
+
+
+class ProviderToolDecisionProjection(StrictContract):
+    """Provider-visible recovery shape; Runtime injects every authority field."""
+
+    concise_basis: str = Field(min_length=1, max_length=500)
+    calls: tuple[ProviderToolDecisionCallProjection, ...] = Field(
+        min_length=1,
+        max_length=4,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -350,29 +373,51 @@ class DeepSeekMainAgentActionProvider:
                 "request_hash": request.request_hash,
             }
         ).removeprefix("sha256:")
-        result = await self._adapter.invoke(
-            ProviderInvocationRequest(
-                call_ref=call_ref,
-                task_ref=request.task_ref,
-                state_version=request.origin_state_version,
-                consumer=ContextConsumer.MAIN_AGENT,
-                context=context,
-                registry_snapshot=registry_snapshot,
-                runtime_input=runtime_input,
-                structured_output=None,
-                tool_choice=(
-                    ProviderToolChoice.AUTO
-                    if request.visible_tool_names
-                    else ProviderToolChoice.NONE
-                ),
-                tool_strict_mode=ProviderStrictMode.PREFERRED,
-                max_output_tokens=min(
-                    self._adapter.capabilities.max_output_tokens,
-                    context.snapshot.reserved_output_tokens,
-                ),
-            )
+        invocation = ProviderInvocationRequest(
+            call_ref=call_ref,
+            task_ref=request.task_ref,
+            state_version=request.origin_state_version,
+            consumer=ContextConsumer.MAIN_AGENT,
+            context=context,
+            registry_snapshot=registry_snapshot,
+            runtime_input=runtime_input,
+            structured_output=None,
+            tool_choice=(
+                ProviderToolChoice.AUTO
+                if request.visible_tool_names
+                else ProviderToolChoice.NONE
+            ),
+            tool_strict_mode=ProviderStrictMode.PREFERRED,
+            max_output_tokens=min(
+                self._adapter.capabilities.max_output_tokens,
+                context.snapshot.reserved_output_tokens,
+            ),
         )
-        if result.output_kind is ProviderOutputKind.TEXT:
+        repaired_tool_batch: ToolCallBatchAction | None = None
+        repaired_tool_basis: str | None = None
+        try:
+            result = await self._adapter.invoke(invocation)
+        except ProviderAdapterError as exc:
+            if not self._is_repairable_tool_arguments_failure(
+                error=exc,
+                request=request,
+                registry_snapshot=registry_snapshot,
+            ):
+                raise
+            result, repaired_tool_batch, repaired_tool_basis = (
+                await self._repair_invalid_tool_arguments(
+                    request=request,
+                    context=context,
+                    registry_snapshot=registry_snapshot,
+                    rejected_call_ref=call_ref,
+                )
+            )
+        if repaired_tool_batch is not None:
+            proposal = repaired_tool_batch
+            concise_basis = repaired_tool_basis or (
+                "recovered one or more validated Tool calls"
+            )
+        elif result.output_kind is ProviderOutputKind.TEXT:
             try:
                 payload = parse_json_object(
                     result.assistant_text or "",
@@ -412,6 +457,156 @@ class DeepSeekMainAgentActionProvider:
         return MainAgentProviderOutcome(
             **body,
             outcome_hash=canonical_hash(body),
+        )
+
+    async def _repair_invalid_tool_arguments(
+        self,
+        *,
+        request: MainAgentDecisionRequest,
+        context: ContextAssemblyResult,
+        registry_snapshot: RegistrySnapshot,
+        rejected_call_ref: str,
+    ) -> tuple[ProviderModelResult, ToolCallBatchAction, str]:
+        """Recover one Tool decision through compact structured output once."""
+
+        payload = {
+            "request": {
+                "request_ref": request.request_ref,
+                "task_ref": request.task_ref,
+                "turn_ref": request.turn_ref,
+                "decision_sequence": request.decision_sequence,
+                "origin_state_version": request.origin_state_version,
+                "execution_mode": request.execution_mode.value,
+                "plan_ref": request.plan_ref,
+                "context_snapshot_ref": request.context_snapshot_ref,
+                "visible_tool_names": list(request.visible_tool_names),
+                "observation_refs": list(request.observation_refs),
+            },
+            "function_call_contract_repair": {
+                "attempt": 1,
+                "rejected_call_ref": rejected_call_ref,
+                "issues": [
+                    {
+                        "loc": ["tool_calls", "function", "arguments"],
+                        "type": "invalid_json_object",
+                    }
+                ],
+                "instruction": (
+                    "上一次响应已经选择了工具，但 Function Call Arguments 不是合法"
+                    " JSON。重新选择当前仍需调用的工具，并通过本次紧凑结构化输出"
+                    "返回 tool_name 和完整 arguments Object；只能选择 visible_tool_names，"
+                    "不得复用、补写或猜测上一次损坏参数。"
+                ),
+            },
+        }
+        runtime_input = ProviderRuntimeInput.from_payload(
+            input_ref=f"{request.request_ref}:tool-decision-repair:1",
+            input_kind="main_agent_tool_decision_contract_repair",
+            payload=payload,
+        )
+        repair_call_ref = "model-call:" + canonical_hash(
+            {
+                "request_ref": request.request_ref,
+                "request_hash": request.request_hash,
+                "repair_kind": "compact_tool_decision",
+                "repair_of_call_ref": rejected_call_ref,
+                "attempt": 1,
+            }
+        ).removeprefix("sha256:")
+        repaired = await self._adapter.invoke(
+            ProviderInvocationRequest(
+                call_ref=repair_call_ref,
+                task_ref=request.task_ref,
+                state_version=request.origin_state_version,
+                consumer=ContextConsumer.MAIN_AGENT,
+                context=context,
+                registry_snapshot=registry_snapshot,
+                runtime_input=runtime_input,
+                structured_output=ProviderStructuredOutputSpec.from_model(
+                    schema_name="provider_tool_decision_repair",
+                    output_model=ProviderToolDecisionProjection,
+                    strict_mode=ProviderStrictMode.PREFERRED,
+                ),
+                tool_choice=ProviderToolChoice.NONE,
+                tool_strict_mode=ProviderStrictMode.PREFERRED,
+                max_output_tokens=min(
+                    self._adapter.capabilities.max_output_tokens,
+                    context.snapshot.reserved_output_tokens,
+                ),
+            )
+        )
+        if (
+            repaired.output_kind is not ProviderOutputKind.STRUCTURED
+            or repaired.structured_payload is None
+        ):
+            raise ActionLoopContractRejected(
+                "compact Tool decision repair returned no structured projection"
+            )
+        try:
+            projection = ProviderToolDecisionProjection.model_validate_json(
+                canonical_json(repaired.structured_payload)
+            )
+        except ValidationError as exc:
+            raise ActionLoopContractRejected(
+                "compact Tool decision repair failed Runtime validation"
+            ) from exc
+
+        visible_names = set(registry_snapshot.visible_tool_names)
+        proposals: list[ProviderToolCallProposal] = []
+        for sequence, call in enumerate(projection.calls, start=1):
+            if call.tool_name not in visible_names:
+                raise ActionLoopContractRejected(
+                    "compact Tool decision selected a non-visible Tool"
+                )
+            raw_arguments = canonical_json(call.arguments)
+            tool_call_id = "provider-tool-call:" + canonical_hash(
+                {
+                    "repair_call_ref": repair_call_ref,
+                    "sequence": sequence,
+                    "tool_name": call.tool_name,
+                    "arguments": call.arguments,
+                }
+            ).removeprefix("sha256:")
+            proposals.append(
+                ProviderToolCallProposal(
+                    model_turn_ref=repair_call_ref,
+                    provider_tool_call_id=tool_call_id,
+                    sequence=sequence,
+                    task_ref=request.task_ref,
+                    context_snapshot_ref=request.context_snapshot_ref,
+                    state_version=request.origin_state_version,
+                    tool_name=call.tool_name,
+                    raw_arguments_json=raw_arguments,
+                    raw_arguments_hash=canonical_hash(raw_arguments),
+                    arguments=call.arguments,
+                    arguments_hash=canonical_hash(call.arguments),
+                    registry_snapshot_ref=registry_snapshot.snapshot_ref,
+                    registry_snapshot_hash=registry_snapshot.snapshot_hash,
+                    visible_tools_hash=registry_snapshot.visible_tools_hash,
+                    authorization_snapshot_ref=(
+                        context.snapshot.authorization_snapshot_ref
+                    ),
+                )
+            )
+        batch = ToolCallBatchAction(
+            model_turn_ref=repair_call_ref,
+            calls=tuple(proposals),
+        )
+        return repaired, batch, projection.concise_basis
+
+    @staticmethod
+    def _is_repairable_tool_arguments_failure(
+        *,
+        error: ProviderAdapterError,
+        request: MainAgentDecisionRequest,
+        registry_snapshot: RegistrySnapshot | None,
+    ) -> bool:
+        return (
+            error.failure.code is ProviderErrorCode.RESPONSE_CONTRACT_VIOLATION
+            and error.failure.safe_message == _INVALID_TOOL_ARGUMENTS_SAFE_MESSAGE
+            and bool(request.visible_tool_names)
+            and registry_snapshot is not None
+            and bool(registry_snapshot.visible_tool_names)
         )
 
     async def _repair_no_tool_decision(
@@ -496,7 +691,10 @@ class DeepSeekMainAgentActionProvider:
                 if (
                     attempt == 1
                     and exc.failure.code
-                    is ProviderErrorCode.RESPONSE_CONTRACT_VIOLATION
+                    in {
+                        ProviderErrorCode.RESPONSE_CONTRACT_VIOLATION,
+                        ProviderErrorCode.RESPONSE_JSON_ENVELOPE_INVALID,
+                    }
                 ):
                     last_error = exc
                     validation_feedback = [

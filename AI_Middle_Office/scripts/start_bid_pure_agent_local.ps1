@@ -8,7 +8,8 @@ param(
     [string]$SecretEnvFile = "",
     [switch]$InitializeLocalDatabase,
     [switch]$PreflightOnly,
-    [switch]$ReplaceLocalInstance
+    [switch]$ReplaceLocalInstance,
+    [switch]$EnableProviderBoundaryV2
 )
 
 $ErrorActionPreference = "Stop"
@@ -94,6 +95,9 @@ $env:STARTUP_COMPAT_MIGRATIONS = "false"
 $env:FEATURE_VITE_FRONTEND = "true"
 $env:FEATURE_BID_ASSESSMENT_PURE_AGENT = "true"
 $env:FEATURE_BID_ASSESSMENT_PURE_AGENT_RUNTIME = "true"
+$env:FEATURE_BID_ASSESSMENT_PURE_AGENT_PROVIDER_BOUNDARY_V2 = if (
+    $EnableProviderBoundaryV2
+) { "true" } else { "false" }
 $env:FEATURE_BID_ASSESSMENT_V1_RUNTIME = "false"
 $env:BID_ASSESSMENT_PURE_AGENT_CONTINUATION_SECRET = $continuationSecret
 $env:BID_PURE_AGENT_LOCAL_ACTIVATION = "explicit"

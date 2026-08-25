@@ -23,6 +23,7 @@ from .answer_contracts import (
     LimitationBlock,
     NarrativeBlock,
     PresentationHint,
+    RuntimeFactBlock,
     SourceBasis,
     StatementBlock,
     StatementSupportRecord,
@@ -175,7 +176,9 @@ class CitationProjector:
                     CitationIssueCode.MODEL_AUTHORED_CITATION,
                     "Draft text contains a model-authored Citation, locator, or transport reference.",
                     statement_ref=(
-                        block.block_id if isinstance(block, StatementBlock) else None
+                        block.block_id
+                        if isinstance(block, (StatementBlock, RuntimeFactBlock))
+                        else None
                     ),
                 )
             if _UNSAFE_TECHNICAL_OUTPUT_PATTERN.search(block.text):
@@ -183,7 +186,9 @@ class CitationProjector:
                     CitationIssueCode.MODEL_AUTHORED_CITATION,
                     "Draft text contains technical output that is not safe for publication.",
                     statement_ref=(
-                        block.block_id if isinstance(block, StatementBlock) else None
+                        block.block_id
+                        if isinstance(block, (StatementBlock, RuntimeFactBlock))
+                        else None
                     ),
                 )
 
@@ -197,10 +202,12 @@ class CitationProjector:
         support_by_ref = {
             support.statement_ref: support for support in validation.statement_support
         }
-        statements = [
-            block for block in draft.blocks if isinstance(block, StatementBlock)
+        support_blocks = [
+            block
+            for block in draft.blocks
+            if isinstance(block, (StatementBlock, RuntimeFactBlock))
         ]
-        if set(support_by_ref) != {statement.block_id for statement in statements}:
+        if set(support_by_ref) != {block.block_id for block in support_blocks}:
             add_issue(
                 CitationIssueCode.RUNTIME_BINDING_MISMATCH,
                 "Statement support receipts do not match the AnswerDraft.",
@@ -212,7 +219,7 @@ class CitationProjector:
         grounding_order: list[str] = []
         validated_grounding_refs = set(validation.validated_grounding_refs)
         validated_quote_refs = set(validation.validated_quote_refs)
-        for statement in statements:
+        for statement in support_blocks:
             support = support_by_ref.get(statement.block_id)
             if support is None:
                 statement_grounding_refs[statement.block_id] = ()
@@ -243,7 +250,9 @@ class CitationProjector:
                     statement_ref=statement.block_id,
                 )
             statement_grounding_refs[statement.block_id] = tuple(eligible_refs)
-            for quote_ref in statement.quote_refs:
+            for quote_ref in (
+                statement.quote_refs if isinstance(statement, StatementBlock) else ()
+            ):
                 if quote_ref not in validated_quote_refs:
                     add_issue(
                         CitationIssueCode.RUNTIME_BINDING_MISMATCH,
@@ -266,7 +275,8 @@ class CitationProjector:
                     )
                     continue
                 quote_refs_by_grounding.setdefault(owner_ref, []).append(quote_ref)
-                statements_by_quote_ref.setdefault(quote_ref, []).append(statement)
+                if isinstance(statement, StatementBlock):
+                    statements_by_quote_ref.setdefault(quote_ref, []).append(statement)
 
         valid_authorities: dict[str, CitationAuthorityRecord] = {}
         for grounding_ref in grounding_order:
@@ -385,7 +395,7 @@ class CitationProjector:
             citation_ref_by_grounding[grounding_ref] = citation.citation_ref
 
         statement_bindings: list[StatementCitationBinding] = []
-        for statement in statements:
+        for statement in support_blocks:
             citation_refs = tuple(
                 citation_ref_by_grounding[ref]
                 for ref in statement_grounding_refs.get(statement.block_id, ())
@@ -398,7 +408,10 @@ class CitationProjector:
                     "Required Citation could not be projected safely.",
                     statement_ref=statement.block_id,
                 )
-            if statement.epistemic_status is EpistemicStatus.CONFLICTED:
+            if (
+                isinstance(statement, StatementBlock)
+                and statement.epistemic_status is EpistemicStatus.CONFLICTED
+            ):
                 cited_groups = {
                     grounding_by_ref[ref].conflict_group_ref
                     for ref in statement_grounding_refs.get(statement.block_id, ())
@@ -628,6 +641,14 @@ class AnswerBlockRenderer:
                 )
                 content = f"{label}{block.text}{markers}"
                 text = self._present(content, block.presentation_hint)
+            elif isinstance(block, RuntimeFactBlock):
+                binding = binding_by_ref.get(block.block_id)
+                support = support_by_ref.get(block.block_id)
+                if binding is None or support is None or binding.citation_refs:
+                    raise AnswerRenderingRejected(
+                        "Runtime fact is missing its non-citable support binding"
+                    )
+                text = self._present(block.text, block.presentation_hint)
             elif isinstance(block, LimitationBlock):
                 label = self._limitation_label(block.code, language_is_zh)
                 text = f"> {label}{block.text}"

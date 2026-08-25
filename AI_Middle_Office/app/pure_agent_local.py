@@ -66,6 +66,13 @@ def create_app():
                         300,
                     ),
                 ),
+                provider_boundary_v2_enabled=bool(
+                    getattr(
+                        settings,
+                        "feature_bid_assessment_pure_agent_provider_boundary_v2",
+                        False,
+                    )
+                ),
             )
         )
     except Exception:
@@ -97,4 +104,3 @@ def create_app():
         "enterprise_baseline_version": materialized.enterprise_baseline_version,
     }
     return app
-

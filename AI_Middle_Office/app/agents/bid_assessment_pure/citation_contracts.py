@@ -316,7 +316,13 @@ class CitationProjectionDecision(StrictContract):
 
 class RenderedAnswerBlock(StrictContentContract):
     block_ref: Reference
-    block_type: Literal["narrative", "statement", "limitation", "interaction"]
+    block_type: Literal[
+        "narrative",
+        "statement",
+        "runtime_fact",
+        "limitation",
+        "interaction",
+    ]
     text: str = Field(min_length=1, max_length=32_000)
     citation_refs: tuple[Reference, ...] = Field(default_factory=tuple, max_length=128)
 

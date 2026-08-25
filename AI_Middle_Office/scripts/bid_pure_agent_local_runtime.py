@@ -24,6 +24,9 @@ from app.agents.bid_assessment_pure.local_runtime_factory import (
     LocalPureAgentCompositionConfig,
     build_local_pure_agent_adapters,
 )
+from app.agents.bid_assessment_pure.persisted_context_adapters import (
+    AuthorizedResourceIdentity,
+)
 from app.agents.bid_assessment_pure.offline_rag_runtime import (
     CanonicalOfflineRagSources,
     OfflineEvidenceRecord,
@@ -67,6 +70,7 @@ class FrozenLocalRuntimeConfig:
     embedding_model_path: Path
     secret_env_file: Path
     provider_timeout_seconds: int = 180
+    provider_boundary_v2_enabled: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,9 +283,26 @@ def materialize_local_runtime(
             rag_sources=rag_sources,
             model_profile=model_profile,
             context_profile=context_profile,
+            provider_boundary_v2_enabled=(
+                config.provider_boundary_v2_enabled
+            ),
             authorized_document_refs=(bid_index.scope_ref,),
             enterprise_scope_ref=enterprise_index.scope_ref,
             required_resource_refs=(bid_index.scope_ref, enterprise_index.scope_ref),
+            resource_identities=(
+                AuthorizedResourceIdentity(
+                    resource_ref=bid_index.scope_ref,
+                    resource_kind="bid_document",
+                    display_name=bid_index.safe_title,
+                    resource_version_ref=bid_index.version_ref,
+                ),
+                AuthorizedResourceIdentity(
+                    resource_ref=enterprise_index.scope_ref,
+                    resource_kind="enterprise_knowledge",
+                    display_name=enterprise_index.safe_title,
+                    resource_version_ref=enterprise_index.version_ref,
+                ),
+            ),
         )
     )
     return FrozenLocalRuntimeMaterialization(

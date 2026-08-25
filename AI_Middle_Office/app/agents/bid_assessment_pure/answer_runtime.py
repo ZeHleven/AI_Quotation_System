@@ -23,6 +23,7 @@ from .answer_contracts import (
     GroundingValidationIssue,
     InteractionBlock,
     LimitationBlock,
+    RuntimeFactBlock,
     SourceBasis,
     StatementBlock,
     StatementSupportRecord,
@@ -44,6 +45,7 @@ _RECEIPT_KINDS = {
     GroundingKind.PERMISSION_RECEIPT,
     GroundingKind.TOOL_RECEIPT,
     GroundingKind.CONTEXT_RECEIPT,
+    GroundingKind.RESOURCE_IDENTITY_RECEIPT,
 }
 
 _PREMISE_KINDS = {
@@ -95,6 +97,9 @@ _EXPECTED_SOURCE_BASIS = {
     GroundingKind.PERMISSION_RECEIPT: {SourceBasis.RUNTIME_RECEIPT},
     GroundingKind.TOOL_RECEIPT: {SourceBasis.RUNTIME_RECEIPT},
     GroundingKind.CONTEXT_RECEIPT: {SourceBasis.RUNTIME_RECEIPT},
+    GroundingKind.RESOURCE_IDENTITY_RECEIPT: {
+        SourceBasis.RUNTIME_RECEIPT,
+    },
 }
 
 
@@ -338,6 +343,53 @@ class GroundingIntegrityGuard:
                     limitation_refs=statement.limitation_refs,
                     citation_required=citation_required,
                     citation_ready=citation_ready,
+                    publishable=len(issues) == issue_count_before,
+                )
+            )
+
+        for runtime_fact in (
+            block for block in draft.blocks if isinstance(block, RuntimeFactBlock)
+        ):
+            issue_count_before = len(issues)
+            records = [
+                selected_records[ref]
+                for ref in runtime_fact.grounding_refs
+                if ref in selected_records
+            ]
+            if not records or any(
+                record.status is not GroundingStatus.SUPPORTED
+                or record.grounding_kind
+                is not GroundingKind.RESOURCE_IDENTITY_RECEIPT
+                or record.source_basis is not SourceBasis.RUNTIME_RECEIPT
+                or record.citable
+                or record.citation_projection_ready
+                for record in records
+            ):
+                add_issue(
+                    GroundingIssueCode.SUPPORT_MATRIX_UNSATISFIED,
+                    "Runtime fact requires current non-citable resource identity receipts.",
+                    block_ref=runtime_fact.block_id,
+                )
+            source_bases = tuple(
+                basis
+                for basis in SourceBasis
+                if any(record.source_basis is basis for record in records)
+            )
+            statement_support.append(
+                StatementSupportRecord(
+                    statement_ref=runtime_fact.block_id,
+                    claim_type=ClaimType.FACT,
+                    epistemic_status=EpistemicStatus.SUPPORTED,
+                    source_bases=source_bases,
+                    grounding_refs=tuple(
+                        ref
+                        for ref in runtime_fact.grounding_refs
+                        if ref in selected_records
+                    ),
+                    quote_refs=(),
+                    limitation_refs=(),
+                    citation_required=False,
+                    citation_ready=False,
                     publishable=len(issues) == issue_count_before,
                 )
             )

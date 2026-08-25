@@ -9,9 +9,9 @@ caller-owned database transaction.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .common import Reference, StrictContract
 from .context_runtime import (
@@ -32,7 +32,10 @@ from .repository import (
 from .persisted_evidence_adapters import (
     PersistedEvidenceArtifactRejected,
     PersistedEvidenceAtomAuthority,
+    PersistedPriorAnswerEvidenceLineage,
     extract_persisted_evidence_atoms,
+    index_persisted_evidence_atoms,
+    load_prior_answer_evidence_lineage,
 )
 from .runtime import (
     ContextAssemblyRequest,
@@ -53,6 +56,20 @@ from .tool_runtime import RegistrySnapshot, canonical_hash, canonical_json
 
 
 _MAX_CONTEXT_CONTENT_CHARS = 131_072
+_MAX_COMPACT_SEARCH_CANDIDATES = 16
+_MAX_COMPACT_SEARCH_EXCERPT_CHARS = 500
+_MAX_COMPACT_DRAFT_TEXT_CHARS = 600
+_MAX_PRIOR_ANSWER_LINEAGES = 4
+_MAX_PRIOR_LINEAGE_EVIDENCE = 128
+
+
+class AuthorizedResourceIdentity(StrictContract):
+    """Runtime-owned display identity; never evidence for resource contents."""
+
+    resource_ref: Reference
+    resource_kind: Literal["bid_document", "enterprise_knowledge"]
+    display_name: str = Field(min_length=1, max_length=500)
+    resource_version_ref: Reference
 
 
 class PersistedContextProjectionPolicy(StrictContract):
@@ -63,7 +80,18 @@ class PersistedContextProjectionPolicy(StrictContract):
     system_policy: str = Field(min_length=1, max_length=32_768)
     output_contract: str = Field(min_length=1, max_length=32_768)
     registry_snapshot: RegistrySnapshot | None = None
+    resource_identities: tuple[AuthorizedResourceIdentity, ...] = Field(
+        default_factory=tuple,
+        max_length=128,
+    )
     max_interaction_messages: int = Field(default=20, ge=0, le=50)
+
+    @model_validator(mode="after")
+    def validate_resource_identities(self) -> "PersistedContextProjectionPolicy":
+        refs = tuple(item.resource_ref for item in self.resource_identities)
+        if len(refs) != len(set(refs)):
+            raise ValueError("resource identity refs must be unique")
+        return self
 
 
 class PersistedContextCandidateSource:
@@ -134,7 +162,10 @@ class PersistedContextCandidateSource:
             self._tool_protocol_candidates(task=task, request=request)
         )
         candidates.extend(self._resource_receipts(request))
-        candidates.extend(self._observation_candidates(task=task, request=request))
+        observation_candidates = list(
+            self._observation_candidates(task=task, request=request)
+        )
+        candidates.extend(observation_candidates)
 
         if task.plan_ref is not None:
             candidates.append(self._plan_candidate(task=task, request=request))
@@ -147,6 +178,32 @@ class PersistedContextCandidateSource:
             before_sequence=current.sequence_no,
             limit=self._policy.max_interaction_messages,
         )
+        lineage_candidates, lineage_authorities = (
+            self._prior_answer_lineage_candidates(
+                task=task,
+                request=request,
+                history=history,
+            )
+        )
+        existing_evidence_refs = {
+            candidate.entry_ref
+            for candidate in observation_candidates
+            if candidate.kind is ContextEntryKind.EVIDENCE_ATOM
+        }
+        for atom in lineage_authorities:
+            if atom.evidence_ref in existing_evidence_refs:
+                continue
+            candidates.append(
+                self._evidence_atom_candidate(
+                    atom=atom,
+                    request=request,
+                    authority_label=(
+                        "persisted-prior-answer-evidence-authority"
+                    ),
+                )
+            )
+            existing_evidence_refs.add(atom.evidence_ref)
+        candidates.extend(lineage_candidates)
         candidates.extend(
             self._interaction_candidate(row=row, request=request) for row in history
         )
@@ -431,33 +488,69 @@ class PersistedContextCandidateSource:
         self,
         request: ContextAssemblyRequest,
     ) -> tuple[ContextEntryCandidate, ...]:
+        identities = {
+            item.resource_ref: item for item in self._policy.resource_identities
+        }
         return tuple(
             self._candidate(
                 identity={
                     "kind": "resource_receipt",
                     "resource_ref": resource_ref,
                     "authorization_ref": request.authorization_snapshot_ref,
+                    "resource_identity": (
+                        None
+                        if resource_ref not in identities
+                        else identities[resource_ref].model_dump(mode="json")
+                    ),
                 },
                 stable_key=f"resource:{canonical_hash(resource_ref)[7:23]}",
                 source_ref=resource_ref,
-                source_version_ref=request.authorization_snapshot_ref,
+                source_version_ref=(
+                    identities[resource_ref].resource_version_ref
+                    if resource_ref in identities
+                    else request.authorization_snapshot_ref
+                ),
                 request=request,
                 lane=ContextLane.OBSERVATION_GROUNDING,
                 kind=ContextEntryKind.GROUNDING,
                 representation=ContextRepresentation.REF_ONLY,
-                authority_label="authorized-resource-receipt",
+                authority_label=(
+                    "authorized-resource-identity-receipt"
+                    if resource_ref in identities
+                    else "authorized-resource-receipt"
+                ),
                 protection_class=ContextProtectionClass.PROTECTED,
                 trust_class=ContextTrustClass.UNTRUSTED_DATA,
                 content=canonical_json(
-                    {
-                        "resource_ref": resource_ref,
-                        "authorization_bound": True,
-                        "evidence_loaded": False,
-                        "instruction": (
-                            "This receipt is not evidence. Use an authorized Tool "
-                            "before making resource-backed claims."
-                        ),
-                    }
+                    (
+                        {
+                            "schema_name": (
+                                "bid.pure-agent.resource-identity-receipt.v1"
+                            ),
+                            "resource_ref": resource_ref,
+                            "resource_kind": identities[resource_ref].resource_kind,
+                            "display_name": identities[resource_ref].display_name,
+                            "resource_version_ref": (
+                                identities[resource_ref].resource_version_ref
+                            ),
+                            "authorization_bound": True,
+                            "claim_scope": "resource_identity_and_load_status_only",
+                            "instruction": (
+                                "This receipt may identify the loaded resource but "
+                                "cannot support claims about its business contents."
+                            ),
+                        }
+                        if resource_ref in identities
+                        else {
+                            "resource_ref": resource_ref,
+                            "authorization_bound": True,
+                            "evidence_loaded": False,
+                            "instruction": (
+                                "This receipt is not evidence. Use an authorized Tool "
+                                "before making resource-backed claims."
+                            ),
+                        }
+                    )
                 ),
                 required=True,
                 material_if_omitted=True,
@@ -580,6 +673,7 @@ class PersistedContextCandidateSource:
         request: ContextAssemblyRequest,
     ) -> tuple[ContextEntryCandidate, ...]:
         candidates: list[ContextEntryCandidate] = []
+        evidence_atoms: list[PersistedEvidenceAtomAuthority] = []
         for observation_ref in task.observation_refs:
             try:
                 artifact = self._repository.load_context_observation_artifact(
@@ -602,22 +696,118 @@ class PersistedContextCandidateSource:
                     )
                 )
                 try:
-                    evidence_atoms = extract_persisted_evidence_atoms(artifact)
+                    extracted_atoms = extract_persisted_evidence_atoms(artifact)
                 except PersistedEvidenceArtifactRejected as exc:
                     raise ContextSourceUnavailable(
                         "persisted Evidence Atom authority is invalid"
                     ) from exc
-                candidates.extend(
-                    self._evidence_atom_candidate(atom=atom, request=request)
-                    for atom in evidence_atoms
-                )
+                evidence_atoms.extend(extracted_atoms)
+        try:
+            evidence_by_ref = index_persisted_evidence_atoms(evidence_atoms)
+        except PersistedEvidenceArtifactRejected as exc:
+            raise ContextSourceUnavailable(
+                "persisted Evidence Atom authority is invalid"
+            ) from exc
+        candidates.extend(
+            self._evidence_atom_candidate(atom=atom, request=request)
+            for atom in evidence_by_ref.values()
+        )
         return tuple(candidates)
+
+    def _prior_answer_lineage_candidates(
+        self,
+        *,
+        task: AgentTaskState,
+        request: ContextAssemblyRequest,
+        history: tuple[ContextMessageRow, ...],
+    ) -> tuple[
+        tuple[ContextEntryCandidate, ...],
+        tuple[PersistedEvidenceAtomAuthority, ...],
+    ]:
+        answer_rows = [
+            row
+            for row in history
+            if row.role == "assistant" and row.message_type == "answer.committed"
+        ][-_MAX_PRIOR_ANSWER_LINEAGES:]
+        if not answer_rows:
+            return (), ()
+        lineages: list[PersistedPriorAnswerEvidenceLineage] = []
+        authorities: list[PersistedEvidenceAtomAuthority] = []
+        try:
+            for row in answer_rows:
+                try:
+                    lineage, selected = load_prior_answer_evidence_lineage(
+                        repository=self._repository,
+                        current_task=task,
+                        message_ref=row.message_ref,
+                        allowed_scope_refs=request.required_resource_refs,
+                    )
+                except PureAgentNotFound:
+                    # Older rendered messages may remain in history after their
+                    # response version was superseded.  They are visible chat
+                    # history, but no longer carry inheritable Answer authority.
+                    continue
+                if lineage is None:
+                    continue
+                lineages.append(lineage)
+                authorities.extend(selected)
+            indexed = index_persisted_evidence_atoms(authorities)
+        except (PureAgentPersistenceError, PersistedEvidenceArtifactRejected) as exc:
+            raise ContextSourceUnavailable(
+                "prior committed Answer evidence lineage is invalid"
+            ) from exc
+        if len(indexed) > _MAX_PRIOR_LINEAGE_EVIDENCE:
+            raise ContextSourceUnavailable(
+                "prior committed Answer evidence exceeds the Context limit"
+            )
+        return (
+            tuple(
+                self._prior_answer_lineage_candidate(
+                    lineage=lineage,
+                    request=request,
+                )
+                for lineage in lineages
+            ),
+            tuple(indexed.values()),
+        )
+
+    def _prior_answer_lineage_candidate(
+        self,
+        *,
+        lineage: PersistedPriorAnswerEvidenceLineage,
+        request: ContextAssemblyRequest,
+    ) -> ContextEntryCandidate:
+        content = canonical_json(lineage)
+        return self._candidate(
+            identity={
+                "kind": "prior_answer_evidence_lineage",
+                "lineage_hash": lineage.lineage_hash,
+            },
+            stable_key=f"prior-answer-lineage:{lineage.message_ref}",
+            source_ref=lineage.response_ref,
+            source_version_ref=lineage.response_artifact_ref,
+            request=request,
+            lane=ContextLane.RELEVANT_INTERACTION,
+            kind=ContextEntryKind.EVIDENCE_PARENT,
+            representation=ContextRepresentation.STRUCTURED_PROJECTION,
+            authority_label="persisted-prior-answer-evidence-lineage",
+            protection_class=ContextProtectionClass.PROTECTED,
+            trust_class=ContextTrustClass.UNTRUSTED_DATA,
+            content=content,
+            source_content_hash=canonical_hash(lineage),
+            required=True,
+            material_if_omitted=True,
+            priority=88,
+            omission_action=ContextOmissionAction.FAIL,
+            compression_level=ContextCompressionLevel.L1,
+        )
 
     def _evidence_atom_candidate(
         self,
         *,
         atom: PersistedEvidenceAtomAuthority,
         request: ContextAssemblyRequest,
+        authority_label: str = "persisted-evidence-read-authority",
     ) -> ContextEntryCandidate:
         content = atom.context_content()
         return self._candidate(
@@ -630,7 +820,7 @@ class PersistedContextCandidateSource:
             lane=ContextLane.OBSERVATION_GROUNDING,
             kind=ContextEntryKind.EVIDENCE_ATOM,
             representation=ContextRepresentation.EXACT,
-            authority_label="persisted-evidence-read-authority",
+            authority_label=authority_label,
             protection_class=ContextProtectionClass.PROTECTED,
             trust_class=ContextTrustClass.UNTRUSTED_DATA,
             content=content,
@@ -652,9 +842,20 @@ class PersistedContextCandidateSource:
             "observation": observation.model_dump(mode="json"),
             "artifact": artifact.artifact,
         }
-        content = canonical_json(source_payload)
-        authority_label = "persisted-observation-artifact"
-        compression_level = ContextCompressionLevel.L0
+        projection = self._compact_observation_artifact(artifact.artifact)
+        projected_payload = {
+            "observation": observation.model_dump(mode="json"),
+            "artifact_projection": projection,
+            "artifact_receipt": {
+                "artifact_ref": observation.artifact_ref,
+                "artifact_hash": observation.artifact_hash,
+                "artifact_content_loaded": False,
+                "projection_kind": projection["projection_kind"],
+            },
+        }
+        content = canonical_json(projected_payload)
+        authority_label = "persisted-observation-compact-projection"
+        compression_level = ContextCompressionLevel.L2
         if len(content) > _MAX_CONTEXT_CONTENT_CHARS:
             content = canonical_json(
                 {
@@ -696,6 +897,300 @@ class PersistedContextCandidateSource:
             omission_action=ContextOmissionAction.LIMIT,
             compression_level=compression_level,
         )
+
+    def _compact_observation_artifact(self, artifact: Any) -> dict[str, Any]:
+        if not isinstance(artifact, dict):
+            return {
+                "projection_kind": "artifact_receipt",
+                "schema_name": None,
+                "content_projected": False,
+            }
+        schema_name = artifact.get("schema_name")
+        if schema_name == "bid.pure-agent.capability.tool-batch-result.v1":
+            return self._compact_tool_batch_artifact(artifact)
+        if schema_name == "bid.pure-agent.capability.answer-result.v1":
+            return self._compact_answer_artifact(artifact)
+        return {
+            "projection_kind": "artifact_receipt",
+            "schema_name": schema_name if isinstance(schema_name, str) else None,
+            "content_projected": False,
+            "top_level_keys": sorted(str(key) for key in artifact)[:32],
+        }
+
+    def _compact_tool_batch_artifact(
+        self,
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        raw_calls = artifact.get("calls")
+        calls = raw_calls if isinstance(raw_calls, list) else []
+        return {
+            "projection_kind": "tool_batch_result",
+            "schema_name": artifact.get("schema_name"),
+            "call_count": len(calls),
+            "calls": [
+                self._compact_tool_call(call)
+                for call in calls[:64]
+                if isinstance(call, dict)
+            ],
+        }
+
+    def _compact_tool_call(self, call: dict[str, Any]) -> dict[str, Any]:
+        result = call.get("result")
+        compact: dict[str, Any] = {
+            "call_ref": call.get("call_ref"),
+            "tool_name": call.get("tool_name"),
+            "accepted_for_context": call.get("accepted_for_context") is True,
+            "replayed": call.get("replayed") is True,
+        }
+        if isinstance(result, dict):
+            compact["result"] = self._compact_tool_result(
+                result,
+                tool_name=str(call.get("tool_name") or ""),
+            )
+        denied_codes = [
+            item.get("code")
+            for item in (call.get("guard_decisions") or [])
+            if isinstance(item, dict) and item.get("allowed") is False
+        ]
+        if denied_codes:
+            compact["denied_guard_codes"] = list(dict.fromkeys(denied_codes))[:16]
+        provenance = call.get("provenance")
+        if isinstance(provenance, list):
+            compact["provenance_receipts"] = [
+                {
+                    "output_ref": item.get("output_ref"),
+                    "source_domain": item.get("source_domain"),
+                    "source_scope_ref": item.get("source_scope_ref"),
+                    "source_version_ref": item.get("source_version_ref"),
+                    "locator": item.get("locator"),
+                    "citable": item.get("citable") is True,
+                }
+                for item in provenance[:64]
+                if isinstance(item, dict)
+            ]
+        return compact
+
+    def _compact_tool_result(
+        self,
+        result: dict[str, Any],
+        *,
+        tool_name: str,
+    ) -> dict[str, Any]:
+        if result.get("ok") is not True:
+            error = result.get("error")
+            compact_error: dict[str, Any] | None = None
+            if isinstance(error, dict):
+                compact_error = {
+                    "code": error.get("code"),
+                    "message": self._bounded_text(error.get("message"), 300),
+                    "retryable": error.get("retryable") is True,
+                }
+            return {"ok": False, "error": compact_error}
+
+        data = result.get("data")
+        if not isinstance(data, dict):
+            return {"ok": True, "data_projection": {"kind": "empty"}}
+        if isinstance(data.get("candidates"), list):
+            candidates = data["candidates"]
+            return {
+                "ok": True,
+                "data_projection": {
+                    "kind": "search_candidates",
+                    "candidate_count": len(candidates),
+                    "candidates": [
+                        {
+                            "evidence_ref": item.get("evidence_ref"),
+                            "excerpt": self._bounded_text(
+                                item.get("excerpt"),
+                                _MAX_COMPACT_SEARCH_EXCERPT_CHARS,
+                            ),
+                            "locator": item.get("locator"),
+                            "citable": item.get("citable") is True,
+                        }
+                        for item in candidates[:_MAX_COMPACT_SEARCH_CANDIDATES]
+                        if isinstance(item, dict)
+                    ],
+                    "truncated": len(candidates) > _MAX_COMPACT_SEARCH_CANDIDATES,
+                },
+            }
+        if isinstance(data.get("evidence"), list):
+            evidence = data["evidence"]
+            return {
+                "ok": True,
+                "data_projection": {
+                    "kind": "evidence_read_receipts",
+                    "evidence_count": len(evidence),
+                    "evidence": [
+                        {
+                            "evidence_ref": item.get("evidence_ref"),
+                            "locator": item.get("locator"),
+                            "citable": item.get("citable") is True,
+                            "content_projected_as": "evidence_atom",
+                        }
+                        for item in evidence[:32]
+                        if isinstance(item, dict)
+                    ],
+                },
+            }
+        if isinstance(data.get("entries"), list):
+            entries = data["entries"]
+            return {
+                "ok": True,
+                "data_projection": {
+                    "kind": "document_outline",
+                    "entry_count": len(entries),
+                    "entries": [
+                        {
+                            "title": self._bounded_text(item.get("title"), 300),
+                            "level": item.get("level"),
+                            "locator": item.get("locator"),
+                        }
+                        for item in entries[:32]
+                        if isinstance(item, dict)
+                    ],
+                    "truncated": len(entries) > 32,
+                },
+            }
+        return {
+            "ok": True,
+            "data_projection": {
+                "kind": "result_receipt",
+                "tool_name": tool_name,
+                "data_keys": sorted(str(key) for key in data)[:32],
+            },
+        }
+
+    def _compact_answer_artifact(
+        self,
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        validation = artifact.get("validation")
+        validation = validation if isinstance(validation, dict) else {}
+        citation = artifact.get("citation_decision")
+        citation = citation if isinstance(citation, dict) else {}
+        issues = [
+            item
+            for item in (*self._dict_items(validation.get("issues")),
+                         *self._dict_items(citation.get("issues")))
+        ]
+        issue_projection = [
+            {
+                "code": item.get("code"),
+                "block_ref": item.get("block_ref"),
+                "statement_ref": item.get("statement_ref"),
+                "grounding_ref": item.get("grounding_ref"),
+                "quote_ref": item.get("quote_ref"),
+                "guard_message": self._bounded_text(item.get("message"), 300),
+                "required_action": self._answer_issue_action(item.get("code")),
+            }
+            for item in issues[:64]
+        ]
+        required_actions = list(
+            dict.fromkeys(
+                item["required_action"]
+                for item in issue_projection
+                if item.get("required_action")
+            )
+        )
+        execution_draft = artifact.get("execution_draft")
+        execution_draft = execution_draft if isinstance(execution_draft, dict) else {}
+        blocks = self._dict_items(execution_draft.get("blocks"))
+        statement_support = self._dict_items(validation.get("statement_support"))
+        return {
+            "projection_kind": "answer_guard_feedback",
+            "schema_name": artifact.get("schema_name"),
+            "status": artifact.get("status"),
+            "accepted": validation.get("accepted") is True,
+            "instruction": (
+                "不得原样重试被拒绝的 Answer。先按 required_actions 补齐或修正证据；"
+                "跨招标资料与企业资料的比较结论必须让每个 Statement 同时满足所需"
+                "source basis。只有 citable Evidence Atom 可用于最终引用。若一侧证据仍"
+                "不足，应明确标记 unknown，并建立 Statement 与 Limitation 的双向引用。"
+                "Resource Identity Receipt 只证明资料身份和加载状态，不能证明某项业务"
+                "内容缺失。若当前 Context 中仍有 search_candidates，应先通过 "
+                "evidence_read 将候选升级为 Evidence Atom，再重新生成 Answer。"
+            ),
+            "required_actions": required_actions,
+            "issues": issue_projection,
+            "draft_blocks": [
+                self._compact_answer_block(block) for block in blocks[:128]
+            ],
+            "statement_support": [
+                {
+                    "statement_ref": item.get("statement_ref"),
+                    "claim_type": item.get("claim_type"),
+                    "epistemic_status": item.get("epistemic_status"),
+                    "source_bases": item.get("source_bases") or [],
+                    "grounding_refs": (item.get("grounding_refs") or [])[:32],
+                    "limitation_refs": (item.get("limitation_refs") or [])[:16],
+                    "citation_ready": item.get("citation_ready") is True,
+                    "publishable": item.get("publishable") is True,
+                }
+                for item in statement_support[:128]
+            ],
+            "validated_grounding_refs": (
+                validation.get("validated_grounding_refs") or []
+            )[:128],
+            "limitation_codes": validation.get("limitation_codes") or [],
+        }
+
+    def _compact_answer_block(self, block: dict[str, Any]) -> dict[str, Any]:
+        keys = (
+            "block_type",
+            "block_id",
+            "claim_type",
+            "epistemic_status",
+            "grounding_refs",
+            "quote_refs",
+            "limitation_refs",
+            "premise_or_trigger",
+        )
+        compact = {key: block[key] for key in keys if key in block}
+        if "text" in block:
+            compact["text"] = self._bounded_text(
+                block.get("text"),
+                _MAX_COMPACT_DRAFT_TEXT_CHARS,
+            )
+        return compact
+
+    @staticmethod
+    def _answer_issue_action(code: Any) -> str:
+        actions = {
+            "support_matrix_unsatisfied": (
+                "acquire_citable_evidence_for_each_required_source_basis_then_retry"
+            ),
+            "limitation_receipt_invalid": (
+                "upgrade_search_candidates_with_evidence_read_or_use_compatible_"
+                "limitation_receipt"
+            ),
+            "citation_not_ready": "replace_search_candidate_with_evidence_read_atom",
+            "grounding_ref_unknown": "select_a_grounding_ref_present_in_current_context",
+            "grounding_not_in_context": "read_evidence_into_current_context_before_answer",
+            "grounding_status_not_publishable": (
+                "use_current_publishable_evidence_or_state_the_limitation"
+            ),
+            "grounding_source_not_current": "retrieve_current_source_version_evidence",
+            "quote_ref_unknown": "remove_unknown_quote_or_read_authoritative_quote",
+            "quote_span_invalid": "correct_or_remove_the_direct_quote",
+            "conflict_groups_insufficient": (
+                "retrieve_both_conflict_sides_or_report_the_unresolved_conflict"
+            ),
+        }
+        return actions.get(str(code), "resolve_guard_issue_before_retrying_answer")
+
+    @staticmethod
+    def _dict_items(value: Any) -> list[dict[str, Any]]:
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, dict)]
+
+    @staticmethod
+    def _bounded_text(value: Any, limit: int) -> str | None:
+        if not isinstance(value, str):
+            return None
+        if len(value) <= limit:
+            return value
+        return value[: max(0, limit - 1)] + "…"
 
     def _observation_receipt_candidate(
         self,

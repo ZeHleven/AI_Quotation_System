@@ -27,6 +27,7 @@ from app.agents.bid_assessment_pure.main_agent_boundary import (
     PersistedMainAgentDecisionBoundaryProvider,
 )
 from app.agents.bid_assessment_pure.persisted_context_adapters import (
+    AuthorizedResourceIdentity,
     PersistedContextAdapterFactories,
     PersistedContextCandidateSource,
     PersistedContextProjectionPolicy,
@@ -352,6 +353,51 @@ def test_resource_and_observation_receipts_never_claim_loaded_evidence(
         assert payload["authorization_bound"] is True
         assert payload["evidence_loaded"] is False
         assert "not evidence" in payload["instruction"]
+
+
+def test_v2l_authorized_resource_identity_receipt_is_narrow_and_versioned(
+    repository,
+) -> None:
+    repo, _ = repository
+    registry = _registry()
+    task, message = _new_task(repo, suffix="v2l-identity", with_history=False)
+    inputs = _inputs(repo, task=task, message=message, registry=registry)
+    request = _request(task, message, inputs)
+    resource_ref = inputs.required_resource_refs[0]
+    policy = _projection_policy(registry).model_copy(
+        update={
+            "resource_identities": (
+                AuthorizedResourceIdentity(
+                    resource_ref=resource_ref,
+                    resource_kind="enterprise_knowledge",
+                    display_name="冻结企业资料基线",
+                    resource_version_ref="enterprise-baseline-version:v2l",
+                ),
+            )
+        }
+    )
+    candidates = asyncio.run(
+        PersistedContextCandidateSource(repo, policy=policy).collect(
+            task=task,
+            request=request,
+        )
+    )
+    receipt = next(
+        candidate
+        for candidate in candidates
+        if candidate.kind is ContextEntryKind.GROUNDING
+        and candidate.source_ref == resource_ref
+    )
+    payload = json.loads(receipt.content)
+
+    assert receipt.authority_label == "authorized-resource-identity-receipt"
+    assert receipt.source_version_ref == "enterprise-baseline-version:v2l"
+    assert payload["display_name"] == "冻结企业资料基线"
+    assert payload["claim_scope"] == "resource_identity_and_load_status_only"
+    assert "evidence_loaded" not in payload
+    assert "cannot support claims about its business contents" in payload[
+        "instruction"
+    ]
 
 
 def test_snapshot_store_is_idempotent_and_task_scoped(repository) -> None:

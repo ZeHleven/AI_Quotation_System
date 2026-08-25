@@ -281,6 +281,8 @@ def _runtime_status_view() -> PureAgentRuntimeStatusView:
     return PureAgentRuntimeStatusView(
         surface_enabled=config.enabled,
         execution_switch_enabled=config.runtime_enabled,
+        provider_boundary_v2_enabled=config.provider_boundary_v2_enabled,
+        provider_boundary_mode=config.provider_boundary_mode,
         preflight_ready=bool(preflight and preflight.ready),
         runtime_available=runtime_available,
         startup_status=startup_status,

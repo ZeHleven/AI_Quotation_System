@@ -8,6 +8,9 @@ from app.agents.bid_assessment_pure.citation_runtime import (
     AnswerBlockRenderer,
     CitationProjector,
 )
+from app.agents.bid_assessment_pure.provider_answer_projection_v2 import (
+    ProviderAnswerProjectionV2,
+)
 from scripts.evaluate_bid_pure_agent_v606 import (
     SCHEMA_VERSION,
     build_synthetic_runtime,
@@ -145,6 +148,44 @@ def test_v606_partial_answer_cites_known_part_and_discloses_missing_validity() -
     assert result["limitation_codes"] == ["evidence_insufficient"]
     assert "部分确认" in rendered.text
     assert "证据不足" in rendered.text
+
+
+def test_v2_uncertainty_maps_to_a_guard_valid_evidence_limitation_repeatedly() -> None:
+    runtime = build_synthetic_runtime(
+        _case("A04_partial_enterprise_qualification")
+    )
+    grounding_ref = runtime.grounding_snapshot.records[0].grounding_ref
+    draft = ProviderAnswerProjectionV2.model_validate(
+        {
+            "response_language": "zh-CN",
+            "items": [
+                {
+                    "kind": "uncertainty",
+                    "text": "现有证据无法确认该资质仍在有效期内。",
+                    "grounding_refs": [grounding_ref],
+                    "limitation": "当前企业资料只包含资质等级，未提供有效期。",
+                }
+            ],
+        }
+    ).to_canonical(
+        context_snapshot_ref=runtime.context.snapshot.snapshot_ref,
+        state_version=runtime.task.state_version,
+    )
+
+    decisions = tuple(
+        GroundingIntegrityGuard().validate(
+            task=runtime.task,
+            context=runtime.context,
+            draft=draft,
+            grounding_snapshot=runtime.grounding_snapshot,
+        )
+        for _ in range(2)
+    )
+
+    assert all(decision.accepted for decision in decisions)
+    assert all(decision.issues == () for decision in decisions)
+    assert tuple(block.block_type for block in draft.blocks) == ("limitation",)
+    assert decisions[0].draft_hash == decisions[1].draft_hash
 
 
 def test_v606_runtime_projection_is_deterministic() -> None:

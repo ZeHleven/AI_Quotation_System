@@ -313,7 +313,10 @@ def test_gateway_executes_outline_once_and_replays_canonical_result() -> None:
     call = _call(
         snapshot=snapshot,
         tool_name=DOCUMENTS_OUTLINE,
-        arguments={"document_ref": "document:bid-1"},
+        arguments={
+            "document_ref": "document:bid-1",
+            "navigation_goal": "定位资格要求所在章节",
+        },
         sequence=1,
     )
     first = _execute(gateway, call=call, snapshot=snapshot)
@@ -409,6 +412,7 @@ def test_model_cannot_inject_runtime_scope_through_tool_arguments() -> None:
             tool_name=DOCUMENTS_OUTLINE,
             arguments={
                 "document_ref": "document:bid-1",
+                "navigation_goal": "定位资格要求所在章节",
                 "tenant_ref": "tenant:attacker",
                 "authorization_snapshot_ref": "authorization:attacker",
             },
@@ -431,7 +435,10 @@ def test_execution_scope_denial_prevents_adapter_invocation() -> None:
         call=_call(
             snapshot=snapshot,
             tool_name=DOCUMENTS_OUTLINE,
-            arguments={"document_ref": "document:outside"},
+            arguments={
+                "document_ref": "document:outside",
+                "navigation_goal": "定位资格要求所在章节",
+            },
             sequence=7,
         ),
         snapshot=snapshot,

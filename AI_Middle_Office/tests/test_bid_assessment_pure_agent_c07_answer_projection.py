@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.agents.bid_assessment_pure.action_runtime import (
+    ActionLoopContractRejected,
     MainAgentDecisionRequest,
     MainAgentModelActionKind,
     MainAgentModelDecision,
@@ -29,10 +30,15 @@ from app.agents.bid_assessment_pure.provider_answer_projection import (
     project_provider_decision,
 )
 from app.agents.bid_assessment_pure.provider_runtime import (
+    ProviderAdapterError,
     ProviderCapabilities,
+    ProviderErrorCode,
+    ProviderFailure,
     ProviderOutputKind,
     ProviderSchemaProjector,
     ProviderStrictMode,
+    ProviderToolCallProposal,
+    ProviderToolChoice,
 )
 from app.agents.bid_assessment_pure.runtime import (
     ContextAssemblyResult,
@@ -47,7 +53,16 @@ from app.agents.bid_assessment_pure.runtime import (
     ContextSnapshot,
     ContextTrustClass,
 )
-from app.agents.bid_assessment_pure.tool_runtime import canonical_hash, canonical_json
+from app.agents.bid_assessment_pure.tool_runtime import (
+    RegistrySnapshot,
+    ToolSnapshotEntry,
+    canonical_hash,
+    canonical_json,
+)
+from app.agents.bid_assessment_pure.tools import (
+    ModelVisibleToolContract,
+    ToolSafety,
+)
 
 
 def _project(payload: dict[str, object]):
@@ -65,7 +80,9 @@ def _project(payload: dict[str, object]):
     )
 
 
-def _provider_context() -> ContextAssemblyResult:
+def _provider_context(
+    registry_snapshot: RegistrySnapshot | None = None,
+) -> ContextAssemblyResult:
     entry_body = {
         "entry_ref": "evidence:c07-deadline",
         "stable_key": "evidence:deadline",
@@ -104,8 +121,12 @@ def _provider_context() -> ContextAssemblyResult:
         model_profile_hash=canonical_hash({"model": "c07"}),
         context_profile_ref="context-profile:c07",
         context_profile_hash=canonical_hash({"context": "c07"}),
-        registry_snapshot_ref=None,
-        registry_snapshot_hash=None,
+        registry_snapshot_ref=(
+            registry_snapshot.snapshot_ref if registry_snapshot else None
+        ),
+        registry_snapshot_hash=(
+            registry_snapshot.snapshot_hash if registry_snapshot else None
+        ),
         authorization_snapshot_ref="authorization-snapshot:c07",
         dependency_refs=("document:c07",),
         included_entries=(included,),
@@ -124,7 +145,11 @@ def _provider_context() -> ContextAssemblyResult:
     return ContextAssemblyResult(snapshot=snapshot, projection_entries=(projection,))
 
 
-def _provider_request(context: ContextAssemblyResult) -> MainAgentDecisionRequest:
+def _provider_request(
+    context: ContextAssemblyResult,
+    *,
+    visible_tool_names: tuple[str, ...] = (),
+) -> MainAgentDecisionRequest:
     body = {
         "task_ref": context.snapshot.task_ref,
         "turn_ref": "turn:c07-provider",
@@ -136,10 +161,14 @@ def _provider_request(context: ContextAssemblyResult) -> MainAgentDecisionReques
         "plan_ref": None,
         "context_snapshot_ref": context.snapshot.snapshot_ref,
         "context_snapshot_hash": context.snapshot.snapshot_hash,
-        "registry_snapshot_ref": None,
-        "registry_snapshot_hash": None,
-        "visible_tools_hash": None,
-        "visible_tool_names": (),
+        "registry_snapshot_ref": context.snapshot.registry_snapshot_ref,
+        "registry_snapshot_hash": context.snapshot.registry_snapshot_hash,
+        "visible_tools_hash": (
+            canonical_hash(list(visible_tool_names))
+            if context.snapshot.registry_snapshot_ref
+            else None
+        ),
+        "visible_tool_names": visible_tool_names,
         "observation_refs": (),
     }
     digest = canonical_hash(body)
@@ -156,11 +185,15 @@ def _provider_result(
     sequence: int,
     assistant_text: str | None = None,
     structured_payload: dict[str, object] | None = None,
+    call_ref: str | None = None,
+    tool_call_proposals: tuple[ProviderToolCallProposal, ...] = (),
 ) -> SimpleNamespace:
     return SimpleNamespace(
         output_kind=output_kind,
         assistant_text=assistant_text,
         structured_payload=structured_payload,
+        call_ref=call_ref or f"model-call:c07-{sequence}",
+        tool_call_proposals=tool_call_proposals,
         result_ref=f"provider-result:c07-{sequence}",
         response_hash=canonical_hash({"response": sequence}),
         provider_receipt_ref=f"provider-receipt:c07-{sequence}",
@@ -178,7 +211,82 @@ class _CaptureAdapter:
 
     async def invoke(self, request):
         self.requests.append(request)
-        return self.results.pop(0)
+        result = self.results.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        if callable(result):
+            return result(request)
+        return result
+
+
+def _provider_registry() -> RegistrySnapshot:
+    name = "bid_document_search"
+    input_schema = {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+        "additionalProperties": False,
+    }
+    model_contract = ModelVisibleToolContract(
+        name=name,
+        description="查询当前已授权招标文件中的相关条款。",
+        input_schema=input_schema,
+    )
+    safety = ToolSafety(
+        effect="read_only",
+        data_scope="context_bound",
+        external_egress=False,
+        requires_approval=False,
+    )
+    entry = ToolSnapshotEntry(
+        name=name,
+        definition_hash=canonical_hash({"definition": name}),
+        input_schema_hash=canonical_hash(input_schema),
+        output_schema_hash=canonical_hash({"type": "object"}),
+        binding_hash=canonical_hash({"kind": "local", "handler": name}),
+        safety_hash=canonical_hash(safety.model_dump(mode="json")),
+        execution_kind="local",
+        safety=safety,
+        model_contract=model_contract,
+    )
+    return RegistrySnapshot(
+        snapshot_ref="registry-snapshot:c07-provider",
+        snapshot_hash=canonical_hash({"registry": "c07-provider"}),
+        entries=(entry,),
+        visible_tool_names=(name,),
+        visible_tools_hash=canonical_hash([name]),
+    )
+
+
+def _invalid_tool_arguments_error() -> ProviderAdapterError:
+    return ProviderAdapterError(
+        ProviderFailure(
+            code=ProviderErrorCode.RESPONSE_CONTRACT_VIOLATION,
+            safe_message=(
+                "provider codec rejected response: value is not valid JSON"
+            ),
+        )
+    )
+
+
+def _compact_tool_decision_result(
+    request,
+    registry: RegistrySnapshot,
+) -> SimpleNamespace:
+    return _provider_result(
+        output_kind=ProviderOutputKind.STRUCTURED,
+        sequence=2,
+        call_ref=request.call_ref,
+        structured_payload={
+            "concise_basis": "仍需读取工期相关证据。",
+            "calls": [
+                {
+                    "tool_name": registry.visible_tool_names[0],
+                    "arguments": {"query": "工期要求"},
+                }
+            ],
+        },
+    )
 
 
 def test_compact_supported_statement_upgrades_to_canonical_answer() -> None:
@@ -468,6 +576,256 @@ def test_deepseek_initial_no_tool_branch_uses_compact_projection() -> None:
         == context.snapshot.snapshot_ref
     )
     assert outcome.proposal.answer.draft.state_version == context.snapshot.state_version
+
+
+def test_deepseek_repairs_invalid_tool_arguments_once_and_keeps_authority() -> None:
+    registry = _provider_registry()
+    context = _provider_context(registry)
+    request = _provider_request(
+        context,
+        visible_tool_names=registry.visible_tool_names,
+    )
+    adapter = _CaptureAdapter(
+        [
+            _invalid_tool_arguments_error(),
+            lambda invocation: _compact_tool_decision_result(invocation, registry),
+        ]
+    )
+
+    outcome = asyncio.run(
+        DeepSeekMainAgentActionProvider(adapter).decide(
+            request=request,
+            context=context,
+            registry_snapshot=registry,
+        )
+    )
+
+    assert len(adapter.requests) == 2
+    initial, repair = adapter.requests
+    assert initial.call_ref != repair.call_ref
+    assert repair.context.snapshot.snapshot_ref == context.snapshot.snapshot_ref
+    assert repair.state_version == request.origin_state_version
+    assert repair.registry_snapshot.snapshot_ref == registry.snapshot_ref
+    assert repair.registry_snapshot.snapshot_hash == registry.snapshot_hash
+    assert repair.tool_choice is ProviderToolChoice.NONE
+    assert repair.structured_output is not None
+    assert repair.structured_output.schema_name == "provider_tool_decision_repair"
+    assert repair.runtime_input.input_kind == (
+        "main_agent_tool_decision_contract_repair"
+    )
+    feedback = repair.runtime_input.payload["function_call_contract_repair"]
+    assert feedback["attempt"] == 1
+    assert feedback["rejected_call_ref"] == initial.call_ref
+    assert feedback["issues"] == [
+        {
+            "loc": ["tool_calls", "function", "arguments"],
+            "type": "invalid_json_object",
+        }
+    ]
+    assert "raw_arguments" not in feedback
+    assert set(repair.runtime_input.payload) == {
+        "request",
+        "function_call_contract_repair",
+    }
+    assert "decision_projection_schema" not in repair.runtime_input.payload
+    assert "action_payload_schemas" not in repair.runtime_input.payload
+    assert "answer_business_rules" not in repair.runtime_input.payload
+    assert outcome.proposal.action_kind == "tool_call_batch"
+    assert outcome.proposal.calls[0].arguments == {"query": "工期要求"}
+    assert outcome.proposal.calls[0].model_turn_ref == repair.call_ref
+    assert outcome.proposal.calls[0].context_snapshot_ref == (
+        context.snapshot.snapshot_ref
+    )
+    assert outcome.proposal.calls[0].registry_snapshot_hash == registry.snapshot_hash
+
+
+def test_deepseek_tool_decision_repair_rejects_non_visible_tool() -> None:
+    registry = _provider_registry()
+    context = _provider_context(registry)
+    request = _provider_request(
+        context,
+        visible_tool_names=registry.visible_tool_names,
+    )
+    adapter = _CaptureAdapter(
+        [
+            _invalid_tool_arguments_error(),
+            _provider_result(
+                output_kind=ProviderOutputKind.STRUCTURED,
+                sequence=2,
+                structured_payload={
+                    "concise_basis": "尝试选择未授权工具。",
+                    "calls": [
+                        {
+                            "tool_name": "enterprise_knowledge_search",
+                            "arguments": {"query": "企业资质"},
+                        }
+                    ],
+                },
+            ),
+        ]
+    )
+
+    with pytest.raises(
+        ActionLoopContractRejected,
+        match="non-visible Tool",
+    ):
+        asyncio.run(
+            DeepSeekMainAgentActionProvider(adapter).decide(
+                request=request,
+                context=context,
+                registry_snapshot=registry,
+            )
+        )
+
+    assert len(adapter.requests) == 2
+
+
+def test_deepseek_tool_decision_repair_requires_tool_calls() -> None:
+    registry = _provider_registry()
+    context = _provider_context(registry)
+    request = _provider_request(
+        context,
+        visible_tool_names=registry.visible_tool_names,
+    )
+    adapter = _CaptureAdapter(
+        [
+            _invalid_tool_arguments_error(),
+            _provider_result(
+                output_kind=ProviderOutputKind.STRUCTURED,
+                sequence=2,
+                structured_payload={
+                    "concise_basis": "错误地返回空工具列表。",
+                    "calls": [],
+                },
+            ),
+        ]
+    )
+
+    with pytest.raises(
+        ActionLoopContractRejected,
+        match="failed Runtime validation",
+    ):
+        asyncio.run(
+            DeepSeekMainAgentActionProvider(adapter).decide(
+                request=request,
+                context=context,
+                registry_snapshot=registry,
+            )
+        )
+
+    assert len(adapter.requests) == 2
+
+
+def test_deepseek_tool_decision_repair_rejects_non_structured_result() -> None:
+    registry = _provider_registry()
+    context = _provider_context(registry)
+    request = _provider_request(
+        context,
+        visible_tool_names=registry.visible_tool_names,
+    )
+    adapter = _CaptureAdapter(
+        [
+            _invalid_tool_arguments_error(),
+            _provider_result(
+                output_kind=ProviderOutputKind.TEXT,
+                sequence=2,
+                assistant_text=canonical_json(
+                    {
+                        "concise_basis": "错误输出类型。",
+                        "calls": [
+                            {
+                                "tool_name": registry.visible_tool_names[0],
+                                "arguments": {"query": "工期要求"},
+                            }
+                        ],
+                    }
+                ),
+            ),
+        ]
+    )
+
+    with pytest.raises(
+        ActionLoopContractRejected,
+        match="no structured projection",
+    ):
+        asyncio.run(
+            DeepSeekMainAgentActionProvider(adapter).decide(
+                request=request,
+                context=context,
+                registry_snapshot=registry,
+            )
+        )
+
+    assert len(adapter.requests) == 2
+
+
+def test_deepseek_tool_argument_contract_repair_is_bounded_to_one() -> None:
+    registry = _provider_registry()
+    context = _provider_context(registry)
+    request = _provider_request(
+        context,
+        visible_tool_names=registry.visible_tool_names,
+    )
+    adapter = _CaptureAdapter(
+        [
+            _invalid_tool_arguments_error(),
+            _invalid_tool_arguments_error(),
+        ]
+    )
+
+    with pytest.raises(ProviderAdapterError) as captured:
+        asyncio.run(
+            DeepSeekMainAgentActionProvider(adapter).decide(
+                request=request,
+                context=context,
+                registry_snapshot=registry,
+            )
+        )
+
+    assert captured.value.failure.code is (
+        ProviderErrorCode.RESPONSE_CONTRACT_VIOLATION
+    )
+    assert len(adapter.requests) == 2
+    assert adapter.requests[0].call_ref != adapter.requests[1].call_ref
+
+
+@pytest.mark.parametrize(
+    ("code", "safe_message"),
+    [
+        (
+            ProviderErrorCode.AUTHENTICATION_FAILED,
+            "official DeepSeek authentication was rejected",
+        ),
+        (
+            ProviderErrorCode.RESPONSE_CONTRACT_VIOLATION,
+            "official DeepSeek returned an invalid response",
+        ),
+    ],
+)
+def test_deepseek_does_not_repair_non_tool_argument_failures(
+    code: ProviderErrorCode,
+    safe_message: str,
+) -> None:
+    registry = _provider_registry()
+    context = _provider_context(registry)
+    request = _provider_request(
+        context,
+        visible_tool_names=registry.visible_tool_names,
+    )
+    adapter = _CaptureAdapter(
+        [ProviderAdapterError(ProviderFailure(code=code, safe_message=safe_message))]
+    )
+
+    with pytest.raises(ProviderAdapterError):
+        asyncio.run(
+            DeepSeekMainAgentActionProvider(adapter).decide(
+                request=request,
+                context=context,
+                registry_snapshot=registry,
+            )
+        )
+
+    assert len(adapter.requests) == 1
 
 
 def test_deepseek_repair_uses_compact_schema_and_field_feedback() -> None:

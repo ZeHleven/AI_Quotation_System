@@ -99,6 +99,10 @@ class ProviderErrorCode(str, Enum):
     RATE_LIMITED = "rate_limited"
     AUTHENTICATION_FAILED = "authentication_failed"
     PROVIDER_REJECTED = "provider_rejected"
+    TOOL_CALL_LIMIT_EXCEEDED = "tool_call_limit_exceeded"
+    TOOL_NAME_NOT_VISIBLE = "tool_name_not_visible"
+    RESPONSE_JSON_ENVELOPE_INVALID = "response_json_envelope_invalid"
+    RESPONSE_JSON_SIZE_LIMIT = "response_json_size_limit"
     RESPONSE_CONTRACT_VIOLATION = "response_contract_violation"
     CANCELLED = "cancelled"
 
@@ -108,6 +112,34 @@ class ProviderFailure(StrictContract):
     safe_message: str = Field(min_length=1, max_length=500)
     retryable: bool = False
     provider_receipt_ref: Reference | None = None
+    response_hash: str | None = Field(
+        default=None,
+        pattern=r"^sha256:[0-9a-f]{64}$",
+    )
+
+    @model_validator(mode="after")
+    def validate_structured_json_failure(self) -> "ProviderFailure":
+        structured_json_codes = {
+            ProviderErrorCode.RESPONSE_JSON_ENVELOPE_INVALID,
+            ProviderErrorCode.RESPONSE_JSON_SIZE_LIMIT,
+        }
+        if self.code in structured_json_codes and (
+            self.provider_receipt_ref is None or self.response_hash is None
+        ):
+            raise ValueError(
+                "structured JSON failure requires a safe response receipt and hash"
+            )
+        if (
+            self.code is ProviderErrorCode.RESPONSE_JSON_ENVELOPE_INVALID
+            and not self.retryable
+        ):
+            raise ValueError("invalid structured JSON envelope must be retryable")
+        if (
+            self.code is ProviderErrorCode.RESPONSE_JSON_SIZE_LIMIT
+            and self.retryable
+        ):
+            raise ValueError("structured JSON size limit cannot be retryable")
+        return self
 
 
 class ProviderAdapterError(RuntimeError):
@@ -128,6 +160,62 @@ class ProviderTransportFailure(RuntimeError):
 
 class ProviderCodecError(ValueError):
     """Internal codec signal whose raw cause is never exposed to callers."""
+
+
+class ProviderJsonObjectFailureKind(str, Enum):
+    ENCODING_INVALID = "encoding_invalid"
+    SIZE_LIMIT = "size_limit"
+    DUPLICATE_KEY = "duplicate_key"
+    NON_FINITE_NUMBER = "non_finite_number"
+    INVALID_JSON = "invalid_json"
+    NON_OBJECT = "non_object"
+
+
+class ProviderJsonObjectError(ProviderCodecError):
+    """Typed JSON-object parser signal containing no rejected content."""
+
+    def __init__(
+        self,
+        *,
+        kind: ProviderJsonObjectFailureKind,
+        safe_message: str,
+    ) -> None:
+        self.kind = kind
+        super().__init__(safe_message)
+
+
+class ProviderStructuredJsonEnvelopeError(ProviderCodecError):
+    """Safe structured-response JSON signal raised after HTTP envelope decoding."""
+
+    def __init__(
+        self,
+        *,
+        kind: ProviderJsonObjectFailureKind,
+        provider_receipt_ref: Reference,
+        response_hash: str,
+    ) -> None:
+        self.kind = kind
+        self.provider_receipt_ref = provider_receipt_ref
+        self.response_hash = response_hash
+        super().__init__("provider structured response JSON envelope is invalid")
+
+
+class ProviderToolCallLimitExceeded(ProviderCodecError):
+    """Typed, content-free signal for a Provider Tool Call count overflow."""
+
+    def __init__(self, *, actual_count: int, limit: int) -> None:
+        self.actual_count = actual_count
+        self.limit = limit
+        super().__init__(
+            f"provider returned {actual_count} Tool Calls; limit is {limit}"
+        )
+
+
+class ProviderToolNameNotVisible(ProviderCodecError):
+    """Content-free signal for a Tool name outside the visible Registry."""
+
+    def __init__(self) -> None:
+        super().__init__("provider selected a Tool outside the visible Registry")
 
 
 class ProviderCapabilities(StrictContract):
@@ -534,6 +622,10 @@ class ProviderInvocationRequest(StrictContract):
     consumer: ContextConsumer
     context: ContextAssemblyResult
     registry_snapshot: RegistrySnapshot | None = None
+    tool_name_filter: tuple[ToolName, ...] | None = Field(
+        default=None,
+        max_length=32,
+    )
     runtime_input: ProviderRuntimeInput | None = None
     structured_output: ProviderStructuredOutputSpec | None = None
     tool_choice: ProviderToolChoice = ProviderToolChoice.NONE
@@ -561,12 +653,26 @@ class ProviderInvocationRequest(StrictContract):
                 raise ValueError("registry snapshot required by Context is missing")
             if self.tool_choice is not ProviderToolChoice.NONE:
                 raise ValueError("Tool choice requires a registry snapshot")
+            if self.tool_name_filter is not None:
+                raise ValueError("Tool filter requires a registry snapshot")
         else:
             if (
                 snapshot.registry_snapshot_ref != self.registry_snapshot.snapshot_ref
                 or snapshot.registry_snapshot_hash != self.registry_snapshot.snapshot_hash
             ):
                 raise ValueError("registry snapshot does not match Context Snapshot")
+            if self.tool_name_filter is not None:
+                if len(self.tool_name_filter) != len(set(self.tool_name_filter)):
+                    raise ValueError("Tool filter names must be unique")
+                if not set(self.tool_name_filter).issubset(
+                    self.registry_snapshot.visible_tool_names
+                ):
+                    raise ValueError("Tool filter exceeds the visible Registry")
+                if (
+                    self.tool_choice is not ProviderToolChoice.NONE
+                    and not self.tool_name_filter
+                ):
+                    raise ValueError("Tool choice requires a non-empty Tool filter")
         return self
 
 
@@ -738,20 +844,35 @@ class ProviderModelResult(StrictContentContract):
 
 
 def parse_json_object(raw: str, *, max_bytes: int) -> dict[str, Any]:
-    encoded = raw.encode("utf-8")
+    try:
+        encoded = raw.encode("utf-8")
+    except UnicodeError as exc:
+        raise ProviderJsonObjectError(
+            kind=ProviderJsonObjectFailureKind.ENCODING_INVALID,
+            safe_message="JSON object encoding is invalid",
+        ) from exc
     if len(encoded) > max_bytes:
-        raise ProviderCodecError("JSON object exceeds the configured size limit")
+        raise ProviderJsonObjectError(
+            kind=ProviderJsonObjectFailureKind.SIZE_LIMIT,
+            safe_message="JSON object exceeds the configured size limit",
+        )
 
     def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, value in pairs:
             if key in result:
-                raise ProviderCodecError("JSON object contains duplicate keys")
+                raise ProviderJsonObjectError(
+                    kind=ProviderJsonObjectFailureKind.DUPLICATE_KEY,
+                    safe_message="JSON object contains duplicate keys",
+                )
             result[key] = value
         return result
 
     def reject_constant(_: str) -> Any:
-        raise ProviderCodecError("non-finite JSON number is not allowed")
+        raise ProviderJsonObjectError(
+            kind=ProviderJsonObjectFailureKind.NON_FINITE_NUMBER,
+            safe_message="non-finite JSON number is not allowed",
+        )
 
     try:
         value = json.loads(
@@ -760,9 +881,15 @@ def parse_json_object(raw: str, *, max_bytes: int) -> dict[str, Any]:
             parse_constant=reject_constant,
         )
     except (UnicodeError, json.JSONDecodeError) as exc:
-        raise ProviderCodecError("value is not valid JSON") from exc
+        raise ProviderJsonObjectError(
+            kind=ProviderJsonObjectFailureKind.INVALID_JSON,
+            safe_message="value is not valid JSON",
+        ) from exc
     if not isinstance(value, dict):
-        raise ProviderCodecError("value must be a JSON Object")
+        raise ProviderJsonObjectError(
+            kind=ProviderJsonObjectFailureKind.NON_OBJECT,
+            safe_message="value must be a JSON Object",
+        )
     return value
 
 
@@ -830,7 +957,17 @@ class OpenAICompatibleChatCodec:
             encoded = canonical_json(dict(payload)).encode("utf-8")
         except (TypeError, ValueError) as exc:
             raise ProviderCodecError("provider response is not canonical JSON") from exc
+        response_hash = canonical_hash(dict(payload))
+        provider_receipt_ref = (
+            "provider-response:" + response_hash.removeprefix("sha256:")
+        )
         if len(encoded) > max_response_bytes:
+            if request.structured_output is not None:
+                raise ProviderStructuredJsonEnvelopeError(
+                    kind=ProviderJsonObjectFailureKind.SIZE_LIMIT,
+                    provider_receipt_ref=provider_receipt_ref,
+                    response_hash=response_hash,
+                )
             raise ProviderCodecError("provider response exceeds the configured size limit")
         if "error" in payload:
             raise ProviderCodecError("provider returned an error envelope")
@@ -880,10 +1017,17 @@ class OpenAICompatibleChatCodec:
             elif content is None:
                 raise ProviderCodecError("structured response has an invalid shape")
             else:
-                structured_payload = parse_json_object(
-                    content,
-                    max_bytes=max_response_bytes,
-                )
+                try:
+                    structured_payload = parse_json_object(
+                        content,
+                        max_bytes=max_response_bytes,
+                    )
+                except ProviderJsonObjectError as exc:
+                    raise ProviderStructuredJsonEnvelopeError(
+                        kind=exc.kind,
+                        provider_receipt_ref=provider_receipt_ref,
+                        response_hash=response_hash,
+                    ) from exc
         else:
             assistant_text = (
                 content
@@ -892,7 +1036,6 @@ class OpenAICompatibleChatCodec:
             )
 
         usage = self._decode_usage(payload.get("usage"))
-        receipt_hash = canonical_hash(dict(payload)).removeprefix("sha256:")
         return ProviderDecodedResponse(
             call_ref=request.call_ref,
             finish_reason=finish_reason,
@@ -900,7 +1043,7 @@ class OpenAICompatibleChatCodec:
             structured_payload=structured_payload,
             tool_calls=tuple(tool_calls),
             usage=usage,
-            provider_receipt_ref=f"provider-response:{receipt_hash}",
+            provider_receipt_ref=provider_receipt_ref,
         )
 
     @staticmethod
@@ -1135,16 +1278,20 @@ class ProviderRequestRenderer:
         invocation: ProviderInvocationRequest,
         capabilities: ProviderCapabilities,
     ) -> tuple[ProviderFunctionDefinition, ...]:
-        if (
-            invocation.tool_choice is ProviderToolChoice.NONE
-            and invocation.structured_output is not None
-            and not capabilities.supports_tool_calls_with_structured_output
-        ):
+        if invocation.tool_choice is ProviderToolChoice.NONE:
             return ()
         registry = invocation.registry_snapshot
         if registry is None:
             return ()
-        contracts = registry.model_visible_contracts()
+        visible_names = (
+            registry.visible_tool_names
+            if invocation.tool_name_filter is None
+            else invocation.tool_name_filter
+        )
+        indexed = {
+            entry.name: entry.model_contract for entry in registry.entries
+        }
+        contracts = tuple(indexed[name] for name in visible_names)
         if len(contracts) > capabilities.max_visible_tools:
             self._raise(
                 ProviderErrorCode.CAPABILITY_UNAVAILABLE,
@@ -1439,6 +1586,44 @@ class ProviderAdapter:
             raise
         except ProviderTransportFailure as exc:
             raise ProviderAdapterError(exc.failure) from exc
+        except ProviderToolCallLimitExceeded as exc:
+            raise ProviderAdapterError(
+                ProviderFailure(
+                    code=ProviderErrorCode.TOOL_CALL_LIMIT_EXCEEDED,
+                    safe_message=str(exc),
+                )
+            ) from exc
+        except ProviderToolNameNotVisible as exc:
+            raise ProviderAdapterError(
+                ProviderFailure(
+                    code=ProviderErrorCode.TOOL_NAME_NOT_VISIBLE,
+                    safe_message=str(exc),
+                )
+            ) from exc
+        except ProviderStructuredJsonEnvelopeError as exc:
+            size_limited = (
+                exc.kind is ProviderJsonObjectFailureKind.SIZE_LIMIT
+            )
+            raise ProviderAdapterError(
+                ProviderFailure(
+                    code=(
+                        ProviderErrorCode.RESPONSE_JSON_SIZE_LIMIT
+                        if size_limited
+                        else ProviderErrorCode.RESPONSE_JSON_ENVELOPE_INVALID
+                    ),
+                    safe_message=(
+                        "provider structured response exceeded the JSON size limit"
+                        if size_limited
+                        else (
+                            "provider structured response was not one valid "
+                            "JSON object"
+                        )
+                    ),
+                    retryable=not size_limited,
+                    provider_receipt_ref=exc.provider_receipt_ref,
+                    response_hash=exc.response_hash,
+                )
+            ) from exc
         except ProviderCodecError as exc:
             raise ProviderAdapterError(
                 ProviderFailure(
@@ -1477,11 +1662,18 @@ class ProviderAdapter:
             if registry is None or invocation.tool_choice is ProviderToolChoice.NONE:
                 raise ProviderCodecError("unexpected provider Tool Calls")
             if len(decoded.tool_calls) > self.capabilities.max_tool_calls_per_response:
-                raise ProviderCodecError("provider returned too many Tool Calls")
-            visible = set(registry.visible_tool_names)
+                raise ProviderToolCallLimitExceeded(
+                    actual_count=len(decoded.tool_calls),
+                    limit=self.capabilities.max_tool_calls_per_response,
+                )
+            visible = set(
+                registry.visible_tool_names
+                if invocation.tool_name_filter is None
+                else invocation.tool_name_filter
+            )
             for sequence, raw_call in enumerate(decoded.tool_calls, start=1):
                 if raw_call.name not in visible:
-                    raise ProviderCodecError("provider selected a non-visible Tool")
+                    raise ProviderToolNameNotVisible()
                 arguments = parse_json_object(
                     raw_call.raw_arguments_json,
                     max_bytes=self.capabilities.max_arguments_bytes,

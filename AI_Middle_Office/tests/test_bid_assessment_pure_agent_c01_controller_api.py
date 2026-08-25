@@ -230,6 +230,13 @@ class _FailingActionDriver:
         raise AssertionError("failed execution must not enter normal continuation")
 
 
+class _ContinueAfterActionDriver(_SlotAfterActionDriver):
+    async def after_observation(self, *, task, action, execution):
+        del action
+        assert execution.observation.observation_ref in task.observation_refs
+        return RuntimePostAction(directive=RuntimePulseDirective.CONTINUE)
+
+
 class DeadlineInput(BaseModel):
     deadline_days: int = Field(ge=7, le=365)
 
@@ -586,6 +593,57 @@ def test_local_dispatcher_terminalizes_an_unhandled_active_action_failure(
     action = verify_session.query(BidPureAgentAction).one()
     assert action.status == "failed"
     assert action.error_code == "runtime_contract_rejected"
+    account = verify_session.query(BidPureAgentBudgetAccount).one()
+    assert int(account.reserved_amount) == 0
+    assert int(account.actual_amount) == 500
+    verify_session.close()
+
+
+def test_local_dispatcher_terminalizes_when_its_pulse_limit_is_exhausted(
+    sqlite_engine,
+) -> None:
+    SessionFactory = sessionmaker(bind=sqlite_engine, expire_on_commit=False)
+    setup_session: Session = SessionFactory()
+    setup_repo = PureAgentRepository(setup_session)
+    conversation_ref, task = _new_task(setup_repo)
+    prepared = _guarded_action(setup_repo, task)
+    setup_session.commit()
+    setup_session.close()
+
+    driver = _ContinueAfterActionDriver(prepared)
+    dispatcher = LocalRuntimePulseDispatcher(
+        session_factory=SessionFactory,
+        controller_factory=lambda db: PureAgentRuntimeController(
+            PureAgentRepository(db),
+            driver=driver,
+        ),
+        max_pulses_per_dispatch=2,
+    )
+    wakeup = RuntimeWakeup.build(
+        task_ref=task.task_id,
+        conversation_ref=conversation_ref,
+        observed_state_version=task.state_version,
+        reason=RuntimeWakeReason.USER_MESSAGE,
+        seed="c01-pulse-limit-terminalization",
+    )
+
+    outcome = asyncio.run(dispatcher.dispatch(wakeup))
+
+    assert outcome.disposition is RuntimePulseDisposition.FAILED
+    assert outcome.directive is RuntimePulseDirective.STOP
+    assert outcome.task_status is AgentTaskStatus.FAILED
+    assert outcome.reason_codes == ("runtime_pulse_limit_exceeded",)
+    assert driver.prepare_calls == 1
+    assert driver.execute_calls == 1
+
+    verify_session: Session = SessionFactory()
+    repo = PureAgentRepository(verify_session)
+    failed = repo.load_task_state(task.task_id)
+    assert failed.status is AgentTaskStatus.FAILED
+    assert failed.in_flight_action_ref is None
+    assert failed.last_error_ref is not None
+    action = verify_session.query(BidPureAgentAction).one()
+    assert action.status == "succeeded"
     account = verify_session.query(BidPureAgentBudgetAccount).one()
     assert int(account.reserved_amount) == 0
     assert int(account.actual_amount) == 500

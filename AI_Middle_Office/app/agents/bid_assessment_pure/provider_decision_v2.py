@@ -92,14 +92,16 @@ class ProviderNextActionRecoveryReason(str, Enum):
     """Runtime-owned reasons that may narrow the next admissible action."""
 
     ANSWER_GUARD_EVIDENCE_UPGRADE = "answer_guard_evidence_upgrade"
+    PRE_ANSWER_EVIDENCE_READINESS = "pre_answer_evidence_readiness"
+    ANSWER_SCHEMA_EVIDENCE_UPGRADE = "answer_schema_evidence_upgrade"
 
 
 class ProviderNextActionRecoveryConstraintV2(StrictContract):
     """Fail-closed eligibility constraint derived from accepted Runtime state.
 
-    This is not a model-authored Plan.  It prevents a rejected Answer from being
-    regenerated unchanged when readable search candidates can still be upgraded
-    into citable Evidence Atoms.
+    This is not a model-authored Plan.  It prevents an Answer from being generated
+    or regenerated when readable search candidates still need to be upgraded into
+    citable Evidence Atoms.
     """
 
     reason_code: ProviderNextActionRecoveryReason

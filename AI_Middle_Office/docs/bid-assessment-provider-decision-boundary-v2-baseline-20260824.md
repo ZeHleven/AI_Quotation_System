@@ -310,6 +310,29 @@ V2-S 收敛为以下通用边界：
 
 已新增合成合同定义，覆盖资源身份与 Limitation 权威分离、Guard 反馈动作更新，以及“已拒绝 Answer + 可读候选片段”强制进入最小 `evidence_read` Tool 投影的完整边界。相关 6 个 Python 文件 AST 静态检查 `6/6` 通过。2026-08-25 按授权执行 V2-S 专项：首轮业务路径已经正确只生成 `evidence_read`，但一条测试误把 `tool_name_filter` 最小投影视为改写完整 Registry Snapshot，结果为 `2 passed / 1 failed`；修正测试合同后专项 `3 passed`。随后执行 V2-D 合同矩阵与 V2-E Runtime 集成完整相邻回归 `84 passed`，覆盖既有 V2-D 至 V2-R 及新增 V2-S 用例。测试未调用模型或读取真实资料正文。后续按独立授权替换启动 9019 加载 V2-S：Preflight `21/21` 通过，新进程 PID `37444`，仅监听 `127.0.0.1:9019`，健康接口和登录页均返回 HTTP 200；启动过程读取冻结资料和 SecretEnvFile 白名单字段并加载本地 BCE，未提交问题、未调用 DeepSeek。9018 在启动前后均未监听，本次 V2 专用脚本未操作 9018。既有 Task 不自动改写或续跑。
 
+## V2-T：Pre-Answer Evidence Readiness 与证据升级收敛
+
+V2-S 受控真实矩阵的第 2 题在 5 个检索批次、9 次成功 Tool Call 后失败。Runtime 已持有 37 个搜索候选，但没有调用 `evidence_read`，最终 Answer Context 中为 0 个 Evidence Atom。Provider Answer 及一次结构恢复均生成了缺少 `grounding_refs` 的事实项，因而在 Canonical Guard 之前以 `answer_schema_invalid / grounding_refs.required_for_kind` 终止。V2-S 的恢复只覆盖 Answer Guard 之后，无法处理这一前置缺口。
+
+V2-T 采用以下通用边界：
+
+- Runtime 从已持久化 Tool Observation 计算候选引用、当前 Evidence Atom 数量和已执行的 `evidence_read` 次数；只有搜索候选而没有 Evidence Atom 时，Answer 资格尚未就绪。
+- 首次未就绪时签发 `pre_answer_evidence_readiness` 约束，下一动作只允许 `retrieve + evidence_read`；该一次证据升级可以跨过“Search 已饱和”状态，因为 Search 收敛不等于候选已经成为证据。
+- `answer_schema_invalid` 若精确属于 `grounding_refs.required_for_kind`，且仍有未升级候选，则转为 `answer_schema_evidence_upgrade`，不再直接把 Task 终止为通用失败。
+- `evidence_read` 最多尝试一次；能力不可见、尝试后仍没有 Evidence Atom，或 Answer 仍无法绑定证据时，Runtime 返回不含业务事实的可行动诊断回执，不继续换关键词搜索或无限恢复。
+- 该边界只依赖 Context Entry 类型、Tool Observation、Registry 可见性和类型化 Provider 错误，不包含问题关键词、资格分类或固定业务步骤。
+
+已写入 4 个合成合同用例，覆盖候选优先升级、Search 饱和后的单次升级、升级失败的安全回执和 Answer Schema 到证据升级的恢复。2026-08-25 按授权执行 V2-T 专项 `4 passed`；随后执行 V2-D 合同矩阵与 V2-E Runtime 集成完整相邻回归 `88 passed`，覆盖既有 V2-D 至 V2-S 及新增 V2-T 用例。测试使用合成 Context 与队列 Provider，未调用模型、读取真实资料正文或重启 9019。
+
+2026-08-25 按独立授权在 9019 使用全新对话，从原失败矩阵第 2 题开始执行 V2-T 受控真实复验。冻结香港中心 PDF、冻结企业基线、本地 BCE 和官方 DeepSeek 均在授权范围内使用，Q2—Q5 全部完成，未触发“当前任务未能安全完成”：
+
+- Q2 投标资格综合判断：Task `f22418f0-aa79-448a-b7e4-fe77229fe5e4`，`completed/v14`；招标资料、企业资料和 `evidence_read` 均成功，形成 4 个 Evidence Atom 和 4 条页面引用。
+- Q3 工期、投标担保、履约担保与违约责任：Task `e75fa827-0296-46b0-88f1-113700b10315`，`completed/v14`；形成 4 个 Evidence Atom 和 4 条页面引用，对未检得的履约担保及违约责任明确保留限制。
+- Q4 完成资格判断仍缺哪些企业材料：Task `5fefeee1-f993-449c-8d9f-60f968d62944`，`completed/v18`；招标、企业检索和 `evidence_read` 均成功，形成 3 个 Evidence Atom 和 3 条页面引用，并明确列出资料不足项。
+- Q5 能力介绍：Task `861ce273-06cf-4c26-9b03-e45ad1d53d21`，`completed/v6`；仅执行一次 Decision 和一次 Answer，Tool Call 为 0，符合普通交流零工具边界。
+
+本轮各题均使用独立 Conversation；Q2—Q4 的证据型回答均经过 Runtime 引用投影，Q5 未误触发检索。复验未影响 9018、ECS 或生产环境。
+
 ## V2 独立真实复验入口
 
 V2 使用独立启动脚本 `scripts/start_bid_pure_agent_v2_validation.ps1`：
@@ -330,8 +353,8 @@ V2 使用独立启动脚本 `scripts/start_bid_pure_agent_v2_validation.ps1`：
 - 未删除或改写 V1 Provider；默认启动行为仍为 V1。
 - 未实现基于模型的 JSON 猜测修复或无限重试。
 - 未改数据库、迁移、旧 `bid_intake_*`、功能开关或生产配置。
-- V2-S 本轮已完成代码、合同测试定义、文档、AST 静态检查、`3/3` 专项和 `84/84` 相邻合同回归，并已加载到 9019；尚未提交真实问题或调用 DeepSeek。
+- V2-T 已完成代码、合同测试定义、短版文档、静态检查、`4/4` 专项、`88/88` 相邻合同回归，以及经独立授权执行的 9019 真实矩阵 Q2—Q5 复验。
 
 ## 下一开发切片
 
-下一步是另行授权通过 9019 页面提交受控问题，并把该问题及必要证据发送至官方 DeepSeek，真实复验 V2-S 的 Guard 驱动证据升级边界。既有失败 Task 不自动改写或续跑。
+V2-T 已完成本地合同验证与受控真实复验。下一步应先完成提交前审计并提交 V2-T 增量；后续若扩大真实试用范围，继续采用“全新独立对话、逐题执行、首个失败停止”的验收边界。既有失败 Task 不自动改写或续跑。

@@ -31,7 +31,12 @@ from .provider_decision_v2 import (
     ProviderNextActionRecoveryReason,
     RuntimeTerminalAnswerAuthorizationV2,
 )
+from .provider_ingress_v2 import (
+    ProviderBoundaryFailureCode,
+    ProviderBoundaryRejected,
+)
 from .retrieval_convergence_v2 import (
+    RetrievalConvergenceDecisionV2,
     RetrievalConvergenceGateV2,
     tool_batch_observation,
 )
@@ -54,6 +59,7 @@ _ANSWER_CONTEXT_EXCLUDED_KINDS = frozenset(
     }
 )
 _MAX_GROUNDING_AWARE_TERMINAL_RETRIES = 1
+_MAX_PRE_ANSWER_EVIDENCE_READ_ATTEMPTS = 1
 _EVIDENCE_UPGRADE_GUARD_CODES = frozenset(
     {
         "citation_not_ready",
@@ -272,10 +278,54 @@ class ProviderBoundaryV2MainAgentActionProvider:
         registry_snapshot: RegistrySnapshot | None,
     ) -> MainAgentProviderOutcome:
         convergence = self._convergence_gate.evaluate(context)
+        guard_feedback_refs = self._answer_guard_feedback_refs(context)
+        if len(guard_feedback_refs) > _MAX_GROUNDING_AWARE_TERMINAL_RETRIES:
+            return self._guard_retry_exhausted_outcome(
+                request=request,
+                guard_feedback_refs=guard_feedback_refs,
+            )
+        guard_recovery_constraint = self._answer_guard_recovery_constraint(
+            context,
+            guard_feedback_refs=guard_feedback_refs,
+            visible_tool_names=request.visible_tool_names,
+        )
+        (
+            pending_candidate_refs,
+            evidence_atom_count,
+            evidence_read_attempts,
+        ) = self._evidence_upgrade_state(context)
+        readiness_recovery_constraint = (
+            self._pre_answer_evidence_readiness_constraint(
+                pending_candidate_refs=pending_candidate_refs,
+                evidence_atom_count=evidence_atom_count,
+                evidence_read_attempts=evidence_read_attempts,
+                visible_tool_names=request.visible_tool_names,
+            )
+        )
+        recovery_constraint = (
+            guard_recovery_constraint or readiness_recovery_constraint
+        )
+        if (
+            pending_candidate_refs
+            and evidence_atom_count == 0
+            and recovery_constraint is None
+        ):
+            reason_code = (
+                "evidence_read_unavailable"
+                if "evidence_read" not in request.visible_tool_names
+                else "evidence_read_attempt_exhausted"
+            )
+            return self._evidence_readiness_fallback_outcome(
+                request=request,
+                reason_code=reason_code,
+                candidate_count=len(pending_candidate_refs),
+                evidence_atom_count=evidence_atom_count,
+                evidence_read_attempts=evidence_read_attempts,
+            )
         active_request = request
         active_context = context
         active_registry = registry_snapshot
-        if convergence.saturated:
+        if convergence.saturated and recovery_constraint is None:
             active_context = self._terminal_context_projector.project(context)
             active_request = self._request_for_projected_context(
                 request,
@@ -283,27 +333,51 @@ class ProviderBoundaryV2MainAgentActionProvider:
                 registry_snapshot=None,
             )
             active_registry = None
-        guard_feedback_refs = self._answer_guard_feedback_refs(active_context)
-        if len(guard_feedback_refs) > _MAX_GROUNDING_AWARE_TERMINAL_RETRIES:
-            return self._guard_retry_exhausted_outcome(
-                request=request,
-                guard_feedback_refs=guard_feedback_refs,
-            )
-        if convergence.saturated and guard_feedback_refs:
+            guard_feedback_refs = self._answer_guard_feedback_refs(active_context)
+        if (
+            convergence.saturated
+            and guard_feedback_refs
+            and recovery_constraint is None
+        ):
             authorization = RuntimeTerminalAnswerAuthorizationV2.build(
                 request=active_request,
                 context=active_context,
                 convergence=convergence,
                 guard_feedback_refs=guard_feedback_refs,
             )
-            _, answer = await self._orchestrator.generate_answer(
-                decision_request=active_request,
-                terminal_authorization=authorization,
-                bundle=ProviderAnswerContextBundle(
-                    context=active_context,
-                    guard_feedback_refs=guard_feedback_refs,
-                ),
-            )
+            try:
+                _, answer = await self._orchestrator.generate_answer(
+                    decision_request=active_request,
+                    terminal_authorization=authorization,
+                    bundle=ProviderAnswerContextBundle(
+                        context=active_context,
+                        guard_feedback_refs=guard_feedback_refs,
+                    ),
+                )
+            except ProviderBoundaryRejected as exc:
+                if not self._is_grounding_required_answer_failure(exc):
+                    raise
+                schema_recovery_constraint = (
+                    self._answer_schema_evidence_recovery_constraint(
+                        context,
+                        visible_tool_names=request.visible_tool_names,
+                    )
+                )
+                if schema_recovery_constraint is not None:
+                    return await self._execute_evidence_upgrade(
+                        request=request,
+                        context=context,
+                        registry_snapshot=registry_snapshot,
+                        convergence=convergence,
+                        recovery_constraint=schema_recovery_constraint,
+                    )
+                return self._evidence_readiness_fallback_outcome(
+                    request=request,
+                    reason_code="answer_schema_grounding_unresolved",
+                    candidate_count=len(pending_candidate_refs),
+                    evidence_atom_count=evidence_atom_count,
+                    evidence_read_attempts=evidence_read_attempts,
+                )
             proposal = MainAgentModelDecision(
                 action_kind=MainAgentModelActionKind.ANSWER,
                 concise_basis=authorization.concise_basis,
@@ -322,11 +396,6 @@ class ProviderBoundaryV2MainAgentActionProvider:
                 provider_response_hash=answer.provider_response_hash,
                 provider_receipt_ref=answer.provider_receipt_ref,
             )
-        recovery_constraint = self._answer_guard_recovery_constraint(
-            active_context,
-            guard_feedback_refs=guard_feedback_refs,
-            visible_tool_names=active_request.visible_tool_names,
-        )
         selected = await self._orchestrator.decide_next_action(
             request=active_request,
             context=active_context,
@@ -341,7 +410,10 @@ class ProviderBoundaryV2MainAgentActionProvider:
             )
 
         if selected.decision.action_kind == "retrieve":
-            if convergence.saturated or active_registry is None:
+            if (
+                (convergence.saturated and recovery_constraint is None)
+                or active_registry is None
+            ):
                 raise ActionLoopContractRejected(
                     "retrieval-saturated decision attempted another Tool call"
                 )
@@ -370,16 +442,41 @@ class ProviderBoundaryV2MainAgentActionProvider:
                 if convergence.saturated
                 else self._answer_context_projector.project(context)
             )
-            _, answer = await self._orchestrator.generate_answer(
-                decision_request=active_request,
-                next_action=selected,
-                bundle=ProviderAnswerContextBundle(
-                    context=answer_context,
-                    guard_feedback_refs=(
-                        self._answer_guard_feedback_refs(answer_context)
+            try:
+                _, answer = await self._orchestrator.generate_answer(
+                    decision_request=active_request,
+                    next_action=selected,
+                    bundle=ProviderAnswerContextBundle(
+                        context=answer_context,
+                        guard_feedback_refs=(
+                            self._answer_guard_feedback_refs(answer_context)
+                        ),
                     ),
-                ),
-            )
+                )
+            except ProviderBoundaryRejected as exc:
+                if not self._is_grounding_required_answer_failure(exc):
+                    raise
+                schema_recovery_constraint = (
+                    self._answer_schema_evidence_recovery_constraint(
+                        context,
+                        visible_tool_names=request.visible_tool_names,
+                    )
+                )
+                if schema_recovery_constraint is not None:
+                    return await self._execute_evidence_upgrade(
+                        request=request,
+                        context=context,
+                        registry_snapshot=registry_snapshot,
+                        convergence=convergence,
+                        recovery_constraint=schema_recovery_constraint,
+                    )
+                return self._evidence_readiness_fallback_outcome(
+                    request=request,
+                    reason_code="answer_schema_grounding_unresolved",
+                    candidate_count=len(pending_candidate_refs),
+                    evidence_atom_count=evidence_atom_count,
+                    evidence_read_attempts=evidence_read_attempts,
+                )
             proposal = MainAgentModelDecision(
                 action_kind=MainAgentModelActionKind.ANSWER,
                 concise_basis=selected.decision.concise_basis,
@@ -427,6 +524,198 @@ class ProviderBoundaryV2MainAgentActionProvider:
         )
 
     @staticmethod
+    def _pre_answer_evidence_readiness_constraint(
+        *,
+        pending_candidate_refs: tuple[str, ...],
+        evidence_atom_count: int,
+        evidence_read_attempts: int,
+        visible_tool_names: tuple[str, ...],
+    ) -> ProviderNextActionRecoveryConstraintV2 | None:
+        """Require one bounded candidate-to-Evidence upgrade before Answer."""
+
+        if (
+            not pending_candidate_refs
+            or evidence_atom_count > 0
+            or evidence_read_attempts
+            >= _MAX_PRE_ANSWER_EVIDENCE_READ_ATTEMPTS
+            or "evidence_read" not in visible_tool_names
+        ):
+            return None
+        return ProviderNextActionRecoveryConstraintV2(
+            reason_code=(
+                ProviderNextActionRecoveryReason.PRE_ANSWER_EVIDENCE_READINESS
+            ),
+            required_tool_names=("evidence_read",),
+            candidate_refs=pending_candidate_refs,
+        )
+
+    @staticmethod
+    def _evidence_upgrade_state(
+        context: ContextAssemblyResult,
+    ) -> tuple[tuple[str, ...], int, int]:
+        """Return pending candidate refs and bounded evidence-read progress."""
+
+        evidence_atom_refs = {
+            entry.entry_ref
+            for entry in context.projection_entries
+            if entry.kind is ContextEntryKind.EVIDENCE_ATOM
+        }
+        upgraded_refs = set(evidence_atom_refs)
+        candidate_refs: dict[str, None] = {}
+        evidence_read_call_refs: set[str] = set()
+        for entry in context.projection_entries:
+            if entry.kind is not ContextEntryKind.OBSERVATION:
+                continue
+            try:
+                payload = json.loads(entry.content)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            projection = payload.get("artifact_projection", payload)
+            if (
+                not isinstance(projection, dict)
+                or projection.get("projection_kind") != "tool_batch_result"
+            ):
+                continue
+            for call_index, call in enumerate(projection.get("calls") or ()):
+                if (
+                    not isinstance(call, dict)
+                    or call.get("accepted_for_context") is not True
+                ):
+                    continue
+                tool_name = call.get("tool_name")
+                if tool_name == "evidence_read":
+                    call_ref = call.get("call_ref")
+                    evidence_read_call_refs.add(
+                        call_ref
+                        if isinstance(call_ref, str) and call_ref
+                        else f"{entry.entry_ref}:{call_index}"
+                    )
+                result = call.get("result")
+                if not isinstance(result, dict) or result.get("ok") is not True:
+                    continue
+                data_projection = result.get("data_projection")
+                if not isinstance(data_projection, dict):
+                    continue
+                projection_kind = data_projection.get("kind")
+                if projection_kind == "evidence_read_receipts":
+                    for evidence in data_projection.get("evidence") or ():
+                        if not isinstance(evidence, dict):
+                            continue
+                        evidence_ref = evidence.get("evidence_ref")
+                        if isinstance(evidence_ref, str) and evidence_ref:
+                            upgraded_refs.add(evidence_ref)
+                    continue
+                if projection_kind != "search_candidates":
+                    continue
+                for candidate in data_projection.get("candidates") or ():
+                    if not isinstance(candidate, dict):
+                        continue
+                    evidence_ref = candidate.get("evidence_ref")
+                    if isinstance(evidence_ref, str) and evidence_ref:
+                        if (
+                            evidence_ref not in candidate_refs
+                            and len(candidate_refs) >= 64
+                        ):
+                            continue
+                        candidate_refs.setdefault(evidence_ref, None)
+        for evidence_ref in upgraded_refs:
+            candidate_refs.pop(evidence_ref, None)
+        return (
+            tuple(candidate_refs),
+            len(evidence_atom_refs),
+            len(evidence_read_call_refs),
+        )
+
+    @classmethod
+    def _answer_schema_evidence_recovery_constraint(
+        cls,
+        context: ContextAssemblyResult,
+        *,
+        visible_tool_names: tuple[str, ...],
+    ) -> ProviderNextActionRecoveryConstraintV2 | None:
+        candidate_refs, _, evidence_read_attempts = cls._evidence_upgrade_state(
+            context
+        )
+        if (
+            not candidate_refs
+            or evidence_read_attempts
+            >= _MAX_PRE_ANSWER_EVIDENCE_READ_ATTEMPTS
+            or "evidence_read" not in visible_tool_names
+        ):
+            return None
+        return ProviderNextActionRecoveryConstraintV2(
+            reason_code=(
+                ProviderNextActionRecoveryReason.ANSWER_SCHEMA_EVIDENCE_UPGRADE
+            ),
+            required_tool_names=("evidence_read",),
+            candidate_refs=candidate_refs,
+        )
+
+    @staticmethod
+    def _is_grounding_required_answer_failure(
+        exc: ProviderBoundaryRejected,
+    ) -> bool:
+        failure = exc.failure
+        return (
+            failure.code is ProviderBoundaryFailureCode.ANSWER_SCHEMA_INVALID
+            and any(
+                ".grounding_refs" in issue.path
+                and issue.error_type == "required_for_kind"
+                for issue in failure.validation_issues
+            )
+        )
+
+    async def _execute_evidence_upgrade(
+        self,
+        *,
+        request: MainAgentDecisionRequest,
+        context: ContextAssemblyResult,
+        registry_snapshot: RegistrySnapshot | None,
+        convergence: RetrievalConvergenceDecisionV2,
+        recovery_constraint: ProviderNextActionRecoveryConstraintV2,
+    ) -> MainAgentProviderOutcome:
+        if registry_snapshot is None:
+            return self._evidence_readiness_fallback_outcome(
+                request=request,
+                reason_code="evidence_read_unavailable",
+                candidate_count=len(recovery_constraint.candidate_refs),
+                evidence_atom_count=0,
+                evidence_read_attempts=0,
+            )
+        selected = await self._orchestrator.decide_next_action(
+            request=request,
+            context=context,
+            registry_snapshot=registry_snapshot,
+            convergence=convergence,
+            allow_native_tool_calls=False,
+            recovery_constraint=recovery_constraint,
+        )
+        if isinstance(selected, ProviderToolCallsOutcomeV2):
+            raise ActionLoopContractRejected(
+                "evidence-upgrade control decision emitted native Function Calls"
+            )
+        tool_selection = await self._orchestrator.decide_retrieval_tool_calls(
+            request=request,
+            control_selection=selected,
+            context=context,
+            registry_snapshot=registry_snapshot,
+        )
+        proposal = ToolCallBatchAction(
+            model_turn_ref=tool_selection.proposals[0].model_turn_ref,
+            calls=tool_selection.proposals,
+        )
+        return self._outcome(
+            request=request,
+            proposal=proposal,
+            concise_basis=selected.decision.concise_basis,
+            provider_result_ref=tool_selection.provider_result_ref,
+            provider_response_hash=tool_selection.provider_response_hash,
+            provider_receipt_ref=tool_selection.provider_receipt_ref,
+        )
+
+    @staticmethod
     def _answer_guard_feedback_refs(
         context: ContextAssemblyResult,
     ) -> tuple[str, ...]:
@@ -462,8 +751,9 @@ class ProviderBoundaryV2MainAgentActionProvider:
         ordered = sorted(candidates, key=lambda item: (item[0], item[1]))[-64:]
         return tuple(dict.fromkeys(entry_ref for _, entry_ref in ordered))
 
-    @staticmethod
+    @classmethod
     def _answer_guard_recovery_constraint(
+        cls,
         context: ContextAssemblyResult,
         *,
         guard_feedback_refs: tuple[str, ...],
@@ -475,12 +765,6 @@ class ProviderBoundaryV2MainAgentActionProvider:
             return None
         active_feedback_ref = guard_feedback_refs[-1]
         guard_codes: set[str] = set()
-        candidate_refs: dict[str, None] = {}
-        upgraded_refs: set[str] = {
-            entry.entry_ref
-            for entry in context.projection_entries
-            if entry.kind is ContextEntryKind.EVIDENCE_ATOM
-        }
         for entry in context.projection_entries:
             if entry.kind is not ContextEntryKind.OBSERVATION:
                 continue
@@ -504,48 +788,23 @@ class ProviderBoundaryV2MainAgentActionProvider:
                     code = issue.get("code")
                     if isinstance(code, str):
                         guard_codes.add(code)
-                continue
-            if projection_kind != "tool_batch_result":
-                continue
-            for call in projection.get("calls") or ():
-                if not isinstance(call, dict):
-                    continue
-                result = call.get("result")
-                if not isinstance(result, dict) or result.get("ok") is not True:
-                    continue
-                data_projection = result.get("data_projection")
-                if not isinstance(data_projection, dict):
-                    continue
-                if data_projection.get("kind") == "evidence_read_receipts":
-                    for evidence in data_projection.get("evidence") or ():
-                        if not isinstance(evidence, dict):
-                            continue
-                        evidence_ref = evidence.get("evidence_ref")
-                        if isinstance(evidence_ref, str) and evidence_ref:
-                            upgraded_refs.add(evidence_ref)
-                    continue
-                if data_projection.get("kind") != "search_candidates":
-                    continue
-                for candidate in data_projection.get("candidates") or ():
-                    if not isinstance(candidate, dict):
-                        continue
-                    evidence_ref = candidate.get("evidence_ref")
-                    if isinstance(evidence_ref, str) and evidence_ref:
-                        candidate_refs.setdefault(evidence_ref, None)
-                        if len(candidate_refs) == 64:
-                            break
-        for evidence_ref in upgraded_refs:
-            candidate_refs.pop(evidence_ref, None)
+        candidate_refs, _, evidence_read_attempts = cls._evidence_upgrade_state(
+            context
+        )
         if not guard_codes.intersection(_EVIDENCE_UPGRADE_GUARD_CODES):
             return None
-        if not candidate_refs:
+        if (
+            not candidate_refs
+            or evidence_read_attempts
+            >= _MAX_PRE_ANSWER_EVIDENCE_READ_ATTEMPTS
+        ):
             return None
         return ProviderNextActionRecoveryConstraintV2(
             reason_code=(
                 ProviderNextActionRecoveryReason.ANSWER_GUARD_EVIDENCE_UPGRADE
             ),
             required_tool_names=("evidence_read",),
-            candidate_refs=tuple(candidate_refs),
+            candidate_refs=candidate_refs,
         )
 
     @classmethod
@@ -607,6 +866,85 @@ class ProviderBoundaryV2MainAgentActionProvider:
             provider_response_hash=canonical_hash(draft),
             provider_receipt_ref=(
                 "runtime-terminal-guard-receipt:"
+                + receipt_hash.removeprefix("sha256:")
+            ),
+        )
+
+    @classmethod
+    def _evidence_readiness_fallback_outcome(
+        cls,
+        *,
+        request: MainAgentDecisionRequest,
+        reason_code: str,
+        candidate_count: int,
+        evidence_atom_count: int,
+        evidence_read_attempts: int,
+    ) -> MainAgentProviderOutcome:
+        messages = {
+            "evidence_read_unavailable": (
+                "已定位到相关候选资料，但当前证据读取能力不可用，无法安全形成"
+                "资格或风险结论。请稍后重试，或由管理员检查证据读取能力。"
+            ),
+            "evidence_read_attempt_exhausted": (
+                "已尝试读取候选资料，但仍未形成可引用证据。我已停止重复检索，"
+                "避免把搜索线索当成正式结论。请缩小问题范围或补充原始资料后继续。"
+            ),
+            "answer_schema_grounding_unresolved": (
+                "现有回答未能稳定绑定到可引用证据，我已停止继续生成，避免输出"
+                "无依据的业务判断。请缩小问题范围或补充对应原始资料后继续。"
+            ),
+        }
+        text = messages.get(
+            reason_code,
+            "当前证据尚未达到安全回答条件，请补充或核验原始资料后继续。",
+        )
+        receipt_body = {
+            "schema_name": "bid.pure-agent.evidence-readiness-fallback.v2",
+            "request_ref": request.request_ref,
+            "task_ref": request.task_ref,
+            "state_version": request.origin_state_version,
+            "reason_code": reason_code,
+            "candidate_count": candidate_count,
+            "evidence_atom_count": evidence_atom_count,
+            "evidence_read_attempts": evidence_read_attempts,
+            "evidence_read_attempt_limit": (
+                _MAX_PRE_ANSWER_EVIDENCE_READ_ATTEMPTS
+            ),
+        }
+        receipt_hash = canonical_hash(receipt_body)
+        draft = AnswerDraft(
+            response_language="zh-CN",
+            blocks=(
+                InteractionBlock(
+                    block_id=(
+                        "interaction:evidence-readiness-fallback:"
+                        + receipt_hash.removeprefix("sha256:")
+                    ),
+                    text=text,
+                ),
+            ),
+            context_snapshot_ref=request.context_snapshot_ref,
+            state_version=request.origin_state_version,
+        )
+        concise_basis = (
+            "Pre-Answer Evidence Readiness could not be satisfied; returned a "
+            f"Runtime-owned actionable receipt ({reason_code})"
+        )
+        return cls._outcome(
+            request=request,
+            proposal=MainAgentModelDecision(
+                action_kind=MainAgentModelActionKind.ANSWER,
+                concise_basis=concise_basis,
+                answer=AnswerAction(draft=draft),
+            ),
+            concise_basis=concise_basis,
+            provider_result_ref=(
+                "runtime-evidence-readiness-fallback:"
+                + receipt_hash.removeprefix("sha256:")
+            ),
+            provider_response_hash=canonical_hash(draft),
+            provider_receipt_ref=(
+                "runtime-evidence-readiness-receipt:"
                 + receipt_hash.removeprefix("sha256:")
             ),
         )

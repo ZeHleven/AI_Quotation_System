@@ -714,8 +714,10 @@ def _request(
 
 def _context_with_tool_signal_batches(
     signal_batches: tuple[tuple[str, ...], ...],
+    *,
+    context: ContextAssemblyResult | None = None,
 ) -> ContextAssemblyResult:
-    base = _context(include_provider_control=True)
+    base = context or _context(include_provider_control=True)
     included = list(base.snapshot.included_entries)
     projections = list(base.projection_entries)
     for index, signals in enumerate(signal_batches, start=1):
@@ -853,6 +855,120 @@ def _context_with_search_candidates(
             "snapshot_ref": snapshot_body["snapshot_ref"],
             "included_refs": list(snapshot_body["included_refs"]),
             "projection_hash": snapshot_body["projection_hash"],
+        }
+    )
+    return ContextAssemblyResult(
+        snapshot=ContextSnapshot(**snapshot_body, snapshot_hash=snapshot_hash),
+        projection_entries=projections,
+    )
+
+
+def _context_without_evidence_atoms(
+    context: ContextAssemblyResult,
+) -> ContextAssemblyResult:
+    included = tuple(
+        entry
+        for entry in context.snapshot.included_entries
+        if entry.kind is not ContextEntryKind.EVIDENCE_ATOM
+    )
+    projections = tuple(
+        entry
+        for entry in context.projection_entries
+        if entry.kind is not ContextEntryKind.EVIDENCE_ATOM
+    )
+    snapshot_body = context.snapshot.model_dump(
+        mode="python",
+        exclude={"snapshot_hash"},
+    )
+    snapshot_body.update(
+        {
+            "dependency_refs": tuple(
+                dict.fromkeys(entry.source_ref for entry in included)
+            ),
+            "included_entries": included,
+            "included_refs": tuple(entry.entry_ref for entry in included),
+            "estimated_input_tokens": sum(entry.token_count for entry in included),
+            "projection_hash": canonical_hash(
+                [entry.model_dump(mode="json") for entry in projections]
+            ),
+        }
+    )
+    snapshot_hash = canonical_hash(
+        {
+            "included_refs": snapshot_body["included_refs"],
+            "projection_hash": snapshot_body["projection_hash"],
+            "contract": "v2t-no-evidence-atoms",
+        }
+    )
+    return ContextAssemblyResult(
+        snapshot=ContextSnapshot(**snapshot_body, snapshot_hash=snapshot_hash),
+        projection_entries=projections,
+    )
+
+
+def _context_with_failed_evidence_read(
+    context: ContextAssemblyResult,
+) -> ContextAssemblyResult:
+    content = canonical_json(
+        {
+            "observation": {
+                "kind": "tool_result",
+                "action_sequence": 12,
+                "progress_signal_refs": [],
+            },
+            "artifact_projection": {
+                "projection_kind": "tool_batch_result",
+                "calls": [
+                    {
+                        "call_ref": "tool-call:v2t-evidence-read-failed",
+                        "tool_name": "evidence_read",
+                        "accepted_for_context": True,
+                        "result": {
+                            "ok": False,
+                            "error_projection": {
+                                "code": "evidence_not_available"
+                            },
+                        },
+                    }
+                ],
+            },
+        }
+    )
+    receipt, projection = _entry(
+        entry_ref="observation:v2t-evidence-read-failed",
+        kind=ContextEntryKind.OBSERVATION,
+        lane=ContextLane.OBSERVATION_GROUNDING,
+        trust=ContextTrustClass.UNTRUSTED_DATA,
+        protection=ContextProtectionClass.PROTECTED,
+        content=content,
+    )
+    included = (*context.snapshot.included_entries, receipt)
+    projections = (*context.projection_entries, projection)
+    snapshot_body = context.snapshot.model_dump(
+        mode="python",
+        exclude={"snapshot_hash"},
+    )
+    snapshot_body.update(
+        {
+            "dependency_refs": tuple(
+                dict.fromkeys(entry.source_ref for entry in included)
+            ),
+            "included_entries": included,
+            "included_refs": tuple(entry.entry_ref for entry in included),
+            "estimated_input_tokens": (
+                context.snapshot.estimated_input_tokens or 0
+            )
+            + receipt.token_count,
+            "projection_hash": canonical_hash(
+                [entry.model_dump(mode="json") for entry in projections]
+            ),
+        }
+    )
+    snapshot_hash = canonical_hash(
+        {
+            "included_refs": snapshot_body["included_refs"],
+            "projection_hash": snapshot_body["projection_hash"],
+            "contract": "v2t-failed-evidence-read",
         }
     )
     return ContextAssemblyResult(
@@ -2078,6 +2194,190 @@ def test_v2s_guard_rejection_with_candidates_requires_evidence_upgrade() -> None
     ]
     assert adapter.requests[2].registry_snapshot is registry
     assert adapter.requests[2].tool_name_filter == ("evidence_read",)
+
+
+def test_v2t_candidate_only_context_requires_evidence_before_answer() -> None:
+    registry = _registry_with_evidence_read()
+    context = _context_without_evidence_atoms(
+        _context_with_search_candidates(_context_for_registry(registry))
+    )
+    request = _request(context, registry=registry)
+    adapter = _QueueAdapter(
+        [
+            _text_result(
+                {
+                    "action_kind": "retrieve",
+                    "concise_basis": "先把候选片段升级为可引用证据。",
+                    "information_needs": [],
+                    "target_source_bases": ["document", "enterprise"],
+                    "retrieval_request": {
+                        "information_needs": ["读取候选片段的权威正文"],
+                        "requested_tool_names": ["evidence_read"],
+                    },
+                },
+                1,
+            ),
+            _evidence_read_tool_result,
+        ]
+    )
+
+    outcome = asyncio.run(
+        _bridge(adapter, _ExplodingProvider()).decide(
+            request=request,
+            context=context,
+            registry_snapshot=registry,
+        )
+    )
+
+    assert isinstance(outcome.proposal, ToolCallBatchAction)
+    assert [call.tool_name for call in outcome.proposal.calls] == [
+        "evidence_read"
+    ]
+    assert len(adapter.requests) == 2
+    first_payload = adapter.requests[0].runtime_input.payload
+    assert first_payload["allowed_action_kinds"] == ["retrieve"]
+    assert first_payload["next_action_recovery_constraint"]["reason_code"] == (
+        "pre_answer_evidence_readiness"
+    )
+    assert adapter.requests[1].tool_name_filter == ("evidence_read",)
+
+
+def test_v2t_evidence_upgrade_may_cross_search_saturation_once() -> None:
+    registry = _registry_with_evidence_read()
+    context = _context_with_tool_signal_batches(
+        tuple(
+            (f"retrieval-signal:{index:064x}",)
+            for index in range(8)
+        ),
+        context=_context_for_registry(registry),
+    )
+    context = _context_without_evidence_atoms(
+        _context_with_search_candidates(context)
+    )
+    request = _request(context, registry=registry)
+    adapter = _QueueAdapter(
+        [
+            _text_result(
+                {
+                    "action_kind": "retrieve",
+                    "concise_basis": "检索已饱和，最后升级现有候选证据。",
+                    "information_needs": [],
+                    "target_source_bases": ["document", "enterprise"],
+                    "retrieval_request": {
+                        "information_needs": ["读取现有候选片段"],
+                        "requested_tool_names": ["evidence_read"],
+                    },
+                },
+                1,
+            ),
+            _evidence_read_tool_result,
+        ]
+    )
+
+    outcome = asyncio.run(
+        _bridge(adapter, _ExplodingProvider()).decide(
+            request=request,
+            context=context,
+            registry_snapshot=registry,
+        )
+    )
+
+    assert isinstance(outcome.proposal, ToolCallBatchAction)
+    assert len(adapter.requests) == 2
+    assert adapter.requests[0].registry_snapshot is registry
+    assert adapter.requests[1].tool_name_filter == ("evidence_read",)
+
+
+def test_v2t_failed_evidence_upgrade_returns_actionable_receipt() -> None:
+    registry = _registry_with_evidence_read()
+    context = _context_with_failed_evidence_read(
+        _context_without_evidence_atoms(
+            _context_with_search_candidates(_context_for_registry(registry))
+        )
+    )
+    request = _request(context, registry=registry)
+    adapter = _QueueAdapter([])
+
+    outcome = asyncio.run(
+        _bridge(adapter, _ExplodingProvider()).decide(
+            request=request,
+            context=context,
+            registry_snapshot=registry,
+        )
+    )
+
+    assert adapter.requests == []
+    assert outcome.proposal.action_kind is MainAgentModelActionKind.ANSWER
+    assert outcome.proposal.answer is not None
+    assert outcome.proposal.answer.draft.blocks[0].block_type == "interaction"
+    assert "停止重复检索" in outcome.proposal.answer.draft.blocks[0].text
+    assert outcome.provider_result_ref.startswith(
+        "runtime-evidence-readiness-fallback:"
+    )
+
+
+def test_v2t_grounding_required_schema_failure_upgrades_evidence() -> None:
+    registry = _registry_with_evidence_read()
+    context = _context_with_search_candidates(_context_for_registry(registry))
+    request = _request(context, registry=registry)
+    invalid_answer = {
+        "response_language": "zh-CN",
+        "items": [
+            {
+                "kind": "fact",
+                "text": "企业满足投标资格。",
+                "grounding_refs": [],
+            }
+        ],
+    }
+    adapter = _QueueAdapter(
+        [
+            _text_result(
+                {
+                    "action_kind": "answer",
+                    "concise_basis": "已有资料可回答。",
+                    "information_needs": [],
+                    "target_source_bases": ["document", "enterprise"],
+                },
+                1,
+            ),
+            _text_result(invalid_answer, 2),
+            _text_result(invalid_answer, 3),
+            _text_result(
+                {
+                    "action_kind": "retrieve",
+                    "concise_basis": "回答证据绑定失败，升级现有候选。",
+                    "information_needs": [],
+                    "target_source_bases": ["document", "enterprise"],
+                    "retrieval_request": {
+                        "information_needs": ["读取未升级的候选片段"],
+                        "requested_tool_names": ["evidence_read"],
+                    },
+                },
+                4,
+            ),
+            _evidence_read_tool_result,
+        ]
+    )
+
+    outcome = asyncio.run(
+        _bridge(adapter, _ExplodingProvider()).decide(
+            request=request,
+            context=context,
+            registry_snapshot=registry,
+        )
+    )
+
+    assert isinstance(outcome.proposal, ToolCallBatchAction)
+    assert len(adapter.requests) == 5
+    assert adapter.requests[2].runtime_input.input_kind == (
+        "main_agent_answer_projection_repair_v2"
+    )
+    recovery_payload = adapter.requests[3].runtime_input.payload
+    assert recovery_payload["next_action_recovery_constraint"][
+        "reason_code"
+    ] == "answer_schema_evidence_upgrade"
+    assert adapter.requests[4].tool_name_filter == ("evidence_read",)
 
 
 def test_v2r_request_information_is_repaired_when_no_slot_is_executable() -> None:

@@ -362,12 +362,6 @@ class ProviderDecisionAnswerOrchestratorV2:
             registry_snapshot=registry_snapshot,
         )
         if recovery_constraint is not None:
-            if convergence is not None and convergence.saturated:
-                self._reject(
-                    ProviderBoundaryFailureCode.RUNTIME_BINDING_INVALID,
-                    "next-action recovery cannot bypass retrieval saturation",
-                    stage=ProviderBoundaryFailureStage.RUNTIME_BINDING,
-                )
             if not set(recovery_constraint.required_tool_names).issubset(
                 request.visible_tool_names
             ):
@@ -379,7 +373,10 @@ class ProviderDecisionAnswerOrchestratorV2:
         tools_allowed = (
             allow_native_tool_calls
             and bool(request.visible_tool_names)
-            and not (convergence is not None and convergence.saturated)
+            and (
+                recovery_constraint is not None
+                or not (convergence is not None and convergence.saturated)
+            )
         )
         tool_call_constraints = self._tool_call_constraints(
             tools_allowed=tools_allowed

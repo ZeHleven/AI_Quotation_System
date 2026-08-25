@@ -483,3 +483,19 @@ C08-3 已证明日常入口从登录、身份恢复、模块可见性到 Runtime
 - C01 失败终态专项 `2 passed / 0 failed`，C07 Answer Projection 专项 `11 passed / 0 failed`，Ruff、AST、差异格式检查通过；Preflight 保持 `20/20` 和原 Report Hash。
 
 C08 本地可用性收口完成，可以进入隔离本地的小规模真实业务试用与缺陷迭代。B07、ECS、生产迁移、发布候选和默认开关启用仍未授权。
+
+## 16. V2-T — Pre-Answer Evidence Readiness
+
+状态：代码、合成合同验证和 9019 受控真实复验均已完成。
+
+- [x] 候选存在但 Evidence Atom 为零时，Answer 前强制一次 `evidence_read`。
+- [x] 允许证据升级跨过 Search 饱和门，但不允许继续普通 Search。
+- [x] 将 `answer_schema_invalid / grounding_refs.required_for_kind` 转为类型化证据升级。
+- [x] 证据读取不可用或一次尝试后仍未就绪时，返回 Runtime-owned 可行动诊断回执。
+- [x] 补充候选就绪、饱和升级、升级失败和 Schema 恢复四类合成合同。
+- [x] 经用户授权执行 V2-T 专项 `4 passed`，V2-D 至 V2-S 相邻合同回归 `88 passed`。
+- [x] 经用户另行授权加载 9019，并从真实矩阵第 2 题开始逐题使用全新对话复验。
+- [x] Q2—Q4 证据型问题均完成并生成 Runtime Citation；Q5 普通交流以零 Tool Call 完成。
+- [x] 真实矩阵未出现通用安全失败，且未影响 9018、ECS 或生产环境。
+
+本切片不修改数据库迁移、默认开关、V1、旧 `bid_intake_*`、9018、ECS 或生产环境。
